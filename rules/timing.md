@@ -154,6 +154,11 @@ other than HAND_PLAYED, DRAW_TO_HAND and PLAY_TAROT.
 The upper limit for selected cards is the card's maximum capped at 5; the
 lower limit is 1 except Death (2).
 
+Quirk (from the code, `consumables.md`): Buy and Use on Ankh with full joker
+slots passes the shop's check (Ankh's own rule doesn't look at room), pays the
+price, then the use is refused with a "no space" alert, leaving the card in no
+area. Its button can still use it later once a slot is free.
+
 ## 6. During scoring: what the player can do, and whether it matters
 
 Question: while a played hand is being scored, can the player drag jokers or

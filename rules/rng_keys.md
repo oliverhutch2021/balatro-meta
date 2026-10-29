@@ -291,7 +291,8 @@ Up; m = 1, or 2 for Standard packs):
   if x > 1 - 0.006rm; else Holographic if x > 1 - 0.02rm; else Foil if
   x > 1 - 0.04rm; else none.
 - Guaranteed (Aura, Wheel of Fortune): Polychrome if x > 0.85, Holographic if
-  x > 0.5, else Foil.
+  x > 0.5, Foil if x > 0; a roll of exactly 0 gives no edition (see
+  `consumables.md`).
 
 The default keys `edition_generic` (edition) and `pack_generic` + A (booster)
 are never used in vanilla.
@@ -336,11 +337,13 @@ Jokers that make cards draw through `create_card`: Riff-raff (`rif`), 8 Ball
 and Purple Seal (`8ba`), Hallucination (`hal`), Cartomancer (`car`), Vagabond
 (`vag`), Superposition (`sup`), Seance (`sea`), Sixth Sense (`sixth`).
 
-Blueprint and Brainstorm run the copied joker's code, so a copy draws the same
-key again, right after the original in joker order. Exceptions that ignore
-copies: Madness, To Do List, Gros Michel, Cavendish, Invisible Joker. Jokers are
-evaluated left to right, so with two rolling jokers on one key (two 8 Balls, or
-8 Ball and its Blueprint) the leftmost draws first.
+Blueprint and Brainstorm run the copied joker's code at their own position, so
+a copy draws the same key again, in joker order: a Blueprint always sits just
+left of the joker it copies, so its draw comes before the original's; a
+Brainstorm copies the leftmost joker, so its draw comes after. Exceptions that
+ignore copies: Madness, To Do List, Gros Michel, Cavendish, Invisible Joker.
+Jokers are evaluated left to right, so with two rolling jokers on one key (two 8
+Balls, or 8 Ball and a copy) the leftmost draws first.
 
 ### 3.8 Tarots
 

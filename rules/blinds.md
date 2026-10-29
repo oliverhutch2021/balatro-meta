@@ -140,6 +140,13 @@ Flush Five become visible once played. A Tag created for the Small or Big panel
 is an Orbital Tag only if the tag draw said so; it then levels up the stored
 hand for its (ante, blind type) by 3 when it fires.
 
+The entries are keyed by ante number and never change once made, and the
+panels' tags are made afresh each time the screen is built, reading the entry
+for the ante current at that moment. After Hieroglyph or Petroglyph the
+lowered ante's entries are used: an ante number already seen draws nothing and
+reuses its old hands, and an ante number with no entries yet (0 or below)
+draws three new ones. See `rules/vouchers_tags.md` 1.17.
+
 The list of visible hands is built by walking the game's hand table in Lua's
 hash-iteration order, which is not alphabetical and not the display order. The
 game ships LuaJIT 2.0.5 (`lua51.dll`, LOVE 11.5), not the 2.1 used in our cloud
@@ -155,7 +162,8 @@ BalatroBot. The same walk decides The Ox's target on ties (see the boss table).
 ## 5. When held tags act (summary for the round flow)
 
 Tags are checked at fixed points; each tag acts at most once and is then
-removed. Details of each tag's effect belong to the tag notes.
+removed. Details of each tag's effect, the exact check moments and the streams
+they draw are in `rules/vouchers_tags.md` section 2.
 
 | Check | When it happens | Tags that act there |
 |-------|-----------------|---------------------|
@@ -163,7 +171,7 @@ removed. Details of each tag's effect belong to the tag notes.
 | new blind choice (first one only) | after a skip; on entering blind select; after a boss reroll; when a pack closes | Charm, Meteor, Ethereal, Standard, Buffoon (open a free pack), Boss (free boss reroll) |
 | round start bonus | each time the hand is about to be drawn | Juggle (+3 hand size for that round) |
 | eval | when the cash-out amounts are computed | Investment ($25, only after a Boss round) |
-| shop start / voucher add / final pass / joker create or modify | while the shop is built | D6, Voucher, Coupon, Uncommon, Rare, Foil, Holographic, Polychrome, Negative |
+| shop start / voucher add / final pass / joker create or modify | while the shop is built; joker create and modify also for every joker-row card made later (rerolls, Overstock refill) | D6, Voucher, Coupon, Uncommon, Rare, Foil, Holographic, Polychrome, Negative |
 | tag added | whenever a new tag is gained | Double |
 
 Boss Tag uses the same reroll as Director's Cut but costs nothing.

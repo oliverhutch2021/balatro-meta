@@ -166,8 +166,9 @@ Tags are walked in the order they were obtained.
   makes a rare joker with source `rta`, costing $0. Otherwise it fails, is used
   up, and uses no RNG.
 - **Foil / Holographic / Polychrome / Negative Tag**: applies to the first
-  shop joker created from now on (initial build, rerolls, tag jokers, later
-  shops) that is a Joker with no edition. Only one such tag goes on a card: the
+  shop joker created from now on (initial build, rerolls, Overstock refills,
+  tag jokers, later shops; never pack jokers or Top-up Tag jokers) that is a
+  Joker with no edition. Only one such tag goes on a card: the
   first in tag order. The card gets that edition, its price is recomputed, and
   it costs $0. No RNG. A tag joker from Uncommon or Rare Tag gets this check
   straight away. A normal slot gets it in a queued step right after the slot is
@@ -180,6 +181,8 @@ Tags are walked in the order they were obtained.
   at blind select, not in the shop. The contents follow section 3 with the
   same keys. Charm and Meteor choose between art variants `_1` and `_2` with
   an unseeded `math.random`. This is cosmetic only.
+- Every tag's full rules, check moments and streams: `rules/vouchers_tags.md`
+  section 2.
 
 ### 1.6 Every stream used while a shop is built, in order
 
@@ -404,7 +407,10 @@ the pool key, using one value.
   enhancements are normal.
 - Timing: a sold, used or destroyed card is removed after its dissolve
   animation, but the event system finishes that removal before any later
-  player action is processed. The engine can treat it as immediate.
+  player action is processed. The engine can treat it as immediate, with
+  one exception: a consumable is still present while its own effects run,
+  so The Emperor never creates The Emperor and a used Negative card's extra
+  slot still counts during its own effect (`consumables.md`).
 
 ### 2.5 Where the creator is called
 
@@ -682,6 +688,9 @@ without Showman. Tarots, planets and spectrals in packs never get editions.
 
 ## 4. Vouchers
 
+Each voucher's effect in full, the redeem steps and the Voucher Tag are in
+`rules/vouchers_tags.md` section 1.
+
 ### 4.1 When the ante's voucher is chosen
 
 - At the start of the run, after the deck's own vouchers are applied, pick
@@ -905,7 +914,10 @@ polychrome $6.
   rerolls cost $0, $1, $2, .... The override is cleared at the end of the
   next round.
 - **Reroll Surplus or Glut bought mid-shop**: the base drops by $2, and the
-  shown price drops by $2 at once (not below 0). The count is kept.
+  shown price drops by $2 at once (not below 0). The count is kept. If a D6
+  Tag is active in this shop, the D6 override (not the base) still sets the
+  price, so the lowered price holds for the very next reroll only, and after
+  it the price is $0 + count again (`rules/vouchers_tags.md` 1.7).
 - **Allowed** when `dollars − floor − price ≥ 0`, or when the price is 0.
 - Example, no vouchers: $5, $6, $7, .... With one Chaos the Clown: $0
   (free), then $5, $6, ....
@@ -960,9 +972,13 @@ polychrome $6.
   in the shop and in packs.
 - UNSURE: Hallucination's Tarot is created after the pack's contents. This
   was worked out from event timing (3.6), not seen in play.
-- UNSURE: hand sorting and the deck order at blind select for tag packs
-  (3.5). These depend on the round-flow notes (initial `shuffle` stream,
-  `nr<ante>`, `cashout<ante>`).
+- Settled: hand sorting and the deck order at blind select for tag packs
+  (3.5). No shuffle happens at a skip or at blind select. The deck order is
+  the one left by the run-start `shuffle` (before the first round) or the
+  last `cashout<ante>`, changed only by later Arcana or Spectral pack hands
+  (top to hand, back to the bottom) and by cards added at the bottom. `nr<ante>`
+  is never seen by a pack. The hand is re-sorted after each card drawn
+  (`rules/round.md` 4). Details: `rules/vouchers_tags.md` 2.5.
 - Weights and prices must be added and multiplied in the same order as
   written above, in f64. The order is written out exactly, but nobody has yet
   compared the cumulative pack and kind boundaries against the real game.
