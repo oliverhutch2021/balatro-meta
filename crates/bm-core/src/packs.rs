@@ -116,7 +116,9 @@ impl Run {
                 Created::Card(c) => PackCard::Card(c),
             });
         }
-        if halu {
+        // Hallucination's Tarots, decided at the opening, are made now.
+        self.consumable_buffer = 0;
+        for _ in 0..halu {
             self.create_consumable_into_slots(CreateKind::Tarot, "hal");
         }
         self.pack = Some(OpenPack {
@@ -165,14 +167,14 @@ impl Run {
 
     /// Hallucination and other "pack opened" reactions. Returns whether a
     /// Tarot is to be made after the contents.
-    fn open_booster_jokers(&mut self) -> bool {
-        let mut make = false;
+    fn open_booster_jokers(&mut self) -> usize {
+        let mut make = 0;
         for i in 0..self.jokers.len() {
             if let Some(e) =
                 crate::scoring::calculate_joker(self, i, Ctx::OpenBooster, &Default::default(), 0)
             {
                 if e.make {
-                    make = true;
+                    make += 1;
                 }
             }
         }
@@ -209,13 +211,7 @@ impl Run {
         match card {
             PackCard::Joker(mut j) => {
                 self.set_joker_cost(&mut j);
-                let negative = j.edition == Edition::Negative;
-                self.jokers.push(j);
-                let idx = self.jokers.len() - 1;
-                self.add_joker_effects(idx);
-                if negative {
-                    self.joker_slots += 1;
-                }
+                self.push_joker(j);
             }
             PackCard::Consumable(c) => {
                 let sel = self.selection_ids(positions)?;

@@ -451,17 +451,7 @@ impl Run {
                 }
                 self.consumables.push(c);
             }
-            RowItem::Joker(j) => {
-                self.jokers.push(j);
-                let idx = self.jokers.len() - 1;
-                self.add_joker_effects(idx);
-                if self.jokers[idx].edition == Edition::Negative {
-                    self.joker_slots += 1;
-                }
-                if self.jokers[idx].kind == JokerKind::Astronomer {
-                    self.reprice_owned();
-                }
-            }
+            RowItem::Joker(j) => self.push_joker(j),
         }
         if slot.cost != 0 {
             self.money -= slot.cost;

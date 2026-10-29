@@ -54,6 +54,8 @@ pub struct JokerView {
     pub x_mult: f64,
     pub chips: f64,
     pub counter: i64,
+    /// To Do List's target hand.
+    pub hand: Option<HandType>,
 }
 
 /// A shop, pack or slot item as the screen shows it.
@@ -152,7 +154,11 @@ pub struct Screen {
     pub ecto_minus: i32,
 }
 
-fn joker_view(j: &crate::jokers::Joker) -> JokerView {
+/// A joker as its card and description show it now. `own` is its place in
+/// the joker area (None for shop and pack cards). Per-frame values are
+/// refreshed as the game does every frame; Loyalty Card shows how many hands
+/// remain before its X4 (0 = the next hand).
+fn joker_view(run: &Run, j: &crate::jokers::Joker, own: Option<usize>) -> JokerView {
     if j.face_down {
         return JokerView {
             kind: None,
@@ -166,20 +172,29 @@ fn joker_view(j: &crate::jokers::Joker) -> JokerView {
             x_mult: 0.0,
             chips: 0.0,
             counter: 0,
+            hand: None,
         };
     }
+    let mut v = j.clone();
+    run.frame_refresh(&mut v, own);
+    let counter = if v.kind == JokerKind::LoyaltyCard {
+        (5 - (run.hands_played_run as i64 - v.counter)).rem_euclid(6)
+    } else {
+        v.counter
+    };
     JokerView {
-        kind: Some(j.kind),
-        edition: j.edition,
-        eternal: j.eternal,
-        perishable: j.perishable.then_some(j.perish_tally),
-        rental: j.rental,
-        debuffed: j.debuffed,
-        sell_value: joker_sell_value(j),
-        mult: j.mult,
-        x_mult: j.x_mult,
-        chips: j.chips,
-        counter: j.counter,
+        kind: Some(v.kind),
+        edition: v.edition,
+        eternal: v.eternal,
+        perishable: v.perishable.then_some(v.perish_tally),
+        rental: v.rental,
+        debuffed: v.debuffed,
+        sell_value: joker_sell_value(&v),
+        mult: v.mult,
+        x_mult: v.x_mult,
+        chips: v.chips,
+        counter,
+        hand: v.hand,
     }
 }
 
@@ -282,7 +297,12 @@ pub fn screen(run: &Run) -> Screen {
         tags_held: run.tags.iter().map(|t| (t.kind, t.orbital_hand)).collect(),
         hands,
         hand: run.hand.iter().map(|&id| card_view(run.card(id))).collect(),
-        jokers: run.jokers.iter().map(joker_view).collect(),
+        jokers: run
+            .jokers
+            .iter()
+            .enumerate()
+            .map(|(i, j)| joker_view(run, j, Some(i)))
+            .collect(),
         deck_counts,
         deck_enhancements,
         deck_editions,
@@ -318,7 +338,7 @@ pub fn screen(run: &Run) -> Screen {
                 .iter()
                 .map(|r| {
                     let v = match &r.item {
-                        RowItem::Joker(j) => ItemView::Joker(joker_view(j)),
+                        RowItem::Joker(j) => ItemView::Joker(joker_view(run, j, None)),
                         RowItem::Consumable(c) => ItemView::Consumable(c.kind, c.edition),
                         RowItem::Card(c) => ItemView::Card(card_view(c)),
                     };
@@ -338,7 +358,7 @@ pub fn screen(run: &Run) -> Screen {
                 .cards
                 .iter()
                 .map(|c| match c {
-                    PackCard::Joker(j) => ItemView::Joker(joker_view(j)),
+                    PackCard::Joker(j) => ItemView::Joker(joker_view(run, j, None)),
                     PackCard::Consumable(c) => ItemView::Consumable(c.kind, c.edition),
                     PackCard::Card(c) => ItemView::Card(card_view(c)),
                 })
@@ -361,7 +381,7 @@ pub fn screen(run: &Run) -> Screen {
 
 /// Floats per hand card and per joker in the encoding.
 pub const CARD_FEATURES: usize = 1 + 13 + 4 + 9 + 5 + 5 + 3;
-pub const JOKER_FEATURES: usize = 1 + 1 + 5 + 4 + 1 + 1 + 4;
+pub const JOKER_FEATURES: usize = 1 + 1 + 5 + 4 + 1 + 1 + 4 + 12;
 
 /// Length of the encoded observation.
 pub const OBS_LEN: usize = GLOBAL_FEATURES
@@ -643,6 +663,9 @@ fn write_joker(f: &mut [f32], j: &JokerView) {
     f[14] = slog(j.x_mult);
     f[15] = slog(j.chips);
     f[16] = slog(j.counter as f64);
+    if let Some(h) = j.hand {
+        f[17 + h.index()] = 1.0;
+    }
 }
 
 /// type (3) | joker | consumable one-hot | card | price.

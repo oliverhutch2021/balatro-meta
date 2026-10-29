@@ -5,11 +5,11 @@
 
 use bm_rng::pick_index;
 
-use crate::card::{standard_card_order, Edition, Enhancement, Seal};
+use crate::card::{standard_card_order, Card, Edition, Enhancement, Seal};
 use crate::content::{ConsumableKind, ConsumableSet};
 use crate::create::{Center, CreateArgs, CreateKind, Dest};
 use crate::joker_data::JokerKind as J;
-use crate::scoring::{calculate_joker, Ctx, Effect, PlayedHand};
+use crate::scoring::{calculate_joker, detect_rules, Ctx, Effect, PlayedHand};
 use crate::state::{CardId, HeldTag, Run};
 use crate::tags::TagKind;
 
@@ -38,11 +38,6 @@ impl Run {
             calculate_joker(self, i, Ctx::PlayingCardAdded, &h, 0);
         }
     }
-
-    /// Room for one more consumable.
-    fn consumable_room_now(&self) -> bool {
-        self.consumables.len() < self.consumable_slots as usize
-    }
 }
 
 /// Blind-start effects (`setting_blind`) other than Chicot's.
@@ -56,7 +51,9 @@ pub(crate) fn setting_blind(
     if run.jokers[idx].sliced {
         return None;
     }
-    let ante = run.ante;
+    // Burglar, Marble Joker, Riff-raff and Cartomancer also do nothing when
+    // the card acting (a copier, or the joker itself) is marked.
+    let acting_sliced = run.jokers[run.blueprint_card.unwrap_or(idx)].sliced;
     match kind {
         J::CeremonialDagger if !bp => {
             let right = idx + 1;
@@ -68,7 +65,7 @@ pub(crate) fn setting_blind(
             }
             None
         }
-        J::MarbleJoker => {
+        J::MarbleJoker if !acting_sliced => {
             let order = standard_card_order();
             let mut g = run.rng.generator("marb_fr");
             let (suit, rank) = order[pick_index(order.len(), &mut g)];
@@ -79,7 +76,7 @@ pub(crate) fn setting_blind(
             run.playing_card_added(&[id]);
             some()
         }
-        J::Burglar => {
+        J::Burglar if !acting_sliced => {
             run.discards_left = 0;
             run.hands_left += 3;
             some()
@@ -102,7 +99,7 @@ pub(crate) fn setting_blind(
             }
             None
         }
-        J::RiffRaff => {
+        J::RiffRaff if !acting_sliced => {
             let used = run.jokers.len() as i32 + run.joker_buffer;
             if used < run.joker_slots {
                 let n = (run.joker_slots - used).min(2);
@@ -117,17 +114,14 @@ pub(crate) fn setting_blind(
             }
             None
         }
-        J::Cartomancer => {
+        J::Cartomancer if !acting_sliced => {
             if run.consumable_room_now() {
                 run.create_consumable_into_slots(CreateKind::Tarot, "car");
                 return some();
             }
             None
         }
-        _ => {
-            let _ = ante;
-            None
-        }
+        _ => None,
     }
 }
 
@@ -147,6 +141,8 @@ pub(crate) fn event(
                 && run.consumable_room_now()
                 && run.rng.random(&format!("halu{ante}")) < run.probability / 2.0
             {
+                // Pending at once; the Tarot is made after the pack's cards.
+                run.consumable_buffer += 1;
                 return Some(Effect {
                     make: true,
                     ..Effect::default()
@@ -283,7 +279,6 @@ pub(crate) fn event(
         }
         Ctx::FirstHandDrawn => {
             if kind == J::Certificate {
-                run.playing_card_added(&[]);
                 let order = standard_card_order();
                 let mut g = run.rng.generator("cert_fr");
                 let (suit, rank) = order[pick_index(order.len(), &mut g)];
@@ -303,7 +298,124 @@ pub(crate) fn event(
                 let d = run.card_should_be_debuffed(id);
                 run.card_mut(id).debuffed = d;
                 run.sort_hand();
+                // Raised for one card (Hologram) when the event fires.
+                run.playing_card_added(&[id]);
                 return some();
+            }
+            None
+        }
+        Ctx::DestroyingCard(_) => {
+            // Copies are never asked this question.
+            if kind == J::SixthSense
+                && !bp
+                && h.full.len() == 1
+                && run.card(h.full[0]).rank_id() == Some(6)
+                && run.hands_played_round == 0
+            {
+                if run.consumable_room_now() {
+                    run.create_consumable_into_slots(CreateKind::Spectral, "sixth");
+                }
+                return Some(Effect {
+                    destroy: true,
+                    ..Effect::default()
+                });
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Before a discard (`pre_discard`, once per discard): Burnt Joker levels
+/// up the discarded cards' poker hand on the round's first player discard.
+pub(crate) fn pre_discard(run: &mut Run, idx: usize, hook: bool, h: &PlayedHand) -> Option<Effect> {
+    if run.jokers[idx].kind == J::BurntJoker && run.discards_used_round <= 0 && !hook {
+        let rules = detect_rules(run);
+        let hand = {
+            let cards: Vec<&Card> = h.full.iter().map(|&id| run.card(id)).collect();
+            crate::poker::detect(&cards, rules).hand
+        };
+        run.hand_levels.level_up(hand, 1);
+    }
+    None
+}
+
+/// One discarded card (`discard`); `h.full` is the whole discard and `last`
+/// marks its last card. `destroy` in the result destroys the card instead
+/// of discarding it (Trading Card).
+pub(crate) fn discard(
+    run: &mut Run,
+    idx: usize,
+    card: CardId,
+    last: bool,
+    h: &PlayedHand,
+    bp: bool,
+) -> Option<Effect> {
+    let kind = run.jokers[idx].kind;
+    let c = run.card(card).clone();
+    match kind {
+        J::Ramen if !bp => {
+            let j = &mut run.jokers[idx];
+            if j.x_mult - 0.01 <= 1.0 {
+                j.removing = true;
+            } else {
+                j.x_mult -= 0.01;
+            }
+            some()
+        }
+        J::Yorick if !bp => {
+            let j = &mut run.jokers[idx];
+            if j.counter <= 1 {
+                j.counter = 23;
+                j.x_mult += 1.0;
+                some()
+            } else {
+                j.counter -= 1;
+                None
+            }
+        }
+        J::TradingCard if !bp && run.discards_used_round <= 0 && h.full.len() == 1 => {
+            run.money += 3;
+            Some(Effect {
+                dollars: 3,
+                destroy: true,
+                ..Effect::default()
+            })
+        }
+        J::Castle if !bp && !c.debuffed && c.has_suit(run.castle_suit, run.smeared()) => {
+            run.jokers[idx].chips += 3.0;
+            some()
+        }
+        J::MailInRebate if !c.debuffed && c.rank_id() == Some(run.mail_rank.id()) => {
+            run.money += 5;
+            Some(Effect {
+                dollars: 5,
+                ..Effect::default()
+            })
+        }
+        J::HitTheRoad if !bp && !c.debuffed && c.rank_id() == Some(11) => {
+            run.jokers[idx].x_mult += 0.5;
+            some()
+        }
+        J::GreenJoker if !bp && last => {
+            let j = &mut run.jokers[idx];
+            let prev = j.mult;
+            j.mult = (j.mult - 1.0).max(0.0);
+            (j.mult != prev).then(Effect::default)
+        }
+        J::FacelessJoker if last => {
+            let par = run.pareidolia();
+            let faces = h
+                .full
+                .iter()
+                .filter(|&&id| run.card(id).is_face(par))
+                .count();
+            if faces >= 3 {
+                run.money += 5;
+                return Some(Effect {
+                    dollars: 5,
+                    ..Effect::default()
+                });
             }
             None
         }

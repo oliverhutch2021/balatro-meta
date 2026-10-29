@@ -250,3 +250,50 @@ fn random_runs_with_the_whole_game() {
         "shops {shops}, packs {packs}, bought {bought}, used {used}"
     );
 }
+
+/// Every joker in play: sets of five, cycling through all 150, each set held
+/// from the start of a run played by the whole-game move generator. No
+/// panics, cards conserved, refused moves change nothing.
+#[test]
+fn random_runs_with_every_joker() {
+    use bm_core::env::{apply, random_move, safe_move, XorShift};
+    use bm_core::joker_data::JOKERS;
+    let mut seeds = SeedSampler::new(150);
+    let mut rng = XorShift(0x0bad_cafe_f00d_d00d);
+    for (set_no, set) in JOKERS.chunks(5).enumerate() {
+        for _ in 0..6 {
+            let mut run = Run::new(RunConfig::new(&seeds.next_seed()));
+            for j in set {
+                run.add_joker(j.kind);
+            }
+            for _ in 0..2500 {
+                if run.phase == Phase::GameOver || run.won {
+                    break;
+                }
+                check_conservation(&run);
+                let (k, a) = if run.phase == Phase::Round && rng.below(3) != 0 {
+                    bm_core::bots::greedy_move(&run, rng.below(1 << 30) as u64)
+                } else {
+                    random_move(&run, &mut rng)
+                };
+                let before_money = run.money;
+                let before_phase = run.phase;
+                if apply(&mut run, k, a).is_err() {
+                    assert_eq!(
+                        run.money, before_money,
+                        "set {set_no}: a refused {k:?} changed money"
+                    );
+                    assert_eq!(run.phase, before_phase);
+                    let (k2, a2) = safe_move(&run);
+                    apply(&mut run, k2, a2).unwrap();
+                }
+                assert!(
+                    run.jokers.len() as i32 <= run.joker_slots + 1,
+                    "set {set_no}: {} jokers in {} slots",
+                    run.jokers.len(),
+                    run.joker_slots
+                );
+            }
+        }
+    }
+}

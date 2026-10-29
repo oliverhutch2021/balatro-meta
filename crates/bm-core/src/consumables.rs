@@ -6,7 +6,6 @@ use bm_rng::{pick_index, shuffle};
 use crate::card::{Edition, Enhancement, Rank, Suit};
 use crate::content::{ConsumableKind, ConsumableSet, ENHANCEMENT_POOL};
 use crate::create::{Center, Consumable, CreateArgs, CreateKind, Created, Dest};
-use crate::jokers::Joker;
 use crate::poker::HandType;
 use crate::run::Refused;
 use crate::scoring::{Ctx, PlayedHand};
@@ -127,12 +126,14 @@ impl Run {
         if negative {
             self.consumable_slots -= 1;
         }
+        // A Chicot gained mid-round may have disabled the boss.
+        self.check_disabled_win();
         Ok(())
     }
 
     /// Make a consumable of `kind` into the slots if there's room.
     pub(crate) fn create_consumable_into_slots(&mut self, kind: CreateKind, append: &'static str) {
-        if self.consumables.len() < self.consumable_slots as usize {
+        if self.consumable_room_now() {
             if let Created::Consumable(c) =
                 self.create_card(CreateArgs::new(kind, Dest::Consumables, append))
             {
@@ -145,16 +146,6 @@ impl Run {
     pub(crate) fn create_joker_into_slots(&mut self, a: CreateArgs) {
         if let Created::Joker(j) = self.create_card(a) {
             self.push_joker(j);
-        }
-    }
-
-    pub(crate) fn push_joker(&mut self, j: Joker) {
-        let negative = j.edition == Edition::Negative;
-        self.jokers.push(j);
-        let idx = self.jokers.len() - 1;
-        self.add_joker_effects(idx);
-        if negative {
-            self.joker_slots += 1;
         }
     }
 
@@ -464,9 +455,7 @@ impl Run {
                     while i < self.jokers.len() {
                         let j = &self.jokers[i];
                         if !j.eternal && j.sort_id != orig_id {
-                            let k = j.kind;
                             self.remove_joker(i);
-                            self.card_removed(Center::Joker(k));
                         } else {
                             i += 1;
                         }
@@ -498,9 +487,7 @@ impl Run {
                     while j < self.jokers.len() {
                         let jk = &self.jokers[j];
                         if jk.sort_id != keep && !jk.eternal {
-                            let k = jk.kind;
                             self.remove_joker(j);
-                            self.card_removed(Center::Joker(k));
                         } else {
                             j += 1;
                         }

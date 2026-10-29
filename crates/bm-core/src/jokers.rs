@@ -1,7 +1,8 @@
-//! Owned jokers: their state and the effects the engine has implemented so
-//! far. Each effect follows the game's joker routine branch by branch
-//! (`rules/scoring.md`); jokers not yet implemented do nothing and are
-//! listed by [`is_implemented`].
+//! Owned jokers: their state, starting values and fixed numbers. Their
+//! effects live in `scoring.rs` (the scoring contexts) and
+//! `joker_events.rs` (blind start, discards, the shop, packs, sales), each
+//! following the game's joker routine branch by branch (`rules/scoring.md`,
+//! `rules/jokers_1_76.md`, `rules/jokers_77_150.md`).
 
 use crate::card::Edition;
 use crate::joker_data::JokerKind;
@@ -35,8 +36,11 @@ pub struct Joker {
     pub x_mult: f64,
     /// Growing chips (Runner, Ice Cream, Square Joker, Castle, Wee Joker).
     pub chips: f64,
-    /// A counter whose meaning depends on the joker (Seltzer's hands left,
-    /// Rocket's payout, Loyalty Card's start, Turtle Bean's hand size).
+    /// A counter whose meaning depends on the joker: Seltzer's hands left,
+    /// Rocket's payout, Loyalty Card's start (hands played when it was
+    /// made), Turtle Bean's hand size, Yorick's discards left, Invisible
+    /// Joker's rounds, and the per-frame deck tallies of Steel Joker, Stone
+    /// Joker, Driver's License and Cloud 9.
     pub counter: i64,
     /// A target hand (To Do List).
     pub hand: Option<HandType>,
@@ -154,105 +158,8 @@ pub fn joker_resource_change(j: &Joker) -> (i32, i32, i32) {
     }
 }
 
-/// Jokers whose effects the engine implements so far. Others can be held but
-/// do nothing yet; studies must not use them until phase 2 adds them.
-pub fn is_implemented(kind: JokerKind) -> bool {
-    use JokerKind as J;
-    matches!(
-        kind,
-        J::Joker
-            | J::GreedyJoker
-            | J::LustyJoker
-            | J::WrathfulJoker
-            | J::GluttonousJoker
-            | J::JollyJoker
-            | J::ZanyJoker
-            | J::MadJoker
-            | J::CrazyJoker
-            | J::DrollJoker
-            | J::SlyJoker
-            | J::WilyJoker
-            | J::CleverJoker
-            | J::DeviousJoker
-            | J::CraftyJoker
-            | J::HalfJoker
-            | J::FourFingers
-            | J::Mime
-            | J::CreditCard
-            | J::Banner
-            | J::MysticSummit
-            | J::Misprint
-            | J::Dusk
-            | J::RaisedFist
-            | J::Fibonacci
-            | J::ScaryFace
-            | J::AbstractJoker
-            | J::Hack
-            | J::Pareidolia
-            | J::GrosMichel
-            | J::EvenSteven
-            | J::OddTodd
-            | J::Scholar
-            | J::BusinessCard
-            | J::Supernova
-            | J::RideTheBus
-            | J::SpaceJoker
-            | J::Runner
-            | J::IceCream
-            | J::Splash
-            | J::BlueJoker
-            | J::Hiker
-            | J::GreenJoker
-            | J::Cavendish
-            | J::CardSharp
-            | J::SquareJoker
-            | J::Vampire
-            | J::Shortcut
-            | J::Baron
-            | J::Obelisk
-            | J::MidasMask
-            | J::Photograph
-            | J::Erosion
-            | J::ReservedParking
-            | J::Juggler
-            | J::Drunkard
-            | J::GoldenJoker
-            | J::LuckyCat
-            | J::BaseballCard
-            | J::Bull
-            | J::Popcorn
-            | J::SpareTrousers
-            | J::AncientJoker
-            | J::WalkieTalkie
-            | J::Seltzer
-            | J::SmileyFace
-            | J::GoldenTicket
-            | J::MrBones
-            | J::Acrobat
-            | J::SockAndBuskin
-            | J::SmearedJoker
-            | J::HangingChad
-            | J::RoughGem
-            | J::Bloodstone
-            | J::Arrowhead
-            | J::OnyxAgate
-            | J::Blueprint
-            | J::MerryAndy
-            | J::OopsAllSixes
-            | J::TheIdol
-            | J::Matador
-            | J::TheDuo
-            | J::TheTrio
-            | J::TheFamily
-            | J::TheOrder
-            | J::TheTribe
-            | J::Stuntman
-            | J::Brainstorm
-            | J::ShootTheMoon
-            | J::Bootstraps
-            | J::Triboulet
-            | J::Chicot
-            | J::Troubadour
-            | J::TurtleBean
-    )
+/// Whether the engine implements this joker's effects. Every one of the
+/// 150 is implemented; kept so callers can still ask.
+pub fn is_implemented(_kind: JokerKind) -> bool {
+    true
 }

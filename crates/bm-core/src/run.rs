@@ -10,8 +10,8 @@ use crate::blinds::{
     blind_target, scaling_for_stake, BlindKind, BlindSlot, Boss, BossPool, SlotState,
 };
 use crate::card::{standard_card_order, Enhancement, Rank, Seal, SortMode, Suit};
+use crate::create::{CreateArgs, CreateKind, Dest};
 use crate::hand_levels::HandLevels;
-use crate::joker_data::JokerKind;
 use crate::poker::HandType;
 use crate::scoring::{calculate_joker, evaluate_play, joker_cash_out, Ctx, HandScore, PlayedHand};
 use crate::state::{ActiveBlind, CardId, CashOut, HeldTag, Phase, Run, RunConfig};
@@ -143,6 +143,8 @@ impl Run {
             jokers_purchased_round: 0,
             boss_rerolls_allowed: false,
             joker_buffer: 0,
+            consumable_buffer: 0,
+            blueprint_card: None,
             cfg,
         };
         // The first boss, the first shop voucher and the two tags.
@@ -290,7 +292,16 @@ impl Run {
                     }
                     true
                 }
-                // Top-up Tag makes Common jokers: phase 2.
+                TagKind::TopUp => {
+                    for _ in 0..2 {
+                        if (self.jokers.len() as i32) < self.joker_slots {
+                            let mut a = CreateArgs::new(CreateKind::Joker, Dest::Jokers, "top");
+                            a.rarity = Some(0.0);
+                            self.create_joker_into_slots(a);
+                        }
+                    }
+                    true
+                }
                 _ => false,
             };
             if acted {
@@ -452,10 +463,10 @@ impl Run {
         self.slots[slot.index()] = SlotState::Current;
         self.set_blind(kind);
         self.joker_buffer = 0;
-        let mut i = 0;
-        while i < self.jokers.len() {
+        // Jokers made during this loop (Riff-raff) do not get the event.
+        let n = self.jokers.len();
+        for i in 0..n {
             calculate_joker(self, i, Ctx::SettingBlind, &PlayedHand::default(), 0);
-            i += 1;
         }
         self.joker_buffer = 0;
         for j in self.jokers.iter_mut() {
@@ -562,6 +573,11 @@ impl Run {
             self.sort_hand();
         }
         self.phase = Phase::Round;
+        // The first draw of a blind (no hand played, no discard used):
+        // Certificate's card arrives after the drawn ones.
+        if self.hands_played_round == 0 && self.discards_used_round == 0 && self.blind.is_some() {
+            self.joker_event_all(Ctx::FirstHandDrawn);
+        }
         self.drawn_to_hand();
     }
 
@@ -707,6 +723,8 @@ impl Run {
                         .collect();
                     cards.dedup();
                     self.discard_cards(cards, true);
+                    // Jokers eaten by it (Ramen) are gone before scoring.
+                    self.purge_jokers();
                 }
                 if let Some(b) = self.blind.as_mut() {
                     b.triggered = true;
@@ -755,32 +773,54 @@ impl Run {
             let id = self.playing_cards[i];
             self.card_mut(id).forced = false;
         }
-        let none = PlayedHand {
+        let full = PlayedHand {
             full: cards.clone(),
             ..PlayedHand::default()
         };
         for k in 0..self.jokers.len() {
-            calculate_joker(self, k, Ctx::PreDiscard { hook }, &none, 0);
+            calculate_joker(self, k, Ctx::PreDiscard { hook }, &full, 0);
         }
         let n = cards.len();
+        let mut destroyed = Vec::new();
+        let mut shattered = Vec::new();
         for (i, &id) in cards.iter().enumerate() {
-            // A Purple Seal makes a Tarot here (phase 2).
-            let _purple = self.card(id).seal == Seal::Purple && !self.card(id).debuffed;
-            for k in 0..self.jokers.len() {
-                calculate_joker(
-                    self,
-                    k,
-                    Ctx::Discard {
-                        card: id,
-                        last: i + 1 == n,
-                        hook,
-                    },
-                    &none,
-                    0,
-                );
+            // The card's own discard effect: a Purple Seal makes a Tarot.
+            let c = self.card(id);
+            if c.seal == Seal::Purple && !c.debuffed && self.consumable_room_now() {
+                self.create_consumable_into_slots(CreateKind::Tarot, "8ba");
             }
-            self.hand.retain(|&h| h != id);
-            self.discard.push(id);
+            let mut removed = false;
+            for k in 0..self.jokers.len() {
+                let ctx = Ctx::Discard {
+                    card: id,
+                    last: i + 1 == n,
+                    hook,
+                };
+                if calculate_joker(self, k, ctx, &full, 0).is_some_and(|e| e.destroy) {
+                    removed = true;
+                }
+            }
+            if removed {
+                // Destroyed instead of discarded (Trading Card).
+                if self.card(id).enhancement == Enhancement::Glass {
+                    shattered.push(id);
+                }
+                destroyed.push(id);
+                self.destroy_card(id);
+            } else {
+                self.hand.retain(|&h| h != id);
+                self.discard.push(id);
+            }
+        }
+        if !destroyed.is_empty() {
+            let report = PlayedHand {
+                full: destroyed,
+                scoring: shattered,
+                ..PlayedHand::default()
+            };
+            for k in 0..self.jokers.len() {
+                calculate_joker(self, k, Ctx::RemovePlayingCards, &report, 0);
+            }
         }
         if !hook {
             self.discards_used_round += 1;
@@ -861,22 +901,36 @@ impl Run {
         if j.eternal {
             return refuse("an Eternal joker can't be sold");
         }
-        let value = joker_sell_value(j);
-        let kind = j.kind;
-        let debuffed = j.debuffed;
-        let boss = self.blind.as_ref().and_then(|b| b.active_boss());
-        self.remove_joker(idx);
-        self.money += value;
-        if self.phase == Phase::Round
-            && (boss == Some(Boss::VerdantLeaf)
-                || (kind == JokerKind::Luchador && !debuffed && boss.is_some()))
-        {
-            self.disable_blind();
-            if self.blind_beaten() {
-                self.end_round();
+        let none = PlayedHand::default();
+        // The sold card's own sale effect (a Blueprint or Brainstorm runs
+        // the one of the joker it copies), then every other joker hears of
+        // the sale.
+        calculate_joker(self, idx, Ctx::SellingSelf, &none, 0);
+        for k in 0..self.jokers.len() {
+            if k != idx {
+                calculate_joker(self, k, Ctx::SellingCard, &none, 0);
             }
         }
+        let value = joker_sell_value(&self.jokers[idx]);
+        self.money += value;
+        self.remove_joker(idx);
+        let leaf = self
+            .blind
+            .as_ref()
+            .is_some_and(|b| b.boss() == Some(Boss::VerdantLeaf));
+        if leaf {
+            self.disable_blind();
+        }
+        self.check_disabled_win();
         Ok(value)
+    }
+
+    /// A boss disabled mid-round whose lowered target is already met: the
+    /// round ends at once as a win.
+    pub(crate) fn check_disabled_win(&mut self) {
+        if self.phase == Phase::Round && self.blind_beaten() {
+            self.end_round();
+        }
     }
 
     // --------------------------------------------------------- end of round
@@ -980,29 +1034,45 @@ impl Run {
         self.most_played = best;
     }
 
-    /// End-of-round effects of held cards: Gold Cards pay $3 per trigger
-    /// (Blue Seals make Planets in phase 2).
+    /// End-of-round effects of held cards, per trigger: a Gold Card pays $3
+    /// and a Blue Seal makes the Planet of the last hand played (if a slot
+    /// is free). Red Seals and Mime retrigger a card that did something.
     fn held_end_of_round(&mut self) {
         let held = self.hand.clone();
         let none = PlayedHand::default();
         for &c in &held {
-            let card = self.card(c).clone();
-            let gold = card.enhancement == Enhancement::Gold && !card.debuffed;
-            let blue = card.seal == Seal::Blue && !card.debuffed;
-            let did = gold || blue;
             let mut reps = 1;
-            if card.seal == Seal::Red && !card.debuffed && did {
-                reps += 1;
-            }
-            for k in 0..self.jokers.len() {
-                if let Some(e) =
-                    calculate_joker(self, k, Ctx::EndOfRoundRepetition(c, did), &none, 0)
-                {
-                    reps += e.repetitions;
+            let mut pass = 0;
+            while pass < reps {
+                let card = self.card(c).clone();
+                let mut did = false;
+                if !card.debuffed {
+                    if card.enhancement == Enhancement::Gold {
+                        self.money += 3;
+                        did = true;
+                    }
+                    if card.seal == Seal::Blue && self.consumable_room_now() {
+                        if let Some(h) = self.last_hand {
+                            let planet = crate::content::ConsumableKind::planet_for(h);
+                            let made = self.make_consumable(planet);
+                            self.consumables.push(made);
+                        }
+                        did = true;
+                    }
                 }
-            }
-            if gold {
-                self.money += 3 * reps as i64;
+                if pass == 0 {
+                    if card.seal == Seal::Red && !card.debuffed && did {
+                        reps += 1;
+                    }
+                    for k in 0..self.jokers.len() {
+                        if let Some(e) =
+                            calculate_joker(self, k, Ctx::EndOfRoundRepetition(c, did), &none, 0)
+                        {
+                            reps += e.repetitions;
+                        }
+                    }
+                }
+                pass += 1;
             }
         }
     }

@@ -5,7 +5,9 @@
 //! consumables, destruction, the floored score, then 'after' effects.
 
 use crate::blinds::Boss;
-use crate::card::{Edition, Enhancement, Seal, Suit};
+use crate::card::{Card, Edition, Enhancement, Seal, Suit};
+use crate::content::ConsumableSet;
+use crate::create::CreateKind;
 use crate::joker_data::JokerKind as J;
 use crate::jokers::{joker_hand_type, joker_t_chips, joker_t_mult};
 use crate::poker::{detect, DetectRules, HandSet, HandType};
@@ -130,7 +132,13 @@ pub fn calculate_joker(
             if d as usize > run.jokers.len() + 1 {
                 return None;
             }
-            if let Some(e) = calculate_joker(run, other, ctx, h, d) {
+            let outer = run.blueprint_card;
+            if outer.is_none() {
+                run.blueprint_card = Some(idx);
+            }
+            let r = calculate_joker(run, other, ctx, h, d);
+            run.blueprint_card = outer;
+            if let Some(e) = r {
                 return Some(e);
             }
         }
@@ -167,17 +175,9 @@ pub fn calculate_joker(
             None
         }
         Ctx::EndOfRound { game_over } => end_of_round(run, idx, game_over, bp),
-        Ctx::PreDiscard { .. } => None,
-        Ctx::Discard { last, .. } => {
-            if kind == J::GreenJoker && !bp && last {
-                let j = &mut run.jokers[idx];
-                let prev = j.mult;
-                j.mult = (j.mult - 1.0).max(0.0);
-                if j.mult != prev {
-                    return Some(Effect::default());
-                }
-            }
-            None
+        Ctx::PreDiscard { hook } => crate::joker_events::pre_discard(run, idx, hook, h),
+        Ctx::Discard { card, last, .. } => {
+            crate::joker_events::discard(run, idx, card, last, h, bp)
         }
         Ctx::SettingBlind => {
             if kind == J::Chicot
@@ -289,6 +289,26 @@ fn before(run: &mut Run, idx: usize, h: &PlayedHand, bp: bool) -> Option<Effect>
             run.jokers[idx].mult += 1.0;
             some()
         }
+        J::ToDoList if h.hand.is_some() && h.hand == run.jokers[idx].hand => {
+            run.pending_money += 4;
+            Some(Effect {
+                dollars: 4,
+                ..Effect::default()
+            })
+        }
+        J::DNA if run.hands_played_round == 0 && h.full.len() == 1 => {
+            // A full copy of the played card goes into the hand at the
+            // right end and joins the deck.
+            let id = run.copy_playing_card(h.full[0]);
+            let c = run.card_mut(id);
+            c.face_down = false;
+            c.times_played = 0;
+            c.lucky_trigger = false;
+            run.playing_cards.push(id);
+            run.hand.push(id);
+            run.playing_card_added(&[id]);
+            some()
+        }
         _ => None,
     }
 }
@@ -315,6 +335,10 @@ fn play_card(run: &mut Run, idx: usize, c: CardId, h: &PlayedHand, bp: bool) -> 
         })
     };
     match kind {
+        J::EightBall if run.consumable_room_now() && id == Some(8) && roll(run, "8ball", 4.0) => {
+            run.create_consumable_into_slots(CreateKind::Tarot, "8ba");
+            some()
+        }
         J::Hiker => {
             run.card_mut(c).perma_bonus += 5;
             some()
@@ -481,7 +505,14 @@ fn main_effect(run: &mut Run, idx: usize, h: &PlayedHand, _bp: bool) -> Option<E
             ..Effect::default()
         })
     };
-    // The generic branches come first, in the game's order.
+    // Loyalty Card's own check runs before everything else.
+    if kind == J::LoyaltyCard {
+        let d = run.hands_played_run as i64 - j.counter;
+        if (4 - d).rem_euclid(6) == 5 {
+            return xm(4.0);
+        }
+    }
+    // Then the generic branches, in the game's order.
     let jtype = joker_hand_type(kind);
     if kind != J::SeeingDouble && j.x_mult > 1.0 && jtype.is_none_or(has) {
         return xm(j.x_mult);
@@ -560,8 +591,106 @@ fn main_effect(run: &mut Run, idx: usize, h: &PlayedHand, _bp: bool) -> Option<E
                 None
             }
         }
+        J::CeremonialDagger | J::RedCard | J::FlashCard | J::Swashbuckler if j.mult > 0.0 => {
+            mm(j.mult)
+        }
+        J::Castle if j.chips > 0.0 => cm(j.chips),
+        J::SteelJoker if j.counter > 0 => xm(1.0 + 0.2 * j.counter as f64),
+        J::StoneJoker if j.counter > 0 => cm(25.0 * j.counter as f64),
+        J::DriversLicense if j.counter >= 16 => xm(3.0),
+        J::FortuneTeller if run.usage_total.tarot > 0 => mm(run.usage_total.tarot as f64),
+        J::Blackboard => {
+            let all_black = run.hand.iter().all(|&c| {
+                let card = run.card(c);
+                let sm = run.smeared();
+                card.counts_for_flush(Suit::Clubs, sm) || card.counts_for_flush(Suit::Spades, sm)
+            });
+            if all_black {
+                xm(3.0)
+            } else {
+                None
+            }
+        }
+        J::FlowerPot if flower_pot(run, &h.scoring) => xm(3.0),
+        J::SeeingDouble if seeing_double(run, &h.scoring) => xm(2.0),
+        J::Seance if run.consumable_room_now() && has(HandType::StraightFlush) => {
+            run.create_consumable_into_slots(CreateKind::Spectral, "sea");
+            some()
+        }
+        J::Superposition
+            if run.consumable_room_now()
+                && h.scoring.iter().any(|&c| run.card(c).rank_id() == Some(14))
+                && has(HandType::Straight) =>
+        {
+            run.create_consumable_into_slots(CreateKind::Tarot, "sup");
+            some()
+        }
+        J::Vagabond if run.consumable_room_now() && run.money <= 4 => {
+            run.create_consumable_into_slots(CreateKind::Tarot, "vag");
+            some()
+        }
         _ => None,
     }
+}
+
+/// Flower Pot: the scoring cards fill Hearts, Diamonds, Spades and Clubs.
+/// Non-Wild cards first (debuff ignored), each filling the first empty suit
+/// it matches; then each Wild card fills the first empty suit (a debuffed
+/// Wild card fills nothing).
+fn flower_pot(run: &Run, scoring: &[CardId]) -> bool {
+    const ORDER: [Suit; 4] = [Suit::Hearts, Suit::Diamonds, Suit::Spades, Suit::Clubs];
+    let sm = run.smeared();
+    let mut filled = [false; 4];
+    let wild = |c: &Card| c.enhancement == Enhancement::Wild;
+    for &id in scoring {
+        let c = run.card(id);
+        if !wild(c) {
+            if let Some(k) = (0..4).find(|&k| !filled[k] && c.has_suit_for_boss(ORDER[k], sm)) {
+                filled[k] = true;
+            }
+        }
+    }
+    for &id in scoring {
+        let c = run.card(id);
+        if wild(c) {
+            if let Some(k) = (0..4).find(|&k| !filled[k] && c.has_suit(ORDER[k], sm)) {
+                filled[k] = true;
+            }
+        }
+    }
+    filled.iter().all(|&f| f)
+}
+
+/// Seeing Double: a Club and a card of another suit among the scoring cards.
+/// Non-Wild cards count for every suit they pass; then each Wild card adds
+/// to the first of Clubs, Diamonds, Spades, Hearts still at zero.
+fn seeing_double(run: &Run, scoring: &[CardId]) -> bool {
+    // Counts in the order Hearts, Diamonds, Spades, Clubs.
+    let sm = run.smeared();
+    let suits = [Suit::Hearts, Suit::Diamonds, Suit::Spades, Suit::Clubs];
+    let mut n = [0u32; 4];
+    for &id in scoring {
+        let c = run.card(id);
+        if c.enhancement != Enhancement::Wild {
+            for k in 0..4 {
+                if c.has_suit(suits[k], sm) {
+                    n[k] += 1;
+                }
+            }
+        }
+    }
+    for &id in scoring {
+        let c = run.card(id);
+        if c.enhancement == Enhancement::Wild {
+            if let Some(k) = [3usize, 1, 2, 0]
+                .into_iter()
+                .find(|&k| n[k] == 0 && c.has_suit(suits[k], sm))
+            {
+                n[k] += 1;
+            }
+        }
+    }
+    (n[0] > 0 || n[1] > 0 || n[2] > 0) && n[3] > 0
 }
 
 fn after(run: &mut Run, idx: usize, bp: bool) -> Option<Effect> {
@@ -594,6 +723,7 @@ fn end_of_round(run: &mut Run, idx: usize, game_over: bool, bp: bool) -> Option<
         return None;
     }
     let kind = run.jokers[idx].kind;
+    let boss = run.blind.as_ref().is_some_and(|b| b.boss().is_some());
     match kind {
         J::Popcorn => {
             let j = &mut run.jokers[idx];
@@ -638,6 +768,50 @@ fn end_of_round(run: &mut Run, idx: usize, game_over: bool, bp: bool) -> Option<
             }
             None
         }
+        J::Campfire if boss && run.jokers[idx].x_mult > 1.0 => {
+            run.jokers[idx].x_mult = 1.0;
+            some()
+        }
+        J::Rocket if boss => {
+            run.jokers[idx].counter += 2;
+            some()
+        }
+        J::InvisibleJoker => {
+            run.jokers[idx].counter += 1;
+            some()
+        }
+        J::ToDoList => {
+            let old = run.jokers[idx].hand;
+            let new = run.pick_to_do_hand(old);
+            run.jokers[idx].hand = Some(new);
+            some()
+        }
+        J::Egg => {
+            let mut j = run.jokers[idx].clone();
+            j.extra_value += 3;
+            run.set_joker_cost(&mut j);
+            run.jokers[idx] = j;
+            some()
+        }
+        J::GiftCard => {
+            for i in 0..run.jokers.len() {
+                let mut j = run.jokers[i].clone();
+                j.extra_value += 1;
+                run.set_joker_cost(&mut j);
+                run.jokers[i] = j;
+            }
+            for i in 0..run.consumables.len() {
+                let mut c = run.consumables[i].clone();
+                c.extra_value += 1;
+                run.set_consumable_cost(&mut c);
+                run.consumables[i] = c;
+            }
+            some()
+        }
+        J::HitTheRoad if run.jokers[idx].x_mult > 1.0 => {
+            run.jokers[idx].x_mult = 1.0;
+            some()
+        }
         _ => None,
     }
 }
@@ -650,6 +824,22 @@ pub fn joker_cash_out(run: &Run, idx: usize) -> Option<i64> {
     }
     match j.kind {
         J::GoldenJoker => Some(4),
+        J::Cloud9 => {
+            let mut k = j.clone();
+            run.frame_refresh(&mut k, Some(idx));
+            (k.counter > 0).then_some(k.counter)
+        }
+        J::Rocket => Some(j.counter),
+        J::Satellite => {
+            let planets = crate::content::ConsumableKind::of_set(ConsumableSet::Planet)
+                .iter()
+                .filter(|p| run.usage[p.index()] > 0)
+                .count() as i64;
+            (planets > 0).then_some(planets)
+        }
+        J::DelayedGratification if run.discards_used_round == 0 && run.discards_left > 0 => {
+            Some(2 * run.discards_left as i64)
+        }
         _ => None,
     }
 }
@@ -726,6 +916,9 @@ fn boss_hand_check(run: &mut Run, n_played: usize, hand: HandType) -> bool {
 /// Evaluate the hand in the play area (`G.FUNCS.evaluate_play`). Money
 /// earned is left in `pending_money` for the caller to add afterwards.
 pub fn evaluate_play(run: &mut Run) -> HandScore {
+    // The evaluation runs within one frame: per-frame joker values are the
+    // ones from just before it.
+    run.refresh_frame_values();
     let full = run.play.clone();
     let rules = detect_rules(run);
     let det = {
@@ -890,13 +1083,50 @@ pub fn evaluate_play(run: &mut Run) -> HandScore {
                 mult *= 1.5;
             }
         }
+        // Then the consumables: with Observatory, each Planet of the played
+        // hand gives X1.5.
+        if run.vouchers[crate::content::VoucherKind::Observatory.index()] {
+            for i in 0..run.consumables.len() {
+                let k = run.consumables[i].kind;
+                if k.set() == ConsumableSet::Planet && k.planet_hand() == Some(hand) {
+                    mult *= 1.5;
+                }
+            }
+        }
 
-        // Destruction: Glass cards roll to shatter.
+        // Destruction: for each scoring card the jokers are asked (Sixth
+        // Sense; the first yes ends the asking), then a Glass card rolls to
+        // shatter. Glass cards destroyed either way count as shattered.
+        let mut shattered = Vec::new();
         for &c in &scoring {
+            let mut gone = false;
+            for k in 0..run.jokers.len() {
+                if calculate_joker(run, k, Ctx::DestroyingCard(c), &ph, 0)
+                    .is_some_and(|e| e.destroy)
+                {
+                    gone = true;
+                    break;
+                }
+            }
             let card = run.card(c);
             if card.enhancement == Enhancement::Glass && !card.debuffed && roll(run, "glass", 4.0) {
+                gone = true;
+            }
+            if gone {
+                if run.card(c).enhancement == Enhancement::Glass {
+                    shattered.push(c);
+                }
                 destroyed.push(c);
             }
+        }
+        // The removal report (Caino, Glass Joker).
+        let report = PlayedHand {
+            full: destroyed.clone(),
+            scoring: shattered,
+            ..PlayedHand::default()
+        };
+        for i in 0..run.jokers.len() {
+            calculate_joker(run, i, Ctx::RemovePlayingCards, &report, 0);
         }
     } else {
         chips = 0.0;

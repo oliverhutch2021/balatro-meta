@@ -1200,6 +1200,14 @@ When the boss debuffs the whole hand, only the debuffed-hand pass and the
 
 ## UNSURE
 
+- **Money from The Hook's forced discard.** Mail-In Rebate, Faceless Joker
+  and Trading Card pay through queued money steps. The engine adds that money
+  before the hand is scored, so Bull, Bootstraps and Vagabond see it. If those
+  steps land after the scoring step in the game, they would not. Check with
+  BalatroBot (The Hook, Mail-In Rebate, Bull).
+- **Ramen eaten by The Hook's discard.** The engine removes it before the hand
+  is scored (the eaten animation is queued behind the discard). If it is still
+  in the joker area during scoring, it would give its last X value once more.
 - **Two Chicots.** From the code, each Chicot's blind-start disable runs without
   checking whether the boss is already disabled, so the restoring effects stack
   (The Water's discards and The Needle's hands twice, a lasting +1 hand size from

@@ -272,6 +272,12 @@ pub struct Run {
     /// `G.GAME.joker_buffer` during a blind start (Ceremonial Dagger,
     /// Riff-raff).
     pub(crate) joker_buffer: i32,
+    /// `G.GAME.consumeable_buffer`: consumables decided but not yet made
+    /// (Hallucination's Tarots wait for the pack's contents).
+    pub(crate) consumable_buffer: i32,
+    /// The Blueprint or Brainstorm that started the current copy chain
+    /// (`context.blueprint_card`), while one is running.
+    pub(crate) blueprint_card: Option<usize>,
 }
 
 impl Run {
@@ -378,9 +384,13 @@ impl Run {
             {
                 self.disable_blind();
             }
+            JokerKind::ChaosTheClown => {
+                self.free_rerolls += 1;
+                self.calc_reroll_cost(true);
+            }
+            JokerKind::ToTheMoon => self.interest_amount += 1,
             _ => {}
         }
-        self.refresh_card_debuffs();
     }
 
     /// A joker leaves (or is debuffed): undo its resource changes.
@@ -404,50 +414,79 @@ impl Run {
         match j.kind {
             JokerKind::CreditCard => self.bankrupt_at += 20,
             JokerKind::OopsAllSixes => self.probability /= 2.0,
+            JokerKind::ChaosTheClown => {
+                self.free_rerolls -= 1;
+                self.calc_reroll_cost(true);
+            }
+            JokerKind::ToTheMoon => self.interest_amount -= 1,
             _ => {}
         }
-        self.refresh_card_debuffs();
     }
 
-    /// Give the player a joker at the right end of the joker row.
+    /// The queued follow-ups of a joker joining, leaving, or changing its
+    /// debuff: every playing card's boss debuff is tested again, and
+    /// Astronomer re-prices every card.
+    pub(crate) fn joker_area_changed(&mut self, kind: JokerKind) {
+        self.refresh_card_debuffs();
+        if kind == JokerKind::Astronomer {
+            self.reprice_owned();
+        }
+    }
+
+    /// Give the player a joker at the right end of the joker row, made as
+    /// the game makes one (a To Do List draws its hand, a Loyalty Card
+    /// starts its cycle).
     pub fn add_joker(&mut self, kind: JokerKind) -> usize {
-        let sort_id = self.take_sort_id();
-        self.jokers.push(Joker::new(kind, sort_id));
-        let idx = self.jokers.len() - 1;
-        self.add_joker_effects(idx);
-        idx
+        let j = self.make_joker(kind);
+        self.push_joker(j);
+        self.jokers.len() - 1
     }
 
     /// Give the player a joker with an edition.
     pub fn add_joker_with_edition(&mut self, kind: JokerKind, edition: Edition) -> usize {
-        let idx = self.add_joker(kind);
-        self.jokers[idx].edition = edition;
-        if edition == Edition::Negative {
-            self.joker_slots += 1;
-        }
-        idx
+        let mut j = self.make_joker(kind);
+        j.edition = edition;
+        self.set_joker_cost(&mut j);
+        self.push_joker(j);
+        self.jokers.len() - 1
     }
 
-    /// Remove the joker at `idx` from the run.
+    /// Put a joker into the joker area: its add effects, a Negative's extra
+    /// slot, then the area's follow-ups.
+    pub(crate) fn push_joker(&mut self, j: Joker) {
+        let negative = j.edition == Edition::Negative;
+        let kind = j.kind;
+        self.jokers.push(j);
+        let idx = self.jokers.len() - 1;
+        self.add_joker_effects(idx);
+        if negative {
+            self.joker_slots += 1;
+        }
+        self.joker_area_changed(kind);
+    }
+
+    /// Remove the joker at `idx` from the run (`Card:remove`): its remove
+    /// effects, a Negative's slot, and its pool mark unless another copy
+    /// is held.
     pub(crate) fn remove_joker(&mut self, idx: usize) {
         self.remove_joker_effects(idx);
         let j = self.jokers.remove(idx);
         if j.edition == Edition::Negative {
             self.joker_slots -= 1;
         }
-        if j.kind == JokerKind::GrosMichel {
-            // extinction is decided by the end-of-round roll, not by removal
-        }
-        self.refresh_card_debuffs();
+        self.card_removed(crate::create::Center::Joker(j.kind));
+        self.joker_area_changed(j.kind);
     }
 
     /// Debuff or un-debuff a joker, with its add/remove effects.
     pub(crate) fn set_joker_debuff(&mut self, idx: usize, debuff: bool) {
         let j = &self.jokers[idx];
+        let kind = j.kind;
         if j.perishable && j.perish_tally <= 0 {
             if !j.debuffed {
-                self.jokers[idx].debuffed = true;
                 self.remove_joker_effects(idx);
+                self.jokers[idx].debuffed = true;
+                self.joker_area_changed(kind);
             }
             return;
         }
@@ -458,6 +497,72 @@ impl Run {
                 self.add_joker_effects(idx);
             }
             self.jokers[idx].debuffed = debuff;
+            self.joker_area_changed(kind);
+        }
+    }
+
+    /// Room for one more consumable, counting ones already decided
+    /// (`#consumeables + consumeable_buffer < limit`).
+    pub(crate) fn consumable_room_now(&self) -> bool {
+        (self.consumables.len() as i32) + self.consumable_buffer < self.consumable_slots
+    }
+
+    // ------------------------------------------------- per-frame values
+
+    /// A joker's values that the game recomputes every frame
+    /// (`Card:update`), from the current state: Joker Stencil's and
+    /// Throwback's X-mult, Swashbuckler's mult, and the deck tallies of
+    /// Steel Joker, Stone Joker, Driver's License and Cloud 9 (kept in
+    /// `counter`). `own` is the joker's index in the joker area, if it is
+    /// there.
+    pub fn frame_refresh(&self, j: &mut Joker, own: Option<usize>) {
+        let tally = |f: &dyn Fn(&crate::card::Card) -> bool| {
+            self.playing_cards
+                .iter()
+                .filter(|&&id| f(self.card(id)))
+                .count() as i64
+        };
+        match j.kind {
+            JokerKind::JokerStencil => {
+                let stencils = self
+                    .jokers
+                    .iter()
+                    .filter(|o| o.kind == JokerKind::JokerStencil)
+                    .count() as i32;
+                j.x_mult = (self.joker_slots - self.jokers.len() as i32 + stencils) as f64;
+            }
+            JokerKind::Swashbuckler => {
+                let sum: i64 = self
+                    .jokers
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| Some(*i) != own)
+                    .map(|(_, o)| o.sell_cost)
+                    .sum();
+                j.mult = sum as f64;
+            }
+            JokerKind::Throwback => j.x_mult = 1.0 + self.skips as f64 * 0.25,
+            JokerKind::SteelJoker => {
+                j.counter = tally(&|c| c.enhancement == Enhancement::Steel);
+            }
+            JokerKind::StoneJoker => {
+                j.counter = tally(&|c| c.enhancement == Enhancement::Stone);
+            }
+            JokerKind::DriversLicense => {
+                j.counter = tally(&|c| c.enhancement != Enhancement::None);
+            }
+            JokerKind::Cloud9 => j.counter = tally(&|c| c.rank_id() == Some(9)),
+            _ => {}
+        }
+    }
+
+    /// Refresh every owned joker's per-frame values. The evaluation of a
+    /// hand runs inside one frame, so it sees the values from before it.
+    pub(crate) fn refresh_frame_values(&mut self) {
+        for i in 0..self.jokers.len() {
+            let mut j = self.jokers[i].clone();
+            self.frame_refresh(&mut j, Some(i));
+            self.jokers[i] = j;
         }
     }
 

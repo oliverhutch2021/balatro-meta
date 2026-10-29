@@ -51,6 +51,13 @@ impl Run {
         id
     }
 
+    /// Put a consumable of `kind` into the consumable slots (room or not).
+    pub fn give_consumable(&mut self, kind: crate::content::ConsumableKind) -> usize {
+        let c = self.make_consumable(kind);
+        self.consumables.push(c);
+        self.consumables.len() - 1
+    }
+
     /// Move every card in hand back to the deck.
     pub fn clear_hand(&mut self) {
         let h: Vec<CardId> = self.hand.drain(..).collect();

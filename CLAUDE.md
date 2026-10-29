@@ -27,8 +27,11 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
 - `crates/bm-rng`: the game's RNG, bit for bit (seed hash, named streams,
   LuaJIT's generator, shuffles and picks).
 - `crates/bm-core`: the engine. `state.rs`/`run.rs` (the run and its flow),
-  `scoring.rs` (the evaluation and the joker routine), `blinds.rs`,
-  `tags.rs`, `joker_data.rs` (all 150 jokers' numbers), `jokers.rs`,
+  `scoring.rs` (the evaluation and the joker routine's scoring contexts),
+  `joker_events.rs` (blind start, discards, sales, shop and pack events),
+  `blinds.rs`, `tags.rs`, `joker_data.rs` (all 150 jokers' numbers),
+  `jokers.rs`, `content.rs` (consumables, vouchers, boosters), `create.rs`
+  (card creation, pools, prices), `shop.rs`, `packs.rs`, `consumables.rs`,
   `observe.rs` (the fair-play wall: the only place the bot's input is
   built), `env.rs` (moves as kind + argument), `bots.rs`, `scenario.rs`
   (building test positions).
@@ -39,14 +42,16 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
 - `tests/fixtures/`: committed fixtures the Rust tests compare against.
 - `rules/`: rules notes, one file per area, with sources.
 
-## Engine status (phase 1)
+## Engine status (phase 2)
 
-Exact so far: run start, blinds and bosses (all 28 effects), skip tags that
-need no shop (Economy, Skip, Handy, Garbage, Orbital, Juggle, Investment,
-Double, Boss), rounds, scoring, about 90 jokers (`jokers::is_implemented`),
-end of round and cash-out. Not yet (phase 2): the shop, packs, vouchers,
-consumables, Purple/Blue seal creations, the other jokers, Top-up and the
-shop tags. Pack tags are consumed as if their pack were skipped.
+Written to the notes: run start, blinds and bosses (all 28 effects), all 24
+tags, rounds, scoring, all 150 jokers, end of round and cash-out, the shop
+(rows, rerolls, vouchers, packs, prices), all 32 vouchers, all 52
+consumables, card creation with its streams, and the seals that make
+consumables. Per-frame joker values (Joker Stencil, Swashbuckler, Throwback,
+the deck tallies) are refreshed just before each hand is scored
+(`Run::refresh_frame_values`). Not yet checked against the real game: that is
+phase 3 (`make watch`). Open questions are the UNSURE sections of the notes.
 
 ## Commands
 
