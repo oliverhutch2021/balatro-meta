@@ -58,15 +58,15 @@ rng-check:  ## Phase 1 gate: the Rust RNG against LuaJIT and the game's own lua5
 bench:  ## Phase 1 gate: engine speed on all threads, in Rust and through Python (about two minutes)
 	$(PY) scripts/jobs.py run bench $(JOB_FLAGS)
 
-PAUSE ?= 0.8
-SPEED ?= 1
-watch:  ## Replay runs move by move in your own Balatro, through BalatroBot (setup: RUNNING.md)
-	$(PY) scripts/watch.py --pause $(PAUSE) --speed $(SPEED)
+SPEED ?= max
+PORT ?= 8790
+watch:  ## Watch the bots play in your own Balatro, with live stats around it, in your browser (setup: RUNNING.md)
+	$(PY) scripts/watch.py --speed $(SPEED) --port $(PORT)
 
-watch-dry:  ## The same runs in the engine only, printed here (no game needed)
+watch-dry:  ## Replay runs in the engine only, printed here (no game, no browser)
 	$(PY) scripts/watch.py --dry --runs 3
 
-watch-mod:  ## Install the in-game panel mod into your Balatro Mods folder
+watch-mod:  ## (Re)install the viewer's companion mod into your Balatro Mods folder (make watch does it too)
 	$(PY) scripts/watch.py --install-mod
 
 rng-game:  ## (dev) Only the game-runtime part of rng-check, outside the job runner

@@ -402,6 +402,30 @@ impl Game {
         (k as i64, a)
     }
 
+    /// How the run is going: up to `n` quick greedy playouts from fair copies
+    /// of this position (no more than `budget_ms` once 8 are done). Runs
+    /// without holding the GIL.
+    #[pyo3(signature = (n = 48, budget_ms = 400, salt = 0))]
+    fn projection<'py>(
+        &self,
+        py: Python<'py>,
+        n: usize,
+        budget_ms: u64,
+        salt: u64,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let run = self.run.clone();
+        let p = py.detach(move || {
+            bm_core::bots::projection(&run, n, std::time::Duration::from_millis(budget_ms), salt)
+        });
+        let d = PyDict::new(py);
+        d.set_item("playouts", p.playouts)?;
+        d.set_item("mean_ante", p.mean_ante())?;
+        d.set_item("p_win", p.p_win())?;
+        d.set_item("p_clear", p.p_clear())?;
+        d.set_item("final_ante", p.final_ante.to_vec())?;
+        Ok(d)
+    }
+
     /// The full state, in the real game's terms (for replay checks).
     fn view<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let r = &self.run;
@@ -428,15 +452,70 @@ impl Game {
         }
         d.set_item("hand", hand)?;
         let jokers = pyo3::types::PyList::empty(py);
-        for j in &r.jokers {
+        // What each joker's card shows (the same values the bot sees).
+        let shown = bm_core::observe::screen(r);
+        for (j, v) in r.jokers.iter().zip(shown.jokers.iter()) {
             let h = PyDict::new(py);
             h.set_item("key", j.kind.key())?;
             h.set_item("name", j.kind.name())?;
             h.set_item("edition", edition_name(j.edition))?;
             h.set_item("debuff", j.debuffed)?;
+            h.set_item("face_down", j.face_down)?;
+            h.set_item("eternal", j.eternal)?;
+            h.set_item("perishable", v.perishable)?;
+            h.set_item("rental", j.rental)?;
+            h.set_item("sell", v.sell_value)?;
+            h.set_item("mult", v.mult)?;
+            h.set_item("x_mult", v.x_mult)?;
+            h.set_item("chips", v.chips)?;
+            h.set_item("counter", v.counter)?;
+            h.set_item("hand", v.hand.map(|t| t.name()))?;
             jokers.append(h)?;
         }
         d.set_item("jokers", jokers)?;
+        d.set_item(
+            "vouchers",
+            bm_core::content::VoucherKind::all()
+                .filter(|v| r.vouchers[v.index()])
+                .map(|v| v.name())
+                .collect::<Vec<_>>(),
+        )?;
+        let levels = pyo3::types::PyList::empty(py);
+        for t in bm_core::poker::HandType::ALL {
+            let i = r.hand_levels.get(t);
+            if i.visible && (i.played > 0 || i.level > 1) {
+                let h = PyDict::new(py);
+                h.set_item("name", t.name())?;
+                h.set_item("level", i.level)?;
+                h.set_item("chips", i.chips)?;
+                h.set_item("mult", i.mult)?;
+                h.set_item("played", i.played)?;
+                levels.append(h)?;
+            }
+        }
+        d.set_item("hand_levels", levels)?;
+        d.set_item("last_hand", r.last_hand.map(|t| t.name()))?;
+        d.set_item("hands_played_run", r.hands_played_run)?;
+        d.set_item("deck_left", r.deck.len())?;
+        d.set_item("deck_total", r.playing_cards.len())?;
+        d.set_item("joker_slots", r.joker_slots)?;
+        d.set_item("consumable_slots", r.consumable_slots)?;
+        d.set_item("hand_size", r.hand_size())?;
+        if let Some(c) = r.cash_out.as_ref() {
+            d.set_item("cash_out", c.total)?;
+        }
+        if let Some(b) = r.blind.as_ref() {
+            d.set_item(
+                "blind_name",
+                match b.kind {
+                    bm_core::blinds::BlindKind::Small => "Small Blind",
+                    bm_core::blinds::BlindKind::Big => "Big Blind",
+                    bm_core::blinds::BlindKind::Boss(x) => x.name(),
+                },
+            )?;
+            d.set_item("blind_reward", b.dollars)?;
+            d.set_item("blind_disabled", b.disabled)?;
+        }
         let blinds = PyDict::new(py);
         for s in BlindSlot::ALL {
             let b = PyDict::new(py);

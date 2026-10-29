@@ -169,6 +169,87 @@ pub fn greedy_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     }
 }
 
+/// Where quick playouts from a position end: how the run is going.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Projection {
+    pub playouts: u32,
+    /// Runs that end at each ante (index 1 to 8 = lost at that ante, 9 =
+    /// won); index 0 unused.
+    pub final_ante: [u32; 10],
+    /// Playouts in which the blind being played (or the next one) is beaten.
+    pub cleared_blind: u32,
+}
+
+impl Projection {
+    pub fn mean_ante(&self) -> f64 {
+        let n: u32 = self.final_ante.iter().sum();
+        if n == 0 {
+            return 0.0;
+        }
+        let s: u64 = self
+            .final_ante
+            .iter()
+            .enumerate()
+            .map(|(a, &c)| a as u64 * c as u64)
+            .sum();
+        s as f64 / n as f64
+    }
+
+    pub fn p_win(&self) -> f64 {
+        self.final_ante[9] as f64 / self.playouts.max(1) as f64
+    }
+
+    pub fn p_clear(&self) -> f64 {
+        self.cleared_blind as f64 / self.playouts.max(1) as f64
+    }
+}
+
+/// Quick playouts by the greedy bot from fair copies of `run` (hidden parts
+/// reshuffled, fresh random streams), until the run is lost or won: at most
+/// `n`, and no more than `budget` of time once 8 are done. For the viewer's
+/// outlook chart; never shown to a bot.
+pub fn projection(run: &Run, n: usize, budget: std::time::Duration, salt: u64) -> Projection {
+    let start = std::time::Instant::now();
+    let mut p = Projection::default();
+    for i in 0..n as u64 {
+        if i >= 8 && start.elapsed() > budget {
+            break;
+        }
+        let mut sim = fair_copy(run, salt.wrapping_mul(1_000_003).wrapping_add(i));
+        let round = sim.round;
+        let in_round = sim.phase == Phase::Round;
+        let mut cleared = None;
+        for step in 0..4000u64 {
+            if sim.phase == Phase::GameOver || sim.won {
+                break;
+            }
+            let (k, a) = greedy_move(&sim, salt ^ (i << 20) ^ step);
+            if crate::env::apply(&mut sim, k, a).is_err() {
+                break;
+            }
+            // The blind being played (or, between blinds, the next one played).
+            let target_round = if in_round { round } else { round + 1 };
+            if cleared.is_none() && sim.round == target_round && sim.phase == Phase::RoundEval {
+                cleared = Some(true);
+            }
+            if cleared.is_none() && (sim.round > target_round || sim.phase == Phase::GameOver) {
+                cleared = Some(sim.round > target_round);
+            }
+        }
+        let ante = if sim.won {
+            9
+        } else {
+            sim.ante.clamp(1, 8) as usize
+        };
+        p.final_ante[ante] += 1;
+        if cleared == Some(true) || sim.won {
+            p.cleared_blind += 1;
+        }
+        p.playouts += 1;
+    }
+    p
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,6 +277,21 @@ mod tests {
         assert!(
             cleared >= 30,
             "greedy cleared both ante-1 blinds in only {cleared} of 40 runs"
+        );
+    }
+
+    #[test]
+    fn projections_are_deterministic_and_sensible() {
+        let run = Run::new(RunConfig::new("PROJECT1"));
+        let a = projection(&run, 16, std::time::Duration::from_secs(60), 7);
+        let b = projection(&run, 16, std::time::Duration::from_secs(60), 7);
+        assert_eq!(a, b);
+        assert_eq!(a.playouts, 16);
+        assert_eq!(a.final_ante.iter().sum::<u32>(), 16);
+        assert!(a.mean_ante() >= 1.0 && a.mean_ante() <= 9.0);
+        assert!(
+            a.p_clear() > 0.5,
+            "greedy clears the first Small Blind most of the time"
         );
     }
 

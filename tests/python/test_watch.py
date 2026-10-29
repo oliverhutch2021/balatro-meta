@@ -17,8 +17,17 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import viewer  # noqa: E402
 import watch  # noqa: E402
 from balatro_meta._engine import Game  # noqa: E402
+
+
+def replay(api, seed: str, tmp_path, moves=None):
+    """One run through the viewer's driver against `api` (no mod, no pictures)."""
+    v = viewer.Viewer("max")
+    drv = viewer.Driver(v, viewer.GameFiles(None), None, api=api, launch=False, say=lambda *_: None)
+    ok, msg = drv.play_run(seed, moves, "test")
+    return ok, msg, v
 
 
 def area(items: list, cheat_price: bool = False) -> dict:
@@ -144,9 +153,10 @@ def serve(fake: FakeGame):
 @pytest.mark.parametrize("seed", ["WATCH001", "K4QJ2B7X", "ZZ9ZZ9ZZ"])
 def test_replay_agrees_with_an_identical_game(seed, tmp_path, monkeypatch):
     monkeypatch.setattr(watch, "WATCH", tmp_path)
+    monkeypatch.setattr(viewer, "WATCH", tmp_path)
     srv = serve(FakeGame())
     api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
-    ok, msg = watch.replay(api, watch.Panel(tmp_path / "panel.txt"), seed, None, "test", 0.0)
+    ok, msg = replay(api, seed, tmp_path)[:2]
     srv.shutdown()
     assert ok, msg
     assert "run over" in msg or "won" in msg
@@ -155,6 +165,7 @@ def test_replay_agrees_with_an_identical_game(seed, tmp_path, monkeypatch):
 def test_shop_and_pack_moves_reach_the_game(tmp_path, monkeypatch):
     """The greedy bot buys, opens packs and uses Planets: those moves must be sent and agree."""
     monkeypatch.setattr(watch, "WATCH", tmp_path)
+    monkeypatch.setattr(viewer, "WATCH", tmp_path)
     fake = FakeGame()
     sent: list[str] = []
     rpc = fake.rpc
@@ -162,7 +173,7 @@ def test_shop_and_pack_moves_reach_the_game(tmp_path, monkeypatch):
     srv = serve(fake)
     api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
     for seed in ("SHOPPER1", "SHOPPER2", "SHOPPER3"):
-        ok, msg = watch.replay(api, watch.Panel(tmp_path / "panel.txt"), seed, None, "test", 0.0)
+        ok, msg = replay(api, seed, tmp_path)[:2]
         assert ok, msg
     srv.shutdown()
     assert {"buy", "pack", "use"} <= set(sent), sorted(set(sent))
@@ -170,35 +181,39 @@ def test_shop_and_pack_moves_reach_the_game(tmp_path, monkeypatch):
 
 def test_a_wrong_shop_price_is_caught(tmp_path, monkeypatch):
     monkeypatch.setattr(watch, "WATCH", tmp_path)
+    monkeypatch.setattr(viewer, "WATCH", tmp_path)
     srv = serve(FakeGame(cheat_price=True))
     api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
-    ok, msg = watch.replay(api, watch.Panel(tmp_path / "panel.txt"), "WATCH003", None, "test", 0.0)
+    ok, msg = replay(api, "WATCH003", tmp_path)[:2]
     srv.shutdown()
     assert not ok and "shop cards" in msg, msg
 
 
 def test_a_difference_is_caught_and_saved(tmp_path, monkeypatch):
     monkeypatch.setattr(watch, "WATCH", tmp_path)
+    monkeypatch.setattr(viewer, "WATCH", tmp_path)
     srv = serve(FakeGame(cheat=True))
     api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
-    ok, msg = watch.replay(api, watch.Panel(tmp_path / "panel.txt"), "WATCH002", None, "test", 0.0)
+    ok, msg, v = replay(api, "WATCH002", tmp_path)
     srv.shutdown()
     assert not ok and "money" in msg
+    assert v.run.mismatch and v.session["mismatches"] == 1  # shown on the page
     saved = list((tmp_path / "mismatches").glob("*.json"))
     assert len(saved) == 1 and json.loads(saved[0].read_text())["differences"]
-    assert "MISMATCH" in (tmp_path / "panel.txt").read_text()
+
 
 
 def test_the_windows_bridge_relays_calls(tmp_path, monkeypatch):
     """The relay that reaches BalatroBot on Windows' localhost, run here with this Python."""
     monkeypatch.setattr(watch, "WATCH", tmp_path)
+    monkeypatch.setattr(viewer, "WATCH", tmp_path)
     srv = serve(FakeGame())
     url = f"http://127.0.0.1:{srv.server_address[1]}"
     bridge = watch.WinBridge(sys.executable, str(ROOT / "scripts" / "win_bridge.py"), cwd=None)
     try:
         api = watch.Api(url, bridge)
         assert api.call("health") == {"status": "ok"}
-        ok, msg = watch.replay(api, watch.Panel(tmp_path / "panel.txt"), "BRIDGE01", None, "test", 0.0)
+        ok, msg = replay(api, "BRIDGE01", tmp_path)[:2]
         assert ok, msg
         # A refused call comes back as BalatroBot's refusal, not a crash.
         with pytest.raises(RuntimeError, match="refused"):

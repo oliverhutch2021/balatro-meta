@@ -1,29 +1,24 @@
-"""Watch runs in your own Balatro: the game replays them move by move.
+"""Watch the bots play in your own Balatro, with live stats around the game.
 
-    make watch                 replay runs in the game (Ctrl+C stops; the game stays open)
-    make watch PAUSE=1.5       seconds between moves (default 0.8)
-    make watch-dry             the same runs in the engine only, printed here (no game needed)
-    make watch-mod             install the in-game panel mod into your Balatro Mods folder
+    make watch                 open the viewer in your browser (Ctrl+C stops; the game stays open)
+    make watch SPEED=4         start at another speed (1, 2, 4, 10 or max; the page can change it)
+    make watch-dry             replay runs in the engine only, printed here (no game, no browser)
+    make watch-mod             (re)install the companion mod into your Balatro Mods folder
 
-Your copy of Balatro does the drawing: this script drives it through BalatroBot's API, which plays
-exactly the moves the engine made. Each replay is also a check of the engine. After every move the
-game's state (money, hands, discards, the cards in hand, the round's chips, the blinds and tags,
-jokers, consumables, the shop's cards, vouchers, packs and prices, and an open pack's cards) is
-compared with the engine's, and the first difference stops the replay and is saved to
-.sync/watch/mismatches/ with both states. BalatroBot has no call for "buy and use" or for a boss
-reroll; a replay stops (without a mismatch) before either.
+Your copy of Balatro does the drawing: BalatroBot plays exactly the moves the engine made, and the
+companion mod (mods/balatro_meta_watch) passes a picture of the game to the viewer page
+(scripts/viewer.py), blocks your mouse and keyboard while the bots play, and runs the game at the page's
+speed. Each replay is also a check of the engine: after every move the game's state (money, hands,
+discards, the cards in hand, the round's chips, the blinds and tags, jokers and consumables, the shop's
+cards, vouchers, packs and prices, and an open pack's cards) is compared with the engine's. A difference
+is saved to .sync/watch/mismatches/ with both states and the viewer moves on. BalatroBot has no call for
+"buy and use" or for a boss reroll; a replay stops (without a mismatch) before either.
 
-What it replays: the newest run a job saved for watching (.sync/watch/<job>/samples/*.json, with
-the job's progress shown in the panel), or else demo runs played by the greedy bot.
-
-Before the first time (see RUNNING.md, "Watching runs in your game"): Lovely, Steamodded
-1.0.0-beta-1221a or newer, BalatroBot and this project's panel mod in your Balatro Mods folder,
-other gameplay mods switched off. If BalatroBot isn't running, this opens the game through it (uv on
-Windows); `--no-launch` turns that off.
+Before the first time: RUNNING.md, step 5 (Lovely, Steamodded, BalatroBot; other gameplay mods off).
+make watch installs or updates the companion mod itself; restart Balatro once afterwards.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import subprocess
@@ -178,25 +173,6 @@ def launch_game(speed: float) -> bool:
     print("Opening Balatro through BalatroBot:", " ".join(cmd[1:]))
     subprocess.Popen(cmd, cwd="/mnt/c", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     return True
-
-
-def find_api(speed: float = 1.0, launch: bool = True) -> Api:
-    api = try_urls()
-    if api:
-        return api
-    if launch and launch_game(speed):
-        for _ in range(90):
-            time.sleep(1)
-            api = try_urls()
-            if api:
-                return api
-    raise SystemExit(
-        "Can't reach BalatroBot. Open the game with it first, in PowerShell:\n"
-        '    uvx balatrobot serve --gamespeed 1 --balatro-path "H:\\Steam\\steamapps\\common\\Balatro"\n'
-        "If the game is open, check its Lovely log (%AppData%\\Balatro\\Mods\\lovely\\log) for\n"
-        "'BB.SERVER :: HTTP server listening'. Ubuntu reaches it through a small relay run by Windows\n"
-        "Python (miniconda, anaconda or python.org; BM_WIN_PYTHON=/mnt/c/.../python.exe overrides).\n"
-        "BM_BALATROBOT_URL=http://host:port points somewhere else. Setup: RUNNING.md, step 5.")
 
 
 # ------------------------------------------------------------------ states
@@ -382,55 +358,18 @@ def hand_permutation(e_hand: list[dict], g_hand: list[dict]) -> list[int] | None
     return perm if len(perm) == len(g_hand) else None
 
 
-# ------------------------------------------------------------------ panel
-def panel_file() -> Path | None:
-    """%APPDATA%/Balatro/balatro_meta_watch.txt, which the panel mod reads."""
-    if os.environ.get("BM_WATCH_PANEL"):
-        return Path(os.environ["BM_WATCH_PANEL"])
+# ------------------------------------------------------------------ your PC
+def save_dir() -> Path | None:
+    """Balatro's save folder (%APPDATA%/Balatro), where the companion mod's files live."""
+    if os.environ.get("BM_BALATRO_SAVE"):
+        return Path(os.environ["BM_BALATRO_SAVE"])
     try:
         from rng_game import sh
         appdata = sh("cmd.exe", "/c", "echo %APPDATA%", cwd="/mnt/c").replace("\r", "").strip()
         folder = Path(sh("wslpath", "-u", appdata)) / "Balatro"
-        return folder / "balatro_meta_watch.txt" if folder.is_dir() else None
+        return folder if folder.is_dir() else None
     except (RuntimeError, OSError, ImportError):
         return None
-
-
-class Panel:
-    def __init__(self, path: Path | None) -> None:
-        self.path = path
-
-    def show(self, lines: list[str]) -> None:
-        text = "\n".join(lines[:14]) + "\n"
-        print("  | " + "\n  | ".join(lines))
-        if self.path:
-            try:
-                tmp = self.path.with_suffix(".tmp")
-                tmp.write_text(text, encoding="utf-8")
-                os.replace(tmp, self.path)
-            except OSError:
-                pass
-
-    def clear(self) -> None:
-        if self.path:
-            try:
-                self.path.unlink(missing_ok=True)
-            except OSError:
-                pass
-
-
-def job_line() -> str | None:
-    """The running job and its step, from the job runner's note."""
-    notes = sorted(WATCH.glob("*/current.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-    for p in notes:
-        try:
-            n = json.loads(p.read_text())
-        except (OSError, ValueError):
-            continue
-        if n.get("state") == "running" and time.time() - n.get("time", 0) < 6 * 3600:
-            done = sum(1 for s in n.get("steps", []) if s.get("done"))
-            return f"Job {n['job']}: step {n.get('step')} ({done}/{len(n.get('steps', []))} done)"
-    return None
 
 
 def newest_sample() -> dict | None:
@@ -556,129 +495,55 @@ def compare(api: Api, game, gs: dict, wait: float = 2.0) -> tuple[dict, list[str
         gs = settle(api, api.call("gamestate"))
 
 
-def replay(api: Api | None, panel: Panel, seed: str, moves, label: str, pause: float) -> tuple[bool, str]:
-    """Play one run in the engine and the game together. `moves` is a list, or None for the greedy bot."""
-    from balatro_meta._engine import Game
-
-    game = Game(seed)
-    title = f"Balatro Meta - {label} - seed {game.seed}"
-    if api:
-        try:
-            api.call("menu")
-        except RuntimeError:
-            pass
-        gs = settle(api, api.call("start", {"deck": "RED", "stake": "WHITE", "seed": game.seed}))
-        gs, diff = compare(api, game, gs)
-        if diff:
-            return False, report_mismatch(panel, title, game, 0, "start", diff, gs)
-    step = 0
-    while not game.over and step < 5000:
-        if moves is None:
-            kind, arg = game.greedy_move()
-        elif step < len(moves):
-            kind, arg = moves[step]
-        else:
-            break
-        what = describe(kind, arg, game)
-        why = unsupported(kind, game.view()["state"]) if api else None
-        if why:
-            end = f"stopped before move {step + 1} ({what}): {why}"
-            panel.show([title, end, f"Engine and game agreed on the first {step} moves"])
-            return True, end
-        lines = [title]
-        jl = job_line()
-        if jl:
-            lines.append(jl)
-        v = game.view()
-        lines.append(f"Ante {v['ante']}, round {v['round']}, ${v['money']}, chips {v['chips']:.0f}")
-        lines.append(f"Move {step + 1}: {what}")
-        if api:
-            lines.append(f"Engine and game agree after {step} moves" if step else "Engine and game agree at the start")
-        panel.show(lines)
-        if api:
-            gs = api.call("gamestate")
-            e_before = engine_view(game)
-            if gs.get("state") in HAND_STATES and e_before["hand"]:
-                perm = hand_permutation(e_before["hand"], game_view(gs)["hand"])
-                if perm is not None and perm != list(range(len(perm))):
-                    gs = settle(api, api.call("rearrange", {"hand": perm}))
-        if not game.step(kind, arg):
-            return False, f"the engine refused move {step + 1} ({what}); the sample doesn't fit this engine"
-        if api:
-            gs = settle(api, apply_in_game(api, kind, arg, e_before, game))
-            gs, diff = compare(api, game, gs)
-            if diff:
-                return False, report_mismatch(panel, title, game, step + 1, what, diff, gs)
-        step += 1
-        time.sleep(pause)
-    v = game.view()
-    end = "won the run" if v["won"] else f"run over at ante {v['ante']}"
-    panel.show([title, f"{end} after {step} moves", "Engine and game agreed on every move" if api else ""])
-    return True, end
-
-
-def report_mismatch(panel: Panel, title: str, game, step: int, what: str, diff: list[str], gs: dict) -> str:
-    out = WATCH / "mismatches"
-    out.mkdir(parents=True, exist_ok=True)
-    f = out / f"{game.seed}-move{step}.json"
-    f.write_text(json.dumps({"seed": game.seed, "move": step, "what": what, "differences": diff,
-                             "moves": game.moves, "engine": engine_view(game), "game": gs}, indent=1, default=str))
-    shown = f.relative_to(ROOT) if f.is_relative_to(ROOT) else f
-    panel.show([title, f"MISMATCH after move {step} ({what}):", *diff[:8], f"Saved: {shown}"])
-    return f"mismatch after move {step} ({what}): " + "; ".join(diff[:3]) + f". Details in {shown}"
-
-
-def install_mod() -> None:
-    from rng_game import sh
-    appdata = sh("cmd.exe", "/c", "echo %APPDATA%", cwd="/mnt/c").replace("\r", "").strip()
-    mods = Path(sh("wslpath", "-u", appdata)) / "Balatro" / "Mods"
-    if not mods.parent.is_dir():
-        raise SystemExit(f"Balatro's save folder isn't at {mods.parent}. Run the game once first.")
-    dest = mods / "balatro_meta_watch"
+def install_mod(folder: Path | None = None) -> str | None:
+    """Copy the companion mod into Balatro's Mods folder if it is missing or out of date. Returns what it
+    did, or None if nothing was needed."""
+    folder = folder or save_dir()
+    if folder is None:
+        raise SystemExit("Balatro's save folder wasn't found (%APPDATA%\\Balatro). Run the game once first.")
+    src = ROOT / "mods" / "balatro_meta_watch"
+    dest = folder / "Mods" / "balatro_meta_watch"
+    if dest.is_dir() and all((dest / f.name).exists() and (dest / f.name).read_bytes() == f.read_bytes()
+                             for f in src.iterdir()):
+        return None
     dest.mkdir(parents=True, exist_ok=True)
-    for f in (ROOT / "mods" / "balatro_meta_watch").iterdir():
+    for f in src.iterdir():
         (dest / f.name).write_bytes(f.read_bytes())
-    print(f"Installed the panel mod to {sh('wslpath', '-w', str(dest))}")
+    return (f"Installed the viewer's companion mod in {dest}. If Balatro is open, restart it once so it "
+            "loads (the viewer has a button for that).")
 
 
 def main() -> None:
+    import argparse
+
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--dry", action="store_true", help="engine only, no game")
-    ap.add_argument("--runs", type=int, default=0, help="stop after this many runs (0 = until Ctrl+C)")
-    ap.add_argument("--pause", type=float, default=0.8, help="seconds between moves")
+    ap.add_argument("--dry", action="store_true", help="engine only, printed here: no game, no browser")
+    ap.add_argument("--engine-only", action="store_true", help="the viewer page without a game")
+    ap.add_argument("--runs", type=int, default=0, help="--dry: stop after this many runs (0 = until Ctrl+C)")
     ap.add_argument("--seed", default="", help="replay this seed with the greedy bot")
-    ap.add_argument("--speed", type=float, default=1.0, help="game speed when this script opens the game")
+    ap.add_argument("--speed", default="max", help="1, 2, 4, 10 or max")
+    ap.add_argument("--port", type=int, default=8790)
+    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--no-browser", action="store_true")
     ap.add_argument("--no-launch", action="store_true", help="don't open the game if BalatroBot isn't running")
     ap.add_argument("--install-mod", action="store_true")
     a = ap.parse_args()
+    import viewer
+
     if a.install_mod:
-        install_mod()
+        print(install_mod() or "The companion mod is already up to date.")
         return
-    api = None if a.dry else find_api(a.speed, not a.no_launch)
-    panel = Panel(None if a.dry else panel_file())
-    if api and not panel.path:
-        print("Note: Balatro's save folder wasn't found, so the in-game panel won't update.")
-    n = 0
-    try:
-        while not a.runs or n < a.runs:
-            sample = None if a.seed else newest_sample()
-            if sample:
-                seed, moves, label = sample["seed"], [tuple(m) for m in sample["moves"]], sample["_from"]
-            else:
-                seed, moves, label = a.seed or fresh_seed(), None, f"demo run {n + 1} (greedy bot)"
-            ok, msg = replay(api, panel, seed, moves, label, 0.0 if a.dry else a.pause)
-            print(f"[{label}] seed {seed}: {msg}")
-            n += 1
-            if not ok:
-                raise SystemExit(1)
-            if a.seed:
-                break
-            time.sleep(0 if a.dry else 3)
-    except KeyboardInterrupt:
-        print("\nStopped. The game stays open.")
-    finally:
-        if not a.dry:
-            panel.clear()
+    if a.dry:
+        v = viewer.Viewer("max")
+        drv = viewer.Driver(v, viewer.GameFiles(None), None, engine_only=True, seed=a.seed, runs=a.runs or 0)
+        try:
+            drv.loop()
+        except KeyboardInterrupt:
+            print("\nStopped.")
+        return
+    speed = a.speed if a.speed in viewer.SPEEDS else "max"
+    viewer.serve(port=a.port, host=a.host, speed=speed, engine_only=a.engine_only, launch=not a.no_launch,
+                 seed=a.seed, browser=not a.no_browser)
 
 
 if __name__ == "__main__":

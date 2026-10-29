@@ -2,8 +2,8 @@
 	"id": "balatro_meta_watch",
 	"name": "Balatro Meta Watch",
 	"author": ["Balatro Meta"],
-	"description": "A small panel showing what make watch is replaying and whether the engine and the game agree. It only draws; it changes nothing in play.",
+	"description": "Companion of the Balatro Meta viewer: while it runs, mouse and keyboard are off so the bots play undisturbed, the game runs at the viewer's speed, and a small picture of the game is saved a few times a second for the viewer page. It changes nothing in the rules.",
 	"prefix": "bmwatch",
 	"main_file": "main.lua",
-	"version": "0.1.0"
+	"version": "0.2.0"
 }

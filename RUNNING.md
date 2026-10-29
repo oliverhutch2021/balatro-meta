@@ -82,28 +82,38 @@ the bot's input built after every move. The phase 1 target is 200,000 moves a se
 `results/bench/`. The leak test (same screen, different seed: identical input) runs in every
 `make smoke`, with the rest of the tests.
 
-## Step 5 (when you like): watching runs in your own Balatro
+## Step 5 (when you like): watching the bots play in your own Balatro
 
-`make watch` replays runs in your copy of Balatro, move by move, so the game itself draws everything.
-Each replay also checks the engine: after every move the game's money, hands, discards, cards in hand,
-round chips, blinds, tags, jokers and consumables, the shop's cards, vouchers, packs and prices, and an
-open pack's cards are compared with the engine's. The first difference stops the replay and is saved to
-`.sync/watch/mismatches/`. For now it shows demo runs by a simple greedy bot that also shops: it buys
-jokers and Planets, opens packs and takes cards from them. Once jobs play real runs, it replays those,
-with the job's progress in an in-game panel. BalatroBot has no "buy and use" and no boss reroll, so a
-replay stops (without a mismatch) before either.
+`make watch` opens the viewer in your browser: your Balatro in the middle, playing on its own, with live
+stats around it (in the style of Monopoly Meta's viewer):
+
+- **Your PC**: the running job and its steps, the engine's speed, and what this viewer has checked.
+- **Run outlook**: after every move, quick playouts from that position (hidden cards reshuffled, fresh
+  random streams) project where the run ends and how likely it is to clear the current blind. Click or
+  drag the chart, or click a move, to see the game as it was after that move. Turning points list the
+  moves that changed the outlook most, and what the shop or pack showed.
+- **Play by play**, the round (ante, blind, chips, money, hands, discards), jokers with their values,
+  consumables, vouchers, tags, the shop or open pack, and hand levels.
+- **Engine and game**: every replay is also a check. After every move the game's money, hands, discards,
+  cards in hand, round chips, blinds, tags, jokers and consumables, the shop's cards, vouchers, packs and
+  prices, and an open pack's cards are compared with the engine's. A difference is shown, saved to
+  `.sync/watch/mismatches/`, and the viewer moves on to the next run.
+
+The buttons under the game pause it, set the speed (1x to Max; Max is the default) and skip to the next
+run. While the viewer runs, Balatro ignores your mouse and keyboard so nothing disturbs the bots (a badge
+in the game's corner says so); it takes input again a few seconds after you stop the viewer. For now the
+runs are demo runs by a simple greedy bot that also shops; once jobs play real runs, it replays those.
+BalatroBot has no "buy and use" and no boss reroll, so a run stops (without a mismatch) before either.
 
 One-time setup, on Windows:
 
 1. Install uv (PowerShell): `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
-2. Lovely 0.8.0 or newer. Current Lovely releases install as `winmm.dll` in the game folder, and your
-   `H:\Steam\steamapps\common\Balatro` already has one; if it's older than 0.8.0, replace it from
-   https://github.com/ethangreen-dev/lovely-injector/releases.
+2. Lovely 0.8.0 or newer (`winmm.dll` in `H:\Steam\steamapps\common\Balatro`;
+   https://github.com/ethangreen-dev/lovely-injector/releases).
 3. Steamodded 1.0.0-beta-1221a or newer (https://github.com/Steamodded/smods/releases) in
-   `%AppData%\Balatro\Mods\smods`, replacing the old `smods-1.0.0-beta-0301a`.
-4. BalatroBot (https://github.com/coder/balatrobot/releases) in `%AppData%\Balatro\Mods\balatrobot`.
+   `%AppData%\Balatro\Mods`.
+4. BalatroBot (https://github.com/coder/balatrobot/releases) in `%AppData%\Balatro\Mods`.
 5. Move every other mod out of `%AppData%\Balatro\Mods` while watching, so the rules stay vanilla.
-6. In Ubuntu: `make watch-mod` installs our panel mod (it only draws a status box; it changes nothing in play).
 
 Each time, in Ubuntu:
 
@@ -111,14 +121,16 @@ Each time, in Ubuntu:
 make watch
 ```
 
-If BalatroBot isn't running yet, it opens Balatro through it and waits for it (`make watch SPEED=2` runs the
-game faster; `make watch PAUSE=2` waits longer between moves). Ctrl+C stops; the game stays open.
+It installs or updates the viewer's companion mod (`mods/balatro_meta_watch`) in your Mods folder by
+itself. If Balatro is already open without it, the page shows a **Restart Balatro** button; otherwise it
+opens Balatro through BalatroBot. Ctrl+C stops the viewer; the game stays open. `make watch SPEED=4` starts
+at another speed; the page can change it any time.
 
 BalatroBot listens on Windows' own localhost, which Ubuntu can't reach by default, so `make watch` talks to
-it through a small relay it runs with your Windows Python (the same miniconda the RNG check uses). Nothing
-to set up. If it still says it can't reach BalatroBot although the game is open, look in Balatro's Lovely
-log (`%AppData%\Balatro\Mods\lovely\log`, newest file) for `BB.SERVER :: HTTP server listening`.
-`make watch-dry` runs the same replays in the engine only.
+it through a small relay it runs with your Windows Python (the same miniconda the RNG check uses). If the
+page keeps waiting for the game although Balatro is open, look in Balatro's Lovely log
+(`%AppData%\Balatro\Mods\lovely\log`, newest file) for `BB.SERVER :: HTTP server listening`.
+`make watch-dry` replays runs in the engine only, printed in the terminal.
 
 ## Later steps
 

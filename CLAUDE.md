@@ -36,8 +36,12 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   built), `env.rs` (moves as kind + argument), `bots.rs`, `scenario.rs`
   (building test positions).
 - `crates/bm-py`: Python bindings (`VecEnv`, `Game`); `python/balatro_meta`.
-- `scripts/watch.py` + `mods/balatro_meta_watch`: `make watch` replays runs
-  in the user's own Balatro through BalatroBot and checks every move.
+- `scripts/watch.py` (BalatroBot link, engine-vs-game comparison),
+  `scripts/viewer.py` (the viewer's server and driver), `viewer/index.html`
+  (the page) and `mods/balatro_meta_watch` (the companion mod: input lock,
+  live speed, frames, idle signal): `make watch` shows the user's own
+  Balatro playing in the browser with live stats, and checks every move.
+  The game's pictures never enter the repo (memory and `.sync/` only).
 - `reference/`: LuaJIT scripts that produce reference fixtures.
 - `tests/fixtures/`: committed fixtures the Rust tests compare against.
 - `rules/`: rules notes, one file per area, with sources.
