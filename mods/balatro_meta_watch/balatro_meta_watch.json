@@ -1,0 +1,9 @@
+{
+	"id": "balatro_meta_watch",
+	"name": "Balatro Meta Watch",
+	"author": ["Balatro Meta"],
+	"description": "A small panel showing what make watch is replaying and whether the engine and the game agree. It only draws; it changes nothing in play.",
+	"prefix": "bmwatch",
+	"main_file": "main.lua",
+	"version": "0.1.0"
+}

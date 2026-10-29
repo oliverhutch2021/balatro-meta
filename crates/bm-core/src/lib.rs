@@ -4,6 +4,7 @@
 //! real game. Modules land here phase by phase.
 
 pub mod blinds;
+pub mod bots;
 pub mod card;
 pub mod env;
 pub mod hand_levels;

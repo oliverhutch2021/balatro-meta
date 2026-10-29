@@ -4,8 +4,11 @@
 //! threads, with the bot's input written straight into numpy arrays.
 //! `python/balatro_meta/env.py` wraps it.
 
-use bm_core::env::{legal_kinds, random_move, Env, MoveKind, XorShift, N_MOVE_KINDS};
+use bm_core::blinds::{BlindSlot, SlotState};
+use bm_core::card::{Edition, Enhancement, Seal};
+use bm_core::env::{apply, legal_kinds, random_move, Env, MoveKind, XorShift, N_MOVE_KINDS};
 use bm_core::observe::{encode, screen, OBS_LEN};
+use bm_core::state::{Phase, Run, RunConfig};
 use pyo3::buffer::PyBuffer;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -251,6 +254,181 @@ impl VecEnv {
     }
 }
 
+fn enh_name(e: Enhancement) -> Option<&'static str> {
+    Some(match e {
+        Enhancement::None => return None,
+        Enhancement::Bonus => "BONUS",
+        Enhancement::Mult => "MULT",
+        Enhancement::Wild => "WILD",
+        Enhancement::Glass => "GLASS",
+        Enhancement::Steel => "STEEL",
+        Enhancement::Stone => "STONE",
+        Enhancement::Gold => "GOLD",
+        Enhancement::Lucky => "LUCKY",
+    })
+}
+
+fn edition_name(e: Edition) -> Option<&'static str> {
+    Some(match e {
+        Edition::None => return None,
+        Edition::Foil => "FOIL",
+        Edition::Holographic => "HOLO",
+        Edition::Polychrome => "POLYCHROME",
+        Edition::Negative => "NEGATIVE",
+    })
+}
+
+fn seal_name(s: Seal) -> Option<&'static str> {
+    Some(match s {
+        Seal::None => return None,
+        Seal::Gold => "GOLD",
+        Seal::Red => "RED",
+        Seal::Blue => "BLUE",
+        Seal::Purple => "PURPLE",
+    })
+}
+
+fn state_name(p: Phase) -> &'static str {
+    match p {
+        Phase::BlindSelect => "BLIND_SELECT",
+        Phase::Round => "SELECTING_HAND",
+        Phase::RoundEval => "ROUND_EVAL",
+        Phase::Shop => "SHOP",
+        Phase::GameOver => "GAME_OVER",
+    }
+}
+
+fn slot_name(s: SlotState) -> &'static str {
+    match s {
+        SlotState::Upcoming => "UPCOMING",
+        SlotState::Select => "SELECT",
+        SlotState::Current => "CURRENT",
+        SlotState::Defeated => "DEFEATED",
+        SlotState::Skipped => "SKIPPED",
+    }
+}
+
+/// One run, for replays and viewers: every move is recorded, and `view()`
+/// gives the full state in the same terms the real game reports.
+#[pyclass(module = "balatro_meta._engine")]
+struct Game {
+    run: Run,
+    moves: Vec<(i64, u64)>,
+}
+
+#[pymethods]
+impl Game {
+    #[new]
+    #[pyo3(signature = (seed, stake = 1))]
+    fn new(seed: &str, stake: u8) -> PyResult<Self> {
+        let s = bm_rng::normalize_seed(seed)
+            .ok_or_else(|| PyValueError::new_err("not a valid seed"))?;
+        let mut cfg = RunConfig::new(&s);
+        cfg.stake = stake;
+        Ok(Game {
+            run: Run::new(cfg),
+            moves: Vec::new(),
+        })
+    }
+
+    #[getter]
+    fn seed(&self) -> String {
+        self.run.cfg.seed.clone()
+    }
+
+    #[getter]
+    fn moves(&self) -> Vec<(i64, u64)> {
+        self.moves.clone()
+    }
+
+    #[getter]
+    fn over(&self) -> bool {
+        self.run.phase == Phase::GameOver || self.run.won
+    }
+
+    /// Apply a move; False if the game refuses it (nothing changes).
+    fn step(&mut self, kind: i64, arg: u64) -> bool {
+        let Some(k) = MoveKind::from_index(kind) else {
+            return false;
+        };
+        let ok = apply(&mut self.run, k, arg).is_ok();
+        if ok {
+            self.moves.push((kind, arg));
+        }
+        ok
+    }
+
+    /// The greedy bot's move (decided on a fair copy).
+    fn greedy_move(&self) -> (i64, u64) {
+        let (k, a) = bm_core::bots::greedy_move(&self.run, self.moves.len() as u64);
+        (k as i64, a)
+    }
+
+    /// The full state, in the real game's terms (for replay checks).
+    fn view<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let r = &self.run;
+        let d = PyDict::new(py);
+        d.set_item("state", state_name(r.phase))?;
+        d.set_item("ante", r.ante)?;
+        d.set_item("round", r.round)?;
+        d.set_item("money", r.money)?;
+        d.set_item("hands_left", r.hands_left)?;
+        d.set_item("discards_left", r.discards_left)?;
+        d.set_item("chips", r.round_chips)?;
+        d.set_item("won", r.won)?;
+        let hand = pyo3::types::PyList::empty(py);
+        for &id in &r.hand {
+            let c = r.card(id);
+            let h = PyDict::new(py);
+            h.set_item("key", c.key())?;
+            h.set_item("enhancement", enh_name(c.enhancement))?;
+            h.set_item("edition", edition_name(c.edition))?;
+            h.set_item("seal", seal_name(c.seal))?;
+            h.set_item("debuff", c.debuffed)?;
+            h.set_item("face_down", c.face_down)?;
+            hand.append(h)?;
+        }
+        d.set_item("hand", hand)?;
+        let jokers = pyo3::types::PyList::empty(py);
+        for j in &r.jokers {
+            let h = PyDict::new(py);
+            h.set_item("key", j.kind.key())?;
+            h.set_item("name", j.kind.name())?;
+            h.set_item("edition", edition_name(j.edition))?;
+            h.set_item("debuff", j.debuffed)?;
+            jokers.append(h)?;
+        }
+        d.set_item("jokers", jokers)?;
+        let blinds = PyDict::new(py);
+        for s in BlindSlot::ALL {
+            let b = PyDict::new(py);
+            let kind = r.blind_in_slot(s);
+            b.set_item(
+                "name",
+                match kind {
+                    bm_core::blinds::BlindKind::Small => "Small Blind",
+                    bm_core::blinds::BlindKind::Big => "Big Blind",
+                    bm_core::blinds::BlindKind::Boss(x) => x.name(),
+                },
+            )?;
+            b.set_item("status", slot_name(r.slots[s.index()]))?;
+            if s != BlindSlot::Boss {
+                b.set_item("tag_name", r.tags_offered[s.index()].name())?;
+            }
+            blinds.set_item(["small", "big", "boss"][s.index()], b)?;
+        }
+        d.set_item("blinds", blinds)?;
+        if let Some(b) = r.blind.as_ref() {
+            d.set_item("blind_score", b.chips)?;
+        }
+        d.set_item(
+            "tags",
+            r.tags.iter().map(|t| t.kind.name()).collect::<Vec<_>>(),
+        )?;
+        Ok(d)
+    }
+}
+
 #[pymodule]
 fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
@@ -260,5 +438,6 @@ fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(lua_random, m)?)?;
     m.add_class::<Streams>()?;
     m.add_class::<VecEnv>()?;
+    m.add_class::<Game>()?;
     Ok(())
 }

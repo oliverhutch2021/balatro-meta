@@ -71,10 +71,55 @@ about the game's runtime to `results/rng/game_runtime.txt`. This is the RNG part
 If it can't find Windows Python or Balatro, it says which setting to give, for example
 `BM_WIN_PYTHON=/mnt/c/Users/<you>/miniconda3/python.exe make rng-check`.
 
+## Step 4: the speed gate (about a minute)
+
+```
+make bench
+```
+
+Plays random legal moves on all 16 threads for 20 seconds in Rust, then 20 seconds through Python with
+the bot's input built after every move. The phase 1 target is 200,000 moves a second; results go to
+`results/bench/`. The leak test (same screen, different seed: identical input) runs in every
+`make smoke`, with the rest of the tests.
+
+## Step 5 (when you like): watching runs in your own Balatro
+
+`make watch` replays runs in your copy of Balatro, move by move, so the game itself draws everything.
+Each replay also checks the engine: after every move the game's money, hands, discards, cards in hand,
+round chips, blinds and tags are compared with the engine's, and the first difference stops the replay
+and is saved to `.sync/watch/mismatches/`. For now it shows demo runs by a simple greedy bot (there's no
+shop until phase 2, so runs end early); once jobs play real runs, it replays those, with the job's
+progress in an in-game panel.
+
+One-time setup, on Windows:
+
+1. Install uv (PowerShell): `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
+2. Lovely 0.8.0 or newer. Current Lovely releases install as `winmm.dll` in the game folder, and your
+   `H:\Steam\steamapps\common\Balatro` already has one; if it's older than 0.8.0, replace it from
+   https://github.com/ethangreen-dev/lovely-injector/releases.
+3. Steamodded 1.0.0-beta-1221a or newer (https://github.com/Steamodded/smods/releases) in
+   `%AppData%\Balatro\Mods\smods`, replacing the old `smods-1.0.0-beta-0301a`.
+4. BalatroBot (https://github.com/coder/balatrobot/releases) in `%AppData%\Balatro\Mods\balatrobot`.
+5. Move every other mod out of `%AppData%\Balatro\Mods` while watching, so the rules stay vanilla.
+6. In Ubuntu: `make watch-mod` installs our panel mod (it only draws a status box; it changes nothing in play).
+
+Each time, in Ubuntu:
+
+```
+make watch
+```
+
+If BalatroBot isn't running yet, it opens Balatro through it and waits for it (`make watch SPEED=2` runs the
+game faster; `make watch PAUSE=2` waits longer between moves). Ctrl+C stops; the game stays open.
+
+If it says it can't reach BalatroBot although the game is open, Ubuntu can't see Windows' localhost: add
+`[wsl2]` and `networkingMode=mirrored` on two lines to `%UserProfile%\.wslconfig`, run `wsl --shutdown` in
+PowerShell, and reopen Ubuntu. `make watch-dry` runs the same replays in the engine only.
+
 ## Later steps
 
-Claude adds each one here when it's ready: the engine speed benchmark and leak test (rest of phase 1), the
-full content (phase 2), checks against the real game with BalatroBot (phase 3), and training (phase 4).
+Claude adds each one here when it's ready: the full content (phase 2), checks against the real game with
+BalatroBot (phase 3), and training (phase 4).
 
 ## If something goes wrong
 

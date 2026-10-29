@@ -225,6 +225,12 @@ The round ends:
 Immediate loss without any save: when a draw is about to happen (outside an
 Arcana or Spectral pack) while hand size is 0 or less and the hand is empty.
 
+UNSURE: the out-of-cards check (case 2) runs on every frame of hand
+selection and each call queues its own end-of-round step, which runs about
+0.2 s later. Several may be queued before the first one changes the state,
+so the end-of-round work could run more than once. The engine runs it once.
+A thin deck with spare hands can reach this; check it with BalatroBot.
+
 End-of-round start (about 0.2 s later, one step):
 
 1. Loss is assumed unless round total >= target.

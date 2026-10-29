@@ -84,7 +84,8 @@ def toolchain() -> None:
     add("PASS" if rustc else "FAIL", "Rust toolchain", ver or "missing; run bash bootstrap.sh")
     lj = shutil.which("luajit")
     _, ver = sh("luajit", "-v") if lj else (1, "")
-    add("PASS" if lj else "WARN", "LuaJIT (for make rng-check)", ver.splitlines()[0] if ver else "missing; sudo apt install luajit")
+    add("PASS" if lj else "WARN", "LuaJIT (for make rng-check)",
+        ver.splitlines()[0] if ver else "missing; sudo apt install luajit")
 
 
 def python_checks(quick: bool) -> None:
