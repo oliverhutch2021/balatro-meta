@@ -48,11 +48,12 @@ JOBS: dict[str, list[tuple]] = {
         ("python-tests", [PY, "-m", "pytest", "-q", "-p", "no:cacheprovider"]),
         ("doctor", ["scripts/doctor.py", "--quick"]),
     ],
-    # Phase 1 gate, part 1: the Rust RNG matches LuaJIT value for value, here on the PC, on 200x the
-    # committed cases (about 2.4 million lines of seeds, hashes, streams, rounding and shuffles).
+    # Phase 1 gate, RNG part: the Rust RNG matches LuaJIT value for value on 200x the committed cases
+    # (about 2.4 million lines of seeds, hashes, streams, rounding and shuffles): first this PC's LuaJIT 2.1,
+    # then the game's own lua51.dll (LuaJIT 2.0.5 + the Windows C runtime) through Windows Python.
     "rng-check": [
-        ("build", [*MAKE, "build"]),
         ("luajit-stress", [*MAKE, "rng-stress", "STRESS=200"]),
+        ("game-runtime", ["scripts/rng_game.py", "--scale", "200"]),
     ],
 }
 

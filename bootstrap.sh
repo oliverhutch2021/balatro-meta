@@ -11,8 +11,12 @@ say "Git settings for a Windows-drive checkout used from Linux"
 git config core.autocrlf false
 git config core.fileMode false
 if [ -z "$(git config user.email || true)" ]; then
-  # results are committed as the repo's owner: the global identity if set, else the latest non-Claude author
+  # results are committed as the repo's owner: the global identity if set, else the latest non-Claude
+  # author of this repo, else of the sibling monopoly-strategy repo
   who=$(git log --format='%an|%ae' | awk -F'|' '$2 != "noreply@anthropic.com" {print; exit}' || true)
+  if [ -z "$who" ] && [ -d ../monopoly-strategy/.git ]; then
+    who=$(git -C ../monopoly-strategy log --format='%an|%ae' | awk -F'|' '$2 != "noreply@anthropic.com" {print; exit}' || true)
+  fi
   if [ -n "$who" ]; then
     name=${who%|*}; email=${who##*|}
     git config user.name "$name"; git config user.email "$email"
@@ -73,7 +77,6 @@ make --no-print-directory doctor || true
 
 cat <<'EOF'
 
-Setup finished. If you opened a new terminal before, run `source ~/.cargo/env` once (new terminals do it
-automatically). Next (step 2 in RUNNING.md):
+Setup finished. Next (step 2 in RUNNING.md), from Ubuntu in this folder (or `wsl make smoke` in PowerShell):
     make smoke
 EOF

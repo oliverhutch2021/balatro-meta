@@ -42,6 +42,24 @@ port is `crates/bm-rng`; it is checked value for value against LuaJIT
 - `math.random()` gives a double in [0, 1); `math.random(m)` gives
   `floor(r * m) + 1`; `math.random(a, b)` gives `floor(r * (b - a + 1)) + a`.
 
+## The game's runtime
+
+- Balatro 1.0.1o ships LuaJIT **2.0.5** (`lua51.dll`), linked to the Windows
+  Universal C runtime; our cloud fixtures come from LuaJIT 2.1.
+- `math.random` is the same TW223 generator in both. `make rng-check` runs our
+  reference script on the game's own `lua51.dll` to confirm it value for value.
+- In 2.0.5, `string.format` hands numbers to the C runtime's `sprintf`. The
+  Universal CRT prints the exact binary value correctly rounded, with exact
+  halves rounded to even (Windows 10 2004 and later). LuaJIT 2.1 has its own
+  formatter that rounds exact halves away from zero, so the reference script
+  corrects ties when it is not running on the game's runtime, and our
+  `round13` rounds halves to even. Exact ties at the 13th place are the values
+  k / 2^14 with k odd, so they are rare in practice, but they are handled.
+- `tonumber` uses LuaJIT's own exact parser in both versions.
+- NaN: a string's hash collapses to NaN only in freak cases (none in 60 million
+  random key+seed strings). How the game's runtime prints and re-reads NaN is
+  recorded by the probe in `results/rng/game_runtime.txt`.
+
 ## Shuffles and picks
 
 - A shuffle walks the list from the end: for `i = n` down to 2, swap item `i`

@@ -1,6 +1,7 @@
 -- Reference fixtures for the Rust RNG port (crates/bm-rng).
 --
--- Run with LuaJIT 2.1:  luajit reference/rng_reference.lua > tests/fixtures/rng/reference.tsv
+-- Run with LuaJIT:  luajit reference/rng_reference.lua > tests/fixtures/rng/reference.tsv
+-- or on the game's own runtime (LuaJIT 2.0.5 + the Windows C runtime): `make rng-game`.
 -- An optional scale argument multiplies the number of generated cases
 -- (`make rng-stress` uses it); scale 1 reproduces the committed fixture.
 --
@@ -30,6 +31,27 @@ local function gen_seed(len)
   return table.concat(t)
 end
 
+-- Rounding to 13 places ------------------------------------------------------
+
+-- The game runs LuaJIT 2.0.5, whose string.format uses the C runtime's sprintf
+-- (on Windows the Universal CRT: exact, halves to even). On that runtime the
+-- plain round trip below is the reference. LuaJIT 2.1 has its own formatter
+-- that rounds exact halves away from zero, so elsewhere ties are corrected.
+-- Exact ties at the 13th decimal are exactly the values k / 2^14 with k odd.
+local GAME_RUNTIME = (jit ~= nil and jit.version == "LuaJIT 2.0.5")
+local function round13(x)
+  if not GAME_RUNTIME then
+    local t = x * 16384
+    if x > 0 and x < 1 and t == math.floor(t) and t % 2 == 1 then
+      local twice = t * 1220703125            -- 2 * x * 10^13, an odd integer
+      local lo = (twice - 1) / 2
+      local n = (lo % 2 == 0) and lo or lo + 1
+      return tonumber(fmt("0.%013d", n))
+    end
+  end
+  return tonumber(fmt("%.13f", x))
+end
+
 -- The recipe -----------------------------------------------------------------
 
 local function pseudohash(str)
@@ -48,7 +70,7 @@ local function pseudoseed(st, key)
   if st.state[key] == nil then
     st.state[key] = pseudohash(key .. st.seed)
   end
-  st.state[key] = math.abs(tonumber(fmt("%.13f", (2.134453429141 + st.state[key] * 1.72431234) % 1)))
+  st.state[key] = math.abs(round13((2.134453429141 + st.state[key] * 1.72431234) % 1))
   return (st.state[key] + st.hashed) / 2
 end
 
@@ -87,6 +109,8 @@ local keys = { "shuffle", "nr1", "nr2", "cdt1", "rarity1sho", "Joker11sho", "edi
 
 -- Output ---------------------------------------------------------------------
 
+print("META\t" .. ((jit and jit.version) or _VERSION) .. "\t" .. (GAME_RUNTIME and "game-runtime" or "ties-corrected"))
+
 -- LuaJIT generator: plain draws, draws in [1, m], draws in [a, b].
 for _, d in ipairs(doubles) do
   math.randomseed(d)
@@ -120,8 +144,7 @@ local r13 = { 0, 0.5, 2^-14, 3 * 2^-14, 2^-20, 0.99999999999995, 0.9999999999999
 for _ = 1, 2000 * SCALE do r13[#r13 + 1] = lcg() / 2147483647 end
 for _ = 1, 500 * SCALE do r13[#r13 + 1] = (lcg() % 16384) / 16384 end
 for _, x in ipairs(r13) do
-  local s = fmt("%.13f", x)
-  print("R13\t" .. num(x) .. "\t" .. s .. "\t" .. num(tonumber(s)))
+  print("R13\t" .. num(x) .. "\t" .. fmt("%.13f", x) .. "\t" .. num(round13(x)))
 end
 
 -- Named streams: interleaved pseudoseed calls, three rounds over every key.

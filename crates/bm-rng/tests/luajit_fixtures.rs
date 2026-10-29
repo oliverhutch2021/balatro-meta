@@ -46,13 +46,15 @@ fn fixture() -> String {
     })
 }
 
+/// Parses a number as LuaJIT prints it with %.17g. Non-finite values come out
+/// as `nan`/`-nan` (LuaJIT 2.1, glibc) or `nan`/`-nan(ind)`/`inf` (Windows CRT).
 fn num(s: &str) -> f64 {
-    let t = s.trim();
-    if t.contains("nan") {
+    let t = s.trim().to_ascii_lowercase();
+    if t.contains("nan") || t.contains("#ind") || t.contains("#qnan") {
         f64::NAN
-    } else if t == "inf" {
+    } else if t == "inf" || t == "+inf" || t.contains("#inf") && !t.starts_with('-') {
         f64::INFINITY
-    } else if t == "-inf" {
+    } else if t == "-inf" || t.starts_with("-1.#inf") {
         f64::NEG_INFINITY
     } else {
         t.parse::<f64>()
@@ -78,6 +80,7 @@ fn matches_luajit_value_for_value() {
         *counts.entry(kind).or_default() += 1;
         let at = || format!("line {}: {line}", lineno + 1);
         match kind {
+            "META" => {}
             "RAND" => {
                 let mut rs = LuaRandom::new(num(f[1]));
                 for want in nums(f[2]) {

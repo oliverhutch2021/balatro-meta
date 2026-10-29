@@ -21,14 +21,19 @@ pub fn lua_mod1(x: f64) -> f64 {
 /// `tonumber(string.format("%.13f", x))`: round to 13 decimal places the way
 /// the game does, by printing and parsing.
 ///
-/// LuaJIT's formatter rounds the exact binary value half away from zero (so
-/// 2^-14 prints as 0.0000610351563, where C and Rust print ...562), and
-/// `tonumber` returns the nearest double to the printed decimal. For |x| < 512
-/// this computes the same thing exactly with integers: N = x * 10^13 rounded
-/// half away from zero, then N / 10^13 (both exact doubles, so the division
-/// is the correctly rounded nearest double). Larger values, never seen in the
-/// game's streams, fall back to printing and parsing. Non-finite values pass
-/// through (the game itself would fail to parse them).
+/// The game runs LuaJIT 2.0.5, whose `string.format` hands numbers to the C
+/// runtime's `sprintf`; on Windows that is the Universal CRT, which prints the
+/// exact binary value correctly rounded, exact halves to even (Windows 10 2004
+/// and later; checked on the user's PC by `make rng-game`). `tonumber` then
+/// returns the nearest double to the printed decimal. (LuaJIT 2.1, used for the
+/// cloud fixture, prints exact halves away from zero instead, so the reference
+/// script corrects ties itself.)
+///
+/// For |x| < 512 this computes the same thing exactly with integers:
+/// N = x * 10^13 rounded half to even, then N / 10^13 (both exact doubles, so
+/// the division is the correctly rounded nearest double). Larger values, never
+/// seen in the game's streams, fall back to Rust's formatter, which also rounds
+/// exactly with halves to even. Non-finite values pass through.
 #[inline]
 pub fn round13(x: f64) -> f64 {
     if !x.is_finite() {
@@ -59,7 +64,9 @@ pub fn round13(x: f64) -> f64 {
         let p = (m as u128) * 10_000_000_000_000u128;
         let q = p >> sh;
         let r = p - (q << sh);
-        if (r << 1) >= (1u128 << sh) {
+        let twice = r << 1;
+        let unit = 1u128 << sh;
+        if twice > unit || (twice == unit && q & 1 == 1) {
             q + 1
         } else {
             q

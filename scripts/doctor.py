@@ -130,6 +130,24 @@ def gpu() -> None:
         f"torch {torch.__version__}, " + (torch.cuda.get_device_name(0) if ok else "CUDA not available"))
 
 
+def game_runtime() -> None:
+    """Windows Python and the game's lua51.dll, used by make rng-check to test the RNG on the game's own runtime."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        import rng_game
+        py = rng_game.find_windows_python()
+        add("PASS", "Windows Python (for the game-runtime RNG check)", str(py))
+    except SystemExit as e:
+        add("WARN", "Windows Python (for the game-runtime RNG check)", str(e))
+    except Exception as e:  # noqa: BLE001 - interop missing etc.
+        add("WARN", "Windows Python (for the game-runtime RNG check)", f"not reachable from WSL: {e}")
+    try:
+        import rng_game
+        add("PASS", "Balatro's lua51.dll", str(rng_game.find_balatro()))
+    except SystemExit as e:
+        add("WARN", "Balatro's lua51.dll", str(e))
+
+
 def later() -> None:
     add("LATER", "Balatro + Lovely + Steamodded + BalatroBot (phase 3)", "set up when validation starts")
 
@@ -143,6 +161,7 @@ def main() -> None:
     toolchain()
     python_checks(a.quick)
     gpu()
+    game_runtime()
     later()
     w = max(len(c) for _, c, _ in rows)
     print(f"\n{'':6}{'Check':{w}}  Detail")

@@ -18,6 +18,8 @@ says **Your turn** in the chat when a run is ready. This file holds the exact st
 
 ## Step 1: one-time setup (about 20 minutes)
 
+Run the commands in Ubuntu. From PowerShell, `bash bootstrap.sh` and `wsl make <target>` work too.
+
 In Ubuntu:
 
 ```
@@ -30,6 +32,13 @@ bash bootstrap.sh
 It installs make, LuaJIT, uv, Rust and Python 3.12, builds the engine, and installs PyTorch with CUDA for
 the 4070 Ti (about 3 GB; `SKIP_GPU=1 bash bootstrap.sh` leaves that for later). It asks for your Ubuntu
 password once and ends with a check table. If any line says FAIL, paste the table into the chat.
+
+Result commits are made under your name. If the check table says the Git identity is missing:
+
+```
+git config user.name "Your Name"
+git config user.email "you@example.com"
+```
 
 Once the empty GitHub repo exists, connect it and push:
 
@@ -53,9 +62,14 @@ tell Claude in the chat.
 make rng-check
 ```
 
-Compares the engine's random numbers with this PC's LuaJIT on about 2.4 million cases: seed hashes, every
-kind of stream draw, the 13-place rounding and deck shuffles. Every value must match bit for bit. This is
-the first part of the phase 1 gate.
+Compares the engine's random numbers with LuaJIT on about 2.4 million cases (seed hashes, every kind
+of stream draw, the 13-place rounding and deck shuffles), twice: first with Ubuntu's LuaJIT, then on the
+game's own `lua51.dll` (LuaJIT 2.0.5 with the Windows C runtime), which it runs through your Windows
+Python (miniconda is found automatically). Every value must match bit for bit. It also saves a few facts
+about the game's runtime to `results/rng/game_runtime.txt`. This is the RNG part of the phase 1 gate.
+
+If it can't find Windows Python or Balatro, it says which setting to give, for example
+`BM_WIN_PYTHON=/mnt/c/Users/<you>/miniconda3/python.exe make rng-check`.
 
 ## Later steps
 
