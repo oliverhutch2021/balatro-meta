@@ -320,8 +320,9 @@ hand is hidden applies once it is played.
 The Ox's "most played hand" is a separate value. It starts as High Card and is
 recomputed only when a Boss Blind is beaten, from the `played` counts. On ties
 the scan keeps the last tied hand it meets, and the scan follows Lua's table
-iteration order. UNSURE: that order is LuaJIT's hash order for the hands table,
-which we have not pinned down. It belongs in the blinds notes.
+iteration order: LuaJIT 2.0.5's hash order for the hands table, confirmed on
+the game's own runtime. `rules/blinds.md` (section 4 and the notes on The Ox)
+gives the order and the tie rule.
 
 ### 6.4 Decks, stakes and challenges
 

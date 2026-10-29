@@ -169,10 +169,12 @@ its table insertion (template table growing from 2 to 16 slots, collision
 handling, free-slot search). The insertion simulation matched real LuaJIT 2.1
 in 40 of 40 runs when fed 2.1's own slot numbers, and the hash formula matched
 2.1's hash exactly once 2.1's random hash seed was recovered; a fixed-size table
-gives the same order too. UNSURE: the remaining assumption is that 2.0.5 places
-string keys by that hash with no seed. Check it in the real game (Orbital Tag
-hands or a To Do List's first hand on a few known seeds). LuaJIT 2.1 cannot be
-used to produce this order: it randomises string placement per process.
+gives the same order too. Confirmed: the game's own `lua51.dll` walks a table
+built the way the game builds its hand table in exactly this order
+(`results/rng/game_runtime.txt`, from `make rng-check` on the PC). Phase 3 still
+checks Orbital Tag hands and a To Do List's first hand on known seeds. LuaJIT
+2.1 cannot be used to produce this order: it randomises string placement per
+process.
 Continuing a saved run rebuilds the table in a different order (computed:
 Flush House, Full House, Flush, Pair, Four of a Kind, Straight Flush, Straight,
 Three of a Kind, Flush Five, Two Pair, Five of a Kind, High Card), so tests
@@ -466,16 +468,18 @@ The engine can ignore all of them (record the Buffoon Pack as one pack type).
 
 ## 6. Runtime notes for `rules/rng.md`
 
-- The game's `lua51.dll` identifies itself as LuaJIT 2.0.5, linked against the
-  Windows Universal C runtime. The repo's fixtures come from LuaJIT 2.1.
-- UNSURE: 2.0.5's `math.random` and `math.randomseed` are believed to be the
-  same Tausworthe generator and seeding as 2.1.
-- In 2.0.5, `string.format` with `%.13f` and the parsing in `tonumber` are done
-  by the C runtime, not by LuaJIT's own code as in 2.1. Both should be
-  correctly rounded, so results should match except possibly for exact ties at
-  the 14th decimal, which `rules/rng.md` says LuaJIT 2.1 rounds away from zero.
-  UNSURE how the game's runtime rounds those, and how it prints NaN; both only
-  matter for rare values.
+- The game's `lua51.dll` identifies itself as LuaJIT 2.0.5 (Windows, x64),
+  linked against the Windows Universal C runtime. The repo's committed
+  fixtures come from LuaJIT 2.1.
+- Confirmed on the game's own `lua51.dll` (`make rng-check`, results in
+  `results/rng/`): 2,326,488 reference lines (hashes, stream steps, rounding,
+  `math.random` after reseeding, shuffles and picks) match the Rust engine value
+  for value. So 2.0.5's `math.random` and `math.randomseed` are the same as
+  2.1's.
+- In 2.0.5, `string.format` hands `%.13f` to the C runtime, which rounds exact
+  halves to even (confirmed: 2^-14 prints as `0.0000610351562`); LuaJIT 2.1
+  rounds them away from zero. `tonumber` is LuaJIT's own exact parser. NaN
+  prints as `nan` and infinity as `inf`.
 - Table walk order differs between 2.0.5 and 2.1 (section 2); nothing else in
   the random streams depends on it.
 

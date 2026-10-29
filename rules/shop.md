@@ -953,11 +953,11 @@ polychrome $6.
 
 - UNSURE: locked items depend on the player's profile. The engine should take
   a locked-key set as configuration; default is everything unlocked.
-- UNSURE: the order of the hand list To Do List picks from. It is built by
-  walking the run's poker-hand table in the runtime's hash order, then picked
-  by index. The jokers notes need to settle that order. Its stream `to_do` is
-  used whenever a To Do List card is created, including in the shop and in
-  packs.
+- Settled: the order of the hand list To Do List picks from. It is built by
+  walking the run's poker-hand table in the runtime's hash order (confirmed on
+  the game's runtime; `rules/rng_keys.md`, section 2), then picked by index.
+  Its stream `to_do` is used whenever a To Do List card is created, including
+  in the shop and in packs.
 - UNSURE: Hallucination's Tarot is created after the pack's contents. This
   was worked out from event timing (3.6), not seen in play.
 - UNSURE: hand sorting and the deck order at blind select for tag packs

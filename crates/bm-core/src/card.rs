@@ -240,6 +240,8 @@ pub struct Card {
     pub times_played: u32,
     /// Forced into the selection by Cerulean Bell.
     pub forced: bool,
+    /// A Lucky Card's roll hit on the current trigger (read by Lucky Cat).
+    pub lucky_trigger: bool,
 }
 
 impl Card {
@@ -258,6 +260,7 @@ impl Card {
             played_this_ante: false,
             times_played: 0,
             forced: false,
+            lucky_trigger: false,
         }
     }
 

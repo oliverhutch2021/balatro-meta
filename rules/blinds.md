@@ -147,9 +147,10 @@ tools. `rules/rng_keys.md` (section 2, "The poker-hand list") gives the walk
 order computed for 2.0.5 for a fresh run: Flush House, Full House, Flush, Pair,
 High Card, Straight Flush, Straight, Two Pair, Flush Five, Five of a Kind,
 Three of a Kind, Four of a Kind (a continued saved run has a different order).
-UNSURE: that order is computed, not yet observed in the game; check Orbital
-Tag hands on known seeds with BalatroBot. The same walk decides The Ox's
-target on ties (see the boss table).
+Confirmed on the game's own `lua51.dll`: a table built the way the game
+builds its hand table walks in exactly this order (`results/rng/game_runtime.txt`,
+`make rng-check`). Phase 3 still checks Orbital Tag hands on known seeds with
+BalatroBot. The same walk decides The Ox's target on ties (see the boss table).
 
 ## 5. When held tags act (summary for the round flow)
 
@@ -380,8 +381,8 @@ Notes on the table:
   House, Flush, Pair, High Card, Straight Flush, Straight, Two Pair, Flush
   Five, Five of a Kind, Three of a Kind, Four of a Kind (for example Pair tied
   with Two Pair gives Two Pair; High Card tied with Flush gives High Card).
-  All 12 hands are walked here, visible or not. UNSURE: same caveat as
-  section 4.
+  All 12 hands are walked here, visible or not. The order is confirmed on the
+  game's runtime (section 4).
 - The Hook's two picks: the first happens if at least 1 card is in hand, the
   second if at least 2 are. Each pick draws `hook` once and chooses among the
   remaining hand cards ordered by creation.

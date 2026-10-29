@@ -25,9 +25,10 @@ port is `crates/bm-rng`; it is checked value for value against LuaJIT
 - A stream starts at the hash of `key .. seed`. Each draw first steps it:
   `v = |round13((2.134453429141 + v * 1.72431234) mod 1)|`, where `round13`
   prints the number to 13 decimal places and reads it back.
-- LuaJIT prints exact halves away from zero (2^-14 prints as
-  `0.0000610351563`), unlike C and Rust, which round them to even. Our
-  `round13` does the same arithmetic exactly with integers.
+- The game's runtime prints exact halves to even (2^-14 prints as
+  `0.0000610351562`; confirmed on the game's own `lua51.dll`), while LuaJIT 2.1
+  rounds them away from zero. Our `round13` matches the game, using exact
+  integer arithmetic.
 - The draw's seed value is `(v + hash(seed)) / 2`. That value reseeds LuaJIT's
   generator (`math.randomseed`), and the event takes its numbers from it:
   one number for a roll, several for a shuffle or a pick from a list.
@@ -36,8 +37,8 @@ port is `crates/bm-rng`; it is checked value for value against LuaJIT
 
 ## LuaJIT's generator
 
-- LuaJIT 2.1's `math.random` is a combined Tausworthe generator (TW223) with
-  four 64-bit words. `math.randomseed(d)` fills them from `d` by repeating
+- LuaJIT's `math.random` (2.0.5 and 2.1 alike) is a combined Tausworthe
+  generator (TW223) with four 64-bit words. `math.randomseed(d)` fills them from `d` by repeating
   `d = d * pi + e`, then discards ten outputs.
 - `math.random()` gives a double in [0, 1); `math.random(m)` gives
   `floor(r * m) + 1`; `math.random(a, b)` gives `floor(r * (b - a + 1)) + a`.
@@ -47,7 +48,8 @@ port is `crates/bm-rng`; it is checked value for value against LuaJIT
 - Balatro 1.0.1o ships LuaJIT **2.0.5** (`lua51.dll`), linked to the Windows
   Universal C runtime; our cloud fixtures come from LuaJIT 2.1.
 - `math.random` is the same TW223 generator in both. `make rng-check` runs our
-  reference script on the game's own `lua51.dll` to confirm it value for value.
+  reference script on the game's own `lua51.dll`; on the user's PC all 2,326,488
+  lines matched the Rust engine value for value (`results/rng/game_check.json`).
 - In 2.0.5, `string.format` hands numbers to the C runtime's `sprintf`. The
   Universal CRT prints the exact binary value correctly rounded, with exact
   halves rounded to even (Windows 10 2004 and later). LuaJIT 2.1 has its own
@@ -57,8 +59,9 @@ port is `crates/bm-rng`; it is checked value for value against LuaJIT
   k / 2^14 with k odd, so they are rare in practice, but they are handled.
 - `tonumber` uses LuaJIT's own exact parser in both versions.
 - NaN: a string's hash collapses to NaN only in freak cases (none in 60 million
-  random key+seed strings). How the game's runtime prints and re-reads NaN is
-  recorded by the probe in `results/rng/game_runtime.txt`.
+  random key+seed strings). The game's runtime prints NaN as `nan` and reads it
+  back as NaN (`results/rng/game_runtime.txt`), so a NaN stream stays NaN, as in
+  the engine.
 
 ## Shuffles and picks
 
