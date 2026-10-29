@@ -1,21 +1,26 @@
 {
  "job": "bench",
- "commit": "357d2c18b906802d57b47f32e55e6a374aeb6361",
- "started": "2026-10-29T19:28:08+00:00",
- "finished": "2026-10-29T19:29:15+00:00",
+ "commit": "cffb455ce7d157c3033441d2c8776890873138d5",
+ "started": "2026-10-29T22:31:50+00:00",
+ "finished": "2026-10-29T22:32:54+00:00",
  "machine": {
   "host": "PC",
   "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
   "cpu_threads": 16,
   "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   7.3,
+   2.6,
+   1.1
+  ],
   "python": "3.12.3",
   "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
   "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
  },
  "steps": {
-  "build": 2,
+  "build": 1,
   "engine-speed": 43,
-  "python-speed": 21
+  "python-speed": 20
  },
  "commands": {
   "build": "make --no-print-directory build",

@@ -1,11 +1,11 @@
 {
  "threads": 16,
  "seconds": 20,
- "moves_per_s": 4439590,
- "moves_per_s_with_obs": 3442790,
- "runs_per_s": 553490,
- "runs_per_s_with_obs": 429245,
- "moves_per_s_one_thread": 385877,
+ "moves_per_s": 7570611,
+ "moves_per_s_with_obs": 5748288,
+ "runs_per_s": 938879,
+ "runs_per_s_with_obs": 712888,
+ "moves_per_s_one_thread": 850005,
  "target_moves_per_s": 200000,
  "passes": true
 }
