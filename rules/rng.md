@@ -1,0 +1,58 @@
+# Random numbers
+
+How Balatro turns a seed into every random event, in our own words. The Rust
+port is `crates/bm-rng`; it is checked value for value against LuaJIT
+(`make rng-fixtures`, `make rng-stress`).
+
+## The seed
+
+- A seed is 1 to 8 characters from `1-9` and `A-Z`. A typed `0` becomes `O`.
+  There are about 2.3 trillion seeds of up to 8 characters.
+- The seed string is hashed once into a number in [0, 1) (`pseudohash`): start
+  from 1 and walk the string from its last character to its first; at position
+  `i` with byte `b`, the running value becomes
+  `((1.1239285023 / n) * b * pi + pi * i) mod 1`.
+- A few strings make the running value collapse to 0, after which it becomes
+  NaN. The game carries the NaN on; we do the same.
+
+## Named streams
+
+- Every kind of random event draws from its own named stream, such as the deck
+  shuffle, a shop slot's rarity, or a Lucky card's roll. Drawing from one stream
+  never moves another, which is what lets two strategies share a world until
+  their choices differ.
+- A stream starts at the hash of `key .. seed`. Each draw first steps it:
+  `v = |round13((2.134453429141 + v * 1.72431234) mod 1)|`, where `round13`
+  prints the number to 13 decimal places and reads it back.
+- LuaJIT prints exact halves away from zero (2^-14 prints as
+  `0.0000610351563`), unlike C and Rust, which round them to even. Our
+  `round13` does the same arithmetic exactly with integers.
+- The draw's seed value is `(v + hash(seed)) / 2`. That value reseeds LuaJIT's
+  generator (`math.randomseed`), and the event takes its numbers from it:
+  one number for a roll, several for a shuffle or a pick from a list.
+- Because every stream shares `hash(seed)`, outputs of different streams are
+  not fully independent. The fair-play RNG-swap check exists for this reason.
+
+## LuaJIT's generator
+
+- LuaJIT 2.1's `math.random` is a combined Tausworthe generator (TW223) with
+  four 64-bit words. `math.randomseed(d)` fills them from `d` by repeating
+  `d = d * pi + e`, then discards ten outputs.
+- `math.random()` gives a double in [0, 1); `math.random(m)` gives
+  `floor(r * m) + 1`; `math.random(a, b)` gives `floor(r * (b - a + 1)) + a`.
+
+## Shuffles and picks
+
+- A shuffle walks the list from the end: for `i = n` down to 2, swap item `i`
+  with item `math.random(i)`, all from one seeding.
+- A pick takes `math.random(#list)` from one seeding.
+- Both depend on the list's order beforehand. The game puts lists into a
+  canonical order first; the engine must reproduce that order (phase 2 notes).
+
+## Sources
+
+- [Balatro's pseudorandom numbers](https://rennsax.com/posts/balatro-pseudorandom/):
+  the hash, the stream step and LuaJIT's generator.
+- [Balatro's least erratic decks](https://blog.danlew.net/2025/11/03/balatros-least-erratic-decks/):
+  the seed alphabet, the seed count and the NaN seeds.
+- LuaJIT 2.1 (`math.random`, `math.randomseed`, `string.format`), MIT licence.

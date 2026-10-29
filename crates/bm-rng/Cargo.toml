@@ -1,0 +1,9 @@
+[package]
+name = "bm-rng"
+description = "Balatro's seeded random numbers, bit for bit: the seed hash, named streams and LuaJIT's math.random"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
