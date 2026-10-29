@@ -391,6 +391,9 @@ impl Run {
                     let keep = self.card(left).clone();
                     copy.sort_id = keep.sort_id;
                     copy.original_suit = keep.original_suit;
+                    // The flips during the effect are cosmetic: it keeps its
+                    // own facing.
+                    copy.face_down = keep.face_down;
                     *self.card_mut(left) = copy;
                 }
             }

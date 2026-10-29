@@ -1,6 +1,7 @@
-//! The run's flow: starting a run, blind select, rounds, end of round,
-//! cash-out and the shop (a stub until phase 2). Every public method is one
-//! player move and checks that the game allows it at that moment.
+//! The run's flow: starting a run, blind select, rounds, end of round and
+//! cash-out (the shop, packs and consumables are in their own files). Every
+//! public method is one player move and checks that the game allows it at
+//! that moment.
 
 use std::fmt;
 
@@ -145,6 +146,10 @@ impl Run {
             joker_buffer: 0,
             consumable_buffer: 0,
             blueprint_card: None,
+            riffraff_pending: 0,
+            chicot_disables: 0,
+            acorn_shuffles_pending: false,
+            vampired: Vec::new(),
             cfg,
         };
         // The first boss, the first shop voucher and the two tags.
@@ -312,9 +317,8 @@ impl Run {
         }
     }
 
-    /// The first held tag that acts on a new blind choice (pack tags, Boss
-    /// Tag). Pack tags are consumed as if their pack were opened and skipped
-    /// until phase 2 adds packs.
+    /// The first held tag that acts on a new blind choice (pack tags open
+    /// their pack, the Boss Tag rerolls the boss).
     fn tags_new_blind_choice(&mut self) {
         for i in 0..self.tags.len() {
             match self.tags[i].kind {
@@ -463,11 +467,23 @@ impl Run {
         self.slots[slot.index()] = SlotState::Current;
         self.set_blind(kind);
         self.joker_buffer = 0;
-        // Jokers made during this loop (Riff-raff) do not get the event.
+        self.riffraff_pending = 0;
+        self.chicot_disables = 0;
+        // Every joker, in the order before Amber Acorn's shuffles.
         let n = self.jokers.len();
         for i in 0..n {
             calculate_joker(self, i, Ctx::SettingBlind, &PlayedHand::default(), 0);
         }
+        // Then the steps the game queued, in queue order: Riff-raff's
+        // jokers (made while the doomed jokers still hold their names), the
+        // doomed jokers leave, the round's deck shuffle, Amber Acorn's joker
+        // shuffles, then Chicot's disables, all before the opening draw.
+        for _ in 0..self.riffraff_pending {
+            let mut a = CreateArgs::new(CreateKind::Joker, Dest::Jokers, "rif");
+            a.rarity = Some(0.0);
+            self.create_joker_into_slots(a);
+        }
+        self.riffraff_pending = 0;
         self.joker_buffer = 0;
         for j in self.jokers.iter_mut() {
             if j.sliced {
@@ -477,7 +493,24 @@ impl Run {
         self.purge_jokers();
         let key = format!("nr{}", self.ante);
         self.shuffle_deck(&key);
+        self.amber_acorn_shuffles();
+        for _ in 0..std::mem::take(&mut self.chicot_disables) {
+            self.disable_blind();
+        }
         self.draw_to_hand();
+    }
+
+    /// Amber Acorn's three joker shuffles (stream `aajk`), queued when the
+    /// blind was set with more than one joker held.
+    fn amber_acorn_shuffles(&mut self) {
+        if !std::mem::take(&mut self.acorn_shuffles_pending) {
+            return;
+        }
+        for _ in 0..3 {
+            self.jokers.sort_by_key(|j| j.sort_id);
+            let mut g = self.rng.generator("aajk");
+            shuffle(&mut self.jokers, &mut g);
+        }
     }
 
     /// `Blind:set_blind` for a new blind.
@@ -517,13 +550,9 @@ impl Run {
                 for j in self.jokers.iter_mut() {
                     j.face_down = true;
                 }
-                if self.jokers.len() > 1 {
-                    for _ in 0..3 {
-                        self.jokers.sort_by_key(|j| j.sort_id);
-                        let mut g = self.rng.generator("aajk");
-                        shuffle(&mut self.jokers, &mut g);
-                    }
-                }
+                // The shuffles are queued: they run after the jokers'
+                // blind-start effects (`new_round`).
+                self.acorn_shuffles_pending = self.jokers.len() > 1;
             }
             _ => {}
         }
@@ -963,13 +992,16 @@ impl Run {
             }
         }
         let boss_round = self.blind.as_ref().is_some_and(|b| b.boss().is_some());
-        if boss_round && self.ante == self.win_ante {
-            self.won = true;
-        }
         if game_over {
+            // (The game also sets its "won" mark when the ante-8 boss is
+            // lost; that only reaches profile statistics, so `won` here
+            // means a real win.)
             self.purge_jokers();
             self.phase = Phase::GameOver;
             return;
+        }
+        if boss_round && self.ante == self.win_ante {
+            self.won = true;
         }
         self.unused_discards += self.discards_left;
         if boss_round {

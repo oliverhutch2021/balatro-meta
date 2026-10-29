@@ -278,6 +278,15 @@ pub struct Run {
     /// The Blueprint or Brainstorm that started the current copy chain
     /// (`context.blueprint_card`), while one is running.
     pub(crate) blueprint_card: Option<usize>,
+    /// Blind start, steps the game queues behind the jokers' blind-start
+    /// event: Riff-raff's jokers to make, Chicot's disables, and Amber
+    /// Acorn's three joker shuffles.
+    pub(crate) riffraff_pending: i32,
+    pub(crate) chicot_disables: i32,
+    pub(crate) acorn_shuffles_pending: bool,
+    /// Cards a Vampire stripped during the current hand (a second Vampire
+    /// skips them).
+    pub(crate) vampired: Vec<CardId>,
 }
 
 impl Run {
@@ -406,7 +415,8 @@ impl Run {
         }
         if d > 0 {
             self.discards_per_round -= d;
-            self.discards_left -= d;
+            // Discards left can't go below 0 (`ease_discard`).
+            self.discards_left = (self.discards_left - d).max(0);
         }
         if hands != 0 {
             self.hands_per_round -= hands;

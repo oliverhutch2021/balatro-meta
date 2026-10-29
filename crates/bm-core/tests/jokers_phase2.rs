@@ -627,3 +627,107 @@ fn every_joker_is_implemented() {
         assert!(bm_core::jokers::is_implemented(j.kind), "{:?}", j.kind);
     }
 }
+
+// ------------------------------------------- blind-start order (review)
+
+/// A run at blind select with the boss on deck.
+fn at_boss_select(boss: Boss, jokers: &[J]) -> Run {
+    use bm_core::blinds::SlotState;
+    let mut run = at_blind_select(jokers);
+    run.boss = boss;
+    run.slots = [SlotState::Defeated, SlotState::Defeated, SlotState::Select];
+    run
+}
+
+#[test]
+fn a_chicot_eaten_by_a_dagger_does_not_disable_the_boss() {
+    let mut run = at_boss_select(Boss::Wall, &[J::CeremonialDagger, J::Chicot]);
+    run.select_blind().unwrap();
+    assert_eq!(run.jokers.len(), 1);
+    assert!(!run.blind.as_ref().unwrap().disabled);
+    // Chicot alone does.
+    let mut run = at_boss_select(Boss::Wall, &[J::Chicot]);
+    run.select_blind().unwrap();
+    assert!(run.blind.as_ref().unwrap().disabled);
+}
+
+#[test]
+fn chicot_disables_after_burglar_so_the_water_gives_discards_back() {
+    let mut run = at_boss_select(Boss::Water, &[J::Chicot, J::Burglar]);
+    run.select_blind().unwrap();
+    // The Water takes 4, Burglar sets 0 and adds 3 hands, then Chicot's
+    // queued disable gives the 4 back.
+    assert_eq!((run.hands_left, run.discards_left), (7, 4));
+}
+
+#[test]
+fn riff_raff_jokers_arrive_after_the_other_blind_start_effects() {
+    let mut run = at_blind_select(&[J::RiffRaff, J::CeremonialDagger]);
+    run.select_blind().unwrap();
+    // The Dagger had no right neighbour when it acted: nothing eaten.
+    assert_eq!(run.jokers.len(), 4);
+    assert_eq!(joker(&run, J::CeremonialDagger).mult, 0.0);
+}
+
+#[test]
+fn amber_acorn_shuffles_after_the_dagger_chose_its_victim() {
+    let mut run = at_boss_select(
+        Boss::AmberAcorn,
+        &[J::CeremonialDagger, J::Joker, J::GreedyJoker, J::LustyJoker],
+    );
+    run.select_blind().unwrap();
+    // The victim is the Joker that was right of the Dagger before the
+    // shuffles, whatever order the shuffles leave.
+    assert_eq!(run.jokers.len(), 3);
+    assert!(run.jokers.iter().all(|j| j.kind != J::Joker));
+    assert_eq!(joker(&run, J::CeremonialDagger).mult, 2.0);
+}
+
+#[test]
+fn discards_never_go_below_zero_when_a_discard_joker_leaves() {
+    let mut run = with_jokers(&[J::Drunkard]);
+    assert_eq!(run.discards_left, 5);
+    run.discards_left = 0;
+    run.sell_joker(0).unwrap();
+    assert_eq!(run.discards_left, 0);
+    assert_eq!(run.discards_per_round, 4);
+}
+
+#[test]
+fn a_second_vampire_skips_cards_the_first_one_stripped() {
+    // [Vampire, Midas Mask, Vampire]: the first strips both Steel Kings,
+    // Midas Mask makes them Gold, the second Vampire leaves them Gold.
+    let mut run = with_jokers(&[J::Vampire, J::MidasMask, J::Vampire]);
+    let mut kings = Vec::new();
+    for s in [Spades, Hearts] {
+        kings.push(run.add_special_card_to_hand(
+            s,
+            King,
+            Enhancement::Steel,
+            Edition::None,
+            Seal::None,
+        ));
+    }
+    play(&mut run, &[0, 1]);
+    for k in kings {
+        assert_eq!(run.card(k).enhancement, Enhancement::Gold);
+    }
+    assert_eq!(run.jokers[0].x_mult, 1.2);
+    assert_eq!(run.jokers[2].x_mult, 1.0);
+}
+
+#[test]
+fn losing_the_ante_8_boss_is_not_a_win() {
+    let mut run = Run::scenario(SEED, BlindKind::Boss(Boss::Arm));
+    run.ante = 8;
+    run.hands_left = 1;
+    pair_of_kings(&mut run);
+    play(&mut run, &[0, 1]);
+    assert_eq!(run.phase, Phase::GameOver);
+    assert!(!run.won);
+
+    let mut run = Run::scenario(SEED, BlindKind::Boss(Boss::Arm));
+    run.ante = 8;
+    win_round(&mut run);
+    assert!(run.won);
+}

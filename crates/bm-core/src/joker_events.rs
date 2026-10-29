@@ -7,7 +7,7 @@ use bm_rng::pick_index;
 
 use crate::card::{standard_card_order, Card, Edition, Enhancement, Seal};
 use crate::content::{ConsumableKind, ConsumableSet};
-use crate::create::{Center, CreateArgs, CreateKind, Dest};
+use crate::create::{Center, CreateKind};
 use crate::joker_data::JokerKind as J;
 use crate::scoring::{calculate_joker, detect_rules, Ctx, Effect, PlayedHand};
 use crate::state::{CardId, HeldTag, Run};
@@ -102,14 +102,11 @@ pub(crate) fn setting_blind(
         J::RiffRaff if !acting_sliced => {
             let used = run.jokers.len() as i32 + run.joker_buffer;
             if used < run.joker_slots {
+                // Room is taken at once; the jokers are made by a queued
+                // step after every joker's blind-start effect.
                 let n = (run.joker_slots - used).min(2);
                 run.joker_buffer += n;
-                for _ in 0..n {
-                    let mut a = CreateArgs::new(CreateKind::Joker, Dest::Jokers, "rif");
-                    a.rarity = Some(0.0);
-                    run.create_joker_into_slots(a);
-                }
-                run.joker_buffer -= n;
+                run.riffraff_pending += n;
                 return some();
             }
             None

@@ -180,14 +180,15 @@ pub fn calculate_joker(
             crate::joker_events::discard(run, idx, card, last, h, bp)
         }
         Ctx::SettingBlind => {
-            if kind == J::Chicot
-                && !bp
-                && run
-                    .blind
-                    .as_ref()
-                    .is_some_and(|b| b.boss().is_some() && !b.disabled)
-            {
-                run.disable_blind();
+            // A joker marked for destruction at this blind start does
+            // nothing at it.
+            if run.jokers[idx].sliced {
+                return None;
+            }
+            // Chicot queues a disable (no "already disabled" check: two
+            // Chicots disable twice); it runs just before the opening draw.
+            if kind == J::Chicot && !bp && run.blind.as_ref().is_some_and(|b| b.boss().is_some()) {
+                run.chicot_disables += 1;
             }
             crate::joker_events::setting_blind(run, idx, h, bp)
         }
@@ -241,7 +242,11 @@ fn before(run: &mut Run, idx: usize, h: &PlayedHand, bp: bool) -> Option<Effect>
             let mut n = 0;
             for &c in &h.scoring {
                 let card = run.card(c);
-                if card.enhancement != Enhancement::None && !card.debuffed {
+                if card.enhancement != Enhancement::None
+                    && !card.debuffed
+                    && !run.vampired.contains(&c)
+                {
+                    run.vampired.push(c);
                     run.set_enhancement(c, Enhancement::None);
                     n += 1;
                 }
@@ -919,6 +924,7 @@ pub fn evaluate_play(run: &mut Run) -> HandScore {
     // The evaluation runs within one frame: per-frame joker values are the
     // ones from just before it.
     run.refresh_frame_values();
+    run.vampired.clear();
     let full = run.play.clone();
     let rules = detect_rules(run);
     let det = {
