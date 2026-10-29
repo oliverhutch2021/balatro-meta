@@ -9,5 +9,5 @@ target/
 *.so
 *.pyd
 .sync/
-runs/
-results/scratch/
+/runs/
+/results/scratch/
