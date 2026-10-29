@@ -328,6 +328,7 @@ fn state_name(p: Phase) -> &'static str {
         Phase::Round => "SELECTING_HAND",
         Phase::RoundEval => "ROUND_EVAL",
         Phase::Shop => "SHOP",
+        Phase::Pack => "SMODS_BOOSTER_OPENED",
         Phase::GameOver => "GAME_OVER",
     }
 }

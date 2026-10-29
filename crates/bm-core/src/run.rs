@@ -9,7 +9,7 @@ use bm_rng::{pick_index, shuffle, Streams};
 use crate::blinds::{
     blind_target, scaling_for_stake, BlindKind, BlindSlot, Boss, BossPool, SlotState,
 };
-use crate::card::{standard_card_order, Edition, Enhancement, Rank, Seal, SortMode, Suit};
+use crate::card::{standard_card_order, Enhancement, Rank, Seal, SortMode, Suit};
 use crate::hand_levels::HandLevels;
 use crate::joker_data::JokerKind;
 use crate::poker::HandType;
@@ -51,19 +51,9 @@ fn refuse<T>(why: &str) -> Result<T, Refused> {
     Err(Refused(why.to_string()))
 }
 
-/// Sell value of a joker: half its cost, at least $1, plus extra value.
+/// A joker's stored sell value.
 pub fn joker_sell_value(j: &crate::jokers::Joker) -> i64 {
-    let edition_cost = match j.edition {
-        Edition::Foil => 2,
-        Edition::Holographic => 3,
-        Edition::Polychrome | Edition::Negative => 5,
-        Edition::None => 0,
-    };
-    let cost = ((j.kind.info().cost + edition_cost) as f64 + 0.5)
-        .floor()
-        .max(1.0) as i64;
-    let cost = if j.rental { 1 } else { cost };
-    (cost / 2).max(1) + j.extra_value
+    j.sell_cost
 }
 
 impl Run {
@@ -125,10 +115,39 @@ impl Run {
             cash_out: None,
             gros_michel_extinct: false,
             pending_money: 0,
+            consumables: Vec::new(),
+            vouchers: [false; crate::content::N_VOUCHERS],
+            present: vec![false; crate::create::N_CENTERS],
+            banned_jokers: Vec::new(),
+            shop: None,
+            pack: None,
+            shop_voucher: None,
+            joker_max: 2,
+            shop_rates: Default::default(),
+            discount_percent: 0,
+            inflation: 0,
+            edition_rate: 1.0,
+            interest_cap: 25,
+            interest_amount: 1,
+            reroll_base: 5,
+            reroll_temp: None,
+            reroll_increase: 0,
+            reroll_cost: 5,
+            free_rerolls: 0,
+            d6_this_shop: false,
+            first_shop_buffoon: false,
+            usage: [0; crate::content::N_CONSUMABLES],
+            usage_total: Default::default(),
+            last_tarot_planet: None,
+            ecto_minus: 1,
+            jokers_purchased_round: 0,
+            boss_rerolls_allowed: false,
+            joker_buffer: 0,
             cfg,
         };
-        // The first boss, the first shop voucher (phase 2) and the two tags.
+        // The first boss, the first shop voucher and the two tags.
         run.boss = run.bosses.draw(&mut run.rng, 1, run.win_ante);
+        run.shop_voucher = Some(run.next_voucher("Voucher1"));
         run.tags_offered = [run.draw_tag(), run.draw_tag()];
         // The 52 cards in the game's creation order, then one shuffle.
         for (s, r) in standard_card_order() {
@@ -298,13 +317,38 @@ impl Run {
                 | TagKind::Ethereal
                 | TagKind::Standard
                 | TagKind::Buffoon => {
-                    self.tags.remove(i);
-                    self.tags_new_blind_choice();
+                    let t = self.tags.remove(i);
+                    let key = match t.kind {
+                        TagKind::Charm => "p_arcana_mega_1",
+                        TagKind::Meteor => "p_celestial_mega_1",
+                        TagKind::Ethereal => "p_spectral_normal_1",
+                        TagKind::Standard => "p_standard_mega_1",
+                        _ => "p_buffoon_mega_1",
+                    };
+                    let id = crate::content::booster_by_key(key).expect("known pack");
+                    self.open_pack(id, Phase::BlindSelect);
                     return;
                 }
                 _ => {}
             }
         }
+    }
+
+    pub(crate) fn add_tag_pub(&mut self, tag: HeldTag) {
+        self.add_tag(tag);
+    }
+
+    pub(crate) fn tags_new_blind_choice_pub(&mut self) {
+        self.tags_new_blind_choice();
+    }
+
+    pub(crate) fn end_round_pub(&mut self) {
+        self.end_round();
+    }
+
+    pub(crate) fn draw_to_hand_pub(&mut self) {
+        self.draw_to_hand();
+        self.check_out_of_cards();
     }
 
     /// Add a tag: every held Double Tag copies it (never a Double Tag).
@@ -363,6 +407,27 @@ impl Run {
         Ok(())
     }
 
+    /// The Reroll Boss button works (Director's Cut once per ante, Retcon
+    /// without limit, $10 each).
+    pub fn can_reroll_boss(&self) -> bool {
+        use crate::content::VoucherKind as V;
+        let dc = self.vouchers[V::DirectorsCut.index()];
+        let retcon = self.vouchers[V::Retcon.index()];
+        self.phase == Phase::BlindSelect
+            && self.spendable() >= 10
+            && (retcon || (dc && !self.boss_rerolled))
+    }
+
+    /// Reroll this ante's boss for $10.
+    pub fn reroll_boss(&mut self) -> Result<(), Refused> {
+        if !self.can_reroll_boss() {
+            return refuse("the boss can't be rerolled now");
+        }
+        self.money -= 10;
+        self.reroll_boss_inner();
+        Ok(())
+    }
+
     fn reroll_boss_inner(&mut self) {
         self.boss_rerolled = true;
         self.boss = self.bosses.draw(&mut self.rng, self.ante, self.win_ante);
@@ -376,11 +441,27 @@ impl Run {
         self.hands_left = self.hands_per_round.max(1);
         self.hands_played_round = 0;
         self.discards_used_round = 0;
+        self.reroll_increase = 0;
         self.hand_levels.new_round();
+        for i in 0..self.playing_cards.len() {
+            let id = self.playing_cards[i];
+            self.card_mut(id).face_down = false;
+        }
+        self.free_rerolls = self.count_jokers(crate::joker_data::JokerKind::ChaosTheClown) as i32;
+        self.calc_reroll_cost(true);
         self.slots[slot.index()] = SlotState::Current;
         self.set_blind(kind);
-        for i in 0..self.jokers.len() {
+        self.joker_buffer = 0;
+        let mut i = 0;
+        while i < self.jokers.len() {
             calculate_joker(self, i, Ctx::SettingBlind, &PlayedHand::default(), 0);
+            i += 1;
+        }
+        self.joker_buffer = 0;
+        for j in self.jokers.iter_mut() {
+            if j.sliced {
+                j.removing = true;
+            }
         }
         self.purge_jokers();
         let key = format!("nr{}", self.ante);
@@ -860,7 +941,8 @@ impl Run {
             .map_or(BlindSlot::Small, |b| b.kind.slot());
         self.slots[slot.index()] = SlotState::Defeated;
         if boss_round {
-            // The shop voucher for the new ante is drawn here (phase 2).
+            let key = format!("Voucher{}", self.ante);
+            self.shop_voucher = Some(self.next_voucher(&key));
             for i in 0..self.playing_cards.len() {
                 let id = self.playing_cards[i];
                 self.card_mut(id).played_this_ante = false;
@@ -870,6 +952,10 @@ impl Run {
             let t = self.temp_handsize;
             self.temp_handsize = 0;
             self.change_hand_size(-t);
+        }
+        if self.reroll_temp.is_some() {
+            self.reroll_temp = None;
+            self.calc_reroll_cost(true);
         }
         self.reset_round_targets(false);
         for i in 0..self.playing_cards.len() {
@@ -957,7 +1043,7 @@ impl Run {
             out.tags += 25 * n as i64;
         }
         if self.money >= 5 {
-            out.interest = (self.money / 5).min(25 / 5);
+            out.interest = self.interest_amount * (self.money / 5).min(self.interest_cap / 5);
         }
         out.total = out.blind
             + out.hands
@@ -986,13 +1072,15 @@ impl Run {
         self.discards_left = self.discards_per_round;
         self.money += total;
         self.round_chips = 0.0;
+        self.jokers_purchased_round = 0;
+        self.d6_this_shop = false;
         if self.slots[BlindSlot::Boss.index()] == SlotState::Defeated {
             self.tags_offered = [self.draw_tag(), self.draw_tag()];
             self.slots = [SlotState::Select, SlotState::Upcoming, SlotState::Upcoming];
             self.boss = self.bosses.draw(&mut self.rng, self.ante, self.win_ante);
             self.boss_rerolled = false;
         }
-        self.phase = Phase::Shop;
+        self.open_shop();
         Ok(total)
     }
 
@@ -1001,6 +1089,7 @@ impl Run {
         if self.phase != Phase::Shop {
             return refuse("not in the shop");
         }
+        self.close_shop();
         self.enter_blind_select();
         Ok(())
     }

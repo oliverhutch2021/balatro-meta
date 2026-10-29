@@ -12,9 +12,14 @@ use bm_rng::{shuffle, LuaRandom, SeedSampler, Streams};
 
 use crate::blinds::{BlindKind, BlindSlot, Boss, SlotState, N_BOSSES};
 use crate::card::{Card, Edition, Enhancement, Rank, Seal, SortMode, Suit};
+use crate::content::{
+    BoosterId, ConsumableKind, PackKind, VoucherKind, BOOSTERS, N_CONSUMABLES, N_VOUCHERS,
+};
 use crate::joker_data::{JokerKind, N_JOKERS};
+use crate::packs::PackCard;
 use crate::poker::HandType;
 use crate::run::joker_sell_value;
+use crate::shop::RowItem;
 use crate::state::{Phase, Run};
 use crate::tags::{TagKind, N_TAGS};
 
@@ -49,6 +54,30 @@ pub struct JokerView {
     pub x_mult: f64,
     pub chips: f64,
     pub counter: i64,
+}
+
+/// A shop, pack or slot item as the screen shows it.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ItemView {
+    Joker(JokerView),
+    Consumable(ConsumableKind, Edition),
+    Card(CardView),
+}
+
+/// The shop's cards, each with its price.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShopView {
+    pub row: Vec<(ItemView, i64)>,
+    pub vouchers: Vec<(VoucherKind, i64)>,
+    pub boosters: Vec<Option<(BoosterId, i64)>>,
+}
+
+/// An open pack.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PackView {
+    pub booster: BoosterId,
+    pub cards: Vec<ItemView>,
+    pub choices_left: usize,
 }
 
 /// A visible hand type's row in the run info: level, chips, mult, times
@@ -105,6 +134,53 @@ pub struct Screen {
     pub unused_discards: i32,
     /// The cash-out screen's total.
     pub cash_out: Option<i64>,
+    /// Held consumables: kind, edition, sell value.
+    pub consumables: Vec<(ConsumableKind, Edition, i64)>,
+    pub vouchers: [bool; N_VOUCHERS],
+    pub shop: Option<ShopView>,
+    pub pack: Option<PackView>,
+    pub reroll_cost: i64,
+    pub interest_cap: i64,
+    pub joker_max: i32,
+    pub tarots_used: u32,
+    pub planets_used: u32,
+    /// Distinct Planets used (Satellite shows it).
+    pub planet_kinds_used: u32,
+    /// The card The Fool would make.
+    pub last_tarot_planet: Option<ConsumableKind>,
+    /// Ectoplasm's hand-size cost (its description shows it).
+    pub ecto_minus: i32,
+}
+
+fn joker_view(j: &crate::jokers::Joker) -> JokerView {
+    if j.face_down {
+        return JokerView {
+            kind: None,
+            edition: Edition::None,
+            eternal: false,
+            perishable: None,
+            rental: false,
+            debuffed: false,
+            sell_value: 0,
+            mult: 0.0,
+            x_mult: 0.0,
+            chips: 0.0,
+            counter: 0,
+        };
+    }
+    JokerView {
+        kind: Some(j.kind),
+        edition: j.edition,
+        eternal: j.eternal,
+        perishable: j.perishable.then_some(j.perish_tally),
+        rental: j.rental,
+        debuffed: j.debuffed,
+        sell_value: joker_sell_value(j),
+        mult: j.mult,
+        x_mult: j.x_mult,
+        chips: j.chips,
+        counter: j.counter,
+    }
 }
 
 fn card_view(c: &Card) -> CardView {
@@ -206,41 +282,7 @@ pub fn screen(run: &Run) -> Screen {
         tags_held: run.tags.iter().map(|t| (t.kind, t.orbital_hand)).collect(),
         hands,
         hand: run.hand.iter().map(|&id| card_view(run.card(id))).collect(),
-        jokers: run
-            .jokers
-            .iter()
-            .map(|j| {
-                if j.face_down {
-                    JokerView {
-                        kind: None,
-                        edition: Edition::None,
-                        eternal: false,
-                        perishable: None,
-                        rental: false,
-                        debuffed: false,
-                        sell_value: 0,
-                        mult: 0.0,
-                        x_mult: 0.0,
-                        chips: 0.0,
-                        counter: 0,
-                    }
-                } else {
-                    JokerView {
-                        kind: Some(j.kind),
-                        edition: j.edition,
-                        eternal: j.eternal,
-                        perishable: j.perishable.then_some(j.perish_tally),
-                        rental: j.rental,
-                        debuffed: j.debuffed,
-                        sell_value: joker_sell_value(j),
-                        mult: j.mult,
-                        x_mult: j.x_mult,
-                        chips: j.chips,
-                        counter: j.counter,
-                    }
-                }
-            })
-            .collect(),
+        jokers: run.jokers.iter().map(joker_view).collect(),
         deck_counts,
         deck_enhancements,
         deck_editions,
@@ -264,6 +306,56 @@ pub fn screen(run: &Run) -> Screen {
         } else {
             None
         },
+        consumables: run
+            .consumables
+            .iter()
+            .map(|c| (c.kind, c.edition, c.sell_cost))
+            .collect(),
+        vouchers: run.vouchers,
+        shop: run.shop.as_ref().map(|s| ShopView {
+            row: s
+                .row
+                .iter()
+                .map(|r| {
+                    let v = match &r.item {
+                        RowItem::Joker(j) => ItemView::Joker(joker_view(j)),
+                        RowItem::Consumable(c) => ItemView::Consumable(c.kind, c.edition),
+                        RowItem::Card(c) => ItemView::Card(card_view(c)),
+                    };
+                    (v, r.cost)
+                })
+                .collect(),
+            vouchers: s.vouchers.iter().map(|v| (v.voucher, v.cost)).collect(),
+            boosters: s
+                .boosters
+                .iter()
+                .map(|b| b.as_ref().map(|b| (b.booster, b.cost)))
+                .collect(),
+        }),
+        pack: run.pack.as_ref().map(|p| PackView {
+            booster: p.booster,
+            cards: p
+                .cards
+                .iter()
+                .map(|c| match c {
+                    PackCard::Joker(j) => ItemView::Joker(joker_view(j)),
+                    PackCard::Consumable(c) => ItemView::Consumable(c.kind, c.edition),
+                    PackCard::Card(c) => ItemView::Card(card_view(c)),
+                })
+                .collect(),
+            choices_left: p.choices_left,
+        }),
+        reroll_cost: run.reroll_cost,
+        interest_cap: run.interest_cap,
+        joker_max: run.joker_max,
+        tarots_used: run.usage_total.tarot,
+        planets_used: run.usage_total.planet,
+        planet_kinds_used: ConsumableKind::ALL[22..34]
+            .iter()
+            .filter(|c| run.usage[c.index()] > 0)
+            .count() as u32,
+        last_tarot_planet: run.last_tarot_planet,
+        ecto_minus: run.ecto_minus,
     }
 }
 
@@ -276,9 +368,29 @@ pub const OBS_LEN: usize = GLOBAL_FEATURES
     + 12 * 6
     + MAX_HAND * CARD_FEATURES
     + MAX_JOKERS * JOKER_FEATURES
-    + DECK_FEATURES;
+    + DECK_FEATURES
+    + ECON_FEATURES;
 
-const GLOBAL_FEATURES: usize = 5 // phase
+/// Room in the encoding for consumables, shop items and pack cards.
+pub const MAX_CONSUMABLES: usize = 8;
+pub const MAX_ROW: usize = 4;
+pub const MAX_SHOP_VOUCHERS: usize = 3;
+pub const MAX_PACK: usize = 5;
+pub const CONSUMABLE_FEATURES: usize = 1 + N_CONSUMABLES + 2;
+pub const ITEM_FEATURES: usize = 3 + JOKER_FEATURES + N_CONSUMABLES + 1 + CARD_FEATURES + 1;
+const BOOSTER_FEATURES: usize = 9;
+const ECON_FEATURES: usize = MAX_CONSUMABLES * CONSUMABLE_FEATURES
+    + N_VOUCHERS
+    + MAX_ROW * ITEM_FEATURES
+    + MAX_SHOP_VOUCHERS * (2 + N_VOUCHERS)
+    + 2 * BOOSTER_FEATURES
+    + BOOSTER_FEATURES
+    + 1
+    + MAX_PACK * ITEM_FEATURES
+    + 8
+    + N_CONSUMABLES;
+
+const GLOBAL_FEATURES: usize = 6 // phase
     + 12 // scalars
     + 2 // sort mode
     + 3 + 1 + N_BOSSES + 3 // blind kind, target, boss one-hot, reward/disabled/round chips
@@ -327,8 +439,9 @@ pub fn encode(s: &Screen, out: &mut Vec<f32>) {
         Phase::RoundEval => 2,
         Phase::Shop => 3,
         Phase::GameOver => 4,
+        Phase::Pack => 5,
     };
-    one_hot(out, 5, Some(phase));
+    one_hot(out, 6, Some(phase));
     out.extend_from_slice(&[
         s.ante as f32 / 8.0,
         s.round as f32 / 24.0,
@@ -418,39 +531,17 @@ pub fn encode(s: &Screen, out: &mut Vec<f32>) {
     for i in 0..MAX_HAND {
         let start = out.len();
         out.resize(start + CARD_FEATURES, 0.0);
-        let Some(c) = s.hand.get(i) else { continue };
-        let f = &mut out[start..];
-        f[0] = 1.0;
-        if let Some((r, su, e, ed, seal)) = c.face {
-            f[1 + rank_index(r)] = 1.0;
-            f[14 + suit_index(su)] = 1.0;
-            f[18 + e as usize] = 1.0;
-            f[27 + ed as usize] = 1.0;
-            f[32 + seal as usize] = 1.0;
+        if let Some(c) = s.hand.get(i) {
+            write_card(&mut out[start..], c);
         }
-        f[37] = c.perma_bonus as f32 / 25.0;
-        f[38] = f32::from(c.debuffed);
-        f[39] = f32::from(c.forced);
     }
 
     for i in 0..MAX_JOKERS {
         let start = out.len();
         out.resize(start + JOKER_FEATURES, 0.0);
-        let Some(j) = s.jokers.get(i) else { continue };
-        let f = &mut out[start..];
-        f[0] = 1.0;
-        f[1] = joker_token(j) as f32 / (N_JOKERS + 2) as f32;
-        f[2 + j.edition as usize] = 1.0;
-        f[7] = f32::from(j.eternal);
-        f[8] = j.perishable.map_or(0.0, |t| t as f32 / 5.0);
-        f[9] = f32::from(j.rental);
-        f[10] = f32::from(j.debuffed);
-        f[11] = j.sell_value as f32 / 5.0;
-        f[12] = f32::from(j.kind.is_none());
-        f[13] = slog(j.mult);
-        f[14] = slog(j.x_mult);
-        f[15] = slog(j.chips);
-        f[16] = slog(j.counter as f64);
+        if let Some(j) = s.jokers.get(i) {
+            write_joker(&mut out[start..], j);
+        }
     }
 
     out.extend(s.deck_counts.iter().map(|&c| c as f32));
@@ -458,7 +549,138 @@ pub fn encode(s: &Screen, out: &mut Vec<f32>) {
     out.extend(s.deck_editions.iter().map(|&c| c as f32 / 8.0));
     out.extend(s.deck_seals.iter().map(|&c| c as f32 / 8.0));
     out.extend_from_slice(&[s.deck_left as f32 / 52.0, s.deck_total as f32 / 52.0]);
+
+    // Consumables, vouchers, the shop and an open pack.
+    for i in 0..MAX_CONSUMABLES {
+        let start = out.len();
+        out.resize(start + CONSUMABLE_FEATURES, 0.0);
+        if let Some(&(k, ed, sell)) = s.consumables.get(i) {
+            let f = &mut out[start..];
+            f[0] = 1.0;
+            f[1 + k.index()] = 1.0;
+            f[1 + N_CONSUMABLES] = f32::from(ed == Edition::Negative);
+            f[2 + N_CONSUMABLES] = sell as f32 / 5.0;
+        }
+    }
+    out.extend(s.vouchers.iter().map(|&v| f32::from(v)));
+    let shop = s.shop.as_ref();
+    for i in 0..MAX_ROW {
+        let start = out.len();
+        out.resize(start + ITEM_FEATURES, 0.0);
+        if let Some((item, cost)) = shop.and_then(|sh| sh.row.get(i)) {
+            write_item(&mut out[start..], item, *cost);
+        }
+    }
+    for i in 0..MAX_SHOP_VOUCHERS {
+        let start = out.len();
+        out.resize(start + 2 + N_VOUCHERS, 0.0);
+        if let Some(&(v, cost)) = shop.and_then(|sh| sh.vouchers.get(i)) {
+            let f = &mut out[start..];
+            f[0] = 1.0;
+            f[1 + v.index()] = 1.0;
+            f[1 + N_VOUCHERS] = cost as f32 / 10.0;
+        }
+    }
+    for i in 0..2 {
+        let start = out.len();
+        out.resize(start + BOOSTER_FEATURES, 0.0);
+        if let Some(&Some((b, cost))) = shop.and_then(|sh| sh.boosters.get(i)) {
+            write_booster(&mut out[start..], b, cost);
+        }
+    }
+    let start = out.len();
+    out.resize(start + BOOSTER_FEATURES + 1, 0.0);
+    if let Some(p) = s.pack.as_ref() {
+        write_booster(&mut out[start..], p.booster, 0);
+        out[start + BOOSTER_FEATURES] = p.choices_left as f32 / 2.0;
+    }
+    for i in 0..MAX_PACK {
+        let start = out.len();
+        out.resize(start + ITEM_FEATURES, 0.0);
+        if let Some(item) = s.pack.as_ref().and_then(|p| p.cards.get(i)) {
+            write_item(&mut out[start..], item, 0);
+        }
+    }
+    out.extend_from_slice(&[
+        s.reroll_cost as f32 / 5.0,
+        s.interest_cap as f32 / 25.0,
+        s.joker_max as f32 / 2.0,
+        s.tarots_used as f32 / 10.0,
+        s.planets_used as f32 / 10.0,
+        s.planet_kinds_used as f32 / 12.0,
+        s.ecto_minus as f32,
+        s.consumable_slots as f32 / 2.0,
+    ]);
+    one_hot(out, N_CONSUMABLES, s.last_tarot_planet.map(|k| k.index()));
     debug_assert_eq!(out.len(), OBS_LEN);
+}
+
+fn write_card(f: &mut [f32], c: &CardView) {
+    f[0] = 1.0;
+    if let Some((r, su, e, ed, seal)) = c.face {
+        f[1 + rank_index(r)] = 1.0;
+        f[14 + suit_index(su)] = 1.0;
+        f[18 + e as usize] = 1.0;
+        f[27 + ed as usize] = 1.0;
+        f[32 + seal as usize] = 1.0;
+    }
+    f[37] = c.perma_bonus as f32 / 25.0;
+    f[38] = f32::from(c.debuffed);
+    f[39] = f32::from(c.forced);
+}
+
+fn write_joker(f: &mut [f32], j: &JokerView) {
+    f[0] = 1.0;
+    f[1] = joker_token(j) as f32 / (N_JOKERS + 2) as f32;
+    f[2 + j.edition as usize] = 1.0;
+    f[7] = f32::from(j.eternal);
+    f[8] = j.perishable.map_or(0.0, |t| t as f32 / 5.0);
+    f[9] = f32::from(j.rental);
+    f[10] = f32::from(j.debuffed);
+    f[11] = j.sell_value as f32 / 5.0;
+    f[12] = f32::from(j.kind.is_none());
+    f[13] = slog(j.mult);
+    f[14] = slog(j.x_mult);
+    f[15] = slog(j.chips);
+    f[16] = slog(j.counter as f64);
+}
+
+/// type (3) | joker | consumable one-hot | card | price.
+fn write_item(f: &mut [f32], item: &ItemView, cost: i64) {
+    match item {
+        ItemView::Joker(j) => {
+            f[0] = 1.0;
+            write_joker(&mut f[3..3 + JOKER_FEATURES], j);
+        }
+        ItemView::Consumable(k, ed) => {
+            f[1] = 1.0;
+            let o = 3 + JOKER_FEATURES;
+            f[o + k.index()] = 1.0;
+            f[o + N_CONSUMABLES] = f32::from(*ed == Edition::Negative);
+        }
+        ItemView::Card(c) => {
+            f[2] = 1.0;
+            let o = 4 + JOKER_FEATURES + N_CONSUMABLES;
+            write_card(&mut f[o..o + CARD_FEATURES], c);
+        }
+    }
+    f[ITEM_FEATURES - 1] = cost as f32 / 5.0;
+}
+
+fn write_booster(f: &mut [f32], b: BoosterId, cost: i64) {
+    let info = &BOOSTERS[b as usize];
+    f[0] = 1.0;
+    let k = match info.kind {
+        PackKind::Arcana => 0,
+        PackKind::Celestial => 1,
+        PackKind::Standard => 2,
+        PackKind::Buffoon => 3,
+        PackKind::Spectral => 4,
+    };
+    f[1 + k] = 1.0;
+    f[6] = info.size as f32 / 5.0;
+    f[7] = info.choose as f32 / 2.0;
+    f[8] = cost as f32 / 5.0;
 }
 
 /// The joker kinds in the screen's order, as embedding tokens (for a

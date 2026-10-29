@@ -64,6 +64,7 @@ fn main() {
                 println!("   cash out {t} ({c:?}) -> money {}", run.money);
             }
             Phase::Shop => run.leave_shop().unwrap(),
+            Phase::Pack => run.pack_skip().unwrap(),
         }
     }
 }

@@ -88,6 +88,7 @@ fn random_run(
                 log.push(format!("cash out {t}"));
             }
             Phase::Shop => run.leave_shop().unwrap(),
+            Phase::Pack => run.pack_skip().unwrap(),
         }
         if run.won {
             break;
@@ -195,4 +196,57 @@ fn run_start_shape() {
     assert_eq!(run.boss.min_ante(), 1);
     // Three Orbital hands were fixed when blind select was built.
     assert_eq!(run.orbital.len(), 3);
+}
+
+/// Random play with every kind of move (shop, packs, consumables, vouchers),
+/// through the environment's move generator: no panics, cards conserved,
+/// refused moves change nothing.
+#[test]
+fn random_runs_with_the_whole_game() {
+    use bm_core::env::{apply, random_move, safe_move, XorShift};
+    let mut seeds = SeedSampler::new(99);
+    let mut rng = XorShift(0x1234_5678_9abc_def1);
+    let (mut shops, mut packs, mut used, mut bought) = (0, 0, 0, 0);
+    for _ in 0..120 {
+        let mut run = Run::new(RunConfig::new(&seeds.next_seed()));
+        for _ in 0..3000 {
+            if run.phase == Phase::GameOver || run.won {
+                break;
+            }
+            check_conservation(&run);
+            // The greedy bot plays the rounds (so runs reach shops); everything
+            // else is random.
+            let (k, a) = if run.phase == Phase::Round && rng.below(4) != 0 {
+                bm_core::bots::greedy_move(&run, rng.below(1 << 30) as u64)
+            } else {
+                random_move(&run, &mut rng)
+            };
+            let before_money = run.money;
+            let before_phase = run.phase;
+            match apply(&mut run, k, a) {
+                Ok(()) => {
+                    match k {
+                        bm_core::env::MoveKind::OpenBooster => packs += 1,
+                        bm_core::env::MoveKind::UseConsumable => used += 1,
+                        bm_core::env::MoveKind::Buy => bought += 1,
+                        _ => {}
+                    }
+                    if before_phase != Phase::Shop && run.phase == Phase::Shop {
+                        shops += 1;
+                    }
+                }
+                Err(_) => {
+                    assert_eq!(run.money, before_money, "a refused {k:?} changed money");
+                    assert_eq!(run.phase, before_phase);
+                    let (k2, a2) = safe_move(&run);
+                    apply(&mut run, k2, a2).unwrap();
+                }
+            }
+        }
+    }
+    println!("shops {shops}, packs {packs}, bought {bought}, used {used}");
+    assert!(
+        shops > 100 && packs > 20 && bought > 20 && used > 0,
+        "shops {shops}, packs {packs}, bought {bought}, used {used}"
+    );
 }

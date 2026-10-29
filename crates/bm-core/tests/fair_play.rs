@@ -87,6 +87,7 @@ fn random_move(run: &mut Run, pick: &mut Pick) {
             run.cash_out().unwrap();
         }
         Phase::Shop => run.leave_shop().unwrap(),
+        Phase::Pack => run.pack_skip().unwrap(),
         Phase::GameOver => {}
     }
 }

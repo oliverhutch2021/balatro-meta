@@ -34,6 +34,10 @@ pub struct Effect {
     pub level_up: bool,
     /// End of round: Mr. Bones saved the run.
     pub saved: bool,
+    /// Something is to be made after the current step (Hallucination's Tarot).
+    pub make: bool,
+    /// Destroying-card check: destroy this card (Sixth Sense).
+    pub destroy: bool,
 }
 
 /// The played hand as the joker routine sees it.
@@ -78,6 +82,27 @@ pub enum Ctx {
         hook: bool,
     },
     SettingBlind,
+    /// A booster pack was opened.
+    OpenBooster,
+    /// A card was bought.
+    BuyingCard,
+    /// This joker is being sold.
+    SellingSelf,
+    /// Another card is being sold.
+    SellingCard,
+    RerollShop,
+    EndingShop,
+    SkipBlind,
+    SkippingBooster,
+    /// Playing cards were added (`PlayedHand::full` lists them).
+    PlayingCardAdded,
+    FirstHandDrawn,
+    /// Playing cards are about to be destroyed (`PlayedHand::full`).
+    RemovePlayingCards,
+    /// A consumable was used, with the number of selected Glass cards.
+    UsingConsumeable(crate::content::ConsumableKind, u8),
+    /// Should this scoring card be destroyed (Sixth Sense)?
+    DestroyingCard(CardId),
 }
 
 /// The joker routine for the joker at `idx` (`Card:calculate_joker`).
@@ -164,8 +189,9 @@ pub fn calculate_joker(
             {
                 run.disable_blind();
             }
-            None
+            crate::joker_events::setting_blind(run, idx, h, bp)
         }
+        _ => crate::joker_events::event(run, idx, ctx, h, bp),
     }
 }
 

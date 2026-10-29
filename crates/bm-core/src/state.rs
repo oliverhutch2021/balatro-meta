@@ -5,11 +5,38 @@ use bm_rng::{shuffle, Streams};
 
 use crate::blinds::{BlindKind, BlindSlot, Boss, BossPool, SlotState};
 use crate::card::{sort_hand, Card, Edition, Enhancement, Rank, SortMode, Suit};
+use crate::consumables::UsageTotals;
+use crate::content::{ConsumableKind, VoucherKind, N_CONSUMABLES, N_VOUCHERS};
+use crate::create::Consumable;
 use crate::hand_levels::HandLevels;
 use crate::joker_data::JokerKind;
 use crate::jokers::{joker_resource_change, Joker};
+use crate::packs::OpenPack;
 use crate::poker::{HandSet, HandType};
+use crate::shop::Shop;
 use crate::tags::{TagKind, TagProfile, N_TAGS};
+
+/// The shop's kind weights (`rules/shop.md` 1.3).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ShopRates {
+    pub joker: f64,
+    pub tarot: f64,
+    pub planet: f64,
+    pub playing_card: f64,
+    pub spectral: f64,
+}
+
+impl Default for ShopRates {
+    fn default() -> Self {
+        ShopRates {
+            joker: 20.0,
+            tarot: 4.0,
+            planet: 4.0,
+            playing_card: 0.0,
+            spectral: 0.0,
+        }
+    }
+}
 
 /// Index of a playing card in [`Run::cards`].
 pub type CardId = u32;
@@ -23,8 +50,10 @@ pub enum Phase {
     Round,
     /// The cash-out screen after a won round.
     RoundEval,
-    /// The shop (phase 1: leave only).
+    /// The shop.
     Shop,
+    /// A booster pack is open (from the shop or a tag).
+    Pack,
     /// The run is lost.
     GameOver,
 }
@@ -202,6 +231,47 @@ pub struct Run {
     /// Money produced during the current evaluation, not yet added
     /// (`G.GAME.dollar_buffer`).
     pub(crate) pending_money: i64,
+
+    // ---- phase 2: consumables, vouchers, the shop and packs
+    pub consumables: Vec<Consumable>,
+    /// Vouchers redeemed this run (index = `VoucherKind::index`).
+    pub vouchers: [bool; N_VOUCHERS],
+    /// "Present" marks that keep duplicates out of pools (`create::Center`).
+    pub present: Vec<bool>,
+    pub banned_jokers: Vec<crate::joker_data::JokerKind>,
+    pub shop: Option<Shop>,
+    pub pack: Option<OpenPack>,
+    /// The ante's voucher, offered in each shop until a voucher is redeemed.
+    pub shop_voucher: Option<VoucherKind>,
+    /// Joker-row slots in the shop.
+    pub joker_max: i32,
+    pub shop_rates: ShopRates,
+    pub discount_percent: i64,
+    pub inflation: i64,
+    pub edition_rate: f64,
+    pub interest_cap: i64,
+    pub interest_amount: i64,
+    pub reroll_base: i64,
+    /// D6 Tag's override of the base reroll cost (until the next round ends).
+    pub reroll_temp: Option<i64>,
+    pub reroll_increase: i64,
+    pub reroll_cost: i64,
+    pub free_rerolls: i32,
+    pub(crate) d6_this_shop: bool,
+    /// The run's first shop pack (a Buffoon Pack) has been placed.
+    pub first_shop_buffoon: bool,
+    pub usage: [u32; N_CONSUMABLES],
+    pub usage_total: UsageTotals,
+    pub last_tarot_planet: Option<ConsumableKind>,
+    /// Ectoplasm's hand-size cost for its next use.
+    pub ecto_minus: i32,
+    /// Jokers bought this round (Flash Card and friends read it later).
+    pub jokers_purchased_round: i32,
+    /// Blind rerolls are possible (Director's Cut, Retcon).
+    pub boss_rerolls_allowed: bool,
+    /// `G.GAME.joker_buffer` during a blind start (Ceremonial Dagger,
+    /// Riff-raff).
+    pub(crate) joker_buffer: i32,
 }
 
 impl Run {

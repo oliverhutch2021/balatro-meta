@@ -6,8 +6,9 @@
     reward, done, won, refused, ante = env.step(kinds, args)
 
 A move is a kind (see MOVE_KINDS) and an argument: a bitmask of hand
-positions for play and discard, a joker position to sell, and
-`from | to << 8` to move a hand card or joker. Runs restart on a fresh seed
+positions for play and discard; `from | to << 8` to move a hand card or
+joker; a slot index to sell, buy, redeem or open; `index | hand mask << 8`
+to use a consumable or take a pack card. Runs restart on a fresh seed
 when they end (lost, or won by beating ante 8); `done` marks that step.
 """
 from __future__ import annotations
@@ -29,6 +30,16 @@ MOVE_KINDS = (
     "move_card",
     "move_joker",
     "sell_joker",
+    "reroll",
+    "buy",
+    "buy_and_use",
+    "redeem_voucher",
+    "open_booster",
+    "sell_consumable",
+    "use_consumable",
+    "pack_choose",
+    "pack_skip",
+    "reroll_boss",
 )
 assert len(MOVE_KINDS) == _engine.N_MOVE_KINDS
 

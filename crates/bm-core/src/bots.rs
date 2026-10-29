@@ -47,6 +47,7 @@ pub fn greedy_move(run: &Run, salt: u64) -> (MoveKind, u64) {
         Phase::BlindSelect => (MoveKind::SelectBlind, 0),
         Phase::RoundEval => (MoveKind::CashOut, 0),
         Phase::Shop => (MoveKind::LeaveShop, 0),
+        Phase::Pack => (MoveKind::PackSkip, 0),
         Phase::GameOver => (MoveKind::SelectBlind, 0),
         Phase::Round => {
             let fair = fair_copy(run, salt);

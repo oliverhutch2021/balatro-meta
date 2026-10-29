@@ -26,6 +26,9 @@ pub struct Joker {
     pub added: bool,
     /// Extra sell value (Egg, Gift Card).
     pub extra_value: i64,
+    /// Price and stored sell value (`Card:set_cost`).
+    pub cost: i64,
+    pub sell_cost: i64,
     /// `ability.mult`: a joker's own growing or fixed mult.
     pub mult: f64,
     /// `ability.x_mult`: a joker's own growing or fixed X-mult.
@@ -40,6 +43,9 @@ pub struct Joker {
     /// Destroyed by its own effect (Ice Cream, Seltzer, Popcorn, Gros
     /// Michel, Mr. Bones, ...): leaves once the current step is over.
     pub removing: bool,
+    /// Marked for destruction at this blind start (Ceremonial Dagger,
+    /// Madness): does nothing more at it.
+    pub sliced: bool,
 }
 
 impl Joker {
@@ -80,12 +86,15 @@ impl Joker {
             face_down: false,
             added: false,
             extra_value: 0,
+            cost: kind.info().cost,
+            sell_cost: (kind.info().cost / 2).max(1),
             mult,
             x_mult,
             chips,
             counter,
             hand: None,
             removing: false,
+            sliced: false,
         }
     }
 
