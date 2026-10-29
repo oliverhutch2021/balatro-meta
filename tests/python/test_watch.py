@@ -21,11 +21,26 @@ import watch  # noqa: E402
 from balatro_meta._engine import Game  # noqa: E402
 
 
+def area(items: list, cheat_price: bool = False) -> dict:
+    """Cards in BalatroBot's area format."""
+    cards = []
+    for i, it in enumerate(items):
+        if it is None:
+            continue
+        c = {"key": it["key"], "modifier": {"edition": it.get("edition"), "enhancement": it.get("enhancement"),
+                                            "seal": it.get("seal")}}
+        if "cost" in it:
+            c["cost"] = {"buy": it["cost"] + (1 if cheat_price and i == 0 else 0), "sell": 1}
+        cards.append(c)
+    return {"count": len(cards), "cards": cards}
+
+
 class FakeGame:
-    def __init__(self, cheat: bool = False) -> None:
+    def __init__(self, cheat: bool = False, cheat_price: bool = False) -> None:
         self.game = None
         self.order: list[int] = []
         self.cheat = cheat
+        self.cheat_price = cheat_price
         self.state = "MENU"
 
     def view(self) -> dict:
@@ -42,9 +57,19 @@ class FakeGame:
         blinds = {k: {"type": k.upper(), "name": b["name"], "status": b["status"], "tag_name": b.get("tag_name")}
                   for k, b in v["blinds"].items()}
         money = v["money"] + (1 if self.cheat and v["state"] == "SHOP" else 0)
+        jokers = [{"key": j["key"], "modifier": {"edition": j["edition"]}} for j in v["jokers"]]
         return {"state": v["state"], "round_num": v["round"], "ante_num": v["ante"], "money": money,
-                "round": {"hands_left": v["hands_left"], "discards_left": v["discards_left"], "chips": v["chips"]},
-                "hand": {"cards": cards}, "jokers": {"cards": []}, "blinds": blinds}
+                "round": {"hands_left": v["hands_left"], "discards_left": v["discards_left"], "chips": v["chips"],
+                          "reroll_cost": v["reroll_cost"]},
+                "hand": {"cards": cards}, "jokers": {"cards": jokers}, "blinds": blinds,
+                "consumables": area(v["consumables"]), "shop": area(v["shop"], self.cheat_price),
+                "vouchers": area(v["shop_vouchers"]), "packs": area(v["shop_packs"]), "pack": area(v["pack"])}
+
+    def mask(self, positions) -> int:
+        m = 0
+        for pos in positions or []:
+            m |= 1 << self.order[pos]
+        return m
 
     def rpc(self, method: str, p: dict):
         kinds = {"select": 0, "skip": 1, "cash_out": 2, "next_round": 3}
@@ -66,6 +91,30 @@ class FakeGame:
             self.order = []
         elif method == "rearrange":
             self.order = [self.order[i] for i in p["hand"]]
+        elif method == "reroll":
+            assert self.game.step(11, 0), method
+        elif method == "buy":
+            if "card" in p:
+                assert self.game.step(12, p["card"]), method
+            elif "voucher" in p:
+                assert self.game.step(14, p["voucher"]), method
+            else:
+                slots = [i for i, b in enumerate(self.game.view()["shop_packs"]) if b is not None]
+                assert self.game.step(15, slots[p["pack"]]), method
+            self.order = []
+        elif method == "sell":
+            assert self.game.step(10, p["joker"]) if "joker" in p else self.game.step(16, p["consumable"]), method
+        elif method == "use":
+            assert self.game.step(17, p["consumable"] | self.mask(p.get("cards")) << 8), method
+            self.order = []
+        elif method == "pack":
+            if p.get("skip"):
+                assert self.game.step(19, 0), method
+            else:
+                assert self.game.step(18, p["card"] | self.mask(p.get("targets")) << 8), method
+            self.order = []
+        elif method != "gamestate":
+            raise AssertionError(f"the stand-in doesn't know {method}")
         return self.view()
 
 
@@ -101,6 +150,31 @@ def test_replay_agrees_with_an_identical_game(seed, tmp_path, monkeypatch):
     srv.shutdown()
     assert ok, msg
     assert "run over" in msg or "won" in msg
+
+
+def test_shop_and_pack_moves_reach_the_game(tmp_path, monkeypatch):
+    """The greedy bot buys, opens packs and uses Planets: those moves must be sent and agree."""
+    monkeypatch.setattr(watch, "WATCH", tmp_path)
+    fake = FakeGame()
+    sent: list[str] = []
+    rpc = fake.rpc
+    fake.rpc = lambda m, p: (sent.append(m), rpc(m, p))[1]
+    srv = serve(fake)
+    api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
+    for seed in ("SHOPPER1", "SHOPPER2", "SHOPPER3"):
+        ok, msg = watch.replay(api, watch.Panel(tmp_path / "panel.txt"), seed, None, "test", 0.0)
+        assert ok, msg
+    srv.shutdown()
+    assert {"buy", "pack", "use"} <= set(sent), sorted(set(sent))
+
+
+def test_a_wrong_shop_price_is_caught(tmp_path, monkeypatch):
+    monkeypatch.setattr(watch, "WATCH", tmp_path)
+    srv = serve(FakeGame(cheat_price=True))
+    api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
+    ok, msg = watch.replay(api, watch.Panel(tmp_path / "panel.txt"), "WATCH003", None, "test", 0.0)
+    srv.shutdown()
+    assert not ok and "shop cards" in msg, msg
 
 
 def test_a_difference_is_caught_and_saved(tmp_path, monkeypatch):

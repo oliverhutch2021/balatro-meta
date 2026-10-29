@@ -2,9 +2,14 @@
 //! screen and from fair copies only (`observe::fair_copy`), never from the
 //! real run's future.
 
+use crate::card::Edition;
+use crate::consumables::UseFrom;
+use crate::content::ConsumableSet;
 use crate::env::MoveKind;
 use crate::observe::fair_copy;
+use crate::packs::PackCard;
 use crate::scoring::evaluate_play;
+use crate::shop::RowItem;
 use crate::state::{Phase, Run};
 
 /// All subsets of up to 5 hand positions that include `forced`, as masks.
@@ -39,16 +44,89 @@ pub fn preview_score(fair: &Run, mask: u64) -> f64 {
     evaluate_play(&mut sim).score
 }
 
+fn joker_room(run: &Run, e: Edition) -> bool {
+    let need = i32::from(e != Edition::Negative);
+    run.jokers.len() as i32 + need <= run.joker_slots
+}
+
+fn consumable_room(run: &Run, e: Edition) -> bool {
+    let need = i32::from(e != Edition::Negative);
+    run.consumables.len() as i32 + need <= run.consumable_slots
+}
+
+/// A held Planet to use now, if any.
+fn planet_to_use(run: &Run) -> Option<(MoveKind, u64)> {
+    run.consumables
+        .iter()
+        .position(|c| c.kind.set() == ConsumableSet::Planet)
+        .map(|i| (MoveKind::UseConsumable, i as u64))
+}
+
+/// Shopping: the first joker it can afford and hold, then the first Planet
+/// (used at once), then a pack while keeping $10; otherwise leave.
+fn shop_move(run: &Run) -> (MoveKind, u64) {
+    let afford = |cost: i64| cost <= 0 || cost <= run.spendable();
+    if let Some(shop) = run.shop.as_ref() {
+        for (i, r) in shop.row.iter().enumerate() {
+            let buy = match &r.item {
+                RowItem::Joker(j) => afford(r.cost) && joker_room(run, j.edition),
+                RowItem::Consumable(c) => {
+                    c.kind.set() == ConsumableSet::Planet
+                        && afford(r.cost)
+                        && consumable_room(run, c.edition)
+                }
+                RowItem::Card(_) => false,
+            };
+            if buy {
+                return (MoveKind::Buy, i as u64);
+            }
+        }
+        if let Some(m) = planet_to_use(run) {
+            return m;
+        }
+        for (i, b) in shop.boosters.iter().enumerate() {
+            if let Some(b) = b {
+                if afford(b.cost) && run.spendable() - b.cost >= 10 {
+                    return (MoveKind::OpenBooster, i as u64);
+                }
+            }
+        }
+    }
+    (MoveKind::LeaveShop, 0)
+}
+
+/// In an open pack: the first card it can take without selecting hand
+/// cards, else skip.
+fn pack_move(run: &Run) -> (MoveKind, u64) {
+    if let Some(p) = run.pack.as_ref() {
+        for (i, c) in p.cards.iter().enumerate() {
+            let ok = match c {
+                PackCard::Joker(j) => joker_room(run, j.edition),
+                PackCard::Consumable(c) => run.can_use_consumable(c, &[], UseFrom::Pack),
+                PackCard::Card(_) => true,
+            };
+            if ok {
+                return (MoveKind::PackChoose, i as u64);
+            }
+        }
+    }
+    (MoveKind::PackSkip, 0)
+}
+
 /// The greedy bot: always takes the blind, plays the highest-scoring hand
 /// when it clears the blind or no discard is left, and otherwise discards
-/// the lowest cards that are not part of its best hand.
+/// the lowest cards that are not part of its best hand. It uses Planets as
+/// soon as it holds them, buys jokers and Planets it can afford, opens packs
+/// while it keeps $10, and takes the first pack card that needs no hand
+/// selection.
 pub fn greedy_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     match run.phase {
         Phase::BlindSelect => (MoveKind::SelectBlind, 0),
         Phase::RoundEval => (MoveKind::CashOut, 0),
-        Phase::Shop => (MoveKind::LeaveShop, 0),
-        Phase::Pack => (MoveKind::PackSkip, 0),
+        Phase::Shop => shop_move(run),
+        Phase::Pack => pack_move(run),
         Phase::GameOver => (MoveKind::SelectBlind, 0),
+        Phase::Round if planet_to_use(run).is_some() => planet_to_use(run).expect("checked"),
         Phase::Round => {
             let fair = fair_copy(run, salt);
             let n = run.hand.len();
@@ -103,7 +181,7 @@ mod tests {
         let mut cleared = 0;
         for i in 0..40 {
             let mut run = Run::new(RunConfig::new(&seeds.next_seed()));
-            for step in 0..60 {
+            for step in 0..300 {
                 if run.phase == Phase::GameOver || run.round >= 3 && run.phase == Phase::BlindSelect
                 {
                     break;
@@ -118,6 +196,32 @@ mod tests {
         assert!(
             cleared >= 30,
             "greedy cleared both ante-1 blinds in only {cleared} of 40 runs"
+        );
+    }
+
+    #[test]
+    fn greedy_moves_are_always_legal() {
+        let mut seeds = bm_rng::SeedSampler::new(8);
+        let (mut bought, mut opened, mut used) = (0, 0, 0);
+        for i in 0..12 {
+            let mut run = Run::new(RunConfig::new(&seeds.next_seed()));
+            for step in 0..3000 {
+                if run.phase == Phase::GameOver || run.won {
+                    break;
+                }
+                let (k, a) = greedy_move(&run, i * 10_000 + step);
+                match k {
+                    MoveKind::Buy => bought += 1,
+                    MoveKind::OpenBooster => opened += 1,
+                    MoveKind::UseConsumable => used += 1,
+                    _ => {}
+                }
+                apply(&mut run, k, a).unwrap_or_else(|e| panic!("{k:?} {a}: {e}"));
+            }
+        }
+        assert!(
+            bought > 0 && opened > 0 && used > 0,
+            "{bought} {opened} {used}"
         );
     }
 }

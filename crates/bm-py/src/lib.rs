@@ -6,8 +6,11 @@
 
 use bm_core::blinds::{BlindSlot, SlotState};
 use bm_core::card::{Edition, Enhancement, Seal};
+use bm_core::content::BOOSTERS;
 use bm_core::env::{apply, legal_kinds, random_move, Env, MoveKind, XorShift, N_MOVE_KINDS};
 use bm_core::observe::{encode, screen, OBS_LEN};
+use bm_core::packs::PackCard;
+use bm_core::shop::RowItem;
 use bm_core::state::{Phase, Run, RunConfig};
 use pyo3::buffer::PyBuffer;
 use pyo3::exceptions::PyValueError;
@@ -460,8 +463,114 @@ impl Game {
             "tags",
             r.tags.iter().map(|t| t.kind.name()).collect::<Vec<_>>(),
         )?;
+        d.set_item("reroll_cost", r.reroll_cost)?;
+        let consumables = pyo3::types::PyList::empty(py);
+        for c in &r.consumables {
+            consumables.append(item(py, c.kind.key().to_string(), c.edition)?)?;
+        }
+        d.set_item("consumables", consumables)?;
+        // The shop: the joker row, the vouchers, and the two booster slots
+        // (None once opened).
+        let row = pyo3::types::PyList::empty(py);
+        let vouchers = pyo3::types::PyList::empty(py);
+        let packs = pyo3::types::PyList::empty(py);
+        if let Some(shop) = r.shop.as_ref() {
+            for slot in &shop.row {
+                let h = match &slot.item {
+                    RowItem::Joker(j) => item(py, j.kind.key().to_string(), j.edition)?,
+                    RowItem::Consumable(c) => item(py, c.kind.key().to_string(), c.edition)?,
+                    RowItem::Card(c) => playing_card(py, c)?,
+                };
+                h.set_item("cost", slot.cost)?;
+                row.append(h)?;
+            }
+            for v in &shop.vouchers {
+                let h = item(py, v.voucher.key().to_string(), Edition::None)?;
+                h.set_item("cost", v.cost)?;
+                vouchers.append(h)?;
+            }
+            for b in &shop.boosters {
+                match b {
+                    Some(b) => {
+                        let h = item(
+                            py,
+                            BOOSTERS[b.booster as usize].key.to_string(),
+                            Edition::None,
+                        )?;
+                        h.set_item("cost", b.cost)?;
+                        packs.append(h)?;
+                    }
+                    None => packs.append(py.None())?,
+                }
+            }
+        }
+        d.set_item("shop", row)?;
+        d.set_item("shop_vouchers", vouchers)?;
+        d.set_item("shop_packs", packs)?;
+        // An open pack's cards.
+        let pack = pyo3::types::PyList::empty(py);
+        if let Some(p) = r.pack.as_ref() {
+            for c in &p.cards {
+                let h = match c {
+                    PackCard::Joker(j) => item(py, j.kind.key().to_string(), j.edition)?,
+                    PackCard::Consumable(c) => item(py, c.kind.key().to_string(), c.edition)?,
+                    PackCard::Card(c) => playing_card(py, c)?,
+                };
+                pack.append(h)?;
+            }
+            d.set_item("pack_key", BOOSTERS[p.booster as usize].key)?;
+            d.set_item("pack_choices_left", p.choices_left)?;
+        }
+        d.set_item("pack", pack)?;
         Ok(d)
     }
+}
+
+/// A shop or pack item: its key, its name and its edition.
+fn item<'py>(py: Python<'py>, key: String, e: Edition) -> PyResult<Bound<'py, PyDict>> {
+    let h = PyDict::new(py);
+    h.set_item("name", item_name(&key))?;
+    h.set_item("key", key)?;
+    h.set_item("edition", edition_name(e))?;
+    Ok(h)
+}
+
+/// A readable name for a joker, consumable, voucher, pack or playing card key.
+fn item_name(key: &str) -> String {
+    use bm_core::content::{ConsumableKind, VoucherKind};
+    use bm_core::joker_data::JOKERS;
+    if let Some(j) = JOKERS.iter().find(|j| j.key == key) {
+        return j.name.to_string();
+    }
+    if let Some(c) = ConsumableKind::ALL.iter().find(|c| c.key() == key) {
+        return c.name().to_string();
+    }
+    if let Some(v) = VoucherKind::all().find(|v| v.key() == key) {
+        return v.name().to_string();
+    }
+    if let Some(rest) = key.strip_prefix("p_") {
+        let mut parts = rest.split('_');
+        let kind = parts.next().unwrap_or("");
+        let size = parts.next().unwrap_or("");
+        let mut kind = kind.to_string();
+        if let Some(f) = kind.get_mut(0..1) {
+            f.make_ascii_uppercase();
+        }
+        return match size {
+            "jumbo" => format!("Jumbo {kind} Pack"),
+            "mega" => format!("Mega {kind} Pack"),
+            _ => format!("{kind} Pack"),
+        };
+    }
+    key.to_string()
+}
+
+/// A playing card offered in the shop or a pack.
+fn playing_card<'py>(py: Python<'py>, c: &bm_core::card::Card) -> PyResult<Bound<'py, PyDict>> {
+    let h = item(py, c.key(), c.edition)?;
+    h.set_item("enhancement", enh_name(c.enhancement))?;
+    h.set_item("seal", seal_name(c.seal))?;
+    Ok(h)
 }
 
 #[pymodule]

@@ -86,10 +86,12 @@ the bot's input built after every move. The phase 1 target is 200,000 moves a se
 
 `make watch` replays runs in your copy of Balatro, move by move, so the game itself draws everything.
 Each replay also checks the engine: after every move the game's money, hands, discards, cards in hand,
-round chips, blinds and tags are compared with the engine's, and the first difference stops the replay
-and is saved to `.sync/watch/mismatches/`. For now it shows demo runs by a simple greedy bot (there's no
-shop until phase 2, so runs end early); once jobs play real runs, it replays those, with the job's
-progress in an in-game panel.
+round chips, blinds, tags, jokers and consumables, the shop's cards, vouchers, packs and prices, and an
+open pack's cards are compared with the engine's. The first difference stops the replay and is saved to
+`.sync/watch/mismatches/`. For now it shows demo runs by a simple greedy bot that also shops: it buys
+jokers and Planets, opens packs and takes cards from them. Once jobs play real runs, it replays those,
+with the job's progress in an in-game panel. BalatroBot has no "buy and use" and no boss reroll, so a
+replay stops (without a mismatch) before either.
 
 One-time setup, on Windows:
 
@@ -118,8 +120,9 @@ PowerShell, and reopen Ubuntu. `make watch-dry` runs the same replays in the eng
 
 ## Later steps
 
-Claude adds each one here when it's ready: the full content (phase 2), checks against the real game with
-BalatroBot (phase 3), and training (phase 4).
+Claude adds each one here when it's ready: checks against the real game with BalatroBot (phase 3), and
+training (phase 4). Phase 2 (the full game: all jokers, consumables, vouchers, tags, the shop and packs) is
+in the engine now; `make smoke` checks it.
 
 ## If something goes wrong
 
