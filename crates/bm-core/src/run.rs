@@ -389,7 +389,7 @@ impl Run {
     }
 
     /// `Blind:set_blind` for a new blind.
-    fn set_blind(&mut self, kind: BlindKind) {
+    pub(crate) fn set_blind(&mut self, kind: BlindKind) {
         let scaling = scaling_for_stake(self.cfg.stake);
         let boss = kind.boss();
         self.blind = Some(ActiveBlind {

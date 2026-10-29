@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | expand -t 14
@@ -54,6 +54,9 @@ smoke:  ## Two-minute check that the build, the tests and the job runner work en
 
 rng-check:  ## Phase 1 gate: the Rust RNG against LuaJIT and the game's own lua51.dll, 2.4M cases each (a few minutes)
 	$(PY) scripts/jobs.py run rng-check $(JOB_FLAGS)
+
+bench:  ## Phase 1 gate: engine speed on all threads, in Rust and through Python (about a minute)
+	$(PY) scripts/jobs.py run bench $(JOB_FLAGS)
 
 rng-game:  ## (dev) Only the game-runtime part of rng-check, outside the job runner
 	$(PY) scripts/rng_game.py --scale 200

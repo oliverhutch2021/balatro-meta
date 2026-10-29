@@ -55,6 +55,15 @@ JOBS: dict[str, list[tuple]] = {
         ("luajit-stress", [*MAKE, "rng-stress", "STRESS=200"]),
         ("game-runtime", ["scripts/rng_game.py", "--scale", "200"]),
     ],
+    # Phase 1 gate, speed part: random legal moves on all threads, in Rust and through Python with the bot's
+    # input built after every move. The target is 200,000 moves a second.
+    "bench": [
+        ("build", [*MAKE, "build"]),
+        ("engine-speed", ["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "bench", "--",
+                          "20", "0", "results/bench/engine.json"]),
+        ("python-speed", ["scripts/bench_env.py", "--n", "4096", "--seconds", "20",
+                          "--out", "results/bench/python.json"]),
+    ],
 }
 
 

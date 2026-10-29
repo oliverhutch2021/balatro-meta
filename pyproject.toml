@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "balatro-meta"
 version = "0.1.0"
 description = "Finding the Balatro meta: an exact engine, fair deep-learning bots and a strategy atlas"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = ["numpy"]
 
 [project.optional-dependencies]
