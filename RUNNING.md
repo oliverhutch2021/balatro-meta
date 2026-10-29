@@ -71,7 +71,7 @@ about the game's runtime to `results/rng/game_runtime.txt`. This is the RNG part
 If it can't find Windows Python or Balatro, it says which setting to give, for example
 `BM_WIN_PYTHON=/mnt/c/Users/<you>/miniconda3/python.exe make rng-check`.
 
-## Step 4: the speed gate (about a minute)
+## Step 4: the speed gate (about two minutes)
 
 ```
 make bench

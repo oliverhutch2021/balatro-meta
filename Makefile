@@ -55,7 +55,7 @@ smoke:  ## Two-minute check that the build, the tests and the job runner work en
 rng-check:  ## Phase 1 gate: the Rust RNG against LuaJIT and the game's own lua51.dll, 2.4M cases each (a few minutes)
 	$(PY) scripts/jobs.py run rng-check $(JOB_FLAGS)
 
-bench:  ## Phase 1 gate: engine speed on all threads, in Rust and through Python (about a minute)
+bench:  ## Phase 1 gate: engine speed on all threads, in Rust and through Python (about two minutes)
 	$(PY) scripts/jobs.py run bench $(JOB_FLAGS)
 
 PAUSE ?= 0.8
