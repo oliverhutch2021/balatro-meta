@@ -1,8 +1,8 @@
 {
  "job": "rng-check",
- "commit": "e348f11eafca7fa675144afe84759e884f216b85",
- "started": "2026-10-29T18:21:07+00:00",
- "finished": "2026-10-29T18:21:18+00:00",
+ "commit": "07b28a686d74a4eb957fd9f0cec038e9b045df28",
+ "started": "2026-10-29T18:23:49+00:00",
+ "finished": "2026-10-29T18:24:16+00:00",
  "machine": {
   "host": "PC",
   "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
@@ -13,8 +13,8 @@
   "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
  },
  "steps": {
-  "build": 1,
-  "luajit-stress": 10
+  "build": 6,
+  "luajit-stress": 21
  },
  "commands": {
   "build": "make --no-print-directory build",
