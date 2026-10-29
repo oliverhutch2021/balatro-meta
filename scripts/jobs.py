@@ -172,8 +172,13 @@ def machine() -> dict:
                 mem = round(int(line.split()[1]) / 1024 ** 2, 1)
     except OSError:
         pass
+    try:
+        load = [round(x, 1) for x in os.getloadavg()]  # how busy Linux was (other jobs slow benchmarks)
+    except OSError:
+        load = None
     return {"host": socket.gethostname(), "platform": platform.platform(), "cpu_threads": os.cpu_count(),
-            "ram_gb": mem, "python": platform.python_version(), "rustc": _first_line("rustc", "--version"),
+            "ram_gb": mem, "load_avg_1_5_15": load, "python": platform.python_version(),
+            "rustc": _first_line("rustc", "--version"),
             "gpu": _first_line("nvidia-smi", "--query-gpu=name,memory.total,driver_version",
                                "--format=csv,noheader")}
 

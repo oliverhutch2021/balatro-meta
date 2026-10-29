@@ -51,3 +51,12 @@ def test_screen_dict():
     assert s["phase"] == "Round"
     assert len(s["hand"]) == 8
     assert s["blind"][1] == 300.0
+
+
+def test_fast_input_matches_the_reference_path():
+    env = VecEnv(256, seed=4, threads=3)
+    ref = np.zeros((256, OBS_LEN), np.float32)
+    for _ in range(20):
+        env.step(*env.random_moves())
+        env._env.obs_into_copy(ref)
+        assert (env.observe() == ref).all()

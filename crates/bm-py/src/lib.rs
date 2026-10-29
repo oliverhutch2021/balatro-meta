@@ -113,8 +113,39 @@ impl VecEnv {
         self.envs.len()
     }
 
-    /// Write every run's input into `out` (float32, n x OBS_LEN).
+    /// Write every run's input into `out` (float32, n x OBS_LEN, C-contiguous,
+    /// writable). The runs are encoded in parallel straight into the array;
+    /// don't touch the array from another thread during the call.
     fn obs_into(&mut self, py: Python<'_>, out: &Bound<'_, PyAny>) -> PyResult<()> {
+        let n = self.envs.len();
+        let buf = buffer::<f32>(out, n * OBS_LEN, "out")?;
+        if buf.readonly() {
+            return Err(PyValueError::new_err("out: the array must be writable"));
+        }
+        let ptr = buf.buf_ptr() as usize;
+        let (envs, pool) = (&self.envs, &self.pool);
+        py.detach(|| {
+            pool.install(|| {
+                // SAFETY: `buf` keeps the array alive and checked its size, layout and
+                // writability; each run writes only its own chunk.
+                let dst = unsafe { std::slice::from_raw_parts_mut(ptr as *mut f32, n * OBS_LEN) };
+                dst.par_chunks_mut(OBS_LEN)
+                    .zip(envs.par_iter())
+                    .for_each_init(
+                        || Vec::with_capacity(OBS_LEN),
+                        |v, (o, e)| {
+                            encode(&screen(&e.run), v);
+                            o.copy_from_slice(v);
+                        },
+                    )
+            })
+        });
+        drop(buf);
+        Ok(())
+    }
+
+    /// The same through an intermediate copy (a slower reference for tests).
+    fn obs_into_copy(&mut self, py: Python<'_>, out: &Bound<'_, PyAny>) -> PyResult<()> {
         let buf = buffer::<f32>(out, self.envs.len() * OBS_LEN, "out")?;
         let (envs, obs, pool) = (&self.envs, &mut self.obs, &self.pool);
         py.detach(|| {
@@ -192,12 +223,15 @@ impl VecEnv {
         args: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
         let n = self.envs.len();
-        let moves: Vec<(MoveKind, u64)> = self
-            .envs
-            .iter()
-            .zip(self.rngs.iter_mut())
-            .map(|(e, r)| random_move(&e.run, r))
-            .collect();
+        let (envs, rngs, pool) = (&self.envs, &mut self.rngs, &self.pool);
+        let moves: Vec<(MoveKind, u64)> = py.detach(|| {
+            pool.install(|| {
+                envs.par_iter()
+                    .zip(rngs.par_iter_mut())
+                    .map(|(e, r)| random_move(&e.run, r))
+                    .collect()
+            })
+        });
         buffer::<i64>(kinds, n, "kinds")?
             .copy_from_slice(py, &moves.iter().map(|m| m.0 as i64).collect::<Vec<_>>())?;
         buffer::<u64>(args, n, "args")?

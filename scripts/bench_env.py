@@ -34,6 +34,7 @@ def main() -> None:
         done += int(d.sum())
     secs = time.perf_counter() - t0
     report = {
+        "load_avg_1min_at_end": round(os.getloadavg()[0], 1),
         "batch": a.n,
         "threads": a.threads or os.cpu_count(),
         "seconds": round(secs, 2),
