@@ -171,3 +171,86 @@ fn the_input_changes_when_the_screen_does() {
     encode(&screen(&run), &mut b);
     assert_ne!(a, b);
 }
+
+/// The same check through shops and packs: buying, rerolling, opening and
+/// choosing, with consumables used, all played by the env's move generator
+/// (greedy rounds so runs reach later shops).
+#[test]
+fn shops_and_packs_show_nothing_hidden() {
+    use bm_core::env::{apply, random_move as env_move, safe_move, XorShift};
+    let mut seeds = SeedSampler::new(4321);
+    let mut rng = XorShift(0x7777_1234_5678_9999);
+    let (mut a, mut b) = (Vec::new(), Vec::new());
+    let (mut shop_steps, mut pack_steps) = (0, 0);
+    for r in 0..250u64 {
+        let mut run = Run::new(RunConfig::new(&seeds.next_seed()));
+        for step in 0..600u64 {
+            if run.phase == Phase::GameOver || run.won {
+                break;
+            }
+            match run.phase {
+                Phase::Shop => shop_steps += 1,
+                Phase::Pack => pack_steps += 1,
+                _ => {}
+            }
+            let t = twin(&run, r * 100_000 + step);
+            assert_eq!(
+                screen(&run),
+                screen(&t),
+                "screens differ: run {r} step {step}"
+            );
+            encode(&screen(&run), &mut a);
+            encode(&screen(&t), &mut b);
+            assert!(
+                a.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits()),
+                "inputs differ: run {r} step {step} ({:?})",
+                run.phase
+            );
+            let f = fair_copy(&run, step);
+            assert_eq!(
+                screen(&run),
+                screen(&f),
+                "fair copy shows a different screen"
+            );
+            let (k, arg) = if run.phase == Phase::Round && rng.below(3) != 0 {
+                bm_core::bots::greedy_move(&run, rng.below(1 << 30) as u64)
+            } else {
+                env_move(&run, &mut rng)
+            };
+            if apply(&mut run, k, arg).is_err() {
+                let (k2, a2) = safe_move(&run);
+                apply(&mut run, k2, a2).unwrap();
+            }
+        }
+    }
+    assert!(
+        shop_steps > 300 && pack_steps > 30,
+        "shop {shop_steps}, pack {pack_steps}"
+    );
+}
+
+#[test]
+fn fair_copies_do_not_know_the_next_shop() {
+    // From the cash-out screen, the real run's next shop and a fair copy's
+    // next shop differ: the copy's streams are new.
+    let mut differs = 0;
+    for i in 0..10 {
+        let mut run = Run::new(RunConfig::new(&format!("NEXTSHP{i}")));
+        run.select_blind().unwrap();
+        run.blind.as_mut().unwrap().chips = 1.0;
+        run.play(&[0]).unwrap();
+        assert_eq!(run.phase, Phase::RoundEval);
+        let mut copy = fair_copy(&run, i);
+        run.cash_out().unwrap();
+        copy.cash_out().unwrap();
+        if format!("{:?}", run.shop.as_ref().map(|s| &s.row))
+            != format!("{:?}", copy.shop.as_ref().map(|s| &s.row))
+        {
+            differs += 1;
+        }
+    }
+    assert!(
+        differs >= 9,
+        "only {differs} of 10 copies saw a different shop"
+    );
+}

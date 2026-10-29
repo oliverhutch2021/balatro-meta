@@ -58,6 +58,12 @@ impl Run {
         self.consumables.len() - 1
     }
 
+    /// Redeem a voucher as if bought (its effect applies at once).
+    pub fn redeem(&mut self, v: crate::content::VoucherKind) {
+        self.vouchers[v.index()] = true;
+        self.apply_voucher(v, true);
+    }
+
     /// Move every card in hand back to the deck.
     pub fn clear_hand(&mut self) {
         let h: Vec<CardId> = self.hand.drain(..).collect();
