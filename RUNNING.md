@@ -114,9 +114,11 @@ make watch
 If BalatroBot isn't running yet, it opens Balatro through it and waits for it (`make watch SPEED=2` runs the
 game faster; `make watch PAUSE=2` waits longer between moves). Ctrl+C stops; the game stays open.
 
-If it says it can't reach BalatroBot although the game is open, Ubuntu can't see Windows' localhost: add
-`[wsl2]` and `networkingMode=mirrored` on two lines to `%UserProfile%\.wslconfig`, run `wsl --shutdown` in
-PowerShell, and reopen Ubuntu. `make watch-dry` runs the same replays in the engine only.
+BalatroBot listens on Windows' own localhost, which Ubuntu can't reach by default, so `make watch` talks to
+it through a small relay it runs with your Windows Python (the same miniconda the RNG check uses). Nothing
+to set up. If it still says it can't reach BalatroBot although the game is open, look in Balatro's Lovely
+log (`%AppData%\Balatro\Mods\lovely\log`, newest file) for `BB.SERVER :: HTTP server listening`.
+`make watch-dry` runs the same replays in the engine only.
 
 ## Later steps
 

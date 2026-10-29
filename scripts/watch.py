@@ -43,15 +43,86 @@ MOVE_NAMES = ("select blind", "skip blind", "cash out", "leave shop", "sort by r
               "skip the pack", "reroll the boss")
 # Moves BalatroBot has no call for: a replay stops before them (not a mismatch).
 UNSUPPORTED = {13: "BalatroBot has no 'buy and use'", 20: "BalatroBot has no boss reroll"}
+# Moves BalatroBot only takes in some states (engine state before the move).
+ALLOWED_STATES = {
+    9: {"SELECTING_HAND", "SHOP", "SMODS_BOOSTER_OPENED"},  # move a joker
+    10: {"SELECTING_HAND", "SHOP"},  # sell a joker
+    16: {"SELECTING_HAND", "SHOP"},  # sell a consumable
+    17: {"SELECTING_HAND", "SHOP"},  # use a consumable
+}
+
+
+def unsupported(kind: int, state: str) -> str | None:
+    """Why BalatroBot can't make this move now, or None."""
+    if kind in UNSUPPORTED:
+        return UNSUPPORTED[kind]
+    if kind in ALLOWED_STATES and state not in ALLOWED_STATES[kind]:
+        return f"BalatroBot can't do that in {state}"
+    return None
 STABLE = {"MENU", "BLIND_SELECT", "SELECTING_HAND", "ROUND_EVAL", "SHOP", "GAME_OVER", "SMODS_BOOSTER_OPENED"}
 # States where the hand can be re-ordered to match the engine's (BalatroBot's `rearrange`).
 HAND_STATES = {"SELECTING_HAND", "SMODS_BOOSTER_OPENED"}
 
 
 # ------------------------------------------------------------------ BalatroBot
+BALATROBOT_URL = "http://127.0.0.1:12346"
+NO_PROXY = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+class WinBridge:
+    """BalatroBot's Windows localhost, reached through scripts/win_bridge.py under Windows Python.
+
+    WSL's default (NAT) networking can't reach a server on Windows' 127.0.0.1, which is where
+    BalatroBot listens. The bridge runs on Windows through WSL's interop and relays each call over
+    stdin/stdout, so no networking or firewall change is needed."""
+
+    def __init__(self, python: str, script: str, cwd: str | None = "/mnt/c") -> None:
+        self.proc = subprocess.Popen([python, "-u", script], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=subprocess.DEVNULL, text=True, cwd=cwd)
+
+    def post(self, url: str, body: dict, timeout: float):
+        if self.proc.poll() is not None:
+            raise OSError("the Windows bridge has stopped")
+        self.proc.stdin.write(json.dumps({"url": url, "body": body, "timeout": timeout}) + "\n")
+        self.proc.stdin.flush()
+        line = self.proc.stdout.readline()
+        if not line:
+            raise OSError("the Windows bridge has stopped")
+        out = json.loads(line)
+        if not out.get("ok"):
+            raise OSError(out.get("error") or "the Windows bridge failed")
+        return out["result"]
+
+    def close(self) -> None:
+        if self.proc.poll() is None:
+            self.proc.terminate()
+
+
+_bridge: list = []  # the one bridge of this process, once started (or [None] if it can't be)
+
+
+def windows_bridge() -> WinBridge | None:
+    """Start the bridge once, under WSL only (needs a Windows Python; BM_WIN_PYTHON overrides)."""
+    if not _bridge:
+        bridge = None
+        try:
+            is_wsl = "microsoft" in Path("/proc/version").read_text().lower()
+        except OSError:
+            is_wsl = False
+        if is_wsl:
+            try:
+                from rng_game import find_windows_python, win_path
+                bridge = WinBridge(str(find_windows_python()), win_path(ROOT / "scripts" / "win_bridge.py"))
+            except (SystemExit, RuntimeError, OSError, ImportError):
+                bridge = None
+        _bridge.append(bridge)
+    return _bridge[0]
+
+
 class Api:
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, bridge: WinBridge | None = None) -> None:
         self.url = url
+        self.bridge = bridge
         self.n = 0
 
     def call(self, method: str, params: dict | None = None, timeout: float = 120.0):
@@ -59,35 +130,30 @@ class Api:
         body = {"jsonrpc": "2.0", "method": method, "id": self.n}
         if params:
             body["params"] = params
-        req = urllib.request.Request(self.url, data=json.dumps(body).encode(),
-                                     headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            out = json.loads(r.read().decode())
+        if self.bridge:
+            out = self.bridge.post(self.url, body, timeout)
+        else:
+            req = urllib.request.Request(self.url, data=json.dumps(body).encode(),
+                                         headers={"Content-Type": "application/json"})
+            with NO_PROXY.open(req, timeout=timeout) as r:
+                out = json.loads(r.read().decode())
         if "error" in out:
             e = out["error"]
             raise RuntimeError(f"BalatroBot refused {method}: {e.get('message')} ({e.get('code')})")
         return out.get("result")
 
 
-def wsl_gateway() -> str | None:
-    try:
-        out = subprocess.run(["ip", "route", "show", "default"], text=True, capture_output=True).stdout
-        parts = out.split()
-        return parts[parts.index("via") + 1] if "via" in parts else None
-    except (OSError, ValueError, IndexError):
-        return None
-
-
 def try_urls() -> Api | None:
-    urls = [os.environ["BM_BALATROBOT_URL"]] if os.environ.get("BM_BALATROBOT_URL") else []
-    urls.append("http://127.0.0.1:12346")
-    gw = wsl_gateway()
-    if gw:
-        urls.append(f"http://{gw}:12346")
-    for u in urls:
+    """BalatroBot directly (mirrored networking, or BM_BALATROBOT_URL), else through the bridge."""
+    url = os.environ.get("BM_BALATROBOT_URL") or BALATROBOT_URL
+    candidates = [Api(url)]
+    bridge = windows_bridge()
+    if bridge and not os.environ.get("BM_BALATROBOT_URL"):
+        candidates.append(Api(url, bridge))
+    for api in candidates:
         try:
-            if Api(u).call("health", timeout=3) is not None:
-                return Api(u)
+            if api.call("health", timeout=3) is not None:
+                return api
         except (urllib.error.URLError, OSError, RuntimeError, ValueError):
             continue
     return None
@@ -105,7 +171,7 @@ def launch_game(speed: float) -> bool:
         return False
     game = find_balatro()
     lovely = game / "winmm.dll" if (game / "winmm.dll").exists() else game / "version.dll"
-    cmd = [str(uvx), "balatrobot", "serve", "--gamespeed", f"{speed:g}",
+    cmd = [str(uvx), "balatrobot", "serve", "--gamespeed", str(max(1, round(speed))),
            "--balatro-path", sh("wslpath", "-w", str(game)),
            "--love-path", sh("wslpath", "-w", str(game / "Balatro.exe")),
            "--lovely-path", sh("wslpath", "-w", str(lovely))]
@@ -127,8 +193,9 @@ def find_api(speed: float = 1.0, launch: bool = True) -> Api:
     raise SystemExit(
         "Can't reach BalatroBot. Open the game with it first, in PowerShell:\n"
         '    uvx balatrobot serve --gamespeed 1 --balatro-path "H:\\Steam\\steamapps\\common\\Balatro"\n'
-        "If the game is open but Ubuntu can't reach it, turn on WSL's mirrored networking: add the two lines\n"
-        "[wsl2] and networkingMode=mirrored to %UserProfile%\\.wslconfig, run `wsl --shutdown`, reopen Ubuntu.\n"
+        "If the game is open, check its Lovely log (%AppData%\\Balatro\\Mods\\lovely\\log) for\n"
+        "'BB.SERVER :: HTTP server listening'. Ubuntu reaches it through a small relay run by Windows\n"
+        "Python (miniconda, anaconda or python.org; BM_WIN_PYTHON=/mnt/c/.../python.exe overrides).\n"
         "BM_BALATROBOT_URL=http://host:port points somewhere else. Setup: RUNNING.md, step 5.")
 
 
@@ -166,7 +233,7 @@ def item_entry(c: dict) -> dict:
     mod = c.get("modifier") or {}
     cost = c.get("cost")
     out = {"key": c.get("key"), "edition": norm_mod(mod.get("edition"))}
-    if mod.get("enhancement") or mod.get("seal"):
+    if c.get("set") in ("DEFAULT", "ENHANCED"):  # playing cards: their enhancement and seal count too
         out["enhancement"] = norm_mod(mod.get("enhancement"))
         out["seal"] = norm_mod(mod.get("seal"))
     buy = cost.get("buy") if isinstance(cost, dict) else cost
@@ -391,7 +458,7 @@ def fresh_seed() -> str:
 def describe(kind: int, arg: int, game) -> str:
     name = MOVE_NAMES[kind] if 0 <= kind < len(MOVE_NAMES) else f"move {kind}"
     if kind in (6, 7):
-        return f"{name} {bin(arg).count('1')} card(s)"
+        return f"{name} {arg.bit_count()} card(s)"
     v = game.view()
     i = arg & 0xFF
     pick = {12: "shop", 13: "shop", 14: "shop_vouchers", 15: "shop_packs", 16: "consumables",
@@ -513,8 +580,9 @@ def replay(api: Api | None, panel: Panel, seed: str, moves, label: str, pause: f
         else:
             break
         what = describe(kind, arg, game)
-        if api and kind in UNSUPPORTED:
-            end = f"stopped before move {step + 1} ({what}): {UNSUPPORTED[kind]}"
+        why = unsupported(kind, game.view()["state"]) if api else None
+        if why:
+            end = f"stopped before move {step + 1} ({what}): {why}"
             panel.show([title, end, f"Engine and game agreed on the first {step} moves"])
             return True, end
         lines = [title]

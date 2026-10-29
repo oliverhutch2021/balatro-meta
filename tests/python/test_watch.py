@@ -187,3 +187,26 @@ def test_a_difference_is_caught_and_saved(tmp_path, monkeypatch):
     saved = list((tmp_path / "mismatches").glob("*.json"))
     assert len(saved) == 1 and json.loads(saved[0].read_text())["differences"]
     assert "MISMATCH" in (tmp_path / "panel.txt").read_text()
+
+
+def test_the_windows_bridge_relays_calls(tmp_path, monkeypatch):
+    """The relay that reaches BalatroBot on Windows' localhost, run here with this Python."""
+    monkeypatch.setattr(watch, "WATCH", tmp_path)
+    srv = serve(FakeGame())
+    url = f"http://127.0.0.1:{srv.server_address[1]}"
+    bridge = watch.WinBridge(sys.executable, str(ROOT / "scripts" / "win_bridge.py"), cwd=None)
+    try:
+        api = watch.Api(url, bridge)
+        assert api.call("health") == {"status": "ok"}
+        ok, msg = watch.replay(api, watch.Panel(tmp_path / "panel.txt"), "BRIDGE01", None, "test", 0.0)
+        assert ok, msg
+        # A refused call comes back as BalatroBot's refusal, not a crash.
+        with pytest.raises(RuntimeError, match="refused"):
+            api.call("no_such_method")
+        # A dead server is an OSError the caller can retry.
+        srv.shutdown()
+        srv.server_close()
+        with pytest.raises(OSError):
+            api.call("health", timeout=2)
+    finally:
+        bridge.close()
