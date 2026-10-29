@@ -1,8 +1,8 @@
 {
  "job": "rng-check",
- "commit": "07b28a686d74a4eb957fd9f0cec038e9b045df28",
- "started": "2026-10-29T18:23:49+00:00",
- "finished": "2026-10-29T18:24:16+00:00",
+ "commit": "1551a7a01bce5017a44a96b9e4fbc27b52711abc",
+ "started": "2026-10-29T18:40:02+00:00",
+ "finished": "2026-10-29T18:41:04+00:00",
  "machine": {
   "host": "PC",
   "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
@@ -13,11 +13,11 @@
   "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
  },
  "steps": {
-  "build": 6,
-  "luajit-stress": 21
+  "luajit-stress": 13,
+  "game-runtime": 48
  },
  "commands": {
-  "build": "make --no-print-directory build",
-  "luajit-stress": "make --no-print-directory rng-stress STRESS=200"
+  "luajit-stress": "make --no-print-directory rng-stress STRESS=200",
+  "game-runtime": "scripts/rng_game.py --scale 200"
  }
 }

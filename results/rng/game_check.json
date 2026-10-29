@@ -1,0 +1,9 @@
+{
+ "runtime": "LuaJIT 2.0.5",
+ "mode": "game-runtime",
+ "scale": 200,
+ "lines": 2326488,
+ "rust_matches": true,
+ "balatro_dir": "/mnt/h/Steam/steamapps/common/Balatro",
+ "windows_python": "/mnt/c/Users/<user>/miniconda3/python.exe"
+}
