@@ -13,7 +13,8 @@ port is `crates/bm-rng`; it is checked value for value against LuaJIT
   `i` with byte `b`, the running value becomes
   `((1.1239285023 / n) * b * pi + pi * i) mod 1`.
 - A few strings make the running value collapse to 0, after which it becomes
-  NaN. The game carries the NaN on; we do the same.
+  NaN. LuaJIT prints and re-reads NaN without error, so the game carries
+  the NaN on and we do the same (example: key `erratic` with seed `7LB2WVPK`).
 
 ## Named streams
 

@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["crates/bm-rng"]
+members = ["crates/bm-rng", "crates/bm-core", "crates/bm-py"]
+# bm-py is the Python extension; build it with maturin (make build), not cargo test.
+default-members = ["crates/bm-rng", "crates/bm-core"]
 
 [workspace.package]
 version = "0.1.0"

@@ -1,31 +1,69 @@
-# Balatro Meta. Run from the repo root (Ubuntu / WSL2 on the PC, or the cloud).
-.PHONY: help test test-rust rng-fixtures rng-stress fmt lint
+# Balatro Meta: everything you run on the PC is a target here. See RUNNING.md.
+#
+# The Python environment and the Rust build live on the WSL disk (fast); the repo can stay on a Windows drive.
 
-CARGO  ?= cargo
+SHELL := /bin/bash
+VENV ?= $(HOME)/.venvs/balatro-meta
+PY := $(VENV)/bin/python
+export CARGO_TARGET_DIR ?= $(HOME)/.cache/balatro-meta/target
+CARGO ?= cargo
 LUAJIT ?= luajit
 STRESS ?= 40
+FORCE ?=
+FORCE_FLAG := $(if $(FORCE),--force,)
+WATCH ?= 1
+JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
-help:
-	@echo "make test          all tests"
-	@echo "make rng-fixtures  regenerate the LuaJIT reference fixture"
-	@echo "make rng-stress    compare the RNG with LuaJIT on ~$(STRESS)x more cases"
-	@echo "make fmt / lint    format / check formatting and clippy"
+.DEFAULT_GOAL := help
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-fixtures rng-stress fmt lint
 
-test: test-rust
+help:  ## List the commands
+	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | expand -t 14
 
-test-rust:
-	$(CARGO) test --workspace
+setup:  ## Create or update the Python environment and build the engine (Python 3.12, on the WSL disk)
+	@command -v uv >/dev/null || { echo "uv is missing: run bash bootstrap.sh"; exit 1; }
+	@command -v cargo >/dev/null || { echo "Rust is missing: run bash bootstrap.sh"; exit 1; }
+	@test -x $(PY) || uv venv --quiet --python 3.12 $(VENV)
+	uv pip install --quiet --python $(PY) -e ".[dev]"
+	@echo "Python environment ready at $(VENV)"
 
-rng-fixtures:
+setup-gpu:  ## Install PyTorch with CUDA for the RTX 4070 Ti (used from phase 4)
+	uv pip install --quiet --python $(PY) torch --index-url https://download.pytorch.org/whl/cu128
+	$(PY) -c "import torch; ok = torch.cuda.is_available(); print('PyTorch', torch.__version__, '| CUDA', ok, '|', torch.cuda.get_device_name(0) if ok else 'no GPU visible')"
+
+build:  ## Rebuild the Rust engine module after a code change (jobs do this themselves)
+	VIRTUAL_ENV=$(VENV) $(PY) -m maturin develop --release --uv
+
+test:  ## Run all tests, Rust and Python
+	$(CARGO) test --release
+	$(PY) -m pytest -q -p no:cacheprovider
+
+doctor:  ## Check this machine and print a pass/warn/fail table
+	$(PY) scripts/doctor.py
+
+sync:  ## Fast-forward to the code Claude left in .sync/claude.bundle
+	$(PY) scripts/jobs.py sync
+
+status:  ## Show which job steps are done
+	$(PY) scripts/jobs.py status
+
+smoke:  ## Two-minute check that the build, the tests and the job runner work end to end
+	$(PY) scripts/jobs.py run smoke $(JOB_FLAGS)
+
+rng-check:  ## Phase 1 gate: the Rust RNG against this PC's LuaJIT on 200x the committed cases (a few minutes)
+	$(PY) scripts/jobs.py run rng-check $(JOB_FLAGS)
+
+rng-fixtures:  ## (dev) Regenerate the committed LuaJIT reference fixture
 	$(LUAJIT) reference/rng_reference.lua > tests/fixtures/rng/reference.tsv
 
-rng-stress:
+rng-stress:  ## (dev) Compare the RNG with LuaJIT on STRESS x the committed cases
 	$(LUAJIT) reference/rng_reference.lua $(STRESS) > /tmp/bm_rng_stress.tsv
-	BM_RNG_FIXTURE=/tmp/bm_rng_stress.tsv $(CARGO) test -p bm-rng --test luajit_fixtures --release
+	BM_RNG_FIXTURE=/tmp/bm_rng_stress.tsv $(CARGO) test --release -p bm-rng --test luajit_fixtures -- --nocapture
+	@rm -f /tmp/bm_rng_stress.tsv
 
-fmt:
+fmt:  ## (dev) Format the Rust code
 	$(CARGO) fmt --all
 
-lint:
+lint:  ## (dev) Check formatting and clippy
 	$(CARGO) fmt --all -- --check
-	$(CARGO) clippy --workspace --all-targets -- -D warnings
+	$(CARGO) clippy --all-targets -- -D warnings

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "balatro-meta"
+version = "0.1.0"
+description = "Finding the Balatro meta: an exact engine, fair deep-learning bots and a strategy atlas"
+requires-python = ">=3.10"
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+dev = ["pytest", "maturin>=1.7,<2", "ruff"]
+
+[tool.maturin]
+manifest-path = "crates/bm-py/Cargo.toml"
+python-source = "python"
+module-name = "balatro_meta._engine"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/python"]
+
+[tool.ruff]
+line-length = 120

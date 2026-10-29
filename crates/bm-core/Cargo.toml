@@ -1,0 +1,10 @@
+[package]
+name = "bm-core"
+description = "Balatro Meta engine: the game's rules, state and scoring"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+bm-rng = { path = "../bm-rng" }
