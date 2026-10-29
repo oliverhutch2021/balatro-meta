@@ -182,7 +182,14 @@ def run(job: str, force: bool, watch: bool = True) -> None:
             print("Note: newer code from Claude is waiting. Finishing this job on its original code first; "
                   "run `make sync` afterwards.")
     elif (SYNC / "claude.bundle").exists():
+        before = git("rev-parse", "HEAD")
         sync()
+        if git("rev-parse", "HEAD") != before and not os.environ.get("BM_JOBS_REEXEC"):
+            # The update may have changed this script and the job's steps: start again on the new code,
+            # so the job runs the steps the new code defines rather than the ones loaded before the update.
+            os.environ["BM_JOBS_REEXEC"] = "1"
+            sys.stdout.flush()
+            os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]])
     changed = dirty_tracked(exclude_results=True)
     if changed:
         raise SystemExit("Uncommitted changes outside results/ (" + ", ".join(changed[:5]) + "). "
