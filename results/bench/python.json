@@ -1,0 +1,8 @@
+{
+ "batch": 4096,
+ "threads": 16,
+ "seconds": 20.0,
+ "moves_per_s": 165268,
+ "runs_finished_per_s": 20527,
+ "includes": "random legal moves, the step, and the bot's input for every run after every step"
+}
