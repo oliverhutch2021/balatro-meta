@@ -1,0 +1,27 @@
+{
+ "job": "smoke",
+ "commit": "414f301c03c021559fc184c206529be6d915a441",
+ "started": "2026-10-29T18:20:55+00:00",
+ "finished": "2026-10-29T18:21:06+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 2,
+  "rust-tests": 5,
+  "python-tests": 1,
+  "doctor": 3
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "rust-tests": "cargo test --release -q",
+  "python-tests": "~/.venvs/balatro-meta/bin/python -m pytest -q -p no:cacheprovider",
+  "doctor": "scripts/doctor.py --quick"
+ }
+}
