@@ -106,23 +106,24 @@ blinds ahead (measured by playing the coming rounds out on copies with the hidde
 the run's own deck, jokers, levels, enhancements and seals), the deck's power (24 hands dealt from the whole
 deck and scored by the engine: how often it deals each hand, what each scores at its level, and what seals,
 retriggers and jokers add to it, with no hand type favoured), what the run gains by itself (growing jokers,
-levels, income, cards made; a joker that pays for one kind of hand counts by how often the run plays it) and
-money as scoring power for the shops still to come (none at the last one, so it doesn't die rich). Every
-shop, pack, Tarot, skip and round decision tries its options and keeps the one that raises that number most,
-each option and doing nothing judged on the same deals; nothing about what to buy or build is a fixed rule.
-In a round it plans which hand to build (and digs for it), and once it holds a winning hand it first takes
-what the round still offers (throwing Mail-In Rebate's rank or Purple Seals, four-card hands for Square
-Joker, a lone 6 for Sixth Sense, Gold Seals played, Steel and Blue Seals kept...) as long as the win stays
-certain. Before every hand it tries every order of its jokers (up to six) and plays the one that scores most
-(+mult before x-mult and Polychrome jokers, copiers on the best joker for that hand); for an extra hand
-played only to dig for value it takes the opposite order, so the hand scores little and the round goes on.
-It moves Blueprint and Brainstorm onto whatever pays at each moment (Perkeo or Cartomancer as the shop
-closes, Mail-In Rebate before a throw). The plan's "teacher's playbook" section lists every idea, where it
-came from and what it did. It plays 12,000 runs (about an hour and a quarter; it thinks far more per move
-than the greedy bot) into `results/baseline/teacher.json`. On 400 fresh test runs (seeds used by neither
-version while building) it won 26% (95% range 22 to 31%), with a mean final ante of 6.4; the version before
-these changes won 21.5% on the same seeds (mean final ante 6.1), the earlier rule-based teacher about 4% and
-the greedy bot 0.07% (mean final ante 3.1).
+levels, income, cards made; a joker that pays for one kind of hand counts by how often the run plays it;
+DNA's copies, and any card added, changed or lost, by what the deck then deals) and money as scoring power
+for the shops still to come (none at the last one, so it doesn't die rich). Every shop, pack, Tarot, skip
+and round decision tries its options and keeps the one that raises that number most, each option and doing
+nothing judged on the same deals; nothing about what to buy or build is a fixed rule. In a round it plans
+which hand to build (and digs for it), and once it holds a winning hand it first takes what the round still
+offers (throwing Mail-In Rebate's rank or Purple Seals, four-card hands for Square Joker, a lone 6 for Sixth
+Sense, Gold Seals played, Steel and Blue Seals kept...) as long as the win stays certain. Before every hand
+it tries every order of its jokers (up to six) and plays the one that scores most (+mult before x-mult and
+Polychrome jokers, copiers on the best joker for that hand); for an extra hand played only to dig for value
+it takes the opposite order, so the hand scores little and the round goes on. It moves Blueprint and
+Brainstorm onto whatever pays at each moment (Perkeo or Cartomancer as the shop closes, Mail-In Rebate
+before a throw). The plan's "teacher's playbook" section lists every idea, where it came from and what it
+did. It plays 12,000 runs (about an hour; it thinks far more per move than the greedy bot) into
+`results/baseline/teacher.json`. On 400 fresh test runs (seeds used by neither version while building) it
+won 26% (95% range 22 to 31%), with a mean final ante of 6.4; the version before these changes won 21.5% on
+the same seeds (mean final ante 6.1), the earlier rule-based teacher about 4% and the greedy bot 0.07% (mean
+final ante 3.1).
 
 In the second:
 

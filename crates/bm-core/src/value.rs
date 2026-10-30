@@ -243,6 +243,9 @@ pub struct Flows {
     pub spectrals: f64,
     /// Log scoring power lost per round (jokers destroyed or wearing out).
     pub drain: f64,
+    /// Log scoring power the deck gains per round from cards jokers add to it (DNA's copies), measured by
+    /// what the deck then deals (`deck_growth`; zero in `flows` itself).
+    pub deck: f64,
 }
 
 /// The run's per-round flows when it plays `main` (every hand of that type).
@@ -416,7 +419,7 @@ fn growth(f: &Flows, o: &Outlook, run: &Run, rounds: f64) -> f64 {
         let x = x.max(0.1);
         g += ((x + rate * rounds).max(0.1) / x).ln();
     }
-    g - f.drain * rounds
+    g + (f.deck - f.drain) * rounds
 }
 
 fn sigmoid(z: f64) -> f64 {
@@ -684,7 +687,13 @@ pub fn breakdown(run: &Run, salt: u64) -> Option<Breakdown> {
 
 fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
     let o = outlook(run, salt, samples)?;
-    let f = flows_for(run, &o.shares);
+    let deals = if samples <= QUICK {
+        DECK_DEALS_QUICK
+    } else {
+        DECK_DEALS
+    };
+    let mut f = flows_for(run, &o.shares);
+    f.deck = deck_growth(run, salt, deals);
     let money = money_now(run);
     let per_round = income(run, &f);
     let mut blinds = Vec::new();
@@ -710,11 +719,6 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
     // all that's left, so the last shop spends rather than dies rich.
     let spend = (shops_left(run) / long).min(1.0);
     let shopping = spend * bought(run, money + per_round * long);
-    let deals = if samples <= QUICK {
-        DECK_DEALS_QUICK
-    } else {
-        DECK_DEALS
-    };
     let power = (1.0 - DECK_SHARE) * mean(&o.next) + DECK_SHARE * deck_power(run, salt, deals);
     let long_run = LONG_RUN * (power + growth(&f, &o, run, long) + shopping);
     let mut sorted = o.next.clone();
@@ -1019,6 +1023,57 @@ fn deal_best(
     best
 }
 
+/// Share of rounds in which DNA gets its single-card first hand (the round has to allow it).
+const DNA_USE: f64 = 0.6;
+
+/// What the jokers that add cards to the deck add per round, in log scoring power: DNA copies a strong card
+/// of the first hand (a typical first hand's best card by `card_value`) into the deck every round it is
+/// used, worth what the deck then deals with it.
+pub fn deck_growth(run: &Run, salt: u64, deals: u64) -> f64 {
+    let dna = run
+        .jokers
+        .iter()
+        .filter(|j| j.kind == JokerKind::DNA && !j.debuffed)
+        .count();
+    if dna == 0 || run.playing_cards.is_empty() {
+        return 0.0;
+    }
+    let mut by_value: Vec<(f64, crate::state::CardId)> = run
+        .playing_cards
+        .iter()
+        .map(|&id| (card_value(run, id), id))
+        .collect();
+    by_value.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+    // The best of a hand of `hand_size` cards sits about this far down the deck.
+    let k = by_value.len() / (run.hand_size().max(1) as usize + 1);
+    let src = by_value[k.min(by_value.len() - 1)].1;
+    let mut c = run.clone();
+    let id = c.copy_playing_card(src);
+    c.playing_cards.push(id);
+    c.deck.push(id);
+    let gain = deck_power(&c, salt, deals) - deck_power(run, salt, deals);
+    gain.max(0.0) * DNA_USE * dna as f64
+}
+
+/// What the cards gained, changed or lost between two positions are worth, by what the deck then deals with
+/// the jokers and levels as they were at `start` (DNA's copies, Midas Mask's Gold cards, shattered Glass...).
+pub fn deck_change(start: &Run, end: &Run) -> f64 {
+    let mut mid = start.clone();
+    mid.cards.clone_from(&end.cards);
+    mid.playing_cards.clone_from(&end.playing_cards);
+    // Hiker's chips on cards already count in `round_gain`.
+    for (id, c) in start.cards.iter().enumerate() {
+        if let Some(m) = mid.cards.get_mut(id) {
+            m.perma_bonus = c.perma_bonus;
+        }
+    }
+    if deck_key(&mid) == deck_key(start) {
+        return 0.0;
+    }
+    const SALT: u64 = 0xDEC4_C4A6;
+    deck_power(&mid, SALT, DECK_DEALS) - deck_power(start, SALT, DECK_DEALS)
+}
+
 /// A key for everything the deck's power depends on: the cards, the jokers in order, hand levels, hand
 /// size and throws, this round's picks (The Idol's card, Ancient Joker's suit...), money for the jokers
 /// that count it, held Planets with Observatory.
@@ -1171,7 +1226,7 @@ pub fn round_gain(start: &Run, end: &Run, reference: (f64, f64)) -> f64 {
     dc += 5.0 * (bonus(end) - bonus(start));
     let growth =
         ((chips + dc).max(1.0) / chips).ln() + ((added_mult + dm).max(1.0) / added_mult).ln() + gx;
-    GROWTH_WEIGHT * (growth + levels) + money
+    GROWTH_WEIGHT * (growth + levels + deck_change(start, end)) + money
 }
 
 thread_local! {
@@ -1352,6 +1407,27 @@ mod tests {
             deck_power(&idol, 3, DECK_DEALS) > before + 0.2,
             "copies of The Idol's card"
         );
+    }
+
+    #[test]
+    fn dna_is_worth_holding_for_the_cards_it_copies() {
+        // With Baron and a deck of strong Kings, DNA's copies count; it no longer looks like a joker that
+        // does nothing.
+        let mut run = first_shop("VALUE5");
+        run.add_joker(JokerKind::Baron);
+        for id in run.playing_cards.clone().into_iter().take(8) {
+            let c = run.card_mut(id);
+            c.rank = Rank::King;
+            c.enhancement = Enhancement::Steel;
+            c.seal = Seal::Red;
+        }
+        let mut with = run.clone();
+        with.add_joker(JokerKind::DNA);
+        assert!(deck_growth(&with, 3, DECK_DEALS) > 0.01);
+        let f = flows_for(&with, &[1.0 / 12.0; 12]);
+        assert_eq!(f.deck, 0.0, "measured by the breakdown, not the table");
+        let b = breakdown(&with, 3).unwrap();
+        assert!(b.flows.deck > 0.0);
     }
 
     #[test]

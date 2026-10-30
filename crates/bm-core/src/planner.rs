@@ -426,8 +426,25 @@ pub fn plan(run: &Run, best: (f64, u64), salt: u64) -> (MoveKind, u64) {
     let reference = value_aware().then(|| reference(run, best.1, salt));
     let hand = seen(run);
     let mut choice: Option<((u64, f64), (MoveKind, u64))> = None;
-    for (n, p) in Plan::options(&hand).into_iter().enumerate() {
-        let first = plan_move(run, p, best);
+    // Each plan from its own first move; with DNA on the first hand, the best-hand plan after copying the
+    // most valuable card too (a hand played for DNA, judged like the rest).
+    let mut tries: Vec<(Plan, Option<(MoveKind, u64)>)> = Plan::options(&hand)
+        .into_iter()
+        .map(|p| (p, None))
+        .collect();
+    let dna = run.hands_played_round == 0
+        && run.hands_left > 1
+        && run
+            .jokers
+            .iter()
+            .any(|j| j.kind == crate::joker_data::JokerKind::DNA && !j.debuffed);
+    if dna && value_aware() {
+        if let Some(i) = dna_pick(run) {
+            tries.push((Plan::Best, Some((MoveKind::Play, 1 << i))));
+        }
+    }
+    for (n, (p, own)) in tries.into_iter().enumerate() {
+        let first = own.unwrap_or_else(|| plan_move(run, p, best));
         if choice.as_ref().is_some_and(|(_, m)| *m == first) {
             continue; // the same move now as a better-scoring plan
         }
@@ -554,20 +571,25 @@ fn extra_play(run: &Run, spare: &[usize], cards: usize) -> u64 {
                 .find(|&i| run.card(run.hand[i]).rank == Rank::Six)
                 .or_else(gold)
         } else if first_hand && run.count_jokers(J::DNA) > 0 {
-            spare.iter().copied().max_by_key(|&i| {
-                let c = run.card(run.hand[i]);
-                (
-                    c.seal != crate::card::Seal::None,
-                    c.enhancement != Enhancement::None,
-                    c.rank.id(),
-                )
-            })
+            dna_pick(run)
         } else {
             gold()
         };
         return 1 << pick.unwrap_or(order[0]);
     }
     order.into_iter().take(cards).fold(0u64, |m, i| m | 1 << i)
+}
+
+/// The card DNA should copy: the most valuable in hand to this run (its copy comes back to the hand, so a
+/// winning hand keeps it).
+fn dna_pick(run: &Run) -> Option<usize> {
+    (0..run.hand.len())
+        .filter(|&i| !run.card(run.hand[i]).face_down)
+        .max_by(|&a, &b| {
+            crate::value::card_value(run, run.hand[a])
+                .total_cmp(&crate::value::card_value(run, run.hand[b]))
+                .then(b.cmp(&a))
+        })
 }
 
 /// The move of a way to finish a beatable round. If the hand no longer beats the blind (a boss took a card),

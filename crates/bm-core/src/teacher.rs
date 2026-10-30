@@ -2021,6 +2021,45 @@ fn value_pack_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     choose(run, vs, options).unwrap_or((MoveKind::PackSkip, 0))
 }
 
+thread_local! {
+    /// The shop's choice to leave, with the jokers' order to leave in (by creation ids), remembered while
+    /// the jokers are moved into it: moving them changes nothing else in the shop.
+    static LEAVING: std::cell::RefCell<std::collections::HashMap<u64, Vec<u64>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// A key for a shop position with the jokers in any order.
+fn shop_key(run: &Run, vs: u64) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (vs, run.ante, run.round, run.money, run.reroll_cost).hash(&mut h);
+    format!("{:?}", run.shop).hash(&mut h);
+    let mut jokers: Vec<_> = run
+        .jokers
+        .iter()
+        .map(|j| {
+            (
+                j.sort_id,
+                j.kind as u16,
+                j.edition as u8,
+                j.debuffed,
+                j.counter,
+                j.sell_cost,
+                j.mult.to_bits(),
+                j.x_mult.to_bits(),
+                j.chips.to_bits(),
+            )
+        })
+        .collect();
+    jokers.sort_unstable();
+    jokers.hash(&mut h);
+    for c in &run.consumables {
+        (c.sort_id, c.kind as u16, c.edition as u8).hash(&mut h);
+    }
+    (run.playing_cards.len(), run.tags.len(), &run.vouchers).hash(&mut h);
+    h.finish()
+}
+
 /// The shop move that raises the value most: buying (a Planet used at once; a joker after selling a weaker
 /// one when slots are full), vouchers, packs (judged by sample contents), a reroll (judged by sample shops,
 /// with what it would buy in each), using or selling held cards, or leaving.
@@ -2029,6 +2068,18 @@ fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
         return (MoveKind::LeaveShop, 0);
     };
     let vs = value_salt(run, salt);
+    // Already decided to leave: go on setting the jokers for it.
+    let key = shop_key(run, vs);
+    let leaving = LEAVING
+        .with(|c| c.borrow().get(&key).cloned())
+        .and_then(|ids| {
+            ids.iter()
+                .map(|id| run.jokers.iter().position(|j| j.sort_id == *id))
+                .collect::<Option<Vec<usize>>>()
+        });
+    if let Some(want) = leaving {
+        return move_towards(run, &want).unwrap_or((MoveKind::LeaveShop, 0));
+    }
     let afford = |cost: i64| cost <= 0 || cost <= run.spendable();
     let mut lists = shop_buys(run, vs);
     for (i, v) in shop.vouchers.iter().enumerate() {
@@ -2108,10 +2159,18 @@ fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     // Leaving: first set the jokers for what happens as the shop closes and the blind starts (or for
     // scoring, when nothing happens then).
     let want = exit_order(run, vs).unwrap_or_else(|| joker_order(run));
-    if let Some(m) = move_towards(run, &want) {
-        return m;
-    }
-    (MoveKind::LeaveShop, 0)
+    let Some(m) = move_towards(run, &want) else {
+        return (MoveKind::LeaveShop, 0);
+    };
+    let ids: Vec<u64> = want.iter().map(|&i| run.jokers[i].sort_id).collect();
+    LEAVING.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.len() > 64 {
+            c.clear();
+        }
+        c.insert(key, ids);
+    });
+    m
 }
 
 /// The least gain worth skipping a blind for (a skip gives up its reward and a shop, and faces the next
@@ -2270,6 +2329,54 @@ mod tests {
             "both Fives thrown: {mask:#b}"
         );
         assert_eq!(mask & 0b11111, 0, "the winning flush kept");
+    }
+
+    #[test]
+    fn dna_copies_the_best_card_on_the_first_hand() {
+        // A flush wins the Small Blind; DNA and Baron held, a Red Seal Steel King in hand: the first hand is
+        // the King alone (its copy joins the deck and comes back to the hand), then the flush.
+        use crate::blinds::BlindKind;
+        use crate::card::Rank::*;
+        use Suit::*;
+        let mut run = Run::scenario("ROUNDPOS", BlindKind::Small);
+        run.hand.clear();
+        for k in [JokerKind::Joker, JokerKind::DNA, JokerKind::Baron] {
+            run.add_joker(k);
+        }
+        for (s, r) in [
+            (Spades, Ace),
+            (Spades, Queen),
+            (Spades, Jack),
+            (Spades, Nine),
+            (Spades, Three),
+            (Clubs, Five),
+            (Diamonds, Four),
+        ] {
+            run.add_card_to_hand(s, r);
+        }
+        run.add_special_card_to_hand(Hearts, King, Enhancement::Steel, Edition::None, Seal::Red);
+        let before = run.playing_cards.len();
+        let mut moves = 0;
+        let first = loop {
+            let (k, a) = teacher_move(&run, 1 << 20 | moves);
+            if k == MoveKind::Play || k == MoveKind::Discard {
+                break (k, a);
+            }
+            apply(&mut run, k, a).unwrap();
+            moves += 1;
+            assert!(moves < 10);
+        };
+        assert_eq!(first.0, MoveKind::Play);
+        assert_eq!(first.1.count_ones(), 1, "one card alone: {:#b}", first.1);
+        let i = first.1.trailing_zeros() as usize;
+        let c = run.card(run.hand[i]);
+        assert_eq!((c.rank, c.enhancement), (King, Enhancement::Steel));
+        apply(&mut run, first.0, first.1).unwrap();
+        assert_eq!(
+            run.playing_cards.len(),
+            before + 1,
+            "DNA's copy joined the deck"
+        );
     }
 
     #[test]
