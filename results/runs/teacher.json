@@ -1,28 +1,28 @@
 {
  "job": "teacher",
- "commit": "2f0f29bb64f4ac5366561348b58402c5f7b19f4a",
- "started": "2026-10-30T02:27:06+00:00",
- "finished": "2026-10-30T03:06:10+00:00",
+ "commit": "0f4e2c15aa8b8234b838285d0c09f157cc3279ef",
+ "started": "2026-10-30T03:22:02+00:00",
+ "finished": "2026-10-30T03:58:29+00:00",
  "machine": {
   "host": "PC",
   "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
   "cpu_threads": 16,
   "ram_gb": 15.2,
   "load_avg_1_5_15": [
-   31.7,
-   32.6,
-   31.1
+   32.3,
+   31.1,
+   29.8
   ],
   "python": "3.12.3",
   "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
   "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
  },
  "steps": {
-  "build": 15,
-  "teacher": 2328
+  "build": 14,
+  "teacher": 2173
  },
  "commands": {
   "build": "make --no-print-directory build",
-  "teacher": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --runs 500000 --seed 1 --out results/baseline/teacher.json"
+  "teacher": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --runs 100000 --seed 1 --out results/baseline/teacher.json"
  }
 }
