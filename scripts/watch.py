@@ -205,16 +205,20 @@ def area_cards(x) -> list | None:
 
 
 def item_entry(c: dict) -> dict:
-    """A shop, pack or consumable card: key, edition and (if shown) price."""
+    """A shop, pack or consumable card: key, edition, and the price and sell value the game shows."""
     mod = c.get("modifier") or {}
     cost = c.get("cost")
     out = {"key": c.get("key"), "edition": norm_mod(mod.get("edition"))}
     if c.get("set") in ("DEFAULT", "ENHANCED"):  # playing cards: their enhancement and seal count too
         out["enhancement"] = norm_mod(mod.get("enhancement"))
         out["seal"] = norm_mod(mod.get("seal"))
-    buy = cost.get("buy") if isinstance(cost, dict) else cost
-    if buy is not None:
-        out["cost"] = buy
+    if isinstance(cost, dict):
+        if cost.get("buy") is not None:
+            out["cost"] = cost["buy"]
+        if cost.get("sell") is not None:
+            out["sell"] = cost["sell"]
+    elif cost is not None:
+        out["cost"] = cost
     return out
 
 
@@ -244,7 +248,9 @@ def game_view(gs: dict) -> dict:
         "discards_left": rnd.get("discards_left"),
         "chips": rnd.get("chips"),
         "hand": [card_entry(c) for c in hand],
-        "jokers": [{"key": j.get("key"), "edition": norm_mod((j.get("modifier") or {}).get("edition"))}
+        "jokers": [dict({"key": j.get("key"), "edition": norm_mod((j.get("modifier") or {}).get("edition"))},
+                        **({"sell": j["cost"]["sell"]} if isinstance(j.get("cost"), dict)
+                           and j["cost"].get("sell") is not None else {}))
                    for j in jokers],
         "blinds": blinds,
         "reroll_cost": rnd.get("reroll_cost"),
@@ -259,7 +265,7 @@ def game_view(gs: dict) -> dict:
 def engine_view(game) -> dict:
     v = dict(game.view())
     v["hand"] = [{k: c[k] for k in ("key", "enhancement", "edition", "seal", "debuff")} for c in v["hand"]]
-    v["jokers"] = [{"key": j["key"], "edition": j["edition"]} for j in v["jokers"]]
+    v["jokers"] = [{"key": j["key"], "edition": j["edition"], "sell": j["sell"]} for j in v["jokers"]]
     v["blinds"] = {k: {"name": b["name"], "status": b["status"], "tag_name": b.get("tag_name")}
                    for k, b in v["blinds"].items()}
     # Opened booster slots leave the game's area; the engine keeps them as None.
@@ -273,14 +279,21 @@ def pack_key(k):
     return "p_buffoon_normal" if isinstance(k, str) and k.startswith("p_buffoon_normal") else k
 
 
-def same_items(e_items: list, g_items: list) -> bool:
-    """Shop or pack cards: keys and editions; prices and modifiers when the game shows them."""
+# What is compared, area by area, beyond key and edition. Prices matter where they are paid (the shop)
+# and sell values where they are held; a pack's cards are taken for free.
+SHOP_FIELDS = ("cost", "enhancement", "seal")
+HELD_FIELDS = ("sell",)
+PACK_FIELDS = ("enhancement", "seal")
+
+
+def same_items(e_items: list, g_items: list, fields=SHOP_FIELDS) -> bool:
+    """Cards in one area: keys and editions, plus `fields` when the game shows them."""
     if len(e_items) != len(g_items):
         return False
     for a, b in zip(e_items, g_items):
         if pack_key(a.get("key")) != pack_key(b.get("key")) or a.get("edition") != b.get("edition"):
             return False
-        for k in ("cost", "enhancement", "seal"):
+        for k in fields:
             if k in b and a.get(k) != b[k]:
                 return False
     return True
@@ -294,9 +307,19 @@ def differences(e: dict, g: dict) -> list[str]:
         if a != b:
             out.append(f"{name}: engine {a!r}, game {b!r}")
 
-    def cmp_items(name, key):
-        if g.get(key) is not None and not same_items(e[key], g[key]):
-            out.append(f"{name}: engine {e[key]!r}, game {g[key]!r}")
+    def cmp_items(name, key, fields=SHOP_FIELDS):
+        if g.get(key) is not None and not same_items(e[key], g[key], fields):
+            shown = ("key", "edition", *fields)
+            ev = [{k: i.get(k) for k in shown if k in i} for i in e[key]]
+            gv = [{k: i.get(k) for k in shown if k in i} for i in g[key]]
+            out.append(f"{name}: engine {ev!r}, game {gv!r}")
+
+    def cmp_jokers():
+        if not same_items(e["jokers"], g["jokers"], HELD_FIELDS):
+            shown = ("key", "edition", "sell")
+            ev = [{k: j.get(k) for k in shown} for j in e["jokers"]]
+            gv = [{k: j.get(k) for k in shown} for j in g["jokers"]]
+            out.append(f"jokers: engine {ev!r}, game {gv!r}")
 
     def cmp_hand():
         named = [(c, d) for c, d in zip(e["hand"], g["hand"]) if d["key"] is not None]
@@ -310,7 +333,7 @@ def differences(e: dict, g: dict) -> list[str]:
         return out
     for k in ("ante", "money"):
         cmp(k, e[k], g[k])
-    cmp_items("consumables", "consumables")
+    cmp_items("consumables", "consumables", HELD_FIELDS)
     st = e["state"]
     if st == "SELECTING_HAND":
         for k in ("round", "hands_left", "discards_left"):
@@ -318,17 +341,17 @@ def differences(e: dict, g: dict) -> list[str]:
         if g["chips"] is not None:
             cmp("round chips", float(e["chips"]), float(g["chips"]))
         cmp_hand()
-        cmp("jokers", e["jokers"], g["jokers"])
+        cmp_jokers()
     if st == "SHOP":
-        cmp("jokers", e["jokers"], g["jokers"])
+        cmp_jokers()
         cmp_items("shop cards", "shop")
         cmp_items("shop vouchers", "shop_vouchers")
         cmp_items("shop packs", "shop_packs")
         if g.get("reroll_cost") is not None:
             cmp("reroll cost", e["reroll_cost"], g["reroll_cost"])
     if st == "SMODS_BOOSTER_OPENED":
-        cmp("jokers", e["jokers"], g["jokers"])
-        cmp_items("pack cards", "pack")
+        cmp_jokers()
+        cmp_items("pack cards", "pack", PACK_FIELDS)
         if e["hand"] or g["hand"]:
             cmp_hand()
     if st == "BLIND_SELECT":
@@ -521,7 +544,7 @@ def main() -> None:
     ap.add_argument("--engine-only", action="store_true", help="the viewer page without a game")
     ap.add_argument("--runs", type=int, default=0, help="--dry: stop after this many runs (0 = until Ctrl+C)")
     ap.add_argument("--seed", default="", help="replay this seed with the greedy bot")
-    ap.add_argument("--speed", default="max", help="1, 2, 4, 10 or max")
+    ap.add_argument("--speed", default="1", help="the visible game's speed: 1 (normal), 2, 4 or max")
     ap.add_argument("--port", type=int, default=8790)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--no-browser", action="store_true")
@@ -541,7 +564,7 @@ def main() -> None:
         except KeyboardInterrupt:
             print("\nStopped.")
         return
-    speed = a.speed if a.speed in viewer.SPEEDS else "max"
+    speed = a.speed if a.speed in viewer.SPEEDS else viewer.DEFAULT_SPEED
     viewer.serve(port=a.port, host=a.host, speed=speed, engine_only=a.engine_only, launch=not a.no_launch,
                  seed=a.seed, browser=not a.no_browser)
 

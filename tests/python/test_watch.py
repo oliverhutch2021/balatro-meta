@@ -17,9 +17,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import viewer  # noqa: E402
-import watch  # noqa: E402
-from balatro_meta._engine import Game  # noqa: E402
+import watch
+from balatro_meta._engine import Game
+
+import viewer
 
 
 def replay(api, seed: str, tmp_path, moves=None):
@@ -31,25 +32,27 @@ def replay(api, seed: str, tmp_path, moves=None):
 
 
 def area(items: list, cheat_price: bool = False) -> dict:
-    """Cards in BalatroBot's area format."""
+    """Cards in BalatroBot's area format. Like the game, every card shows a price and a sell value, also
+    where no price is paid (a pack's cards show their shop price, a Planet $3)."""
     cards = []
     for i, it in enumerate(items):
         if it is None:
             continue
+        buy = it.get("cost", 3)
         c = {"key": it["key"], "modifier": {"edition": it.get("edition"), "enhancement": it.get("enhancement"),
-                                            "seal": it.get("seal")}}
-        if "cost" in it:
-            c["cost"] = {"buy": it["cost"] + (1 if cheat_price and i == 0 else 0), "sell": 1}
+                                            "seal": it.get("seal")},
+             "cost": {"buy": buy + (1 if cheat_price and i == 0 else 0), "sell": it.get("sell", max(1, buy // 2))}}
         cards.append(c)
     return {"count": len(cards), "cards": cards}
 
 
 class FakeGame:
-    def __init__(self, cheat: bool = False, cheat_price: bool = False) -> None:
+    def __init__(self, cheat: bool = False, cheat_price: bool = False, cheat_sell: bool = False) -> None:
         self.game = None
         self.order: list[int] = []
         self.cheat = cheat
         self.cheat_price = cheat_price
+        self.cheat_sell = cheat_sell
         self.state = "MENU"
 
     def view(self) -> dict:
@@ -66,7 +69,9 @@ class FakeGame:
         blinds = {k: {"type": k.upper(), "name": b["name"], "status": b["status"], "tag_name": b.get("tag_name")}
                   for k, b in v["blinds"].items()}
         money = v["money"] + (1 if self.cheat and v["state"] == "SHOP" else 0)
-        jokers = [{"key": j["key"], "modifier": {"edition": j["edition"]}} for j in v["jokers"]]
+        jokers = [{"key": j["key"], "modifier": {"edition": j["edition"]},
+                   "cost": {"buy": 2 * j["sell"], "sell": j["sell"] + (1 if self.cheat_sell and i == 0 else 0)}}
+                  for i, j in enumerate(v["jokers"])]
         return {"state": v["state"], "round_num": v["round"], "ante_num": v["ante"], "money": money,
                 "round": {"hands_left": v["hands_left"], "discards_left": v["discards_left"], "chips": v["chips"],
                           "reroll_cost": v["reroll_cost"]},
@@ -189,6 +194,19 @@ def test_a_wrong_shop_price_is_caught(tmp_path, monkeypatch):
     assert not ok and "shop cards" in msg, msg
 
 
+def test_a_wrong_sell_value_is_caught(tmp_path, monkeypatch):
+    monkeypatch.setattr(watch, "WATCH", tmp_path)
+    monkeypatch.setattr(viewer, "WATCH", tmp_path)
+    srv = serve(FakeGame(cheat_sell=True))
+    api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
+    for seed in ("SHOPPER1", "SHOPPER2", "SHOPPER3"):  # runs where the bot buys a joker
+        ok, msg = replay(api, seed, tmp_path)[:2]
+        if not ok:
+            break
+    srv.shutdown()
+    assert not ok and "jokers" in msg and "sell" in msg, msg
+
+
 def test_a_difference_is_caught_and_saved(tmp_path, monkeypatch):
     monkeypatch.setattr(watch, "WATCH", tmp_path)
     monkeypatch.setattr(viewer, "WATCH", tmp_path)
@@ -225,3 +243,28 @@ def test_the_windows_bridge_relays_calls(tmp_path, monkeypatch):
             api.call("health", timeout=2)
     finally:
         bridge.close()
+
+
+def test_a_refused_start_is_reported_and_the_viewer_carries_on(tmp_path, monkeypatch):
+    """BalatroBot failing inside `start` (as it did after a lost run, before the companion mod readied the
+    run-setup deck) is shown as the game refusing a call, and the link to the game is kept."""
+    monkeypatch.setattr(watch, "WATCH", tmp_path)
+    monkeypatch.setattr(viewer, "WATCH", tmp_path)
+    fake = FakeGame()
+    rpc = fake.rpc
+
+    def refuse_start(method, p):
+        if method == "start":
+            raise AssertionError("attempt to index field 'viewed_back' (a nil value)")
+        return rpc(method, p)
+
+    fake.rpc = refuse_start
+    srv = serve(fake)
+    api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
+    v = viewer.Viewer("max")
+    drv = viewer.Driver(v, viewer.GameFiles(None), None, api=api, launch=False, seed="REFUSED1", runs=1,
+                        say=lambda *_: None)
+    drv.loop()
+    srv.shutdown()
+    assert v.run.result.startswith("the game refused a call") and "viewed_back" in v.run.result
+    assert drv.api is api, "a refusal is not a lost connection"

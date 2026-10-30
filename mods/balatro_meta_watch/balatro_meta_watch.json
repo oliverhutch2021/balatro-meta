@@ -2,8 +2,8 @@
 	"id": "balatro_meta_watch",
 	"name": "Balatro Meta Watch",
 	"author": ["Balatro Meta"],
-	"description": "Companion of the Balatro Meta viewer: while it runs, mouse and keyboard are off so the bots play undisturbed, the game runs at the viewer's speed, and a small picture of the game is saved a few times a second for the viewer page. It changes nothing in the rules.",
+	"description": "Companion of the Balatro Meta viewer: while it runs, mouse and keyboard are off so the bots play undisturbed, the game runs at the viewer's speed, and the game is streamed as live video to the viewer page from this computer only (127.0.0.1). It changes nothing in the rules.",
 	"prefix": "bmwatch",
 	"main_file": "main.lua",
-	"version": "0.2.0"
+	"version": "0.3.0"
 }

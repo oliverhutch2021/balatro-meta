@@ -84,8 +84,9 @@ the bot's input built after every move. The phase 1 target is 200,000 moves a se
 
 ## Step 5 (when you like): watching the bots play in your own Balatro
 
-`make watch` opens the viewer in your browser: your Balatro in the middle, playing on its own, with live
-stats around it (in the style of Monopoly Meta's viewer):
+`make watch` opens the viewer in your browser: your Balatro in the middle as live video (about 30 frames
+a second, streamed by the game itself to your browser on this PC only), playing on its own, with live stats
+around it (in the style of Monopoly Meta's viewer):
 
 - **Your PC**: the running job and its steps, the engine's speed, and what this viewer has checked.
 - **Run outlook**: after every move, quick playouts from that position (hidden cards reshuffled, fresh
@@ -95,12 +96,13 @@ stats around it (in the style of Monopoly Meta's viewer):
 - **Play by play**, the round (ante, blind, chips, money, hands, discards), jokers with their values,
   consumables, vouchers, tags, the shop or open pack, and hand levels.
 - **Engine and game**: every replay is also a check. After every move the game's money, hands, discards,
-  cards in hand, round chips, blinds, tags, jokers and consumables, the shop's cards, vouchers, packs and
-  prices, and an open pack's cards are compared with the engine's. A difference is shown, saved to
-  `.sync/watch/mismatches/`, and the viewer moves on to the next run.
+  cards in hand, round chips, blinds, tags, jokers and consumables (with their sell values), the shop's
+  cards, vouchers, packs and prices, and an open pack's cards are compared with the engine's. A difference
+  is shown, saved to `.sync/watch/mismatches/`, and the viewer moves on to the next run.
 
-The buttons under the game pause it, set the speed (1x to Max; Max is the default) and skip to the next
-run. While the viewer runs, Balatro ignores your mouse and keyboard so nothing disturbs the bots (a badge
+The buttons under the game pause it, set the speed (1x, the game's normal speed, to start with; 2x, 4x or
+Max) and skip to the next run. The speed is the visible game's only: the projections run in the engine in
+the background at full speed whatever you choose. While the viewer runs, Balatro ignores your mouse and keyboard so nothing disturbs the bots (a badge
 in the game's corner says so); it takes input again a few seconds after you stop the viewer. For now the
 runs are demo runs by a simple greedy bot that also shops; once jobs play real runs, it replays those.
 BalatroBot has no "buy and use" and no boss reroll, so a run stops (without a mismatch) before either.
@@ -121,10 +123,12 @@ Each time, in Ubuntu:
 make watch
 ```
 
-It installs or updates the viewer's companion mod (`mods/balatro_meta_watch`) in your Mods folder by
-itself. If Balatro is already open without it, the page shows a **Restart Balatro** button; otherwise it
-opens Balatro through BalatroBot. Ctrl+C stops the viewer; the game stays open. `make watch SPEED=4` starts
-at another speed; the page can change it any time.
+It rebuilds the engine if the code changed, and installs or updates the viewer's companion mod
+(`mods/balatro_meta_watch`) in your Mods folder by itself. If Balatro is already open without it (or with an
+older version), the page shows a **Restart Balatro** button; otherwise it opens Balatro through BalatroBot.
+Ctrl+C stops the viewer; the game stays open. `make watch SPEED=4` starts at another speed; the page can
+change it any time. The live video comes from a small server inside the game on `127.0.0.1:13346` (your PC
+only); if your browser can't reach it, the page falls back to a few pictures a second by itself.
 
 BalatroBot listens on Windows' own localhost, which Ubuntu can't reach by default, so `make watch` talks to
 it through a small relay it runs with your Windows Python (the same miniconda the RNG check uses). If the

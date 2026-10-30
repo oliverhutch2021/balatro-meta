@@ -39,7 +39,8 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
 - `scripts/watch.py` (BalatroBot link, engine-vs-game comparison),
   `scripts/viewer.py` (the viewer's server and driver), `viewer/index.html`
   (the page) and `mods/balatro_meta_watch` (the companion mod: input lock,
-  live speed, frames, idle signal): `make watch` shows the user's own
+  live speed, a live BMP video stream on 127.0.0.1:BalatroBot port + 1000,
+  snapshots on request, idle signal): `make watch` shows the user's own
   Balatro playing in the browser with live stats, and checks every move.
   The game's pictures never enter the repo (memory and `.sync/` only).
 - `reference/`: LuaJIT scripts that produce reference fixtures.

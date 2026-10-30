@@ -2,13 +2,15 @@
 
     make watch           opens the viewer in your browser (Ctrl+C stops it; the game stays open)
 
-The middle of the page is your game. The companion mod (mods/balatro_meta_watch) saves a small picture of
-it a few times a second and this server passes it on; after every move it also keeps a snapshot, so you
-can click back through the run. While the viewer runs, the game takes no mouse or keyboard input and runs
-at the speed chosen on the page. Around the game: what your PC is running, how the run is going (quick
-playouts by the greedy bot from fair copies of each position: hidden cards reshuffled, fresh random
-streams), the moves so far, and the engine-versus-game check that every replay is. A difference is saved
-to .sync/watch/mismatches/ and the viewer moves on to the next run.
+The middle of the page is your game, live: the companion mod (mods/balatro_meta_watch) streams it as video
+(about 30 frames a second) straight to the page from a small server inside the game, on 127.0.0.1 only.
+After every move the mod also saves one snapshot, which this server keeps so you can click back through
+the run. If the stream can't run, the mod saves a picture a few times a second instead and this server
+passes it on. While the viewer runs, the game takes no mouse or keyboard input and runs at the speed
+chosen on the page (normal speed to start with). Around the game: what your PC is running, how the run is
+going (quick playouts by the greedy bot from fair copies of each position: hidden cards reshuffled, fresh
+random streams), the moves so far, and the engine-versus-game check that every replay is. A difference is
+saved to .sync/watch/mismatches/ and the viewer moves on to the next run.
 
 The runs: the newest one a job saved for watching (.sync/watch/<job>/samples/*.json), or else demo runs by
 the greedy bot. The pictures stay on your PC (in memory and .sync/, which git ignores).
@@ -45,17 +47,20 @@ from watch import (
 PAGE = ROOT / "viewer" / "index.html"
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 SNAP_BUDGET = 160 << 20  # bytes of pictures a run may keep for clicking back
-MOD_VERSION = "0.2.0"
+MOD_VERSION = "0.3.0"
 DEFAULT_PORT = 8790
+STREAM_FPS = 30
+STREAM_WIDTH = 1280
+SNAP_WAIT = 1.0  # seconds a move waits for its snapshot (not at max speed)
 
 # Speeds on the page: (game speed, frame rate uncapped, pause between moves, factor for waits).
 SPEEDS = {
     "1": (1, False, 0.8, 1.0),
     "2": (2, False, 0.4, 2.0),
     "4": (4, False, 0.2, 4.0),
-    "10": (10, False, 0.05, 10.0),
     "max": (10, True, 0.0, 20.0),
 }
+DEFAULT_SPEED = "1"
 
 
 # ---------------------------------------------------------------------- the mod's files
@@ -66,19 +71,23 @@ class GameFiles:
         self.folder = folder
         self.dir = folder / "balatro_meta" if folder else None
         self.n = 0
+        self.lock = threading.Lock()  # the driver, the page's requests and the once-a-second rewrite
 
     def write_control(self, **values) -> None:
         if not self.dir:
             return
-        self.n += 1
-        text = "\n".join([f"n={self.n}"] + [f"{k}={v}" for k, v in values.items()]) + "\n"
-        try:
-            self.dir.mkdir(parents=True, exist_ok=True)
-            tmp = self.dir / "control.tmp"
-            tmp.write_text(text)
-            os.replace(tmp, self.dir / "control.txt")
-        except OSError:
-            pass
+        with self.lock:
+            self.n += 1
+            text = "\n".join([f"n={self.n}"] + [f"{k}={v}" for k, v in values.items()]) + "\n"
+            for _ in range(3):  # Windows refuses the swap while the game is reading the file: try again
+                try:
+                    self.dir.mkdir(parents=True, exist_ok=True)
+                    tmp = self.dir / "control.tmp"
+                    tmp.write_text(text)
+                    os.replace(tmp, self.dir / "control.txt")
+                    return
+                except OSError:
+                    time.sleep(0.01)
 
     def read_state(self) -> dict | None:
         if not self.dir:
@@ -122,7 +131,8 @@ def png(rgb) -> bytes:
 
 
 class Frames:
-    """Follows the mod's state and newest picture (polled about 25 times a second)."""
+    """Follows the mod's state, its snapshots and (when the stream can't run) its newest picture, about 25
+    times a second."""
 
     def __init__(self, files: GameFiles) -> None:
         self.files = files
@@ -133,6 +143,8 @@ class Frames:
         self.png: bytes | None = None
         self.got = 0.0
         self.ever_fresh = False  # the mod has been seen running since the viewer started
+        self.snap_seen: str | None = None  # the newest snapshot read
+        self.snap_new: tuple[int, bytes] | None = None  # read, not yet handed to its run
 
     def poll(self) -> None:
         st = self.files.read_state()
@@ -140,6 +152,8 @@ class Frames:
             with self.lock:
                 self.state = None
             return
+        if st.get("version") in (None, MOD_VERSION) and "end" not in st:
+            return  # read while the mod was rewriting it: the next poll gets the whole report
         with self.lock:
             if self.state is not None and st.get("time") != self.state.get("time"):
                 self.state_changed = time.time()
@@ -153,6 +167,13 @@ class Frames:
             if data is not None:
                 with self.lock:
                     self.seq, self.png, self.got = seq, data, time.time()
+        snap = st.get("snap")
+        if snap and snap != self.snap_seen and snap.isdigit():
+            data = self.files.read_frame(st.get("snap_file") or "")
+            if data is not None:  # (a picture still being written is read on the next poll)
+                with self.lock:
+                    self.snap_seen = snap
+                    self.snap_new = (int(snap), data)
 
     def loop(self, stop: threading.Event, viewer: Viewer | None = None) -> None:
         while not stop.is_set():
@@ -165,21 +186,28 @@ class Frames:
             time.sleep(0.04)
 
     def fill_snapshots(self, viewer: Viewer) -> None:
-        """Pictures for moves that asked for one, from the first frame taken after the move."""
-        with viewer.lock:
-            run = viewer.run
-            pending = list(run.pending) if run else []
-        if not pending:
-            return
+        """Hand a new snapshot to the move that asked for it."""
         with self.lock:
-            got, data = self.got, self.png
-        for n, after in pending:
-            if got > after or time.time() - after > 2.0:
-                with viewer.lock:
-                    if data:
-                        run.keep_snap(n, data)
-                    if (n, after) in run.pending:
-                        run.pending.remove((n, after))
+            got, self.snap_new = self.snap_new, None
+        if got is None:
+            return
+        k, data = got
+        with viewer.lock:
+            want = viewer.snap_wanted.pop(k, None)
+            if want is not None:
+                rec, n = want
+                rec.keep_snap(n, data)
+
+    def snap_ack(self) -> int:
+        """The newest snapshot the mod has saved (0 if none)."""
+        with self.lock:
+            snap = (self.state or {}).get("snap") or ""
+        return int(snap) if snap.isdigit() else 0
+
+    def streaming(self) -> bool:
+        """The mod's stream server is up (or starting)."""
+        with self.lock:
+            return (self.state or {}).get("stream_status") in ("starting", "listening")
 
     def mod_status(self) -> str:
         """ok; missing (not running in the game: it needs a restart); old (an older version is running);
@@ -194,11 +222,12 @@ class Frames:
             return "stale" if ever else "missing"
         return "ok"
 
-    def busy(self) -> tuple[str | None, str | None]:
-        """(the mod's clock, blocking events queued), from its newest report."""
+    def busy(self) -> tuple[str | None, str | None, float]:
+        """(the mod's clock, blocking events queued, wall time the report was first seen), from its newest
+        report."""
         with self.lock:
             st = self.state or {}
-        return st.get("time"), st.get("busy")
+            return st.get("time"), st.get("busy"), self.state_changed
 
     def latest_png(self) -> tuple[str | None, bytes | None]:
         with self.lock:
@@ -264,7 +293,6 @@ class RunRecord:
         self.mismatch: dict | None = None
         self.snaps: dict[int, bytes] = {}
         self.snap_bytes = 0
-        self.pending: list[tuple[int, float]] = []  # moves waiting for their picture: (move, wall time)
         self.proj: dict[int, dict] = {}
 
     def keep_snap(self, n: int, data: bytes) -> None:
@@ -285,17 +313,33 @@ class RunRecord:
 class Viewer:
     """Everything the page reads and the driver writes."""
 
-    def __init__(self, speed: str = "max") -> None:
+    def __init__(self, speed: str = DEFAULT_SPEED) -> None:
         self.lock = threading.RLock()
         self.paused = False
-        self.speed = speed if speed in SPEEDS else "max"
+        self.speed = speed if speed in SPEEDS else DEFAULT_SPEED
         self.analysis = True
+        self.analysis_error: str | None = None
         self.next_flag = False
         self.restart_flag = False
         self.link = {"game": "starting", "message": "Starting"}
         self.session = {"started": time.time(), "runs": 0, "moves": 0, "mismatches": 0}
         self.run: RunRecord | None = None
         self.last_run: RunRecord | None = None
+        # Snapshots: ids unique across viewer sessions (the mod takes one whenever the id changes).
+        self.snap_next = int(time.time() * 1000) % 1_000_000_000
+        self.snap_id: int | None = None
+        self.snap_wanted: dict[int, tuple[RunRecord, int]] = {}
+        self.stream_broken_at = 0.0  # the page said it couldn't show the stream
+
+    def ask_snap(self, rec: RunRecord, n: int) -> int:
+        """A snapshot of the game now, for move `n` of `rec`."""
+        with self.lock:
+            self.snap_next += 1
+            self.snap_id = self.snap_next
+            self.snap_wanted[self.snap_id] = (rec, n)
+            for k in [k for k in self.snap_wanted if k < self.snap_id - 50]:  # never answered
+                del self.snap_wanted[k]
+            return self.snap_id
 
     def new_run(self, seed: str, label: str, source: str, bot: str) -> RunRecord:
         with self.lock:
@@ -338,13 +382,23 @@ class Driver:
 
     # -- the game link
     def control(self) -> None:
-        """Tell the mod what the viewer wants (rewritten every second while the viewer runs)."""
+        """Tell the mod what the viewer wants (rewritten every second while the viewer runs, and at once
+        when something changes): the lock, the speed, the live stream, and the newest snapshot asked for.
+        Pictures as files only while the stream isn't running or the page can't show it."""
+        if self.engine_only:
+            return
         speed, uncap, _, _ = SPEEDS[self.viewer.speed]
-        self.files.write_control(lock=0 if self.engine_only else 1, speed=speed, uncap=int(uncap),
-                                 frames=0 if self.engine_only else 1, width=960, every=0.2)
+        with self.viewer.lock:
+            snap, broken = self.viewer.snap_id, time.time() - self.viewer.stream_broken_at < 30
+        files = 1 if broken or self.frames is None or not self.frames.streaming() else 0
+        values = {"lock": 1, "speed": speed, "uncap": int(uncap), "stream": 1, "fps": STREAM_FPS,
+                  "width": STREAM_WIDTH, "frames": files, "every": 0.2}
+        if snap is not None:
+            values["snap"] = snap
+        self.files.write_control(**values)
 
     def release(self) -> None:
-        self.files.write_control(lock=0, frames=0)
+        self.files.write_control(lock=0, stream=0, frames=0)
 
     def connect(self) -> bool:
         """Find BalatroBot, opening the game through it if needed. False while it isn't there."""
@@ -376,32 +430,42 @@ class Driver:
         self.launched_at = 0.0
 
     def wait_idle(self, cash_out: bool = False) -> None:
-        """Wait until the game has played out the last move (the mod reports no blocking events queued
-        twice in a row). Without the mod, wait a fixed time instead."""
+        """Wait until the game has played out the last move: the mod reports no blocking events queued
+        twice in a row, in reports written after the wait began (an older report may predate the move's
+        animations). Without the mod, wait a fixed time instead."""
         if self.engine_only or self.frames is None:
             return
         f = self.viewer.factor()
         if self.frames.mod_status() != "ok":
             time.sleep((3.0 if cash_out else 0.6) / f)
             return
-        deadline = time.time() + max(1.5, 10.0 / f)
+        start = time.time()
+        deadline = start + max(1.5, 10.0 / f)
         seen, calm = None, 0
         while time.time() < deadline:
-            clock, busy = self.frames.busy()
-            if clock != seen:
+            clock, busy, seen_at = self.frames.busy()
+            if clock != seen and seen_at > start + 0.1:
                 seen = clock
                 calm = calm + 1 if busy == "0" else 0
                 if calm >= 2:
                     return
-            time.sleep(0.03)
+            time.sleep(0.02)
 
-    def pace(self) -> None:
+    def pace(self, snap: int | None = None) -> None:
+        """The pause between moves at this speed; below max speed, also until the move's snapshot is
+        saved (at most SNAP_WAIT), so it shows the position the move left."""
         pause = SPEEDS[self.viewer.speed][2]
-        end = time.time() + pause
-        while time.time() < end and not self.stop.is_set():
+        start = time.time()
+        while not self.stop.is_set():
+            waited = time.time() - start
+            if waited >= pause and (pause == 0 or waited >= SNAP_WAIT or self.snapped(snap)):
+                break
             time.sleep(0.02)
         while self.viewer.paused and not self.stop.is_set() and not self.viewer.next_flag:
             time.sleep(0.1)
+
+    def snapped(self, snap: int | None) -> bool:
+        return snap is None or self.frames is None or self.frames.snap_ack() == snap
 
     # -- one run
     def play_run(self, seed: str, moves, label: str, source: str = "demo") -> tuple[bool, str]:
@@ -419,11 +483,17 @@ class Driver:
                 api.call("menu")
             except RuntimeError:
                 pass
+            self.wait_idle()  # a few frames in the menu: the mod readies the run-setup deck `start` needs
             gs = settle(api, api.call("start", {"deck": "RED", "stake": "WHITE", "seed": game.seed}))
             self.wait_idle()
+            snap = None
+            if self.frames is not None:
+                snap = self.viewer.ask_snap(rec, 0)
+                self.control()
             gs, diff = compare(api, game, gs)
             if diff:
                 return False, self.mismatch(rec, game, 0, "start", diff, gs)
+            self.pace(snap)
         step = 0
         while not game.over and step < 5000 and not self.stop.is_set():
             if self.viewer.restart_flag:
@@ -462,11 +532,13 @@ class Driver:
                 return False, rec.result
             after = game.view()
             diff = []
-            done_at = time.time()
+            snap = None
             if api:
                 gs = settle(api, apply_in_game(api, kind, arg, e_before, game))
                 self.wait_idle()
-                done_at = time.time()
+                if self.frames is not None:  # the game has played the move out: its picture now
+                    snap = self.viewer.ask_snap(rec, step + 1)
+                    self.control()
                 gs, diff = compare(api, game, gs)
             with self.viewer.lock:
                 rec.move_list.append((kind, arg))
@@ -478,13 +550,11 @@ class Driver:
                     move["shows"] = [watch.card_name(i) for i in after.get("pack") or []]
                 rec.moves.append(move)
                 rec.view = details(after)
-                if api and self.frames:
-                    rec.pending.append((step + 1, done_at))
                 self.viewer.session["moves"] += 1
             if diff:
                 return False, self.mismatch(rec, game, step + 1, what, diff, gs)
             step += 1
-            self.pace()
+            self.pace(snap)
         v = game.view()
         end = "won the run" if v["won"] else f"run over at ante {v['ante']}"
         with self.viewer.lock:
@@ -528,9 +598,12 @@ class Driver:
                 seed, moves, label, source = self.seed or fresh_seed(), None, "demo run (greedy bot)", "demo"
             try:
                 ok, msg = self.play_run(seed, moves, label, source)
-            except (OSError, RuntimeError) as exc:
+            except (OSError, ValueError) as exc:
                 self.api = None
                 ok, msg = False, f"lost the game: {exc}"
+            except RuntimeError as exc:  # BalatroBot refused a call or failed in it
+                ok, msg = False, f"the game refused a call: {exc}"
+            if not ok:
                 with self.viewer.lock:
                     if self.viewer.run is not None and self.viewer.run.result is None:
                         self.viewer.run.result = msg
@@ -564,23 +637,40 @@ class Analyst:
                     return rec, k, list(rec.move_list[:k])
         return None
 
-    def loop(self, stop: threading.Event) -> None:
-        from balatro_meta._engine import Game
+    def fail(self, message: str) -> None:
+        with self.viewer.lock:
+            self.viewer.analysis_error = message
 
+    def loop(self, stop: threading.Event) -> None:
+        try:
+            from balatro_meta._engine import Game
+        except ImportError as exc:
+            self.fail(f"The engine module isn't built ({exc}). Run make build.")
+            return
+        if not hasattr(Game, "projection"):
+            self.fail("The engine module is older than this viewer. Stop the viewer and run make watch again "
+                      "(it rebuilds the engine first).")
+            return
         while not stop.is_set():
             t = self.task()
             if t is None:
                 time.sleep(0.2)
                 continue
             rec, k, moves = t
-            g = Game(rec.seed)
-            for m in moves[:k]:
-                g.step(*m)
-            p = g.projection(48, 350, (hash(rec.id) & 0xFFFF) * 1000 + k)
+            try:
+                g = Game(rec.seed)
+                for m in moves[:k]:
+                    g.step(*m)
+                p = g.projection(48, 350, (hash(rec.id) & 0xFFFF) * 1000 + k)
+                out = {"mean_ante": round(p["mean_ante"], 3), "p_win": round(p["p_win"], 3),
+                       "p_clear": round(p["p_clear"], 3), "n": p["playouts"], "final_ante": p["final_ante"]}
+            except Exception as exc:  # noqa: BLE001 - a failed projection is shown, never fatal
+                self.fail(f"Projection failed at move {k}: {type(exc).__name__}: {exc}")
+                time.sleep(5)
+                continue
             with self.viewer.lock:
-                rec.proj[k] = {"mean_ante": round(p["mean_ante"], 3), "p_win": round(p["p_win"], 3),
-                               "p_clear": round(p["p_clear"], 3), "n": p["playouts"],
-                               "final_ante": p["final_ante"]}
+                rec.proj[k] = out
+                self.viewer.analysis_error = None
 
 
 # ---------------------------------------------------------------------- your PC
@@ -630,14 +720,27 @@ MOD_MESSAGES = {
 }
 
 
+def whole(v) -> int | None:
+    """A whole number the mod reported, or None."""
+    return int(v) if isinstance(v, str) and v.isdigit() else None
+
+
 def link_status(viewer: Viewer, frames: Frames | None) -> dict:
-    """The game link as the page shows it: the driver's connection plus the mod's state now."""
+    """The game link as the page shows it: the driver's connection, the mod's state now, and where the
+    live stream is (the page's browser runs on the same PC as the game)."""
     link = dict(viewer.link)
     mod = frames.mod_status() if frames else "none"
     link["mod"] = mod
     if frames is not None:
         with frames.lock:
-            link["mod_error"] = (frames.state or {}).get("error")
+            st = dict(frames.state or {})
+        link["mod_error"] = st.get("error")
+        port = whole(st.get("stream_port"))
+        if mod == "ok" and st.get("stream_status") == "listening" and port:
+            link["stream"] = f"http://127.0.0.1:{port}/stream"
+            link["stream_epoch"] = st.get("stream_epoch")
+            link["stream_clients"] = whole(st.get("stream_clients")) or 0
+            link["stream_fps"] = whole(st.get("stream_fps"))
     if link.get("game") == "connected" and mod in MOD_MESSAGES:
         link["game"] = "restart" if mod in ("missing", "old") else "stale"
         link["message"] = MOD_MESSAGES[mod]
@@ -673,7 +776,8 @@ def make_handler(viewer: Viewer, frames: Frames | None, driver: Driver):
                         run = viewer.run
                         body = {
                             "now": time.time(), "host": os.uname().nodename,
-                            "settings": {"paused": viewer.paused, "speed": viewer.speed, "analysis": viewer.analysis},
+                            "settings": {"paused": viewer.paused, "speed": viewer.speed, "analysis": viewer.analysis,
+                                         "analysis_error": viewer.analysis_error},
                             "link": link_status(viewer, frames),
                             "session": dict(viewer.session),
                             "run": run.public(since if run and run.id == run_id else 0) if run else None,
@@ -727,6 +831,8 @@ def make_handler(viewer: Viewer, frames: Frames | None, driver: Driver):
                         viewer.paused = False
                     if body.get("restart"):
                         viewer.restart_flag = True
+                    if "stream_ok" in body:  # the page couldn't show the stream: pictures as files meanwhile
+                        viewer.stream_broken_at = 0.0 if body["stream_ok"] else time.time()
                 driver.control()
                 self.send({"ok": True})
             except (BrokenPipeError, ConnectionResetError):
@@ -748,7 +854,7 @@ def open_browser(url: str) -> None:
     webbrowser.open(url)
 
 
-def serve(port: int = DEFAULT_PORT, host: str = "127.0.0.1", speed: str = "max", engine_only: bool = False,
+def serve(port: int = DEFAULT_PORT, host: str = "127.0.0.1", speed: str = DEFAULT_SPEED, engine_only: bool = False,
           launch: bool = True, seed: str = "", browser: bool = True, save_folder: Path | None = None) -> None:
     try:
         os.nice(10)  # a running job comes first

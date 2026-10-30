@@ -545,7 +545,10 @@ impl Game {
         d.set_item("reroll_cost", r.reroll_cost)?;
         let consumables = pyo3::types::PyList::empty(py);
         for c in &r.consumables {
-            consumables.append(item(py, c.kind.key().to_string(), c.edition)?)?;
+            let h = item(py, c.kind.key().to_string(), c.edition)?;
+            h.set_item("cost", c.cost)?;
+            h.set_item("sell", c.sell_cost)?;
+            consumables.append(h)?;
         }
         d.set_item("consumables", consumables)?;
         // The shop: the joker row, the vouchers, and the two booster slots

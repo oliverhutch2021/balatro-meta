@@ -61,6 +61,7 @@ header .where { color: #a9c2c6; font-size: 13px; }
   border-radius: 14px; overflow: hidden; background: #071418; box-shadow: 0 14px 30px rgba(0,0,0,.45); }
 .screen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block;
   user-select: none; pointer-events: none; }
+.screen #still { background: #071418; }
 .screen .msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: #dfe9ea;
   padding: 24px; background: rgba(7,20,24,.78); }
 .screen .msg h3 { margin: 0 0 6px; font-family: var(--display); letter-spacing: .06em; font-size: 26px; }
@@ -195,7 +196,8 @@ footer { color: #93aeb3; font-size: 11.5px; padding: 0 18px 14px; line-height: 1
 
   <div class="centre">
     <div class="screen" id="screen">
-      <img id="frame" alt="">
+      <img id="feed" alt="">
+      <img id="still" alt="" hidden>
       <div class="msg" id="msg"><div><h3>STARTING</h3><p>Connecting to your game.</p></div></div>
       <div class="banner" id="viewing" hidden><span id="viewingtext"></span><button id="backlive">Back to live</button></div>
       <div class="mismatchbar" id="mismatch" hidden></div>
@@ -203,8 +205,8 @@ footer { color: #93aeb3; font-size: 11.5px; padding: 0 18px 14px; line-height: 1
     <div class="toolbar">
       <button id="pause">&#10074;&#10074; Pause</button>
       <span class="sep"></span>
-      <button data-speed="1">1&times;</button><button data-speed="2">2&times;</button><button data-speed="4">4&times;</button>
-      <button data-speed="10">10&times;</button><button data-speed="max">Max</button>
+      <button data-speed="1" title="Normal game speed">1&times;</button><button data-speed="2">2&times;</button>
+      <button data-speed="4">4&times;</button><button data-speed="max" title="As fast as your PC goes">Max</button>
       <span class="sep"></span>
       <button id="next" class="go">Next run</button>
       <button id="analysis">Analysis: on</button>
@@ -236,13 +238,14 @@ footer { color: #93aeb3; font-size: 11.5px; padding: 0 18px 14px; line-height: 1
     </div>
   </div>
 </div>
-<footer>Your copy of Balatro draws the game; this page shows a picture of it and the engine's view of the same run.
-  While the viewer runs, the game takes no mouse or keyboard input. Pictures stay on your PC.</footer>
+<footer>Your copy of Balatro draws the game; this page shows it live (streamed from the game on this PC only) and
+  the engine's view of the same run. While the viewer runs, the game takes no mouse or keyboard input. Pictures
+  stay on your PC.</footer>
 
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
-const S = { state: null, run: null, moves: [], proj: {}, sel: null, frameSeq: '', speed: 'max', paused: false,
+const S = { state: null, run: null, moves: [], proj: {}, sel: null, frameSeq: '', speed: '1', paused: false,
   analysis: true, lastMoves: 0, runId: '' };
 
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -280,6 +283,7 @@ async function pollState() {
     }
     S.proj = st.proj || {};
     S.speed = st.settings.speed; S.paused = st.settings.paused; S.analysis = st.settings.analysis;
+    updateLive(true);
     render();
   } catch (e) {
     setPill('bad', 'Viewer stopped');
@@ -288,20 +292,65 @@ async function pollState() {
   setTimeout(pollState, 500);
 }
 
+// ------------------------------------------------------------------ the live picture
+// The game streams itself as video from the companion mod (127.0.0.1, this PC). Without the stream (an old
+// mod, or the page can't reach it), the viewer passes on pictures the mod saves a few times a second.
+const LV = { url: '', epoch: null, cid: 0, at: 0, loaded: false, idle: 0, fails: 0, until: 0, gone: 0 };
+function setLive(src) {
+  const img = $('feed'), old = img.getAttribute('src') || '';
+  if (src) img.src = src; else img.removeAttribute('src');
+  if (old.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(old), 2000);
+}
+function streamOn(url, epoch) {
+  const cid = ++LV.cid;
+  Object.assign(LV, { url, epoch, at: Date.now(), loaded: false, idle: 0 });
+  const img = $('feed');
+  img.onload = () => {
+    if (cid !== LV.cid) return;
+    if (!LV.loaded) { LV.loaded = true; LV.fails = 0; post({ stream_ok: true }); }
+    S.haveFrame = true;
+  };
+  img.onerror = () => { if (cid === LV.cid) streamFailed(); };
+  setLive(`${url}?e=${encodeURIComponent(epoch || '')}&t=${Date.now()}`);
+}
+function streamOff() {
+  if (!LV.url) return;
+  LV.cid++; LV.url = ''; LV.loaded = false;
+  setLive('');
+}
+function streamFailed() {
+  streamOff();
+  if (++LV.fails >= 3) { LV.fails = 0; LV.until = Date.now() + 30000; post({ stream_ok: false }); }
+}
+function updateLive(poll) {
+  const link = (S.state && S.state.link) || {};
+  const shown = S.sel === null && document.visibilityState === 'visible' && Date.now() > LV.until;
+  if (shown && LV.url && !link.stream) {  // believe a report without the stream only a few times in a row
+    if (poll) LV.gone++;
+    if (LV.gone < 3) return;
+  } else LV.gone = 0;
+  const want = shown ? link.stream : '';
+  if (!want) { streamOff(); return; }
+  if (want !== LV.url || link.stream_epoch !== LV.epoch) { streamOn(want, link.stream_epoch); return; }
+  const age = Date.now() - LV.at;
+  if (!LV.loaded) { if (age > 6000) streamFailed(); return; }
+  // The game no longer counts this page as watching (it restarted, or the connection dropped): reconnect.
+  if (poll) LV.idle = link.stream_clients ? 0 : LV.idle + 1;
+  if (age > 4000 && LV.idle >= 4) streamOn(want, link.stream_epoch);
+}
+document.addEventListener('visibilitychange', () => updateLive(false));
+
 let frameBusy = false;
 async function pollFrame() {
-  if (!frameBusy && S.sel === null && document.visibilityState === 'visible') {
+  if (!frameBusy && !LV.url && S.sel === null && document.visibilityState === 'visible') {
     frameBusy = true;
     try {
       const r = await fetch('/api/frame?have=' + encodeURIComponent(S.frameSeq), { cache: 'no-store' });
-      if (r.status === 200) {
-        const blob = await r.blob();
+      const blob = r.status === 200 ? await r.blob() : null;
+      if (blob && !LV.url && S.sel === null) {  // (the stream may have started meanwhile: it wins)
         S.frameSeq = r.headers.get('X-Seq') || '';
-        const url = URL.createObjectURL(blob);
-        const img = $('frame');
-        const old = img.src;
-        img.onload = () => { if (old && old.startsWith('blob:')) URL.revokeObjectURL(old); };
-        img.src = url;
+        $('feed').onload = $('feed').onerror = null;
+        setLive(URL.createObjectURL(blob));
         S.haveFrame = true;
       }
     } catch (e) { /* retry */ }
@@ -328,7 +377,9 @@ function render() {
   const link = st.link || {};
   $('where').textContent = `viewer on ${st.host}`;
   // pill and centre message
-  if (link.game === 'connected') setPill(S.paused ? 'warn' : 'live', S.paused ? 'Paused' : 'Live');
+  updateLive(false);
+  const fps = LV.loaded && link.stream_fps ? ` · ${link.stream_fps} fps` : '';
+  if (link.game === 'connected') setPill(S.paused ? 'warn' : 'live', (S.paused ? 'Paused' : 'Live') + fps);
   else if (link.game === 'engine') setPill('warn', 'Engine only');
   else if (link.game === 'restart') setPill('warn', 'Game needs a restart');
   else if (link.game === 'stale') setPill('warn', 'Picture paused');
@@ -554,6 +605,8 @@ function renderChart() {
   let r = `<b>${k === 0 ? 'Start of the run' : `After move ${k}`}</b>` + (m ? ` &middot; ante ${m.ante}${m.blind ? ', ' + esc(m.blind) : ''}` : '');
   if (p) r += `<br>Projected to end at <b>${p.mean_ante >= 8.95 ? 'a win' : 'ante ' + p.mean_ante.toFixed(1)}</b> &middot; clears this blind <b>${Math.round(100 * p.p_clear)}%</b> &middot; wins <b>${Math.round(100 * p.p_win)}%</b> <span>(${p.n} playouts)</span>`;
   else r += `<br>${S.analysis ? 'Projecting…' : 'Analysis is off.'}`;
+  const err = S.state && S.state.settings && S.state.settings.analysis_error;
+  if (err && S.analysis) r += `<br><span style="color:var(--bad)">${esc(err)}</span>`;
   $('readout').innerHTML = r;
   // turning point list
   const tps = turningPoints();
@@ -584,13 +637,18 @@ $('chart').addEventListener('pointermove', e => { if (dragging) chartPick(e); })
 
 function select(k) {
   const n = S.moves.length;
-  if (k === null || k >= n) { S.sel = null; $('viewing').hidden = true; S.frameSeq = ''; render(); return; }
+  if (k === null || k >= n) {
+    S.sel = null; $('viewing').hidden = true; $('still').hidden = true; S.frameSeq = ''; render(); return;
+  }
   S.sel = k;
-  $('viewing').hidden = false;
-  $('viewingtext').textContent = k === 0 ? 'Start of the run' : `Move ${k}: ${S.moves[k - 1].what}`;
   const snaps = (S.run && S.run.snaps) || [];
   const have = snaps.filter(x => x <= k);  // the move's own picture, or the nearest earlier one kept
-  if (k > 0 && have.length) $('frame').src = `/api/snap?run=${encodeURIComponent(S.runId)}&n=${have[have.length - 1]}`;
+  const shown = have.length ? have[have.length - 1] : null;
+  $('viewing').hidden = false;
+  $('viewingtext').textContent = (k === 0 ? 'Start of the run' : `Move ${k}: ${S.moves[k - 1].what}`) +
+    (shown === null ? ' (no picture kept)' : shown < k ? ` (picture from move ${shown})` : '');
+  $('still').hidden = shown === null;
+  if (shown !== null) $('still').src = `/api/snap?run=${encodeURIComponent(S.runId)}&n=${shown}`;
   render();
 }
 
