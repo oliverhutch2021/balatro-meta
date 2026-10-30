@@ -1,0 +1,28 @@
+{
+ "job": "value-net",
+ "commit": "90ce9445f98ac5f1c4193d56eeb7b5db3ed0dfb3",
+ "started": "2026-10-30T18:19:38+00:00",
+ "finished": "2026-10-30T18:20:34+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   6.9,
+   13.9,
+   15.8
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "setup-gpu": 10,
+  "train": 46
+ },
+ "commands": {
+  "setup-gpu": "make --no-print-directory setup-gpu",
+  "train": "scripts/train_value.py --data ~/.cache/balatro-meta/data/value-1 --out models/value-1.bin --report results/value/value-1.json"
+ }
+}
