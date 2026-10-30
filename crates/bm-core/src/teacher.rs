@@ -94,6 +94,11 @@ pub fn set_options(names: &[String]) -> Result<(), String> {
         .map_err(|_| "the teacher's options are already set".to_string())
 }
 
+/// The options switched on for the whole program.
+pub fn options() -> Vec<&'static str> {
+    ON.get().cloned().unwrap_or_default()
+}
+
 /// Run `f` with these options on this thread only (tests).
 pub fn with_options<T>(names: &[&str], f: impl FnOnce() -> T) -> T {
     let names: Vec<String> = names.iter().map(|s| s.to_string()).collect();

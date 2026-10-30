@@ -186,11 +186,44 @@ through a small relay run with your Windows Python (the same miniconda the RNG c
 keeps waiting for the hidden game, look in `%AppData%\Balatro\balatro_meta\logs` (BalatroBot's log for
 port 12350) and in Balatro's Lovely log (`%AppData%\Balatro\Mods\lovely\log`, newest file).
 
+## Step 6: the learned value (about 3.5 hours)
+
+The teacher's value is a formula: it sees the next few blinds clearly, but not what wins at ante 8. The
+learned value is a network that does. It is trained on how the teacher's own runs ended, gives the chance of
+winning from a position, and the teacher adds it to its formula (as the log of that chance) for every
+decision between rounds. Three jobs, one after the other:
+
+```
+make teacher-data
+make value-net
+make teacher-learned
+```
+
+or `make learned` for all three in a row.
+
+- `make teacher-data` (about 1.5 hours): the teacher plays 20,000 runs on fresh seeds (none of the 12,000
+  `make teacher` plays), and every position it values between rounds (blind choices, shops, open packs:
+  about 130 a run) is recorded as the network will read it, with how its run ended. The recording (about
+  2 GB) goes to `~/.cache/balatro-meta/data/value-1` on the WSL disk. The runs' numbers go to
+  `results/value/record-1.json`: a measure of today's teacher on seeds it has never played.
+- `make value-net` (about 15 minutes): installs PyTorch with CUDA if it isn't there yet, then trains the
+  network on the 4070 Ti. It reads a position as the screen shows it (the same rule as everything the bot
+  sees) and learns the chance of winning, and how far the run gets. It tries four network sizes and keeps
+  the best, judged on runs it never trained on, and measures it on others again. The network goes to
+  `models/value-1.bin` (not committed; the report holds its checksum), and the report, with how well it
+  predicts those runs at each ante, to `results/value/value-1.json`.
+- `make teacher-learned` (about 1.5 hours): on the same 5,000 seeds (the first of `make teacher`'s), the
+  teacher plays without the network, then with it at three weights (how much its chance counts against the
+  formula), into `results/value/`. Each report lists how every run ended, so they compare run by run.
+
+`make watch` shows the first and third like `make teacher`. Then tell Claude. Each round of this learns from
+a better player: the next recording is made by the teacher with the network.
+
 ## Later steps
 
-Claude adds each one here when it's ready. Next: training a neural network on the GPU (`make train`),
-which `make watch` will show the same way, with its learning curves. Phase 2 (the full game: all jokers, consumables, vouchers, tags, the shop and packs) is
-in the engine now; `make smoke` checks it.
+Claude adds each one here when it's ready. Next: more rounds of the learned value, then training the
+bot's own network on the GPU (`make train`), which `make watch` will show the same way, with its learning
+curves.
 
 ## If something goes wrong
 

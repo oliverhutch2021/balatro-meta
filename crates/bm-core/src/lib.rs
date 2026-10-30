@@ -15,6 +15,7 @@ pub mod hand_levels;
 pub mod joker_data;
 pub mod joker_events;
 pub mod jokers;
+pub mod learned;
 pub mod observe;
 pub mod packs;
 pub mod planner;

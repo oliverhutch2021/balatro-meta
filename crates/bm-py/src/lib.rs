@@ -8,7 +8,7 @@ use bm_core::blinds::{BlindSlot, SlotState};
 use bm_core::card::{Edition, Enhancement, Seal};
 use bm_core::content::BOOSTERS;
 use bm_core::env::{apply, legal_kinds, random_move, Env, MoveKind, XorShift, N_MOVE_KINDS};
-use bm_core::observe::{encode, screen, OBS_LEN};
+use bm_core::observe::{encode, encode_value, screen, OBS_LEN, VALUE_INPUT_VERSION, VALUE_LEN};
 use bm_core::packs::PackCard;
 use bm_core::shop::RowItem;
 use bm_core::state::{Phase, Run, RunConfig};
@@ -22,6 +22,20 @@ use rayon::prelude::*;
 #[pyfunction]
 fn pseudohash(s: &str) -> f64 {
     bm_rng::pseudohash(s)
+}
+
+/// A value network's outputs (a BMVN file's bytes, `bm_core::learned`) for one input of `VALUE_LEN`
+/// floats: the engine's own forward pass, to check the trainer's export against.
+#[pyfunction]
+fn value_net_forward(data: &[u8], x: Vec<f32>) -> PyResult<Vec<f32>> {
+    let net = bm_core::learned::Net::from_bytes(data).map_err(PyValueError::new_err)?;
+    if x.len() != VALUE_LEN {
+        return Err(PyValueError::new_err(format!(
+            "the input has {} floats, not {VALUE_LEN}",
+            x.len()
+        )));
+    }
+    Ok(net.forward(&x))
 }
 
 /// LuaJIT's `math.randomseed(d)` followed by `n` calls to `math.random()`.
@@ -459,6 +473,13 @@ impl Game {
         Ok(Some(d))
     }
 
+    /// What the value network reads here (`observe::encode_value`: the screen alone), `VALUE_LEN` floats.
+    fn value_input(&self) -> Vec<f32> {
+        let mut x = Vec::with_capacity(VALUE_LEN);
+        encode_value(&screen(&self.run), &mut x);
+        x
+    }
+
     /// The full state, in the real game's terms (for replay checks).
     fn view<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let r = &self.run;
@@ -729,7 +750,10 @@ fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("OBS_LEN", OBS_LEN)?;
     m.add("N_MOVE_KINDS", N_MOVE_KINDS)?;
+    m.add("VALUE_LEN", VALUE_LEN)?;
+    m.add("VALUE_INPUT_VERSION", VALUE_INPUT_VERSION)?;
     m.add_function(wrap_pyfunction!(pseudohash, m)?)?;
+    m.add_function(wrap_pyfunction!(value_net_forward, m)?)?;
     m.add_function(wrap_pyfunction!(lua_random, m)?)?;
     m.add_class::<Streams>()?;
     m.add_class::<VecEnv>()?;

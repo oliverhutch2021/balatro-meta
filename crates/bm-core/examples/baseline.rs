@@ -2,9 +2,15 @@
 //!
 //!     cargo run --release -p bm-core --example baseline -- [--bot greedy|teacher] [--runs N] [--seconds S]
 //!         [--threads T] [--seed BASE] [--out results/baseline/greedy.json]
+//!         [--value-net models/value-1.bin] [--value-weight W] [--record DIR]
 //!
 //! `greedy` is the simple bot (bots.rs); `teacher` the rule-based one written to teach the network
-//! (teacher.rs).
+//! (teacher.rs). `--value-net` gives the teacher a learned value (learned.rs; `--value-weight` scales it).
+//!
+//! `--record DIR` keeps the bot's training data for the learned value: every position the teacher values
+//! between rounds (blind choice, shop, open packs) as the value network's input (sparse, half precision),
+//! labelled with how its run ended. Chunks of 250 runs in run order (`chunk-NNNNN-{idx,val,ptr,lab}.npy`
+//! and `-runs.json`), then `manifest.json` once every run is in, so the same seeds give the same files.
 //!
 //! With `BM_WATCH_DIR` set (the job runner sets it), it writes there for the live viewer:
 //! `progress.json` about once a second (runs, runs a second, win rate, final antes, what ended the
@@ -13,23 +19,27 @@
 //! the best runs so far (`best-*.json`, kept up to date as better runs turn up) and every few seconds a
 //! typical one picked at random (`typical-*.json`). Best means: won first, and among wins the biggest
 //! single hand; among losses, the furthest blind reached, then how close the run came to its target.
-//! The final numbers go to `--out`.
+//! The final numbers go to `--out`; for up to 50,000 runs they include `run_stages`, one letter per run in
+//! seed order for paired comparisons between bots on the same seeds: the blind the run ended at, `A` (ante
+//! 1's small blind) to `X` (ante 8's boss), or `Y` for a win.
 //!
 //! Seeds come from a fixed sampler (`--seed`), so a rerun plays the same runs. The bot sees only what
 //! the screen shows (bots.rs works on fair copies).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use bm_core::blinds::BlindKind;
+use bm_core::blinds::{BlindKind, SlotState};
 use bm_core::bm_rng::SeedSampler;
 use bm_core::bots::greedy_move;
 use bm_core::env::{apply, MoveKind};
 use bm_core::joker_data::{JokerKind, N_JOKERS};
+use bm_core::learned::{self, le_bytes, npy_bytes, Rows};
+use bm_core::observe::{encode_value, screen, VALUE_INPUT_VERSION, VALUE_LEN};
 use bm_core::packs::PackCard;
 use bm_core::poker::HandType;
 use bm_core::shop::RowItem;
@@ -70,6 +80,8 @@ struct RunSummary {
     record: Option<Vec<(u8, u64)>>,
     /// One CSV row about how the run ended (`--runs-csv`), for studying where the bot falls short.
     detail: Option<String>,
+    /// The positions the teacher valued (`--record`).
+    recorded: Option<Recorded>,
 }
 
 impl RunSummary {
@@ -176,10 +188,24 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot) -> RunSummary {
     let mut run = Run::new(RunConfig::new(&seed));
     let mut s = RunSummary {
         record: keep.then(Vec::new),
+        recorded: RECORD.load(Ordering::Relaxed).then(Recorded::default),
         ..RunSummary::default()
     };
+    let mut input = Vec::with_capacity(VALUE_LEN);
     let mut step = 0u64;
     while run.phase != Phase::GameOver && !run.won && step < MAX_STEPS {
+        if let Some(r) = s.recorded.as_mut() {
+            if learned::values_here(&run) {
+                encode_value(&screen(&run), &mut input);
+                r.rows.push(&input);
+                r.at.push([
+                    step as f32,
+                    phase_code(run.phase),
+                    run.ante as f32,
+                    stage_now(&run),
+                ]);
+            }
+        }
         let (k, a) = bot(&run, salt << 20 | step);
         match k {
             MoveKind::Buy | MoveKind::BuyAndUse => {
@@ -272,6 +298,205 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot) -> RunSummary {
 
 /// Whether runs keep a `--runs-csv` row.
 static DETAIL: AtomicBool = AtomicBool::new(false);
+
+/// Whether runs keep their valued positions (`--record`).
+static RECORD: AtomicBool = AtomicBool::new(false);
+
+/// Runs per chunk of recorded positions.
+const RUNS_PER_CHUNK: u64 = 250;
+
+/// The columns of a chunk's `lab.npy` (f32), one row per position.
+const LABELS: [&str; 8] = [
+    "run",
+    "step",
+    "phase",
+    "ante",
+    "stage",
+    "won",
+    "end_stage",
+    "end_ante",
+];
+
+/// A run's valued positions: the network's input, and where in the run each was (step, phase, ante,
+/// stage).
+#[derive(Default)]
+struct Recorded {
+    rows: Rows,
+    at: Vec<[f32; 4]>,
+}
+
+/// The phase as `observe::encode` numbers it.
+fn phase_code(p: Phase) -> f32 {
+    match p {
+        Phase::BlindSelect => 0.0,
+        Phase::Round => 1.0,
+        Phase::RoundEval => 2.0,
+        Phase::Shop => 3.0,
+        Phase::GameOver => 4.0,
+        Phase::Pack => 5.0,
+    }
+}
+
+/// Blinds behind the run: 3 per ante before this one, and this ante's beaten or skipped (0 to 23).
+fn stage_now(run: &Run) -> f32 {
+    let done = run
+        .slots
+        .iter()
+        .filter(|s| matches!(s, SlotState::Defeated | SlotState::Skipped))
+        .count();
+    ((run.ante.clamp(1, 8) - 1) * 3) as f32 + done as f32
+}
+
+/// One finished run's recording, waiting for the rest of its chunk.
+struct RecordedRun {
+    run: u64,
+    seed: String,
+    won: bool,
+    end_stage: u32,
+    end_ante: usize,
+    rec: Recorded,
+}
+
+/// Recorded runs grouped into chunks by run number; a chunk is written once all its runs are in.
+struct Recorder {
+    dir: PathBuf,
+    target: u64,
+    open: BTreeMap<u64, Vec<RecordedRun>>,
+    chunks: u64,
+    rows: u64,
+    runs: u64,
+}
+
+impl Recorder {
+    fn new(dir: PathBuf, target: u64) -> Recorder {
+        std::fs::create_dir_all(&dir).expect("make the record folder");
+        // A rerun replaces the last recording.
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for e in rd.flatten() {
+                let name = e.file_name().to_string_lossy().into_owned();
+                if name.starts_with("chunk-") || name == "manifest.json" {
+                    let _ = std::fs::remove_file(e.path());
+                }
+            }
+        }
+        Recorder {
+            dir,
+            target,
+            open: BTreeMap::new(),
+            chunks: 0,
+            rows: 0,
+            runs: 0,
+        }
+    }
+
+    fn add(&mut self, r: RecordedRun) {
+        let c = r.run / RUNS_PER_CHUNK;
+        let want = RUNS_PER_CHUNK.min(self.target - c * RUNS_PER_CHUNK) as usize;
+        let runs = self.open.entry(c).or_default();
+        runs.push(r);
+        if runs.len() == want {
+            let runs = self.open.remove(&c).expect("just added");
+            self.write(c, runs);
+        }
+    }
+
+    /// Write the chunks still open (runs stopped early by `--seconds`).
+    fn finish(&mut self) {
+        let open = std::mem::take(&mut self.open);
+        for (c, runs) in open {
+            self.write(c, runs);
+        }
+    }
+
+    fn write(&mut self, chunk: u64, mut runs: Vec<RecordedRun>) {
+        runs.sort_by_key(|r| r.run);
+        let mut rows = Rows::default();
+        let mut lab: Vec<f32> = Vec::new();
+        let mut list = Vec::new();
+        for r in &runs {
+            rows.extend(&r.rec.rows);
+            for at in &r.rec.at {
+                lab.extend_from_slice(&[
+                    r.run as f32,
+                    at[0],
+                    at[1],
+                    at[2],
+                    at[3],
+                    f32::from(u8::from(r.won)),
+                    r.end_stage as f32,
+                    r.end_ante as f32,
+                ]);
+            }
+            list.push(format!(
+                "{{\"run\": {}, \"seed\": {}, \"won\": {}, \"end_stage\": {}, \"rows\": {}}}",
+                r.run,
+                esc(&r.seed),
+                r.won,
+                r.end_stage,
+                r.rec.rows.len()
+            ));
+        }
+        let n = rows.len();
+        let name = |part: &str| self.dir.join(format!("chunk-{chunk:05}-{part}"));
+        let files = [
+            (
+                "idx.npy",
+                npy_bytes(
+                    "<u2",
+                    &[rows.idx.len()],
+                    &le_bytes(&rows.idx, u16::to_le_bytes),
+                ),
+            ),
+            (
+                "val.npy",
+                npy_bytes(
+                    "<f2",
+                    &[rows.val.len()],
+                    &le_bytes(&rows.val, u16::to_le_bytes),
+                ),
+            ),
+            (
+                "ptr.npy",
+                npy_bytes(
+                    "<i8",
+                    &[rows.ptr.len()],
+                    &le_bytes(&rows.ptr, i64::to_le_bytes),
+                ),
+            ),
+            (
+                "lab.npy",
+                npy_bytes("<f4", &[n, LABELS.len()], &le_bytes(&lab, f32::to_le_bytes)),
+            ),
+            (
+                "runs.json",
+                format!("[\n{}\n]\n", list.join(",\n")).into_bytes(),
+            ),
+        ];
+        for (part, bytes) in files {
+            let path = name(part);
+            let tmp = path.with_extension("tmp");
+            std::fs::write(&tmp, bytes).expect("write recorded positions");
+            std::fs::rename(&tmp, &path).expect("write recorded positions");
+        }
+        self.chunks += 1;
+        self.rows += n as u64;
+        self.runs += runs.len() as u64;
+    }
+
+    fn manifest(&self, about: &str) {
+        let labels: Vec<String> = LABELS.iter().map(|l| esc(l)).collect();
+        let text = format!(
+            "{{\n \"format\": 1,\n \"input_version\": {VALUE_INPUT_VERSION},\n \"inputs\": {VALUE_LEN},\n \
+             \"runs\": {},\n \"rows\": {},\n \"chunks\": {},\n \"runs_per_chunk\": {RUNS_PER_CHUNK},\n \
+             \"labels\": [{}],\n{about}\n}}\n",
+            self.runs,
+            self.rows,
+            self.chunks,
+            labels.join(", "),
+        );
+        write_atomic(&self.dir.join("manifest.json"), &text);
+    }
+}
 
 /// Everything counted so far.
 struct Totals {
@@ -683,11 +908,32 @@ fn main() {
         println!("Teacher options: {}", names.join(", "));
     }
     let details: Mutex<Vec<String>> = Mutex::new(Vec::new());
-    let (bot, bot_name): (Bot, &str) = match opt("--bot").as_deref().unwrap_or("greedy") {
-        "greedy" => (greedy_move, "greedy bot"),
-        "teacher" => (teacher_move, "teacher bot"),
-        other => panic!("unknown bot {other:?}: greedy or teacher"),
+    // The learned value (`--value-net`), and how much it counts (`--value-weight`).
+    let value_net = opt("--value-net");
+    if let Some(p) = &value_net {
+        if let Err(e) = learned::load(p) {
+            panic!("{e}");
+        }
+        println!("Value network: {p}");
+    }
+    if let Some(w) = opt("--value-weight") {
+        let w: f64 = w.parse().expect("--value-weight takes a number");
+        learned::set_weight(w);
+        println!("Value network weight: {w}");
+    }
+    let bot_label = opt("--bot").unwrap_or_else(|| "greedy".into());
+    let (bot, bot_name): (Bot, &str) = match (bot_label.as_str(), value_net.is_some()) {
+        ("greedy", _) => (greedy_move, "greedy bot"),
+        ("teacher", false) => (teacher_move, "teacher bot"),
+        ("teacher", true) => (teacher_move, "teacher bot with a learned value"),
+        (other, _) => panic!("unknown bot {other:?}: greedy or teacher"),
     };
+    // How each run ended, in seed order (for paired comparisons), when there aren't too many runs.
+    let stages: Option<Mutex<Vec<u8>>> =
+        (target <= 50_000).then(|| Mutex::new(vec![b'?'; target as usize]));
+    let record_dir = opt("--record");
+    RECORD.store(record_dir.is_some(), Ordering::Relaxed);
+    let recorder = record_dir.map(|d| Mutex::new(Recorder::new(PathBuf::from(d), target)));
     let watch = std::env::var("BM_WATCH_DIR")
         .ok()
         .filter(|s| !s.is_empty())
@@ -729,6 +975,19 @@ fn main() {
                         let mut s = play(run_seed(base, i), i, true, bot);
                         if let Some(d) = s.detail.take() {
                             details.lock().unwrap().push(d);
+                        }
+                        if let Some(st) = &stages {
+                            st.lock().unwrap()[i as usize] = b'A' + s.stage.min(24) as u8;
+                        }
+                        if let (Some(rec), Some(r)) = (s.recorded.take(), &recorder) {
+                            r.lock().unwrap().add(RecordedRun {
+                                run: i,
+                                seed: s.seed.clone(),
+                                won: s.won,
+                                end_stage: s.stage,
+                                end_ante: s.end,
+                                rec,
+                            });
                         }
                         local.add(&s);
                         let mut b = best.lock().unwrap();
@@ -872,6 +1131,29 @@ fn main() {
 
     let t = totals.into_inner().unwrap();
     let el = start.elapsed().as_secs_f64();
+    if let Some(r) = recorder {
+        let mut r = r.into_inner().unwrap();
+        r.finish();
+        let opts = bm_core::teacher::options();
+        let about = format!(
+            " \"bot\": {},\n \"seed_base\": {base},\n \"value_net\": {},\n \"value_weight\": {},\n \
+             \"teacher_options\": [{}],\n \"wins\": {},\n \"seconds\": {}",
+            esc(bot_name),
+            value_net.as_deref().map_or("null".into(), esc),
+            num(learned::weight()),
+            opts.iter().map(|o| esc(o)).collect::<Vec<_>>().join(", "),
+            t.wins,
+            num(el)
+        );
+        r.manifest(&about);
+        println!(
+            "Recorded {} positions from {} runs in {} chunks: {}",
+            r.rows,
+            r.runs,
+            r.chunks,
+            r.dir.display()
+        );
+    }
     let history = vec![(
         el,
         t.runs,
@@ -889,7 +1171,12 @@ fn main() {
         bot: bot_name,
         done: true,
     };
-    let text = report_json(&r);
+    let mut text = report_json(&r);
+    if let Some(st) = stages {
+        let st = String::from_utf8(st.into_inner().unwrap()).expect("letters");
+        let end = text.rfind("\n}").expect("the report ends with its brace");
+        text.replace_range(end.., &format!(",\n \"run_stages\": {}\n}}\n", esc(&st)));
+    }
     if let Some(p) = out {
         let p = Path::new(&p);
         if let Some(dir) = p.parent() {

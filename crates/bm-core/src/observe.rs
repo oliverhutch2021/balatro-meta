@@ -706,6 +706,42 @@ fn write_booster(f: &mut [f32], b: BoosterId, cost: i64) {
     f[8] = cost as f32 / 5.0;
 }
 
+/// Length of the value network's input (`encode_value`).
+pub const VALUE_LEN: usize = OBS_LEN + 3 * N_JOKERS;
+
+/// The value input's layout version: bumped whenever `encode` or
+/// `encode_value` changes what a float means, so a network trained on one
+/// layout is refused by another (`learned.rs`).
+pub const VALUE_INPUT_VERSION: u32 = 1;
+
+/// What the value network reads: `encode`'s floats, then the jokers held, in
+/// the shop and in an open pack as counts by kind (`encode` gives a joker's
+/// kind as one number, which a plain network can't take apart).
+pub fn encode_value(s: &Screen, out: &mut Vec<f32>) {
+    encode(s, out);
+    let base = out.len();
+    out.resize(base + 3 * N_JOKERS, 0.0);
+    let mut count = |area: usize, j: &JokerView| {
+        if let Some(k) = j.kind {
+            out[base + area * N_JOKERS + k.index()] += 1.0;
+        }
+    };
+    for j in &s.jokers {
+        count(0, j);
+    }
+    for (item, _) in s.shop.iter().flat_map(|sh| &sh.row) {
+        if let ItemView::Joker(j) = item {
+            count(1, j);
+        }
+    }
+    for item in s.pack.iter().flat_map(|p| &p.cards) {
+        if let ItemView::Joker(j) = item {
+            count(2, j);
+        }
+    }
+    debug_assert_eq!(out.len(), VALUE_LEN);
+}
+
 /// The joker kinds in the screen's order, as embedding tokens (for a
 /// network that embeds jokers rather than reading `encode`'s scalar).
 pub fn joker_tokens(s: &Screen) -> [u16; MAX_JOKERS] {

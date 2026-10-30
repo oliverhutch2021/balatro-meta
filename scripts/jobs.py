@@ -35,8 +35,12 @@ SYNC = ROOT / ".sync"
 STATE = SYNC / "state"
 LOGS = SYNC / "logs"
 WATCH = SYNC / "watch"  # what the live viewer reads (make watch)
+# Big recordings live on the WSL disk, like the build: the repo's drive only holds code and results.
+DATA = Path(os.environ.get("BM_DATA", Path.home() / ".cache" / "balatro-meta" / "data"))
 PY = sys.executable
 MAKE = ["make", "--no-print-directory"]
+
+BASELINE = ["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "baseline", "--"]
 
 # A step is (name, argv) or (name, argv, env). argv starting with a .py file runs with this Python;
 # anything else runs as a command. env adds variables for that step. Finished steps are skipped on a rerun.
@@ -78,6 +82,31 @@ JOBS: dict[str, list[tuple]] = {
         ("build", [*MAKE, "build"]),
         ("teacher", ["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "baseline", "--",
                      "--bot", "teacher", "--runs", "12000", "--seed", "1", "--out", "results/baseline/teacher.json"]),
+    ],
+    # The learned value, round 1 (crates/bm-core/src/learned.rs). The teacher plays 20,000 runs on fresh seeds
+    # (seed base 101: none of the runs `make teacher` plays), and every position it values between rounds is
+    # recorded with how its run ended. Its numbers are also a measure of the teacher on new seeds.
+    "teacher-data": [
+        ("build", [*MAKE, "build"]),
+        ("record", [*BASELINE, "--bot", "teacher", "--runs", "20000", "--seed", "101",
+                    "--record", str(DATA / "value-1"), "--out", "results/value/record-1.json"]),
+    ],
+    # The value network, trained on the GPU from that recording (scripts/train_value.py): the chance of
+    # winning from a position. The network itself stays out of git (models/); its report holds its checksum.
+    "value-net": [
+        ("setup-gpu", [*MAKE, "setup-gpu"]),
+        ("train", ["scripts/train_value.py", "--data", str(DATA / "value-1"), "--out", "models/value-1.bin",
+                   "--report", "results/value/value-1.json"]),
+    ],
+    # The teacher without the network and with it at three weights, on the same 5,000 seeds (the first of
+    # `make teacher`'s): each report's run_stages compare them run by run.
+    "teacher-learned": [
+        ("build", [*MAKE, "build"]),
+        ("plain", [*BASELINE, "--bot", "teacher", "--runs", "5000", "--seed", "1",
+                   "--out", "results/value/teacher-plain.json"]),
+        *[(f"weight-{w}", [*BASELINE, "--bot", "teacher", "--value-net", "models/value-1.bin", "--value-weight", w,
+                           "--runs", "5000", "--seed", "1", "--out", f"results/value/teacher-w{w}.json"])
+          for w in ("0.5", "1", "2")],
     ],
 }
 

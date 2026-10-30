@@ -736,6 +736,19 @@ pub fn value_with(run: &Run, salt: u64, samples: usize) -> f64 {
     if run.won {
         return 1e6;
     }
+    let v = formula(run, salt, samples);
+    // The learned value, when a network is loaded: the log of its chance of winning from here, which sees
+    // what the formula can't (what wins at ante 8, learned from how runs ended). Outside the formula's
+    // cache: the network also reads the shop's and packs' cards, which the formula's key leaves out.
+    if v > -1e5 {
+        v + crate::learned::term(run).unwrap_or(0.0)
+    } else {
+        v
+    }
+}
+
+/// The hand-made part of the value (cached).
+fn formula(run: &Run, salt: u64, samples: usize) -> f64 {
     let key = (state_key(run) ^ samples as u64, salt);
     if let Some(v) = CACHE.with(|c| c.borrow().get(&key).copied()) {
         return v;

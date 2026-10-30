@@ -17,10 +17,10 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher watch watch-mod
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned watch watch-mod
 
 help:  ## List the commands
-	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | expand -t 14
+	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | expand -t 17
 
 setup:  ## Create or update the Python environment and build the engine (Python 3.12, on the WSL disk)
 	@command -v uv >/dev/null || { echo "uv is missing: run bash bootstrap.sh"; exit 1; }
@@ -63,6 +63,20 @@ baseline:  ## The number to beat: the greedy bot plays a million runs on all thr
 
 teacher:  ## The teacher bot (every decision by value) plays 12,000 runs (about 50 minutes; make watch shows it)
 	$(PY) scripts/jobs.py run teacher $(JOB_FLAGS)
+
+teacher-data:  ## Learned value 1/3: the teacher plays 20,000 new runs, every position it values recorded (about 1.5 hours)
+	$(PY) scripts/jobs.py run teacher-data $(JOB_FLAGS)
+
+value-net:  ## Learned value 2/3: train the value network on the GPU from that recording (about 15 minutes)
+	$(PY) scripts/jobs.py run value-net $(JOB_FLAGS)
+
+teacher-learned:  ## Learned value 3/3: the teacher without the network and with it at three weights, 5,000 runs each (about 1.5 hours)
+	$(PY) scripts/jobs.py run teacher-learned $(JOB_FLAGS)
+
+learned:  ## The three learned-value jobs in a row (about 3.5 hours)
+	@$(MAKE) --no-print-directory teacher-data
+	@$(MAKE) --no-print-directory value-net
+	@$(MAKE) --no-print-directory teacher-learned
 
 SPEED ?= 1
 PORT ?= 8790

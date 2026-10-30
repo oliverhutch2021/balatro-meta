@@ -11,3 +11,4 @@ target/
 .sync/
 /runs/
 /results/scratch/
+/models/

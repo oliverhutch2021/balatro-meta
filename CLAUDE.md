@@ -39,8 +39,12 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   (the value of a position: scoring power measured by playing the coming
   rounds out on fair copies, against the blinds ahead; the deck's power from
   many dealt hands, no hand type favoured; growth; money as scoring power for
-  the shops still to come), `explain.rs` (the teacher's plan in words, for
-  the viewer),
+  the shops still to come; with a learned value loaded, plus the log of
+  its chance of winning), `learned.rs` (the learned value: a network read
+  from the screen alone, `observe::encode_value`, trained by
+  `scripts/train_value.py` on positions `baseline --record` keeps, each
+  labelled with how its run ended), `explain.rs` (the teacher's plan in
+  words, for the viewer),
   `planner.rs` (the teacher's rounds: which hand to build, tried on fair
   copies; digging; taking value from a round it can already win),
   `scenario.rs` (building test positions).
@@ -50,7 +54,10 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   `best-*.json`, the job's 30 best so far, and `typical-*.json`).
   `make baseline` and `make teacher` are
   `crates/bm-core/examples/baseline.rs` (`--bot greedy|teacher` on all
-  threads). `make watch` is `scripts/viewer.py` (replays samples
+  threads). `make teacher-data`, `make value-net` and `make
+  teacher-learned` are the learned value's round: record (to
+  `~/.cache/balatro-meta/data/`), train on the GPU (`models/`, not in git),
+  play with it. `make watch` is `scripts/viewer.py` (replays samples
   with the engine, best first; serves `viewer/index.html`, which draws the
   table itself) plus `scripts/checker.py` (the real-game checks: a hidden
   BalatroBot game on port 12350, compared after every move using
@@ -76,8 +83,9 @@ consumables. Per-frame joker values (Joker Stencil, Swashbuckler, Throwback,
 the deck tallies) are refreshed just before each hand is scored
 (`Run::refresh_frame_values`). The real-game check (phase 3) runs in the
 background of `make watch`; no rule difference found so far. Open questions are
-the UNSURE sections of the notes. Next: `make train` (a neural network, PPO,
-on the GPU), shown by `make watch` like the baseline.
+the UNSURE sections of the notes. Now: the teacher's learned value (expert
+iteration: record, train, play with it, repeat). Next: `make train` (a neural
+network, PPO, on the GPU), shown by `make watch` like the baseline.
 
 ## Commands
 

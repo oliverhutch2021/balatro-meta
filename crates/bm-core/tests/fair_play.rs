@@ -3,7 +3,7 @@
 
 use bm_core::bm_rng::{SeedSampler, Streams};
 use bm_core::joker_data::JokerKind;
-use bm_core::observe::{encode, fair_copy, screen, OBS_LEN};
+use bm_core::observe::{encode, encode_value, fair_copy, screen, OBS_LEN, VALUE_LEN};
 use bm_core::{Phase, Run, RunConfig};
 
 struct Pick(u64);
@@ -185,6 +185,28 @@ fn the_input_changes_when_the_screen_does() {
     assert_ne!(a, b);
 }
 
+#[test]
+fn the_value_input_counts_the_jokers_by_kind() {
+    use bm_core::joker_data::N_JOKERS;
+    let mut run = Run::new(RunConfig::new("VALUEIN1"));
+    for k in [JokerKind::Joker, JokerKind::Blueprint, JokerKind::Joker] {
+        run.add_joker(k);
+    }
+    let (mut a, mut v) = (Vec::new(), Vec::new());
+    encode(&screen(&run), &mut a);
+    encode_value(&screen(&run), &mut v);
+    assert_eq!(v.len(), VALUE_LEN);
+    assert_eq!(&v[..OBS_LEN], &a[..], "the screen's encoding comes first");
+    let held = &v[OBS_LEN..OBS_LEN + N_JOKERS];
+    assert_eq!(held[JokerKind::Joker.index()], 2.0);
+    assert_eq!(held[JokerKind::Blueprint.index()], 1.0);
+    assert_eq!(held.iter().sum::<f32>(), 3.0);
+    assert!(
+        v[OBS_LEN + N_JOKERS..].iter().all(|&x| x == 0.0),
+        "no shop or pack yet"
+    );
+}
+
 /// The same check through shops and packs: buying, rerolling, opening and
 /// choosing, with consumables used, all played by the env's move generator
 /// (greedy rounds so runs reach later shops).
@@ -217,6 +239,15 @@ fn shops_and_packs_show_nothing_hidden() {
             assert!(
                 a.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits()),
                 "inputs differ: run {r} step {step} ({:?})",
+                run.phase
+            );
+            // The value network's input too (it reads the shop's and packs' jokers by kind).
+            encode_value(&screen(&run), &mut a);
+            encode_value(&screen(&t), &mut b);
+            assert_eq!(a.len(), VALUE_LEN);
+            assert!(
+                a.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits()),
+                "value inputs differ: run {r} step {step} ({:?})",
                 run.phase
             );
             let f = fair_copy(&run, step);
