@@ -87,3 +87,27 @@ def test_a_saved_run_replays_to_the_end_the_job_recorded(job):
     for p in typical[:2]:
         s = json.loads(p.read_text())
         assert replay(s)["ante"] == s["ante"]
+
+
+def test_the_teacher_bot_runs_in_the_job_and_its_runs_replay(tmp_path):
+    """The teacher (sells, rerolls, Tarots with targets, vouchers, joker order) in the same job: every move
+    legal, and its best runs replay with the engine to the end it recorded."""
+    if not shutil.which("cargo"):
+        pytest.skip("cargo is not installed")
+    watch = tmp_path / "watch" / "teacher"
+    out = tmp_path / "teacher.json"
+    r = subprocess.run(["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "baseline", "--",
+                        "--bot", "teacher", "--runs", "150", "--threads", "2", "--seed", "9", "--out", str(out)],
+                       cwd=ROOT, capture_output=True, text=True, check=False, timeout=900,
+                       env={**os.environ, "BM_WATCH_DIR": str(watch)})
+    assert r.returncode == 0, r.stdout + r.stderr
+    final = json.loads(out.read_text())
+    assert final["bot"] == "teacher bot" and final["runs"] == 150 and final["refused_moves"] == 0
+    assert final["per_run"]["rerolls"] > 0 and final["per_run"]["vouchers"] > 0
+    jobs = viewer.JobFiles(tmp_path / "watch", tmp_path / "logs")
+    best = jobs.best()
+    assert best and jobs.read_sample(best[0][1])["bot"] == "teacher bot"
+    for _, p in best[:3]:
+        s = jobs.read_sample(p)
+        got = replay(s)
+        assert got["over"] and got["won"] == s["won"] and got["ante"] == s["ante"], s["seed"]

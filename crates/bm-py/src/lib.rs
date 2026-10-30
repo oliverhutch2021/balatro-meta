@@ -402,6 +402,12 @@ impl Game {
         (k as i64, a)
     }
 
+    /// The teacher bot's move (rule-based, stronger; decided from the screen and fair copies).
+    fn teacher_move(&self) -> (i64, u64) {
+        let (k, a) = bm_core::teacher::teacher_move(&self.run, self.moves.len() as u64);
+        (k as i64, a)
+    }
+
     /// How the run is going: up to `n` quick greedy playouts from fair copies
     /// of this position (no more than `budget_ms` once 8 are done). Runs
     /// without holding the GIL.

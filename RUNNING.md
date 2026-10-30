@@ -91,8 +91,21 @@ make baseline
 ```
 
 The greedy bot (the simple bot the search has to beat) plays a million fresh-seed runs, Red Deck on
-White Stake, on all 16 threads: on the order of a thousand runs a second, so about 15 minutes. Its
-numbers go to `results/baseline/greedy.json` and are committed like every job's.
+White Stake, on all 16 threads: about 850 runs a second, so about 20 minutes. Its numbers go to
+`results/baseline/greedy.json` and are committed like every job's.
+
+Then, the same way:
+
+```
+make teacher
+```
+
+The teacher bot is a rule-based bot written to teach the network: it sells its weakest joker for a
+clearly better one, rerolls with money to spare, buys good vouchers, uses Tarots on sensible cards, keeps
+its x-mult jokers at the right end, and plays its low cards to dig for a bigger hand when even its best
+hand can't reach the target. It plays half a million runs (about 20 minutes) into
+`results/baseline/teacher.json`. On a first 4,000-run test it won 1.8% of runs against the greedy bot's
+0.07%.
 
 In the second:
 

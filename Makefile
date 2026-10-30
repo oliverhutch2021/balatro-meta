@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline watch watch-mod
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher watch watch-mod
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | expand -t 14
@@ -58,8 +58,11 @@ rng-check:  ## Phase 1 gate: the Rust RNG against LuaJIT and the game's own lua5
 bench:  ## Phase 1 gate: engine speed on all threads, in Rust and through Python (about two minutes)
 	$(PY) scripts/jobs.py run bench $(JOB_FLAGS)
 
-baseline:  ## The number to beat: the greedy bot plays a million runs on all threads (about 15 minutes; make watch shows it)
+baseline:  ## The number to beat: the greedy bot plays a million runs on all threads (about 20 minutes; make watch shows it)
 	$(PY) scripts/jobs.py run baseline $(JOB_FLAGS)
+
+teacher:  ## The teacher bot (sells, rerolls, Tarots, vouchers) plays half a million runs (about 20 minutes; make watch shows it)
+	$(PY) scripts/jobs.py run teacher $(JOB_FLAGS)
 
 SPEED ?= 1
 PORT ?= 8790

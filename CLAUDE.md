@@ -33,14 +33,16 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   `jokers.rs`, `content.rs` (consumables, vouchers, boosters), `create.rs`
   (card creation, pools, prices), `shop.rs`, `packs.rs`, `consumables.rs`,
   `observe.rs` (the fair-play wall: the only place the bot's input is
-  built), `env.rs` (moves as kind + argument), `bots.rs`, `scenario.rs`
-  (building test positions).
+  built), `env.rs` (moves as kind + argument), `bots.rs` (greedy bot,
+  projections), `teacher.rs` (the rule-based teacher bot: the network's
+  warm start), `scenario.rs` (building test positions).
 - `crates/bm-py`: Python bindings (`VecEnv`, `Game`); `python/balatro_meta`.
 - Jobs (`scripts/jobs.py`, like monopoly-strategy's) leave live files in
   `.sync/watch/<job>/`: `progress.json` and `samples/` (runs to replay:
   `best-*.json`, the job's 30 best so far, and `typical-*.json`).
-  `make baseline` is `crates/bm-core/examples/baseline.rs` (the greedy bot
-  on all threads). `make watch` is `scripts/viewer.py` (replays samples
+  `make baseline` and `make teacher` are
+  `crates/bm-core/examples/baseline.rs` (`--bot greedy|teacher` on all
+  threads). `make watch` is `scripts/viewer.py` (replays samples
   with the engine, best first; serves `viewer/index.html`, which draws the
   table itself) plus `scripts/checker.py` (the real-game checks: a hidden
   BalatroBot game on port 12350, compared after every move using

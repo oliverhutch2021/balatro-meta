@@ -1,7 +1,10 @@
-//! The baseline: the greedy bot plays fresh-seed runs on every thread and reports as it goes.
+//! A bot's baseline: it plays fresh-seed runs on every thread and reports as it goes.
 //!
-//!     cargo run --release -p bm-core --example baseline -- [--runs N] [--seconds S] [--threads T]
-//!         [--seed BASE] [--out results/baseline/greedy.json]
+//!     cargo run --release -p bm-core --example baseline -- [--bot greedy|teacher] [--runs N] [--seconds S]
+//!         [--threads T] [--seed BASE] [--out results/baseline/greedy.json]
+//!
+//! `greedy` is the simple bot (bots.rs); `teacher` the rule-based one written to teach the network
+//! (teacher.rs).
 //!
 //! With `BM_WATCH_DIR` set (the job runner sets it), it writes there for the live viewer:
 //! `progress.json` about once a second (runs, runs a second, win rate, final antes, what ended the
@@ -30,6 +33,7 @@ use bm_core::joker_data::{JokerKind, N_JOKERS};
 use bm_core::packs::PackCard;
 use bm_core::poker::HandType;
 use bm_core::shop::RowItem;
+use bm_core::teacher::teacher_move;
 use bm_core::{Phase, Run, RunConfig};
 
 const MAX_STEPS: u64 = 3000;
@@ -124,8 +128,11 @@ fn run_seed(base: u64, i: u64) -> String {
     SeedSampler::new(base.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ i).next_seed()
 }
 
-/// One run by the greedy bot, start to end.
-fn play(seed: String, salt: u64, keep: bool) -> RunSummary {
+/// A bot: its move for a run (it sees only the screen and fair copies).
+type Bot = fn(&Run, u64) -> (MoveKind, u64);
+
+/// One run by `bot`, start to end.
+fn play(seed: String, salt: u64, keep: bool, bot: Bot) -> RunSummary {
     let mut run = Run::new(RunConfig::new(&seed));
     let mut s = RunSummary {
         record: keep.then(Vec::new),
@@ -133,7 +140,7 @@ fn play(seed: String, salt: u64, keep: bool) -> RunSummary {
     };
     let mut step = 0u64;
     while run.phase != Phase::GameOver && !run.won && step < MAX_STEPS {
-        let (k, a) = greedy_move(&run, salt << 20 | step);
+        let (k, a) = bot(&run, salt << 20 | step);
         match k {
             MoveKind::Buy | MoveKind::BuyAndUse => {
                 if let Some(slot) = run.shop.as_ref().and_then(|sh| sh.row.get(a as usize)) {
@@ -159,8 +166,13 @@ fn play(seed: String, salt: u64, keep: bool) -> RunSummary {
             _ => {}
         }
         let chips_before = run.round_chips;
-        if apply(&mut run, k, a).is_err() {
-            s.refused = true; // never expected: the bot only makes legal moves (tested)
+        if let Err(why) = apply(&mut run, k, a) {
+            // Never expected: the bots only make legal moves (tested). Say which, for a fix.
+            eprintln!(
+                "refused: seed {seed}, move {step}: {k:?} {a:#x} in {:?}: {}",
+                run.phase, why.0
+            );
+            s.refused = true;
             break;
         }
         if k == MoveKind::Play {
@@ -406,6 +418,7 @@ struct Report<'a> {
     history: &'a [(f64, u64, f64, f64)],
     /// The best runs so far, as a JSON list.
     best: String,
+    bot: &'a str,
     done: bool,
 }
 
@@ -436,13 +449,14 @@ fn report_json(r: &Report) -> String {
     let mut o = String::new();
     let _ = write!(
         o,
-        "{{\n \"kind\": \"baseline\",\n \"bot\": \"greedy bot\",\n \"deck\": \"Red Deck\",\n \"stake\": \"White Stake\",\n \
+        "{{\n \"kind\": \"baseline\",\n \"bot\": {},\n \"deck\": \"Red Deck\",\n \"stake\": \"White Stake\",\n \
          \"done\": {},\n \"updated\": {},\n \"elapsed\": {},\n \"threads\": {},\n \"target\": {},\n \"runs\": {},\n \
          \"rate\": {},\n \"moves\": {},\n \"wins\": {},\n \"win_rate\": {},\n \"win_ci\": [{}, {}],\n \"mean_ante\": {},\n \
          \"ante_hist\": {:?},\n \"blinds_beaten_per_run\": {},\n \"refused_moves\": {},\n \"lost_to\": [{}],\n \
          \"hands_played\": [{}],\n \"jokers_bought\": {},\n \"jokers_held_at_end\": {},\n \"jokers_in_wins\": {},\n \
          \"per_run\": {{\"moves\": {}, \"jokers_bought\": {}, \"rerolls\": {}, \"skips\": {}, \"packs\": {}, \
          \"vouchers\": {}, \"money_at_end\": {}}},\n \"best_runs\": {},\n \"history\": [{}]\n}}\n",
+        esc(r.bot),
         r.done,
         num(now),
         num(r.elapsed),
@@ -477,15 +491,16 @@ fn report_json(r: &Report) -> String {
     o
 }
 
-fn sample_json(s: &RunSummary, record: &[(u8, u64)], pick: &str, run: u64) -> String {
+fn sample_json(s: &RunSummary, record: &[(u8, u64)], pick: &str, run: u64, bot: &str) -> String {
     let moves: Vec<String> = record.iter().map(|(k, a)| format!("[{k}, {a}]")).collect();
     format!(
-        "{{\"seed\": {}, \"bot\": \"greedy bot\", \"source\": \"baseline\", \"pick\": {}, \"run\": {run}, \
+        "{{\"seed\": {}, \"bot\": {}, \"source\": \"baseline\", \"pick\": {}, \"run\": {run}, \
          \"label\": {}, \"result\": {}, \"won\": {}, \"ante\": {}, \"stage\": {}, \"closeness\": {}, \
          \"best_hand\": {}, \"moves\": [{}]}}\n",
         esc(&s.seed),
+        esc(bot),
         esc(pick),
-        esc(if pick == "best" { "one of the baseline's best runs (greedy bot)" } else { "a typical baseline run (greedy bot)" }),
+        esc(&if pick == "best" { format!("one of the {bot}'s best runs") } else { format!("a typical run by the {bot}") }),
         esc(&s.result()),
         s.won,
         s.end,
@@ -606,6 +621,11 @@ fn main() {
         _ => std::thread::available_parallelism().map_or(1, |n| n.get()),
     };
     let out = opt("--out");
+    let (bot, bot_name): (Bot, &str) = match opt("--bot").as_deref().unwrap_or("greedy") {
+        "greedy" => (greedy_move, "greedy bot"),
+        "teacher" => (teacher_move, "teacher bot"),
+        other => panic!("unknown bot {other:?}: greedy or teacher"),
+    };
     let watch = std::env::var("BM_WATCH_DIR")
         .ok()
         .filter(|s| !s.is_empty())
@@ -629,7 +649,7 @@ fn main() {
     let start = Instant::now();
     let deadline = seconds.map(Duration::from_secs_f64);
     println!(
-        "Baseline: the greedy bot on {threads} threads, {target} runs (Red Deck, White Stake)."
+        "Baseline: the {bot_name} on {threads} threads, {target} runs (Red Deck, White Stake)."
     );
 
     std::thread::scope(|scope| {
@@ -643,7 +663,7 @@ fn main() {
                         if i >= target || over {
                             break;
                         }
-                        let s = play(run_seed(base, i), i, true);
+                        let s = play(run_seed(base, i), i, true, bot);
                         local.add(&s);
                         let mut b = best.lock().unwrap();
                         if b.wants(&s) {
@@ -714,7 +734,7 @@ fn main() {
                             if !written.contains_key(i) {
                                 if let Some(rec) = &s.record {
                                     let f = dir.join(format!("best-{i:010}.json"));
-                                    write_atomic(&f, &sample_json(s, rec, "best", *i));
+                                    write_atomic(&f, &sample_json(s, rec, "best", *i, bot_name));
                                     written.insert(*i, f);
                                 }
                             }
@@ -736,6 +756,7 @@ fn main() {
                         threads,
                         history: &history,
                         best: rows,
+                        bot: bot_name,
                         done,
                     };
                     write_atomic(&w.join("progress.json"), &report_json(&r));
@@ -747,7 +768,7 @@ fn main() {
                                     .map_or(0, |d| d.as_millis());
                                 write_atomic(
                                     &dir.join(format!("typical-{ms:015}.json")),
-                                    &sample_json(&s, rec, "typical", i),
+                                    &sample_json(&s, rec, "typical", i, bot_name),
                                 );
                                 prune_typical(&dir);
                                 last_sample = Instant::now();
@@ -797,6 +818,7 @@ fn main() {
         threads,
         history: &history,
         best: best.lock().unwrap().rows(KEEP_BEST),
+        bot: bot_name,
         done: true,
     };
     let text = report_json(&r);
@@ -808,8 +830,5 @@ fn main() {
         std::fs::write(p, &text).expect("write the results");
         println!("Results: {}", p.display());
     }
-    assert_eq!(
-        t.refused, 0,
-        "the greedy bot made a move the engine refused"
-    );
+    assert_eq!(t.refused, 0, "the bot made a move the engine refused");
 }

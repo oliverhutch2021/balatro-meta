@@ -23,6 +23,7 @@ pub mod scoring;
 pub mod shop;
 pub mod state;
 pub mod tags;
+pub mod teacher;
 
 pub use bm_rng;
 pub use run::Refused;
