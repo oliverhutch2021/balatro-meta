@@ -461,12 +461,12 @@ def make_handler(viewer: Viewer, jobs: JobFiles, checks=None, art=None):
         def log_message(self, fmt, *args):  # keep the terminal quiet
             pass
 
-        def send(self, body, ctype="application/json", code=200, cache: int = 0):
+        def send(self, body, ctype="application/json", code=200):
             data = body if isinstance(body, bytes) else (body if isinstance(body, str) else json.dumps(body)).encode()
             self.send_response(code)
             text = ctype.startswith(("text/", "application/json"))
             self.send_header("Content-Type", ctype + ("; charset=utf-8" if text else ""))
-            self.send_header("Cache-Control", f"private, max-age={cache}" if cache else "no-store")
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -477,10 +477,10 @@ def make_handler(viewer: Viewer, jobs: JobFiles, checks=None, art=None):
                 self.send({"error": "no game art here"}, code=404)
             elif path == "/art/manifest.json":
                 self.send(art.manifest())
-            elif path == "/art/font.ttf" and art.font():
-                self.send(art.font(), "font/ttf", cache=3600)
+            elif path == "/art/font.ttf" and art.font():  # (no-store: the browser keeps no copy on disk)
+                self.send(art.font(), "font/ttf")
             elif path.startswith("/art/sheet/") and path.endswith(".png") and art.sheet(path[11:-4]):
-                self.send(art.sheet(path[11:-4]), "image/png", cache=3600)
+                self.send(art.sheet(path[11:-4]), "image/png")
             else:
                 self.send({"error": "not found"}, code=404)
 
