@@ -47,7 +47,11 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   `scripts/watch.py`'s BalatroBot link and comparison). The companion mod
   `mods/balatro_meta_watch` (idle signal, run-setup deck for `start`,
   optional lock and speed) keeps its files in
-  `balatro_meta/<BalatroBot port>/` in the game's save folder.
+  `balatro_meta/<BalatroBot port>/` in the game's save folder. The page's
+  art comes from the user's own Balatro.exe at runtime (`scripts/art.py`
+  parses the game's definitions for sheet cells then; served from memory to
+  loopback clients only). No art, positions or text from the game are ever
+  written to the repo or to disk.
 - `reference/`: LuaJIT scripts that produce reference fixtures.
 - `tests/fixtures/`: committed fixtures the Rust tests compare against.
 - `rules/`: rules notes, one file per area, with sources.

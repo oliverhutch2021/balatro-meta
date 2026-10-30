@@ -13,6 +13,11 @@ streams), the moves so far, and the real-game checks, in which a hidden copy of 
 at full speed and compares every move with the engine (scripts/checker.py). With no job running it shows
 demo runs by the greedy bot.
 
+The page draws the run with the art from your own Balatro: the viewer reads the sheets and the font from
+your installed Balatro.exe at start-up (scripts/art.py), keeps them in memory and serves them to a browser on
+this PC only. Nothing of the game is stored anywhere or enters the repo. Without the game, the page draws its
+own cards.
+
 The viewer never touches a job: it only reads the job's files, at the lowest priority.
 """
 from __future__ import annotations
@@ -445,21 +450,39 @@ class Analyst:
 
 
 # ---------------------------------------------------------------------- the server
-def make_handler(viewer: Viewer, jobs: JobFiles, checks=None):
-    """`checks` is anything with a summary() (scripts/checker.py's Checker), or None."""
+LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
+
+
+def make_handler(viewer: Viewer, jobs: JobFiles, checks=None, art=None):
+    """`checks` is anything with a summary() (scripts/checker.py's Checker), or None; `art` is your game's
+    pictures (scripts/art.py's GameArt), or None."""
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):  # keep the terminal quiet
             pass
 
-        def send(self, body, ctype="application/json", code=200):
+        def send(self, body, ctype="application/json", code=200, cache: int = 0):
             data = body if isinstance(body, bytes) else (body if isinstance(body, str) else json.dumps(body)).encode()
             self.send_response(code)
-            self.send_header("Content-Type", ctype + "; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
+            text = ctype.startswith(("text/", "application/json"))
+            self.send_header("Content-Type", ctype + ("; charset=utf-8" if text else ""))
+            self.send_header("Cache-Control", f"private, max-age={cache}" if cache else "no-store")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+
+        def send_art(self, path: str) -> None:
+            """Your game's pictures and font, to a browser on this PC only (never stored anywhere)."""
+            if art is None or self.client_address[0] not in LOOPBACK:
+                self.send({"error": "no game art here"}, code=404)
+            elif path == "/art/manifest.json":
+                self.send(art.manifest())
+            elif path == "/art/font.ttf" and art.font():
+                self.send(art.font(), "font/ttf", cache=3600)
+            elif path.startswith("/art/sheet/") and path.endswith(".png") and art.sheet(path[11:-4]):
+                self.send(art.sheet(path[11:-4]), "image/png", cache=3600)
+            else:
+                self.send({"error": "not found"}, code=404)
 
         def do_GET(self):
             url = urlparse(self.path)
@@ -467,6 +490,8 @@ def make_handler(viewer: Viewer, jobs: JobFiles, checks=None):
             try:
                 if url.path in ("/", "/index.html"):
                     self.send(PAGE.read_bytes(), "text/html")
+                elif url.path.startswith("/art/"):
+                    self.send_art(url.path)
                 elif url.path == "/api/state":
                     since = int(q.get("since", ["0"])[0] or 0)
                     run_id = q.get("run", [""])[0]
@@ -558,6 +583,11 @@ def serve(port: int = DEFAULT_PORT, host: str = "127.0.0.1", speed: str = DEFAUL
         pass
     viewer = Viewer(speed)
     jobs = JobFiles()
+    import art as art_mod
+
+    art = art_mod.load()
+    print("Drawing the run with the art from your Balatro." if art else
+          "Your Balatro wasn't found, so the page draws its own cards.", flush=True)
     checker = None
     if checks:
         import checker as checker_mod
@@ -572,7 +602,7 @@ def serve(port: int = DEFAULT_PORT, host: str = "127.0.0.1", speed: str = DEFAUL
     server = None
     for p in range(port, port + 20):
         try:
-            server = ThreadingHTTPServer((host, p), make_handler(viewer, jobs, checker))
+            server = ThreadingHTTPServer((host, p), make_handler(viewer, jobs, checker, art))
             break
         except OSError:
             continue

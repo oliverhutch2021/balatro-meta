@@ -135,6 +135,22 @@ header .where { color: #a9c2c6; font-size: 13px; }
   font: 700 calc(var(--w, 6cqw) * .7)/1 var(--body); z-index: 2; }
 .down { background: repeating-linear-gradient(45deg, #6d2230 0 .5cqw, #84303f .5cqw 1cqw) !important; }
 .down > * { display: none; }
+/* the game's own pictures (read from your Balatro by the viewer; see scripts/art.py) */
+.art { background-repeat: no-repeat; image-rendering: pixelated; border: 0 !important; background-color: transparent !important;
+  box-shadow: none !important; position: relative; flex: none; }
+.art > * { display: none; }
+.pc.art { height: calc(var(--w) * 1.338); border-radius: 0; filter: drop-shadow(0 .25cqw 0 rgba(0,0,0,.35)); }
+.jk.art, .cs.art { --w: 6.4cqw; width: var(--w); height: calc(var(--w) * 1.338); padding: 0; border-radius: 0;
+  filter: drop-shadow(0 .25cqw 0 rgba(0,0,0,.35)); }
+.cs.art.small { --w: 5.2cqw; }
+.chipart { width: 2.6cqw; height: 2.6cqw; display: inline-block; vertical-align: middle; margin-right: .5cqw; }
+.chipart.big { width: 4.6cqw; height: 4.6cqw; display: block; margin: 0 auto .4cqw; }
+.tagart { width: 2.6cqw; height: 2.6cqw; display: inline-block; vertical-align: middle; }
+.art.ed-FOIL::after, .art.ed-HOLO::after, .art.ed-POLYCHROME::after { mix-blend-mode: screen; opacity: .55; }
+.cap { font: 600 .95cqw/1.2 var(--body); color: #f3efe2; text-align: center; max-width: 7cqw; }
+.cap .m { color: #ff8a7a; } .cap .c { color: #7cc0ff; } .cap .x { color: #ff6b5e; }
+.tbl.gamefont .ts, .tbl.gamefont .title, .tbl.gamefont .bigmsg, .tbl.gamefont .played .what, .tbl.gamefont .bl,
+.tbl.gamefont .price { font-family: 'GameFont', var(--display); letter-spacing: .02em; }
 /* jokers, consumables and shop items */
 .jk { --w: 6.6cqw; width: var(--w); height: calc(var(--w) * 1.4); border-radius: .7cqw; background: #f8f3e3; color: #23201a;
   border: .3cqw solid #2f8be0; padding: .45cqw .35cqw; display: flex; flex-direction: column; justify-content: space-between;
@@ -299,7 +315,8 @@ footer { color: #93aeb3; font-size: 11.5px; padding: 0 18px 14px; line-height: 1
   </div>
 </div>
 <footer>The search plays its runs in the engine on your PC; the middle of the page replays one of them with the same
-  engine, drawn here. A hidden copy of your Balatro checks the engine against the real game. Nothing leaves your PC.</footer>
+  engine, drawn with the art from your own copy of Balatro (read at start-up, kept in memory, never stored). A hidden
+  copy of your Balatro checks the engine against the real game. Nothing leaves your PC.</footer>
 
 <script>
 'use strict';
@@ -354,6 +371,51 @@ async function pollState() {
   setTimeout(pollState, S.speed === 'max' ? 250 : 400);
 }
 
+// ------------------------------------------------------------------ your game's pictures
+// The viewer reads them from your installed Balatro at start-up and serves them only to this browser; if it
+// can't, ART stays null and the page draws its own cards.
+let ART = null;
+async function loadArt() {
+  try {
+    const r = await fetch('/art/manifest.json', { cache: 'no-store' });
+    if (!r.ok) return;
+    ART = await r.json();
+    if (ART.font) {
+      const f = new FontFace('GameFont', `url(${ART.font})`);
+      document.fonts.add(await f.load());
+      $('tbl').classList.add('gamefont');
+    }
+  } catch (e) { /* the page's own cards */ }
+  render();
+}
+function cell(key, soul) {
+  // One sprite as background layer parts: [image, size, position].
+  const s = ART && ART.sprites[key]; if (!s) return null;
+  const a = ART.atlases[s[0]]; if (!a) return null;
+  const x = soul ? s[3] : s[1], y = soul ? s[4] : s[2];
+  if (x === undefined) return null;
+  return [`url(${a.url})`, `${a.cols * 100}% ${a.rows * 100}%`,
+    `${a.cols > 1 ? (x / (a.cols - 1) * 100).toFixed(4) : 0}% ${a.rows > 1 ? (y / (a.rows - 1) * 100).toFixed(4) : 0}%`];
+}
+function layers(list) {
+  // Background layers, the first on top; null when the bottom layer is missing.
+  const ok = list.filter(Boolean);
+  if (!ok.length || !list[list.length - 1]) return null;
+  return `background-image:${ok.map(l => l[0]).join(',')};background-size:${ok.map(l => l[1]).join(',')};` +
+    `background-position:${ok.map(l => l[2]).join(',')}`;
+}
+const ENH_KEY = { BONUS: 'm_bonus', MULT: 'm_mult', WILD: 'm_wild', GLASS: 'm_glass', STEEL: 'm_steel', STONE: 'm_stone',
+  GOLD: 'm_gold', LUCKY: 'm_lucky' };
+function blindKey(name) { return ART && ART.names ? ART.names[name] : null; }
+function chipHTML(name, big) {
+  const st = ART && layers([cell(blindKey(name))]);
+  return st ? `<span class="art chipart ${big ? 'big' : ''}" style="${st}"></span>` : '';
+}
+function tagHTML(name) {
+  const st = ART && layers([cell(blindKey(name))]);
+  return st ? `<span class="art tagart" style="${st}" title="${esc(name)}"></span>` : esc(name);
+}
+
 // ------------------------------------------------------------------ drawing the game
 const SUIT = { S: ['♠', false], H: ['♥', true], D: ['♦', true], C: ['♣', false] };
 const RANK = { T: '10' };
@@ -362,6 +424,14 @@ const ENH_TAG = { BONUS: '+30 chips', MULT: '+4 mult', GLASS: 'Glass', STEEL: 'S
 
 function cardHTML(c, small) {
   if (!c) return '';
+  if (ART) {
+    const base = c.face_down ? 'b_red' : (ENH_KEY[c.enhancement] || 'c_base');
+    const face = c.face_down || c.enhancement === 'STONE' ? null : c.key;
+    const seal = c.seal && !c.face_down ? 'seal_' + cap(c.seal.toLowerCase()) : null;
+    const st = layers([seal && cell(seal), face && cell(face), cell(base)]);
+    if (st) return `<div class="pc art${small ? ' sm' : ''}${c.edition && !c.face_down ? ' ed-' + c.edition : ''}${c.debuff ? ' debuff' : ''}" ` +
+      `style="${st}" title="${esc(c.face_down ? 'Face down' : cardTitle(c))}"></div>`;
+  }
   if (c.face_down) return `<div class="pc down${small ? ' sm' : ''}"></div>`;
   const [s, r] = (c.key || '?_?').split('_');
   const [sym, red] = SUIT[s] || ['?', false];
@@ -379,7 +449,24 @@ function cardTitle(c) {
   return `${ranks[r] || r} of ${names[s] || s}` + (c.enhancement ? `, ${c.enhancement.toLowerCase()}` : '') +
     (c.edition ? `, ${c.edition.toLowerCase()}` : '') + (c.seal ? `, ${c.seal.toLowerCase()} seal` : '') + (c.debuff ? ', debuffed' : '');
 }
+function jokerVals(j) {
+  const vals = [];
+  if (j.mult) vals.push(`<span class="m">+${num(j.mult)}</span>`);
+  if (j.x_mult && j.x_mult !== 1) vals.push(`<span class="x">X${+j.x_mult.toFixed(2)}</span>`);
+  if (j.chips) vals.push(`<span class="c">+${num(j.chips)}</span>`);
+  return vals.join(' ');
+}
 function jokerHTML(j) {
+  if (ART) {
+    const stickers = [j.eternal && cell('sticker_eternal'), j.perishable !== null && j.perishable !== undefined && cell('sticker_perishable'),
+      j.rental && cell('sticker_rental')];
+    const st = j.face_down ? layers([cell('b_red')]) : layers([cell(j.key, true), ...stickers, cell(j.key)]);
+    if (st) {
+      const v = j.face_down ? '' : jokerVals(j);
+      return `<div class="item"><div class="jk art${j.edition ? ' ed-' + j.edition : ''}${j.debuff ? ' debuff' : ''}" style="${st}" ` +
+        `title="${esc(j.face_down ? 'Face down' : j.name)}"></div>${j.sell !== undefined || v ? `<div class="cap">${v}${v ? ' · ' : ''}${j.sell !== undefined ? '$' + j.sell : ''}</div>` : ''}</div>`;
+    }
+  }
   if (j.face_down) return `<div class="jk down"></div>`;
   const vals = [];
   if (j.mult) vals.push(`<span class="m">+${num(j.mult)} Mult</span>`);
@@ -394,6 +481,10 @@ function jokerHTML(j) {
     `<div class="sell">${j.sell !== undefined ? 'sells $' + j.sell : ''}</div></div>`;
 }
 function consHTML(c, extraCls) {
+  if (ART) {
+    const st = layers([cell(c.key, true), cell(c.key)]);
+    if (st) return `<div class="cs art${c.edition ? ' ed-' + c.edition : ''}" style="${st}" title="${esc(c.name || c.key)}"></div>`;
+  }
   const set = c.set || (extraCls === 'voucher' ? 'voucher' : '');
   return `<div class="cs ${esc(set)} ${extraCls || ''} ${c.edition ? 'ed-' + c.edition : ''}">${esc(c.name || c.key)}` +
     `${c.set ? `<small>${esc(c.set)}</small>` : ''}</div>`;
@@ -401,7 +492,9 @@ function consHTML(c, extraCls) {
 function itemHTML(i, kind) {
   // A shop or pack item: a joker, a consumable, a playing card, a voucher or a pack.
   let face;
-  if (kind === 'voucher') face = consHTML(i, 'voucher');
+  const st = ART && (kind === 'voucher' || kind === 'pack') && layers([cell(i.key)]);
+  if (st) face = `<div class="cs art" style="${st}" title="${esc(i.name || i.key)}"></div>`;
+  else if (kind === 'voucher') face = consHTML(i, 'voucher');
   else if (kind === 'pack') face = `<div class="cs pack">${esc(i.name || i.key)}</div>`;
   else if (i.key && /^[SHDC]_/.test(i.key)) face = cardHTML(i);
   else if (i.set) face = consHTML(i);
@@ -414,7 +507,7 @@ function sidebar(v, m) {
   const boss = v.blind_name && !/^(Small|Big) Blind$/.test(v.blind_name);
   let blind;
   if (inBlind && v.blind_name) {
-    blind = `<div class="box"><div class="bname ${boss ? 'boss' : ''}">${esc(v.blind_name)}${v.blind_disabled ? ' (off)' : ''}</div>` +
+    blind = `<div class="box"><div class="bname ${boss ? 'boss' : ''}">${chipHTML(v.blind_name)}${esc(v.blind_name)}${v.blind_disabled ? ' (off)' : ''}</div>` +
       `<div class="lab">Score at least</div><div class="target">${num(v.blind_score)}</div>` +
       `<div class="reward">Reward ${'$'.repeat(Math.max(0, Math.min(8, v.blind_reward || 0)))}</div></div>`;
   } else {
@@ -437,13 +530,13 @@ function sidebar(v, m) {
 function middle(v, m) {
   if (v.state === 'BLIND_SELECT') {
     const b = v.blinds || {};
-    const one = (k, x) => !x ? '' : `<div class="bl ${x.status}"><div class="bn">${esc(x.name)}</div>` +
+    const one = (k, x) => !x ? '' : `<div class="bl ${x.status}">${chipHTML(x.name, true)}<div class="bn">${esc(x.name)}</div>` +
       `<div class="bs">Score at least</div><div class="bt">${num(x.score)}</div>` +
       `<div class="br">Reward ${'$'.repeat(Math.max(0, Math.min(8, x.reward || 0)))}</div>` +
       `<div class="bs">${esc((x.status || '').toLowerCase())}</div>` +
-      (x.tag_name && k !== 'boss' ? `<div class="bg">Skip for: ${esc(x.tag_name)}</div>` : '') + `</div>`;
+      (x.tag_name && k !== 'boss' ? `<div class="bg">Skip for: ${ART ? tagHTML(x.tag_name) + ' ' : ''}${esc(x.tag_name)}</div>` : '') + `</div>`;
     return `<div class="title">Choose your next blind</div><div class="blinds3">${one('small', b.small)}${one('big', b.big)}${one('boss', b.boss)}</div>` +
-      ((v.tags || []).length ? `<div class="subt">Tags: ${esc(v.tags.join(', '))}</div>` : '');
+      ((v.tags || []).length ? `<div class="subt">Tags: ${ART ? v.tags.map(tagHTML).join(' ') : esc(v.tags.join(', '))}</div>` : '');
   }
   if (v.state === 'SHOP') {
     const row = (v.shop || []).map(i => itemHTML(i, 'row')).join('');
@@ -816,6 +909,7 @@ document.addEventListener('keydown', e => {
 });
 
 pollState();
+loadArt();
 </script>
 </body>
 </html>

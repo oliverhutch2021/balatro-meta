@@ -102,8 +102,9 @@ make watch
 
 Your browser opens the viewer, in the style of Monopoly Meta's:
 
-- **In the middle**, one run drawn by the page: the blind and its target, the score, your hand, the
-  jokers, consumables, shop and packs. It's a run the job has just played, replayed move by move with
+- **In the middle**, one run drawn by the page with the art from your own Balatro (the viewer reads it from
+  your installed game each time it starts and keeps it in memory; it is never stored or copied): the blind
+  and its target, the score, your hand, the jokers, consumables, shop and packs. It's a run the job has just played, replayed move by move with
   the same engine at a speed you can follow. **Best runs** (the default) shows the job's best runs so far:
   wins first, ranked by their biggest single hand, then losses by how far they got (the ante, which
   blind, how close to its target). **Typical runs** shows runs picked at random, as the job plays them.
