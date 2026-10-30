@@ -240,7 +240,7 @@ def test_the_page_draws_with_the_game_art(game_exe, tmp_path):
             # vouchers, the deck's enhancements, seals and editions, and each levelled hand's planet.
             got = page.evaluate(test_viewer.RUN_INFO_CHECK, test_viewer.run_info_view("SELECTING_HAND"))
             assert got["inside"] and got["vouchers"] == 2 and got["mod_art"] == 6 and got["planet_art"] == 3, got
-            assert got["sa"] == ["0", "z"] and got["all"] == "45", got
+            assert got["sa"] == ["1", ""] and got["all"] == "51", got
             # The teacher's plan in words sits in the outlook card.
             got = page.evaluate(PLAN_CHECK)
             assert got["shown"] and got["inside"], got

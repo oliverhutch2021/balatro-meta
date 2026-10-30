@@ -395,20 +395,20 @@ def test_the_page_draws_the_run(tmp_path):
             page.wait_for_function("() => document.querySelectorAll('#proglist .prow').length > 1", timeout=15000)
             assert "Now:" in page.inner_text("#proglist") and "goal 90%" in page.inner_text("#progsub")
             assert page.locator("#progchart circle.pulse").count() == 1
-            # The run in detail under the counters: every card by suit and rank (in a blind, those still to draw),
-            # the deck's upgrades, the vouchers and the hands levelled (here without the game's pictures).
+            # The run in detail under the counters: every card in the deck by suit and rank (the whole deck, in a
+            # blind too: cards held or played still count), the deck's upgrades, the vouchers and the hands levelled
+            # (here without the game's pictures).
             got = page.evaluate(RUN_INFO_CHECK, run_info_view("SELECTING_HAND"))
             assert got["cells"] == 6 * 15 and got["inside"], got
-            assert got["sa"] == ["0", "z"] and got["ha"] == ["1", ""], "the held Ace of Spades, one Ace of Hearts left"
+            assert got["sa"] == ["1", ""] and got["ha"] == ["2", "dup"], "held cards count; a duplicate stands out"
             assert got["c2"][1] == "n0" and got["c5"][1] == "n0", "a destroyed card, and a Stone card has no rank"
-            assert (got["spades"], got["all"], got["head"]) == ("10", "45", "46 of 52 left to draw"), got
+            assert (got["spades"], got["clubs"], got["all"], got["head"]) == ("13", "11", "51", "52 cards"), got
             assert got["levels"] == ["Flush", "High Card", "Pair"], "levelled hands first, then the most played"
             assert "Overstock, Clearance Sale" in got["voucher_text"]
-            got = page.evaluate(RUN_INFO_CHECK, run_info_view("SHOP"))
-            assert got["ha"] == ["2", "dup"] and got["sa"] == ["1", ""] and (got["clubs"], got["all"]) == ("11", "51")
-            assert got["head"] == "52 cards"
             assert [m.split(":")[0] for m in got["mods"]] == ["Bonus card", "Glass card", "Stone card", "Gold seal",
                                                                "Red seal", "Foil"], got["mods"]
+            shop = page.evaluate(RUN_INFO_CHECK, run_info_view("SHOP"))
+            assert all(shop[k] == got[k] for k in ("sa", "ha", "spades", "clubs", "all", "head")), "the same in the shop"
             assert not errors, errors
             browser.close()
     finally:

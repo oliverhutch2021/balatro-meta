@@ -116,7 +116,6 @@ header .where { color: #a9c2c6; font-size: 13px; }
 .dgrid .s { font-weight: 700; }
 .dgrid .S { color: #c9c4ff; } .dgrid .H { color: #ff7a8a; } .dgrid .C { color: #7fd6c8; } .dgrid .D { color: #ffb36b; }
 .dgrid .n0 { color: rgba(243,239,226,.2); }
-.dgrid .z { color: rgba(243,239,226,.38); }
 .dgrid .dup { color: #ffc94d; font-weight: 700; }
 .dgrid .t { color: #b9c7bf; }
 .mods { display: flex; flex-wrap: wrap; gap: .35cqw .65cqw; margin-top: .45cqw; }
@@ -610,7 +609,7 @@ function sidebar(v, m) {
 }
 
 // The run in detail (the left panel, under the counters), drawn with your game's pictures when the viewer has
-// them: the vouchers bought, every card in the deck by suit and rank (in a blind: the cards still to draw),
+// them: the vouchers bought, every card in the deck by suit and rank (the whole deck, as the shop shows it),
 // the deck's enhancements, seals and editions, and the hands levelled or played.
 const DECK_SUITS = ['S', 'H', 'C', 'D'];
 const DECK_RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'];
@@ -637,14 +636,13 @@ function vouchersInfo(v) {
 }
 
 function deckTally(cards) {
-  // Each card's count by key (Stone cards have no rank or suit and are left out), in the deck and still to draw,
-  // and how many cards carry each enhancement, seal and edition.
-  const t = { full: {}, left: {}, enhancement: {}, seal: {}, edition: {} };
+  // Each card's count by key in the whole deck (Stone cards have no rank or suit and are left out), and how many
+  // cards carry each enhancement, seal and edition.
+  const t = { full: {}, enhancement: {}, seal: {}, edition: {} };
   for (const c of cards) {
     for (const f of ['enhancement', 'seal', 'edition']) if (c[f]) t[f][c[f]] = (t[f][c[f]] || 0) + 1;
     if (c.enhancement === 'STONE') continue;
     t.full[c.key] = (t.full[c.key] || 0) + 1;
-    if (c.left) t.left[c.key] = (t.left[c.key] || 0) + 1;
   }
   return t;
 }
@@ -665,27 +663,25 @@ function modHTML(field, name, n) {
 function deckInfo(v) {
   const cards = v.deck_cards;
   if (!cards) return '';
-  const inRound = v.state === 'SELECTING_HAND';
+  // Always the whole deck, even mid-blind: what the run has built, not what is left to draw this round.
   const t = deckTally(cards);
-  const count = inRound ? t.left : t.full;
   let g = '<span></span>' + DECK_RANKS.map(r => `<span class="h">${RANK[r] || r}</span>`).join('') + '<span class="h">&Sigma;</span>';
   const byRank = {};
   let all = 0;
   for (const s of DECK_SUITS) {
     let row = 0, cells = '';
     for (const r of DECK_RANKS) {
-      const key = s + '_' + r, n = count[key] || 0, owned = t.full[key] || 0;
+      const n = t.full[s + '_' + r] || 0;
       row += n;
       byRank[r] = (byRank[r] || 0) + n;
-      cells += `<span class="${!owned ? 'n0' : n === 0 ? 'z' : n > 1 ? 'dup' : ''}">${owned ? n : '&middot;'}</span>`;
+      cells += `<span class="${!n ? 'n0' : n > 1 ? 'dup' : ''}">${n || '&middot;'}</span>`;
     }
     all += row;
     g += `<span class="s ${s}">${SUIT[s][0]}</span>${cells}<span class="t ${s}">${row}</span>`;
   }
   g += '<span class="h">&Sigma;</span>' + DECK_RANKS.map(r => `<span class="t">${byRank[r]}</span>`).join('') +
     `<span class="t">${all}</span>`;
-  const total = v.deck_total ?? cards.length;
-  const head = inRound ? `${v.deck_left ?? '-'} of ${total} left to draw` : `${total} cards`;
+  const head = `${v.deck_total ?? cards.length} cards`;
   const mods = [];
   for (const f of ['enhancement', 'seal', 'edition']) {
     const names = MOD_ORDER[f].concat(Object.keys(t[f]).filter(k => !MOD_ORDER[f].includes(k)));
