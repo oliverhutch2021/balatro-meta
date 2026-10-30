@@ -98,7 +98,11 @@ header .where { color: #a9c2c6; font-size: 13px; }
 .tm-top { display: flex; gap: 1.2cqw; align-items: flex-start; justify-content: space-between; min-width: 0; }
 .slots { display: flex; gap: .6cqw; flex-wrap: nowrap; align-items: flex-start; min-height: 9.6cqw; padding: .5cqw;
   border-radius: .8cqw; background: rgba(0,0,0,.18); position: relative; min-width: 0; }
-.slots .cap { position: absolute; right: .6cqw; bottom: -1.9cqw; font-size: 1.05cqw; color: #b9c7bf; }
+.slots .slotcap { position: absolute; right: .6cqw; bottom: -1.9cqw; font-size: 1.05cqw; line-height: 1.2; color: #b9c7bf;
+  white-space: nowrap; }
+/* more cards than room: they overlap, as in the game (--ov is set by drawTable) */
+.slots > :not(.slotcap) + :not(.slotcap) { margin-left: var(--ov, 0cqw); }
+.slots > .item > .cap { max-width: min(6.6cqw, calc(7.1cqw + var(--ov, 0cqw))); }
 .tm-mid { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1cqw; min-height: 0; text-align: center; }
 .tm-hand { display: flex; align-items: flex-end; justify-content: center; gap: .5cqw; min-height: 10cqw; position: relative; }
 .deckinfo { position: absolute; right: 0; bottom: 0; font-size: 1.1cqw; color: #b9c7bf; text-align: right; }
@@ -147,7 +151,7 @@ header .where { color: #a9c2c6; font-size: 13px; }
 .chipart.big { width: 4.6cqw; height: 4.6cqw; display: block; margin: 0 auto .4cqw; }
 .tagart { width: 2.6cqw; height: 2.6cqw; display: inline-block; vertical-align: middle; }
 .art.ed-FOIL::after, .art.ed-HOLO::after, .art.ed-POLYCHROME::after { mix-blend-mode: screen; opacity: .55; }
-.cap { font: 600 .95cqw/1.2 var(--body); color: #f3efe2; text-align: center; max-width: 7cqw; }
+.cap { font: 600 .95cqw/1.2 var(--body); color: #f3efe2; text-align: center; max-width: 6.6cqw; }
 .cap .m { color: #ff8a7a; } .cap .c { color: #7cc0ff; } .cap .x { color: #ff6b5e; }
 .tbl.gamefont .ts, .tbl.gamefont .title, .tbl.gamefont .bigmsg, .tbl.gamefont .played .what, .tbl.gamefont .bl,
 .tbl.gamefont .price { font-family: 'GameFont', var(--display); letter-spacing: .02em; }
@@ -186,9 +190,11 @@ header .where { color: #a9c2c6; font-size: 13px; }
 @keyframes rise { from { transform: translateY(1.5cqw); opacity: 0; } to { transform: none; opacity: 1; } }
 .bigmsg { font: 700 4cqw/1.1 var(--display); letter-spacing: .05em; }
 .bigmsg.win { color: #ffc94d; } .bigmsg.lose { color: #ff8a6b; }
-.tbl .banner { position: absolute; left: 25%; top: 1cqw; display: flex; gap: 8px; align-items: center; padding: 5px 12px;
-  border-radius: 999px; background: rgba(12,34,42,.9); color: #fff; font-size: 12.5px; font-weight: 600; z-index: 5; }
-.tbl .banner button { padding: 3px 10px; font-size: 12px; }
+/* viewing an earlier move: a note in the free space at the foot of the left panel, clear of the cards */
+.tbl .banner { position: absolute; left: 1.2cqw; bottom: 1.2cqw; width: calc(23% - 2.4cqw); display: flex; flex-direction: column;
+  gap: .6cqw; padding: .8cqw 1cqw; border-radius: .8cqw; background: rgba(12,34,42,.92); color: #fff;
+  font: 600 1.25cqw/1.3 var(--body); z-index: 5; box-shadow: 0 0 0 .15cqw #ffc94d inset; }
+.tbl .banner button { padding: .4cqw .8cqw; font-size: 1.2cqw; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; background: rgba(251,248,239,.95);
   padding: 7px 10px; border-radius: 999px; box-shadow: 0 6px 18px rgba(0,0,0,.3); }
 .toolbar .sep { width: 1px; background: var(--line); margin: 2px 4px; }
@@ -587,9 +593,18 @@ function drawTable() {
   const hand = showHand ? (v.hand || []).map(c => cardHTML(c)).join('') : '';
   const banner = live ? '' : `<div class="banner"><span>${k === 0 ? 'Start of the run' : `After move ${k}: ${esc(m ? m.what : '')}`}</span>` +
     `<button id="backlive">Back to live</button></div>`;
+  // The consumable area keeps the width of its slots; the joker area takes the rest, and a crowded row overlaps.
+  const consW = ART ? 6.4 : 5.4, nc = Math.max(1, v.consumable_slots ?? 2);
+  const consBox = nc * consW + (nc - 1) * 0.6 + 1;
+  const nj = (v.jokers || []).length, jokW = 6.6;
+  const room = 74.2 - 1.2 - Math.max(consBox, 1 + (v.consumables || []).length * (consW + 0.6)) - 1.2;
+  const need = nj * jokW + Math.max(0, nj - 1) * 0.6;
+  const ov = nj > 1 && need > room ? Math.max(-jokW * 0.8, (room - need) / (nj - 1)) : 0;
   setHTML(tbl, sidebar(v, m) + `<section class="tm"><div class="tm-top">` +
-    `<div class="slots" style="flex:1">${jokers}<span class="cap">${(v.jokers || []).length}/${v.joker_slots ?? 5} jokers</span></div>` +
-    `<div class="slots">${cons}<span class="cap">${(v.consumables || []).length}/${v.consumable_slots ?? 2}</span></div></div>` +
+    `<div class="slots" style="flex:1;--ov:${ov.toFixed(2)}cqw">${jokers}` +
+    `<span class="slotcap">${nj}/${v.joker_slots ?? 5} jokers</span></div>` +
+    `<div class="slots" style="min-width:${consBox.toFixed(1)}cqw">${cons}` +
+    `<span class="slotcap">${(v.consumables || []).length}/${v.consumable_slots ?? 2}</span></div></div>` +
     `<div class="tm-mid">${middle(v, m)}</div>` +
     `<div class="tm-hand">${hand}<div class="deckinfo">${(v.vouchers || []).length ? esc(v.vouchers.join(', ')) + '<br>' : ''}` +
     `Deck ${v.deck_left ?? '-'}/${v.deck_total ?? '-'}</div></div></section>${banner}`);

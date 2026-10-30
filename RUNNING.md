@@ -100,12 +100,17 @@ Then, the same way:
 make teacher
 ```
 
-The teacher bot is a rule-based bot written to teach the network: it sells its weakest joker for a
-clearly better one, rerolls with money to spare, buys good vouchers, uses Tarots on sensible cards, keeps
-its x-mult jokers at the right end, and plays its low cards to dig for a bigger hand when even its best
-hand can't reach the target. It plays half a million runs (about 20 minutes) into
-`results/baseline/teacher.json`. On a first 4,000-run test it won 1.8% of runs against the greedy bot's
-0.07%.
+The teacher bot is a rule-based bot written to teach the network. When its best hand won't beat the blind,
+it plans: for each hand it could build (a flush, three or four of a kind, a full house, a straight, or
+just its best hand) it plays the rest of the round out many times on copies with the hidden cards
+reshuffled, and goes for the one that wins most often: discarding towards it, and once the discards are
+gone, playing its spare cards to draw new ones (digging) while it has hands to spare. It also sells its
+weakest joker for a clearly better one, rerolls with money to spare, buys good vouchers, uses Tarots on
+sensible cards, and orders its jokers: x-mult jokers at the right end, Blueprint just left of the best
+joker it can copy, Brainstorm off the left end with the best joker it can copy moved there (and a
+Blueprint next to Brainstorm then copies that joker too), Ceremonial Dagger rightmost. It plays 100,000
+runs (about 45 minutes) into `results/baseline/teacher.json`. On a 4,000-run test it won 5.8% of runs
+(the greedy bot: 0.07%), with a mean final ante of 4.9 (greedy: 3.1).
 
 In the second:
 

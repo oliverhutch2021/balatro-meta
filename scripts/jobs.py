@@ -72,12 +72,12 @@ JOBS: dict[str, list[tuple]] = {
                     "--runs", "1000000", "--seed", "1", "--out", "results/baseline/greedy.json"]),
     ],
     # The teacher bot (crates/bm-core/src/teacher.rs: sells for upgrades, rerolls, vouchers, Tarots with
-    # targets, joker order, digging) on half a million runs: the network's warm start and the next number
-    # to beat. Same seeds as the greedy baseline's first half million.
+    # targets, joker order; planner.rs: plans its hands, digging) on 100,000 runs: the network's warm start
+    # and the next number to beat. Same seeds as the greedy baseline's first 100,000.
     "teacher": [
         ("build", [*MAKE, "build"]),
         ("teacher", ["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "baseline", "--",
-                     "--bot", "teacher", "--runs", "500000", "--seed", "1", "--out", "results/baseline/teacher.json"]),
+                     "--bot", "teacher", "--runs", "100000", "--seed", "1", "--out", "results/baseline/teacher.json"]),
     ],
 }
 

@@ -66,6 +66,31 @@ function Game:init_item_prototypes()
     self.shared_sticker_eternal = Sprite(0, 0, self.CARD_W, self.CARD_H, self.ASSET_ATLAS["stickers"], {x = 0,y = 0})
 end
 '''
+# Draws a position with n jokers (and no consumables) on the page and measures it, in one go so no poll redraws
+# in between: the captions and counters must not overlap, and the jokers must stay inside their area.
+LAYOUT_CHECK = """n => {
+  const jokers = Array.from({length: n}, (_, i) => ({key: i % 2 ? 'j_star' : 'j_joker', name: 'J' + i, mult: 4 + i,
+    sell: 1 + i, edition: null}));
+  S.sel = 1; S.selView = {state: 'SHOP', ante: 3, round: 7, money: 12, hands_left: 4, discards_left: 3, chips: 0,
+    jokers, joker_slots: 5, consumables: [], consumable_slots: 2, shop: [], shop_vouchers: [], shop_packs: [],
+    reroll_cost: 5, vouchers: [], deck_left: 52, deck_total: 52};
+  drawTable();
+  const r = e => e.getBoundingClientRect();
+  const hit = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+  const caps = [...document.querySelectorAll('#tbl .slots .item > .cap')].map(r);
+  const counters = [...document.querySelectorAll('#tbl .slotcap')].map(r);
+  const overlaps = [];
+  const all = caps.concat(counters);
+  for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) if (hit(all[i], all[j])) overlaps.push([i, j]);
+  const [jbox, cbox] = [...document.querySelectorAll('#tbl .slots')].map(r);
+  const cards = [...document.querySelectorAll('#tbl .slots .jk')].map(r);
+  const inside = cards.every(c => c.right <= jbox.right + 1 && c.left >= jbox.left - 1) && jbox.right <= cbox.left;
+  // The note shown while looking at an earlier move covers none of the table's boxes.
+  const banner = r(document.querySelector('#tbl .banner'));
+  const covered = [...document.querySelectorAll('#tbl .ts .box, #tbl .slots, #tbl .tm-mid > *')].filter(e => hit(r(e), banner));
+  S.sel = null; S.selView = null;
+  return {caps: caps.length, overlaps, inside, covered: covered.map(e => e.className)};
+}"""
 SHEETS = {"Deck.png": (2, 2, 142, 190), "Centers.png": (2, 2, 142, 190), "Jokers.png": (2, 2, 142, 190),
           "Consumables.png": (2, 1, 142, 190), "Tags.png": (2, 1, 68, 68), "Stickers.png": (1, 1, 142, 190),
           "Chips.png": (3, 2, 68, 68)}
@@ -184,6 +209,11 @@ def test_the_page_draws_with_the_game_art(game_exe, tmp_path):
                                    timeout=20000)
             style = page.eval_on_selector("#tbl .art", "e => e.getAttribute('style')")
             assert "/art/sheet/" in style
+            # Each joker's caption sits under that joker, clear of the slot counters; a crowded row stays in its box.
+            for n in (5, 11):
+                got = page.evaluate(LAYOUT_CHECK, n)
+                assert got["caps"] == n and got["overlaps"] == [], got
+                assert got["inside"] and got["covered"] == [], got
             assert not errors, errors
             browser.close()
     finally:

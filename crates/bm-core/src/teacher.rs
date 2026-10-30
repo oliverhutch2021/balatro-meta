@@ -13,9 +13,14 @@
 //!   it holds, suit changes towards its main suit, Death to copy its best card over its worst, Hanged Man
 //!   on its lowest cards; the money and card-making Tarots and Spectrals at once; sells the ones it can't
 //!   use well;
-//! - keeps its x-mult jokers at the right end (they multiply what the others add);
-//! - plays like the greedy bot, but when no discard is left and even its best hand played with every hand
-//!   left can't reach the target, it plays its low cards to dig for a bigger hand.
+//! - keeps its x-mult jokers at the right end (they multiply what the others add) and Blueprint just left of
+//!   the best joker it can copy; with Brainstorm (it copies the leftmost joker) it moves Brainstorm off the
+//!   left end, puts the best joker it can copy there, and Blueprint just left of Brainstorm, so both copy
+//!   it; Ceremonial Dagger rightmost, where it destroys nothing;
+//! - plays a hand that beats the blind as soon as it has one; otherwise it plans (planner.rs): it tries each
+//!   hand it could build (a flush, three or four of a kind, a full house, a straight, or just its best hand)
+//!   many times on fair copies of the round, and keeps, discards or plays to draw (digging) for the one that
+//!   beats the blind most often.
 //!
 //! It never makes moves BalatroBot has no call for (buy and use, boss reroll), so its runs stay checkable
 //! against the real game.
@@ -58,8 +63,8 @@ pub fn joker_value(k: JokerKind) -> f64 {
         | WalkieTalkie | SmileyFace | ScaryFace | EvenSteven | OddTodd | Banner | MysticSummit
         | Misprint | ShootTheMoon | HalfJoker | IceCream | Popcorn | Seltzer | HangingChad
         | Arrowhead | OnyxAgate | FourFingers | Shortcut | Pareidolia | SmearedJoker
-        | OopsAllSixes | CeremonialDagger | InvisibleJoker | DNA | BurntJoker | SpaceJoker
-        | Rocket | Cloud9 | FlashCard | MrBones => 4.0,
+        | OopsAllSixes | InvisibleJoker | DNA | BurntJoker | SpaceJoker | Rocket | Cloud9
+        | FlashCard | MrBones => 4.0,
         Joker | GreedyJoker | LustyJoker | WrathfulJoker | GluttonousJoker | JollyJoker
         | ZanyJoker | MadJoker | CrazyJoker | DrollJoker | SlyJoker | WilyJoker | CleverJoker
         | DeviousJoker | CraftyJoker | RoughGem | Splash | StoneJoker | MarbleJoker
@@ -69,6 +74,10 @@ pub fn joker_value(k: JokerKind) -> f64 {
         | ChaosTheClown | DelayedGratification | BusinessCard | GoldenJoker | ToTheMoon
         | GiftCard | Satellite | TurtleBean => 3.0,
         SixthSense | Showman | Hallucination | EightBall | Troubadour | Egg => 2.0,
+        // Ceremonial Dagger destroys the joker to its right at every blind, so the teacher keeps it rightmost,
+        // where it never grows. (Madness destroys a random one at every Small and Big Blind, yet valuing it
+        // low cost wins: 202 against 230 in 4,000 runs.)
+        CeremonialDagger => 2.0,
         CreditCard => 1.0,
     }
 }
@@ -340,31 +349,85 @@ fn useless(run: &Run, c: &Consumable) -> bool {
     }
 }
 
-/// Jokers in the order the teacher wants: adders first, multipliers last (Blueprint at the front of the
-/// multipliers, so it copies one). One move to get closer, if any.
-fn reorder(run: &Run) -> Option<(MoveKind, u64)> {
-    let class = |k: JokerKind| -> u8 {
-        if k == JokerKind::Blueprint {
-            2
-        } else if multiplies(k) {
-            3
-        } else {
-            1
-        }
+/// The order the teacher wants its jokers in, as their current positions. Jokers score left to right, so
+/// adders go first and multipliers last (they multiply what the others add). Then:
+/// - Blueprint copies its right neighbour: it goes just left of the best joker it can copy.
+/// - Brainstorm copies the leftmost joker (leftmost itself, it copies nothing): it moves off the left end,
+///   the best joker it can copy moves there, and every Blueprint goes just left of Brainstorm, copying
+///   Brainstorm and so the same best joker. All the copies sit together after the adders, and after the
+///   other multipliers too when the copied joker multiplies.
+/// - Ceremonial Dagger destroys its right neighbour at every blind: it goes rightmost, where it can't.
+///
+/// The order depends only on which jokers there are, never on where they stand, so moving towards it ends.
+fn joker_order(run: &Run) -> Vec<usize> {
+    use JokerKind::{Blueprint, Brainstorm, CeremonialDagger};
+    let j = &run.jokers;
+    let all_of = |k: JokerKind| -> Vec<usize> {
+        let mut v: Vec<usize> = (0..j.len()).filter(|&i| j[i].kind == k).collect();
+        v.sort_by_key(|&i| j[i].sort_id);
+        v
     };
-    let cur: Vec<u8> = run
-        .jokers
-        .iter()
-        .map(|j| if j.face_down { 0 } else { class(j.kind) })
+    let (prints, storms, daggers) = (
+        all_of(Blueprint),
+        all_of(Brainstorm),
+        all_of(CeremonialDagger),
+    );
+    let mut rest: Vec<usize> = (0..j.len())
+        .filter(|&i| !matches!(j[i].kind, Blueprint | Brainstorm | CeremonialDagger))
         .collect();
-    if cur.contains(&0) {
-        return None; // face down (Amber Acorn): leave them
+    rest.sort_by_key(|&i| (multiplies(j[i].kind), j[i].kind as usize, j[i].sort_id));
+    let value =
+        |i: usize| worth(j[i].kind, j[i].edition) + if multiplies(j[i].kind) { 1.0 } else { 0.0 };
+    let target = rest
+        .iter()
+        .copied()
+        .filter(|&i| j[i].kind.info().blueprint_compat)
+        .max_by(|&a, &b| {
+            value(a)
+                .total_cmp(&value(b))
+                .then(j[b].sort_id.cmp(&j[a].sort_id))
+        });
+    let mut want = Vec::with_capacity(j.len());
+    match target {
+        Some(t) if !storms.is_empty() => {
+            rest.retain(|&i| i != t);
+            let split = if multiplies(j[t].kind) {
+                rest.len()
+            } else {
+                rest.iter()
+                    .position(|&i| multiplies(j[i].kind))
+                    .unwrap_or(rest.len())
+            };
+            want.push(t);
+            want.extend(&rest[..split]);
+            want.extend(&prints);
+            want.extend(&storms);
+            want.extend(&rest[split..]);
+        }
+        Some(t) => {
+            let at = rest.iter().position(|&i| i == t).unwrap_or(rest.len());
+            want.extend(&rest[..at]);
+            want.extend(&prints);
+            want.extend(&rest[at..]);
+        }
+        None => {
+            want.extend(&rest);
+            want.extend(&prints);
+            want.extend(&storms);
+        }
     }
-    let mut want = cur.clone();
-    want.sort();
-    let at = (0..cur.len()).find(|&i| cur[i] != want[i])?;
-    let from = (at + 1..cur.len()).find(|&j| cur[j] == want[at])?;
-    Some((MoveKind::MoveJoker, (from | at << 8) as u64))
+    want.extend(&daggers);
+    want
+}
+
+/// One move towards `joker_order`, if the jokers aren't in it yet (and none is face down).
+fn reorder(run: &Run) -> Option<(MoveKind, u64)> {
+    if run.jokers.len() < 2 || run.jokers.iter().any(|j| j.face_down) {
+        return None;
+    }
+    let want = joker_order(run);
+    let at = (0..want.len()).find(|&i| want[i] != i)?;
+    Some((MoveKind::MoveJoker, (want[at] | at << 8) as u64))
 }
 
 fn shop_move(run: &Run) -> (MoveKind, u64) {
@@ -563,27 +626,20 @@ fn round_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     let (score, mask) = best();
     let target = run.blind.as_ref().map_or(0.0, |b| b.chips);
     let needed = target - run.round_chips;
-    if score >= needed || run.hands_left <= 1 {
+    // A hand that beats the blind is played at once; so is the last hand once the discards are gone. With
+    // discards left, even the last hand (The Needle's only one) is worth improving first.
+    if score >= needed || (run.hands_left <= 1 && run.discards_left == 0) {
         return (MoveKind::Play, mask);
     }
-    if run.discards_left > 0 {
-        // As the greedy bot: discard up to 5 of the lowest cards outside the best hand.
+    if run.forced_card().is_some() && run.discards_left > 0 {
+        // Cerulean Bell: as the greedy bot (every selection must hold the boss's card).
         return match greedy_move(run, salt) {
             (MoveKind::Discard, m) => (MoveKind::Discard, m),
             _ => (MoveKind::Play, mask),
         };
     }
-    // No discard left and the best hand falls short. If playing it with every hand left can't reach the
-    // target either, dig: play the low cards, to draw new ones for a bigger hand.
-    if score * f64::from(run.hands_left) >= needed {
-        return (MoveKind::Play, mask);
-    }
-    let junk: Vec<usize> = positions(run, mask, false).into_iter().take(5).collect();
-    let forced = run.forced_card();
-    if junk.is_empty() || forced.is_some_and(|f| !junk.contains(&f)) {
-        return (MoveKind::Play, mask);
-    }
-    (MoveKind::Play, junk.iter().fold(0u64, |m, &p| m | 1 << p))
+    // The best hand now falls short: build towards the hand that beats the blind most often.
+    crate::planner::plan(run, (score, mask), salt)
 }
 
 /// The teacher's move.
@@ -644,6 +700,105 @@ mod tests {
         ] {
             assert!(seen.contains(&k), "the teacher never made a {k:?}");
         }
+    }
+
+    #[test]
+    fn jokers_are_ordered_so_copies_copy_something() {
+        use crate::blinds::BlindKind;
+        use JokerKind::*;
+        let order = |kinds: &[JokerKind]| -> Vec<JokerKind> {
+            let mut run = Run::scenario("ORDERING", BlindKind::Small);
+            for &k in kinds {
+                run.add_joker(k);
+            }
+            let mut moves = 0;
+            while let Some((k, a)) = reorder(&run) {
+                apply(&mut run, k, a).unwrap();
+                moves += 1;
+                assert!(moves <= 10, "the order must settle");
+            }
+            run.jokers.iter().map(|j| j.kind).collect()
+        };
+        // Brainstorm never leftmost: the best joker it can copy goes there, Brainstorm last.
+        let o = order(&[Brainstorm, Joker, Cavendish]);
+        assert_eq!(o, vec![Cavendish, Joker, Brainstorm]);
+        // Blueprint just left of the best joker it can copy; adders before multipliers.
+        let o = order(&[Cavendish, Blueprint, Joker, GreedyJoker]);
+        assert_eq!(o.last(), Some(&Cavendish));
+        assert_eq!(o[o.len() - 2], Blueprint);
+        let o = order(&[Blueprint, Joker]);
+        assert_eq!(
+            o,
+            vec![Blueprint, Joker],
+            "Blueprint never rightmost while it has a joker to copy"
+        );
+        // Both copiers: Blueprint copies Brainstorm, which copies the leftmost, so both copy Cavendish, and
+        // both copies come after the Joker's +4.
+        let o = order(&[Brainstorm, Blueprint, Joker, Cavendish]);
+        assert_eq!(o, vec![Cavendish, Joker, Blueprint, Brainstorm]);
+        // A best joker that adds: the copies come before the multipliers.
+        let o = order(&[Brainstorm, GlassJoker, Blueprint, Joker, Stuntman]);
+        assert_eq!(o, vec![Stuntman, Joker, Blueprint, Brainstorm, GlassJoker]);
+        // Ceremonial Dagger rightmost: it destroys the joker to its right at every blind.
+        let o = order(&[CeremonialDagger, Cavendish, Joker]);
+        assert_eq!(o, vec![Joker, Cavendish, CeremonialDagger]);
+    }
+
+    #[test]
+    fn the_teachers_joker_order_scores_the_most() {
+        // Brainstorm starts leftmost (copying nothing). Of all 24 orders of these four jokers, the teacher's
+        // scores the most: Cavendish copied twice, after the Joker's +4.
+        use crate::blinds::BlindKind;
+        use crate::card::Rank;
+        use JokerKind::*;
+        let kinds = [Brainstorm, Blueprint, Joker, Cavendish];
+        let score = |order: &[JokerKind], settle: bool| -> (f64, Vec<JokerKind>) {
+            let mut run = Run::scenario("ORDERING", BlindKind::Small);
+            run.hand.clear();
+            for &k in order {
+                run.add_joker(k);
+            }
+            run.add_card_to_hand(Suit::Spades, Rank::Ace);
+            run.add_card_to_hand(Suit::Hearts, Rank::Ace);
+            while let Some((k, a)) = reorder(&run).filter(|_| settle) {
+                apply(&mut run, k, a).unwrap();
+            }
+            (
+                preview_score(&run, 0b11),
+                run.jokers.iter().map(|j| j.kind).collect(),
+            )
+        };
+        let (teacher, got) = score(&kinds, true);
+        let mut best = (0.0, Vec::new());
+        let mut perm = kinds.to_vec();
+        // Heap's algorithm over the 24 orders.
+        let mut c = [0usize; 4];
+        let mut i = 0;
+        let mut seen = vec![score(&perm, false)];
+        while i < 4 {
+            if c[i] < i {
+                perm.swap(if i % 2 == 0 { 0 } else { c[i] }, i);
+                seen.push(score(&perm, false));
+                c[i] += 1;
+                i = 0;
+            } else {
+                c[i] = 0;
+                i += 1;
+            }
+        }
+        assert_eq!(seen.len(), 24);
+        for s in seen {
+            if s.0 > best.0 {
+                best = s;
+            }
+        }
+        assert_eq!(got, vec![Cavendish, Joker, Blueprint, Brainstorm]);
+        assert!(
+            teacher >= best.0,
+            "the teacher's order scores {teacher}, but {:?} scores {}",
+            best.1,
+            best.0
+        );
     }
 
     #[test]

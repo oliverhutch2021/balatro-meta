@@ -35,7 +35,9 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   `observe.rs` (the fair-play wall: the only place the bot's input is
   built), `env.rs` (moves as kind + argument), `bots.rs` (greedy bot,
   projections), `teacher.rs` (the rule-based teacher bot: the network's
-  warm start), `scenario.rs` (building test positions).
+  warm start), `planner.rs` (the teacher's hand planning: which hand to
+  build this round, tried on fair copies; discards and digging),
+  `scenario.rs` (building test positions).
 - `crates/bm-py`: Python bindings (`VecEnv`, `Game`); `python/balatro_meta`.
 - Jobs (`scripts/jobs.py`, like monopoly-strategy's) leave live files in
   `.sync/watch/<job>/`: `progress.json` and `samples/` (runs to replay:

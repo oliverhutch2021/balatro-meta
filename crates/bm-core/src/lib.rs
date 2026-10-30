@@ -16,6 +16,7 @@ pub mod joker_events;
 pub mod jokers;
 pub mod observe;
 pub mod packs;
+pub mod planner;
 pub mod poker;
 pub mod run;
 pub mod scenario;

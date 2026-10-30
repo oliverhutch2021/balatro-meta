@@ -657,6 +657,7 @@ fn main() {
             .map(|_| {
                 scope.spawn(|| {
                     let mut local = Totals::new();
+                    let mut merged = Instant::now();
                     loop {
                         let over = deadline.is_some_and(|d| start.elapsed() >= d);
                         let i = next.fetch_add(1, Ordering::Relaxed);
@@ -672,9 +673,11 @@ fn main() {
                             drop(b);
                             *offer.lock().unwrap() = Some((i, s));
                         }
-                        if local.runs >= 64 {
+                        // Into the shared totals every 64 runs, or every half second for a slow bot.
+                        if local.runs >= 64 || merged.elapsed() >= Duration::from_millis(500) {
                             totals.lock().unwrap().merge(&local);
                             local = Totals::new();
+                            merged = Instant::now();
                         }
                     }
                     totals.lock().unwrap().merge(&local);
