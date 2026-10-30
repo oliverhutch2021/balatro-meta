@@ -47,6 +47,24 @@ MAKE = ["make", "--no-print-directory"]
 
 BASELINE = ["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "baseline", "--"]
 
+
+def learned_value_args(root: Path = ROOT) -> list[str]:
+    """The teacher's learned-value options at the weight that won most often in `make teacher-learned` (its
+    reports, results/value/teacher-w*.json; the lower weight on a tie), or none before that job has measured any
+    or without the network."""
+    best = None
+    for w in ("0.5", "1", "2"):
+        try:
+            rate = json.loads((root / "results" / "value" / f"teacher-w{w}.json").read_text()).get("win_rate")
+        except (OSError, ValueError, AttributeError):
+            continue
+        if isinstance(rate, (int, float)) and (best is None or rate > best[0]):
+            best = (rate, w)
+    if best is None or not (root / "models" / "value-1.bin").exists():
+        return []
+    return ["--value-net", "models/value-1.bin", "--value-weight", best[1]]
+
+
 # A step is (name, argv) or (name, argv, env). argv starting with a .py file runs with this Python;
 # anything else runs as a command. env adds variables for that step. Finished steps are skipped on a rerun.
 JOBS: dict[str, list[tuple]] = {
@@ -104,15 +122,17 @@ JOBS: dict[str, list[tuple]] = {
                    "--report", "results/value/value-1.json"]),
     ],
     # The network that learns to play (scripts/train_policy.py). First the teacher's moves: 10,000 runs on fresh seeds
-    # (seed base 303), every move it makes with what the screen showed.
+    # (seed base 303), every move it makes with what the screen showed. The teacher plays with the learned value at
+    # the weight that won most often in `make teacher-learned` (learned_value_args), so the network copies the
+    # strongest teacher there is.
     "teacher-moves": [
         ("build", [*MAKE, "build"]),
-        ("record", [*BASELINE, "--bot", "teacher", "--runs", "10000", "--seed", "303",
+        ("record", [*BASELINE, "--bot", "teacher", *learned_value_args(), "--runs", "10000", "--seed", "303",
                     "--record-moves", str(DATA / "moves-1"), "--out", "results/train/teacher-moves.json"]),
     ],
     # Then the network: it copies the teacher (imitate), plays 2,000 of the usual seeds to show where that leaves it,
     # learns by PPO on the GPU for 8 hours (resumable: Ctrl+C, then make train again), and plays 5,000 of the usual
-    # seeds (the teacher's own on the same seeds: results/value/teacher-plain.json).
+    # seeds (the teacher's own on the same seeds: results/value/teacher-plain.json and teacher-w*.json).
     "train": [
         ("build", [*MAKE, "build"]),
         ("setup-gpu", [*MAKE, "setup-gpu"]),

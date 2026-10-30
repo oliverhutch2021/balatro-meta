@@ -47,6 +47,23 @@ def test_steps_that_measure_nothing_are_not_logged(tmp_path):
     assert e["name"] == "Teacher" and e["value_net"] is None and e["value_weight"] is None and e["seed"] == 1
 
 
+def test_the_teacher_s_moves_are_recorded_with_its_best_learned_value(tmp_path):
+    assert jobs.learned_value_args(tmp_path) == [], "before make teacher-learned: the plain teacher"
+    folder = tmp_path / "results" / "value"
+    folder.mkdir(parents=True)
+    for w, rate in (("0.5", 0.37), ("1", 0.39), ("2", 0.39)):
+        (folder / f"teacher-w{w}.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": rate}))
+    assert jobs.learned_value_args(tmp_path) == [], "without the network: the plain teacher"
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "value-1.bin").write_bytes(b"BMVN")
+    assert jobs.learned_value_args(tmp_path) == ["--value-net", "models/value-1.bin", "--value-weight", "1"], \
+        "the weight that won most; the lower one on a tie"
+    (folder / "teacher-w2.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": 0.41}))
+    assert jobs.learned_value_args(tmp_path)[-1] == "2"
+    record = {n: a for n, a, *_ in jobs.JOBS["teacher-moves"]}["record"]
+    assert "--record-moves" in record and record[record.index("--bot") + 1] == "teacher"
+
+
 def test_every_learned_value_step_reports_where_the_log_finds_it():
     for job in ("teacher-data", "teacher-learned"):
         for name, argv, *_ in jobs.JOBS[job]:

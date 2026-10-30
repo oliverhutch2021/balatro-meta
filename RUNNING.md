@@ -239,7 +239,9 @@ make train
 ```
 
 - `make teacher-moves` (about 45 minutes): the teacher plays 10,000 new runs and every move it makes is
-  recorded with what the screen showed, in `~/.cache/balatro-meta/data/moves-1` (about 3 GB).
+  recorded with what the screen showed, in `~/.cache/balatro-meta/data/moves-1` (about 3 GB). It plays with
+  the learned value at the weight that won most often in `make teacher-learned`, so the network copies the
+  strongest teacher; its report names the weight.
 - `make train`: the network. It reads the screen as a set of objects (the cards in hand, the jokers in
   order, the consumables, the shop's cards, vouchers and packs, an open pack's cards) with a transformer,
   picks a kind of move the game allows, then which slot, where to move it and which cards; a second head
