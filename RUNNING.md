@@ -223,11 +223,34 @@ or `make learned` for all three in a row.
 `make watch` shows the first and third like `make teacher`. Then tell Claude. Each round of this learns from
 a better player: the next recording is made by the teacher with the network.
 
+## Step 7: the network that learns to play
+
+```
+make teacher-moves
+make train
+```
+
+- `make teacher-moves` (about 45 minutes): the teacher plays 10,000 new runs and every move it makes is
+  recorded with what the screen showed, in `~/.cache/balatro-meta/data/moves-1` (about 3 GB).
+- `make train`: the network. It reads the screen as a set of objects (the cards in hand, the jokers in
+  order, the consumables, the shop's cards, vouchers and packs, an open pack's cards) with a transformer,
+  picks a kind of move the game allows, then which slot, where to move it and which cards; a second head
+  estimates what the run will still earn. Its steps:
+  1. **imitate** (about 15 minutes on the GPU): it copies the teacher's moves. `results/train/imitate.json`
+     says how often it makes the teacher's exact move on runs it didn't learn from.
+  2. **eval-imitate** (a few minutes): it plays 2,000 of the usual seeds with its likeliest moves
+     (`results/train/eval-imitate.json`), to compare with the teacher on the same seeds.
+  3. **ppo** (8 hours): thousands of runs at once on all 16 threads, the network on the GPU, rewarded for
+     every blind beaten and for winning. `make watch` shows it live: runs played, the win rate of its last
+     2,000 runs, and its runs to replay. Ctrl+C stops it after saving; `make train` again carries on where
+     it stopped. The network is saved in `models/policy/` (not committed).
+  4. **eval**: it plays 5,000 of the usual seeds, the same ones as the teacher's in
+     `results/value/teacher-plain.json`, and the Progress panel adds it to the chart.
+
 ## Later steps
 
-Claude adds each one here when it's ready. Next: more rounds of the learned value, then training the
-bot's own network on the GPU (`make train`), which `make watch` will show the same way, with its learning
-curves.
+Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a
+search guided by the network at card-play time.
 
 ## If something goes wrong
 

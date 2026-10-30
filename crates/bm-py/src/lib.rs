@@ -8,7 +8,9 @@ use bm_core::blinds::{BlindSlot, SlotState};
 use bm_core::card::{Edition, Enhancement, Seal};
 use bm_core::content::BOOSTERS;
 use bm_core::env::{apply, legal_kinds, random_move, Env, MoveKind, XorShift, N_MOVE_KINDS};
-use bm_core::observe::{encode, encode_value, screen, OBS_LEN, VALUE_INPUT_VERSION, VALUE_LEN};
+use bm_core::observe::{
+    encode, encode_value, obs_layout, screen, OBS_LEN, VALUE_INPUT_VERSION, VALUE_LEN,
+};
 use bm_core::packs::PackCard;
 use bm_core::shop::RowItem;
 use bm_core::state::{Phase, Run, RunConfig};
@@ -36,6 +38,12 @@ fn value_net_forward(data: &[u8], x: Vec<f32>) -> PyResult<Vec<f32>> {
         )));
     }
     Ok(net.forward(&x))
+}
+
+/// The seed of run `i` of a job with seed base `base` (the baseline job's runs).
+#[pyfunction]
+fn run_seed(base: u64, i: u64) -> String {
+    bm_core::env::run_seed(base, i)
 }
 
 /// LuaJIT's `math.randomseed(d)` followed by `n` calls to `math.random()`.
@@ -180,8 +188,10 @@ impl VecEnv {
     }
 
     /// Apply one move per run: `kinds` (int64) and `args` (uint64). Writes
-    /// reward (float32), done, won and refused (uint8) and the ante (int32).
+    /// reward (float32), done, won and refused (uint8) and the ante (int32),
+    /// and, if given, whether the move beat a blind (`cleared`, uint8).
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (kinds, args, reward, done, won, refused, ante, cleared = None))]
     fn step(
         &mut self,
         py: Python<'_>,
@@ -192,6 +202,7 @@ impl VecEnv {
         won: &Bound<'_, PyAny>,
         refused: &Bound<'_, PyAny>,
         ante: &Bound<'_, PyAny>,
+        cleared: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<()> {
         let n = self.envs.len();
         let k: Vec<i64> = buffer::<i64>(kinds, n, "kinds")?.to_vec(py)?;
@@ -217,7 +228,29 @@ impl VecEnv {
         )?;
         buffer::<i32>(ante, n, "ante")?
             .copy_from_slice(py, &infos.iter().map(|x| x.ante).collect::<Vec<_>>())?;
+        if let Some(c) = cleared {
+            buffer::<u8>(c, n, "cleared")?.copy_from_slice(
+                py,
+                &infos.iter().map(|x| x.cleared as u8).collect::<Vec<_>>(),
+            )?;
+        }
         Ok(())
+    }
+
+    /// Start run `i` again on this seed (to play chosen seeds, such as another bot's).
+    fn set_seed(&mut self, i: usize, seed: &str) -> PyResult<()> {
+        let s = bm_rng::normalize_seed(seed)
+            .ok_or_else(|| PyValueError::new_err("not a valid seed"))?;
+        self.envs
+            .get_mut(i)
+            .ok_or_else(|| PyValueError::new_err("no such run"))?
+            .start(&s);
+        Ok(())
+    }
+
+    /// Each run's seed (to replay a run with `Game`).
+    fn seeds(&self) -> Vec<String> {
+        self.envs.iter().map(|e| e.run.cfg.seed.clone()).collect()
     }
 
     /// Which move kinds each run allows now (uint8, n x N_MOVE_KINDS).
@@ -751,6 +784,8 @@ fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("OBS_LEN", OBS_LEN)?;
     m.add("N_MOVE_KINDS", N_MOVE_KINDS)?;
     m.add("VALUE_LEN", VALUE_LEN)?;
+    m.add("OBS_LAYOUT", obs_layout())?;
+    m.add_function(wrap_pyfunction!(run_seed, m)?)?;
     m.add("VALUE_INPUT_VERSION", VALUE_INPUT_VERSION)?;
     m.add_function(wrap_pyfunction!(pseudohash, m)?)?;
     m.add_function(wrap_pyfunction!(value_net_forward, m)?)?;

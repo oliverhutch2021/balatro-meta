@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned watch watch-mod
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train watch watch-mod
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | expand -t 17
@@ -72,6 +72,12 @@ value-net:  ## Learned value 2/3: train the value network on the GPU from that r
 
 teacher-learned:  ## Learned value 3/3: the teacher without the network and with it at three weights, 5,000 runs each (about 1.5 hours)
 	$(PY) scripts/jobs.py run teacher-learned $(JOB_FLAGS)
+
+teacher-moves:  ## The network's lessons: the teacher plays 10,000 new runs, every move recorded (about 45 minutes)
+	$(PY) scripts/jobs.py run teacher-moves $(JOB_FLAGS)
+
+train:  ## The network: copies the teacher, then PPO on the GPU for 8 hours (resumable; make watch shows it)
+	$(PY) scripts/jobs.py run train $(JOB_FLAGS)
 
 learned:  ## The three learned-value jobs in a row (about 3.5 hours)
 	@$(MAKE) --no-print-directory teacher-data

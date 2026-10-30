@@ -353,6 +353,12 @@ pub struct Env {
     pub episodes: u64,
 }
 
+/// The seed of run `i` of a job with seed base `base` (the baseline job's runs, so other bots can play the
+/// very same seeds).
+pub fn run_seed(base: u64, i: u64) -> String {
+    SeedSampler::new(base.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ i).next_seed()
+}
+
 /// What one step returned.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct StepInfo {
@@ -362,6 +368,8 @@ pub struct StepInfo {
     pub refused: bool,
     /// Antes cleared in the episode that just ended (or so far).
     pub ante: i32,
+    /// The move beat a blind.
+    pub cleared: bool,
 }
 
 impl Env {
@@ -384,6 +392,13 @@ impl Env {
         self.episodes += 1;
     }
 
+    /// Start a new run on this seed (to play chosen seeds, such as another bot's).
+    pub fn start(&mut self, seed: &str) {
+        let mut cfg = RunConfig::new(seed);
+        cfg.stake = self.stake;
+        self.run = Run::new(cfg);
+    }
+
     /// Apply a move; at the end of an episode (lost, or won by beating
     /// ante 8) report it and start a new one. A refused move changes nothing.
     pub fn step(&mut self, kind: i64, arg: u64) -> StepInfo {
@@ -394,6 +409,7 @@ impl Env {
                 ..StepInfo::default()
             };
         };
+        let in_round = self.run.phase == Phase::Round;
         let refused = apply(&mut self.run, k, arg).is_err();
         let won = self.run.won;
         let done = won || self.run.phase == Phase::GameOver;
@@ -403,6 +419,7 @@ impl Env {
             won,
             refused,
             ante: self.run.ante,
+            cleared: in_round && (won || self.run.phase == Phase::RoundEval),
         };
         if done {
             self.reset();

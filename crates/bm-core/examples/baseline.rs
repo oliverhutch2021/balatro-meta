@@ -11,6 +11,9 @@
 //! between rounds (blind choice, shop, open packs) as the value network's input (sparse, half precision),
 //! labelled with how its run ended. Chunks of 250 runs in run order (`chunk-NNNNN-{idx,val,ptr,lab}.npy`
 //! and `-runs.json`), then `manifest.json` once every run is in, so the same seeds give the same files.
+//! `--record-moves DIR` keeps every move instead, for the network that learns to play (`make train`): each
+//! position's screen input (`observe::encode`), the move kinds it allowed and the bot's move
+//! (`-mov.npy`: kind, argument, legal kinds as bits), in the same chunks.
 //!
 //! With `BM_WATCH_DIR` set (the job runner sets it), it writes there for the live viewer:
 //! `progress.json` about once a second (runs, runs a second, win rate, final antes, what ended the
@@ -34,12 +37,11 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use bm_core::blinds::{BlindKind, SlotState};
-use bm_core::bm_rng::SeedSampler;
 use bm_core::bots::greedy_move;
-use bm_core::env::{apply, MoveKind};
+use bm_core::env::{apply, legal_kinds, run_seed, MoveKind};
 use bm_core::joker_data::{JokerKind, N_JOKERS};
 use bm_core::learned::{self, le_bytes, npy_bytes, Rows};
-use bm_core::observe::{encode_value, screen, VALUE_INPUT_VERSION, VALUE_LEN};
+use bm_core::observe::{encode, encode_value, screen, OBS_LEN, VALUE_INPUT_VERSION, VALUE_LEN};
 use bm_core::packs::PackCard;
 use bm_core::poker::HandType;
 use bm_core::shop::RowItem;
@@ -138,10 +140,6 @@ fn blind_name(kind: BlindKind) -> &'static str {
     }
 }
 
-fn run_seed(base: u64, i: u64) -> String {
-    SeedSampler::new(base.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ i).next_seed()
-}
-
 /// A bot: its move for a run (it sees only the screen and fair copies).
 type Bot = fn(&Run, u64) -> (MoveKind, u64);
 
@@ -192,11 +190,16 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot) -> RunSummary {
         ..RunSummary::default()
     };
     let mut input = Vec::with_capacity(VALUE_LEN);
+    let moves = RECORD_MODE.load(Ordering::Relaxed) == 2;
     let mut step = 0u64;
     while run.phase != Phase::GameOver && !run.won && step < MAX_STEPS {
-        if let Some(r) = s.recorded.as_mut() {
-            if learned::values_here(&run) {
-                encode_value(&screen(&run), &mut input);
+        let keep_this = match s.recorded.as_mut() {
+            Some(r) if moves || learned::values_here(&run) => {
+                if moves {
+                    encode(&screen(&run), &mut input);
+                } else {
+                    encode_value(&screen(&run), &mut input);
+                }
                 r.rows.push(&input);
                 r.at.push([
                     step as f32,
@@ -204,9 +207,20 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot) -> RunSummary {
                     run.ante as f32,
                     stage_now(&run),
                 ]);
+                true
+            }
+            _ => false,
+        };
+        let (k, a) = bot(&run, salt << 20 | step);
+        if keep_this && moves {
+            let legal = legal_kinds(&run)
+                .iter()
+                .enumerate()
+                .fold(0i64, |m, (i, &ok)| m | (i64::from(ok) << i));
+            if let Some(r) = s.recorded.as_mut() {
+                r.moves.push([k as i64, a as i64, legal]);
             }
         }
-        let (k, a) = bot(&run, salt << 20 | step);
         match k {
             MoveKind::Buy | MoveKind::BuyAndUse => {
                 if let Some(slot) = run.shop.as_ref().and_then(|sh| sh.row.get(a as usize)) {
@@ -323,7 +337,12 @@ const LABELS: [&str; 8] = [
 struct Recorded {
     rows: Rows,
     at: Vec<[f32; 4]>,
+    /// With `--record-moves`: each position's move (kind, argument) and the kinds it allowed (bits).
+    moves: Vec<[i64; 3]>,
 }
+
+/// What `--record` keeps: 1 the positions the teacher values, 2 every move.
+static RECORD_MODE: AtomicU64 = AtomicU64::new(0);
 
 /// The phase as `observe::encode` numbers it.
 fn phase_code(p: Phase) -> f32 {
@@ -412,9 +431,13 @@ impl Recorder {
         runs.sort_by_key(|r| r.run);
         let mut rows = Rows::default();
         let mut lab: Vec<f32> = Vec::new();
+        let mut mov: Vec<i64> = Vec::new();
         let mut list = Vec::new();
         for r in &runs {
             rows.extend(&r.rec.rows);
+            for m in &r.rec.moves {
+                mov.extend_from_slice(m);
+            }
             for at in &r.rec.at {
                 lab.extend_from_slice(&[
                     r.run as f32,
@@ -472,6 +495,14 @@ impl Recorder {
                 format!("[\n{}\n]\n", list.join(",\n")).into_bytes(),
             ),
         ];
+        let mut files = Vec::from(files);
+        if RECORD_MODE.load(Ordering::Relaxed) == 2 {
+            assert_eq!(mov.len(), 3 * n, "a move for every recorded position");
+            files.push((
+                "mov.npy",
+                npy_bytes("<i8", &[n, 3], &le_bytes(&mov, i64::to_le_bytes)),
+            ));
+        }
         for (part, bytes) in files {
             let path = name(part);
             let tmp = path.with_extension("tmp");
@@ -485,10 +516,15 @@ impl Recorder {
 
     fn manifest(&self, about: &str) {
         let labels: Vec<String> = LABELS.iter().map(|l| esc(l)).collect();
+        let (input, inputs) = if RECORD_MODE.load(Ordering::Relaxed) == 2 {
+            ("screen", OBS_LEN)
+        } else {
+            ("value", VALUE_LEN)
+        };
         let text = format!(
-            "{{\n \"format\": 1,\n \"input_version\": {VALUE_INPUT_VERSION},\n \"inputs\": {VALUE_LEN},\n \
-             \"runs\": {},\n \"rows\": {},\n \"chunks\": {},\n \"runs_per_chunk\": {RUNS_PER_CHUNK},\n \
-             \"labels\": [{}],\n{about}\n}}\n",
+            "{{\n \"format\": 1,\n \"input\": \"{input}\",\n \"input_version\": {VALUE_INPUT_VERSION},\n \
+             \"inputs\": {inputs},\n \"runs\": {},\n \"rows\": {},\n \"chunks\": {},\n \
+             \"runs_per_chunk\": {RUNS_PER_CHUNK},\n \"labels\": [{}],\n{about}\n}}\n",
             self.runs,
             self.rows,
             self.chunks,
@@ -931,7 +967,13 @@ fn main() {
     // How each run ended, in seed order (for paired comparisons), when there aren't too many runs.
     let stages: Option<Mutex<Vec<u8>>> =
         (target <= 50_000).then(|| Mutex::new(vec![b'?'; target as usize]));
-    let record_dir = opt("--record");
+    let (record_dir, mode) = match (opt("--record"), opt("--record-moves")) {
+        (Some(d), None) => (Some(d), 1),
+        (None, Some(d)) => (Some(d), 2),
+        (None, None) => (None, 0),
+        _ => panic!("--record or --record-moves, not both"),
+    };
+    RECORD_MODE.store(mode, Ordering::Relaxed);
     RECORD.store(record_dir.is_some(), Ordering::Relaxed);
     let recorder = record_dir.map(|d| Mutex::new(Recorder::new(PathBuf::from(d), target)));
     let watch = std::env::var("BM_WATCH_DIR")

@@ -706,6 +706,33 @@ fn write_booster(f: &mut [f32], b: BoosterId, cost: i64) {
     f[8] = cost as f32 / 5.0;
 }
 
+/// Where each part of `encode`'s output lies, for a network that reads the
+/// screen as objects: (name, start, slots, floats per slot). Parts with one
+/// slot are global features.
+pub fn obs_layout() -> Vec<(&'static str, usize, usize, usize)> {
+    let mut at = 0;
+    let mut out = Vec::new();
+    let mut part = |name: &'static str, slots: usize, width: usize| {
+        out.push((name, at, slots, width));
+        at += slots * width;
+    };
+    part("global", 1, GLOBAL_FEATURES);
+    part("hand_levels", 12, 6);
+    part("hand", MAX_HAND, CARD_FEATURES);
+    part("jokers", MAX_JOKERS, JOKER_FEATURES);
+    part("deck", 1, DECK_FEATURES);
+    part("consumables", MAX_CONSUMABLES, CONSUMABLE_FEATURES);
+    part("vouchers", 1, N_VOUCHERS);
+    part("shop_row", MAX_ROW, ITEM_FEATURES);
+    part("shop_vouchers", MAX_SHOP_VOUCHERS, 2 + N_VOUCHERS);
+    part("boosters", 2, BOOSTER_FEATURES);
+    part("pack_booster", 1, BOOSTER_FEATURES + 1);
+    part("pack", MAX_PACK, ITEM_FEATURES);
+    part("tail", 1, 8 + N_CONSUMABLES);
+    debug_assert_eq!(at, OBS_LEN);
+    out
+}
+
 /// Length of the value network's input (`encode_value`).
 pub const VALUE_LEN: usize = OBS_LEN + 3 * N_JOKERS;
 

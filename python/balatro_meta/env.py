@@ -55,7 +55,9 @@ class VecEnv:
         self._won = np.zeros(n, np.uint8)
         self._refused = np.zeros(n, np.uint8)
         self._ante = np.zeros(n, np.int32)
+        self._cleared = np.zeros(n, np.uint8)
         self._hand = np.zeros(n, np.int32)
+        self.cleared = np.zeros(n, bool)  # whether each run's last move beat a blind
 
     def observe(self) -> np.ndarray:
         """The bot's input for every run (a view reused by the next call)."""
@@ -80,7 +82,8 @@ class VecEnv:
     def step(self, kinds: np.ndarray, args: np.ndarray):
         kinds = np.ascontiguousarray(kinds, dtype=np.int64)
         args = np.ascontiguousarray(args, dtype=np.uint64)
-        self._env.step(kinds, args, self._reward, self._done, self._won, self._refused, self._ante)
+        self._env.step(kinds, args, self._reward, self._done, self._won, self._refused, self._ante, self._cleared)
+        self.cleared = self._cleared.astype(bool)
         return (
             self._reward.copy(),
             self._done.astype(bool),
@@ -88,6 +91,14 @@ class VecEnv:
             self._refused.astype(bool),
             self._ante.copy(),
         )
+
+    def set_seed(self, i: int, seed: str) -> None:
+        """Start run `i` again on this seed."""
+        self._env.set_seed(i, seed)
+
+    def seeds(self) -> list[str]:
+        """Each run's seed now."""
+        return self._env.seeds()
 
     def screen(self, i: int) -> dict:
         """What run `i` shows on screen (for viewers and debugging)."""

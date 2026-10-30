@@ -103,6 +103,28 @@ JOBS: dict[str, list[tuple]] = {
         ("train", ["scripts/train_value.py", "--data", str(DATA / "value-1"), "--out", "models/value-1.bin",
                    "--report", "results/value/value-1.json"]),
     ],
+    # The network that learns to play (scripts/train_policy.py). First the teacher's moves: 10,000 runs on fresh seeds
+    # (seed base 303), every move it makes with what the screen showed.
+    "teacher-moves": [
+        ("build", [*MAKE, "build"]),
+        ("record", [*BASELINE, "--bot", "teacher", "--runs", "10000", "--seed", "303",
+                    "--record-moves", str(DATA / "moves-1"), "--out", "results/train/teacher-moves.json"]),
+    ],
+    # Then the network: it copies the teacher (imitate), plays 2,000 of the usual seeds to show where that leaves it,
+    # learns by PPO on the GPU for 8 hours (resumable: Ctrl+C, then make train again), and plays 5,000 of the usual
+    # seeds (the teacher's own on the same seeds: results/value/teacher-plain.json).
+    "train": [
+        ("build", [*MAKE, "build"]),
+        ("setup-gpu", [*MAKE, "setup-gpu"]),
+        ("imitate", ["scripts/train_policy.py", "imitate", "--data", str(DATA / "moves-1"),
+                     "--out", "models/policy/imitate.pt", "--report", "results/train/imitate.json"]),
+        ("eval-imitate", ["scripts/train_policy.py", "eval", "--model", "models/policy/imitate.pt", "--runs", "2000",
+                          "--seed", "1", "--out", "results/train/eval-imitate.json"]),
+        ("ppo", ["scripts/train_policy.py", "ppo", "--init", "models/policy/imitate.pt", "--dir", "models/policy",
+                 "--hours", "8", "--report", "results/train/ppo.json"]),
+        ("eval", ["scripts/train_policy.py", "eval", "--model", "models/policy/latest.pt", "--runs", "5000",
+                  "--seed", "1", "--out", "results/train/eval.json"]),
+    ],
     # The teacher without the network and with it at three weights, on the same 5,000 seeds (the first of
     # `make teacher`'s): each report's run_stages compare them run by run.
     "teacher-learned": [
