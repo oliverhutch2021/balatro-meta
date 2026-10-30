@@ -157,6 +157,37 @@ impl Plan {
     }
 }
 
+/// The plans this hand allows, most promising first for this run: by how far each shape is built (as
+/// `Plan::options`), and by what the jokers pay for in the cards it keeps (a flush in Ancient Joker's or
+/// Bloodstone's suit, Kings with Baron, copies of The Idol's card...). For the value's quick players, so they
+/// chase what the run's jokers pay for as a player would.
+pub(crate) fn options_for(run: &Run) -> Vec<Plan> {
+    let hand = seen(run);
+    let mut plans = Plan::options(&hand);
+    let built = |p: Plan| -> f64 {
+        let n = p.keep(&hand).count_ones() as f64;
+        match p {
+            Plan::Best => 0.0,
+            Plan::Flush(_) | Plan::Straight(_) => 2.0 * n,
+            Plan::Kind(_) => 2.0 * n + 1.0,
+            Plan::House(..) => 9.0,
+        }
+    };
+    let pays = |p: Plan| -> f64 {
+        if p == Plan::Best {
+            return 0.0;
+        }
+        let keep = p.keep(&hand);
+        (0..run.hand.len())
+            .filter(|&i| keep >> i & 1 == 1)
+            .map(|i| crate::value::joker_bonus(run, run.card(run.hand[i])) / 8.0)
+            .sum()
+    };
+    let mut scored: Vec<(f64, Plan)> = plans.drain(..).map(|p| (built(p) + pays(p), p)).collect();
+    scored.sort_by(|a, b| b.0.total_cmp(&a.0));
+    scored.into_iter().map(|(_, p)| p).collect()
+}
+
 /// The best hand among the usual shapes (each pair, trips, two pair, full house, flush, straight, the high
 /// card), scored as the game would score it now: (score, mask). Quicker than trying every subset.
 pub fn quick_best(run: &Run) -> (f64, u64) {

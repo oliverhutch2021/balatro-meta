@@ -128,7 +128,7 @@ pub fn play_out(start: &Run, shape: bool) -> (f64, Vec<Played>) {
         let best = quick_best(&c);
         let mv = if c.discards_left > 0 {
             let plan = if shape {
-                Plan::options(&seen(&c))
+                crate::planner::options_for(&c)
                     .first()
                     .copied()
                     .unwrap_or(Plan::Best)
@@ -488,7 +488,7 @@ fn rounds_left(run: &Run) -> f64 {
 }
 
 /// Log scoring power a dollar buys now: less late (a shop adds less to a big score), more with vouchers
-/// that make shops cheaper or wider, less with no joker slot free (a new joker then replaces one).
+/// that make shops cheaper or wider.
 pub fn buying_power(run: &Run) -> f64 {
     use crate::content::VoucherKind::*;
     let has = |v: crate::content::VoucherKind| run.vouchers[v.index()];
@@ -516,14 +516,9 @@ pub fn buying_power(run: &Run) -> f64 {
             shops *= f;
         }
     }
-    let used = run
-        .jokers
-        .iter()
-        .filter(|j| j.edition != crate::card::Edition::Negative)
-        .count() as i32;
-    let free = (run.joker_slots - used).max(0) as f64;
-    let slots = 0.65 + 0.35 * free.min(1.0) + 0.05 * (free - 1.0).max(0.0);
-    BUYING_POWER * (1.0 - 0.08 * (run.ante.clamp(1, 8) - 1) as f64) * shops * slots
+    // (Joker slots don't change it: a full row made all money worth a third less, so filling the last slot
+    // looked like a loss and selling a joker like a gain. A joker's own power decides that.)
+    BUYING_POWER * (1.0 - 0.08 * (run.ante.clamp(1, 8) - 1) as f64) * shops
 }
 
 /// Scoring power that `dollars` will buy (each further dollar buying less).
@@ -1078,7 +1073,10 @@ fn deal_best(
             break;
         }
         let hand = seen(c);
-        let plan = Plan::options(&hand).first().copied().unwrap_or(Plan::Best);
+        let plan = crate::planner::options_for(c)
+            .first()
+            .copied()
+            .unwrap_or(Plan::Best);
         let keep = match plan {
             Plan::Best => now.1,
             p => p.keep(&hand),
@@ -1523,6 +1521,30 @@ mod tests {
         assert_eq!(f.deck, 0.0, "measured by the breakdown, not the table");
         let b = breakdown(&with, 3).unwrap();
         assert!(b.flows.deck > 0.0);
+    }
+
+    #[test]
+    fn a_fifth_joker_is_worth_its_price_when_rich() {
+        // Four jokers in five slots and $40: a +4 mult joker for $5 fills the last slot. Filling it must
+        // not cost all the money held a share of its worth.
+        let mut run = first_shop("VALUE6");
+        run.jokers.clear();
+        for k in [
+            JokerKind::JollyJoker,
+            JokerKind::Banner,
+            JokerKind::GreenJoker,
+            JokerKind::RideTheBus,
+        ] {
+            run.add_joker(k);
+        }
+        run.joker_slots = 5;
+        run.money = 40;
+        let base = value(&run, 11);
+        let mut bought = run.clone();
+        bought.add_joker(JokerKind::Joker);
+        bought.money -= 5;
+        let v = value(&bought, 11);
+        assert!(v > base, "the fifth joker: {base} -> {v}");
     }
 
     #[test]

@@ -1594,10 +1594,12 @@ fn weakest_jokers(run: &Run, vs: u64, n: usize) -> Vec<usize> {
             .map(|i| {
                 let mut c = run.clone();
                 c.jokers.remove(i);
+                // Full estimates: a sale rests on this order, and quick ones are noisy enough to put
+                // a strong joker last.
                 let without = if run.phase == Phase::Round {
-                    crate::value::value_in_round(&c, vs, crate::value::QUICK)
+                    crate::value::value_in_round(&c, vs, crate::value::SAMPLES)
                 } else {
-                    crate::value::quick(&c, vs)
+                    crate::value::value(&c, vs)
                 };
                 (i, without)
             })
@@ -2461,6 +2463,59 @@ mod tests {
         assert!((search(&best, 0.2, true) - 10.6).abs() < 1e-6);
         // Too dear to search: no better than one look.
         assert!((search(&best, 2.0, true) - 31.0 / 3.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_shop_with_a_free_slot_buys_the_strong_joker_and_keeps_its_own() {
+        // Ante 2, $12, four jokers in five slots (Golden Joker, Ancient Joker, Shoot the Moon, Egg); the
+        // shop has Reserved Parking and Bloodstone. Filling the last slot used to look like a loss and a
+        // sale like a gain: it rerolled, bought a weak joker and sold Ancient Joker.
+        use crate::jokers::Joker;
+        use crate::shop::RowSlot;
+        let mut run = Run::new(RunConfig::new("SHOPCASE"));
+        let mut step = 0;
+        while !(run.phase == Phase::Shop && run.ante == 2) {
+            let (k, a) = teacher_move(&run, step);
+            apply(&mut run, k, a).unwrap();
+            step += 1;
+        }
+        run.jokers.clear();
+        for k in [
+            JokerKind::GoldenJoker,
+            JokerKind::AncientJoker,
+            JokerKind::ShootTheMoon,
+            JokerKind::Egg,
+        ] {
+            run.add_joker(k);
+        }
+        run.joker_slots = 5;
+        run.money = 12;
+        let shop = run.shop.as_mut().unwrap();
+        shop.row = vec![
+            RowSlot {
+                item: RowItem::Joker(Joker::new(JokerKind::ReservedParking, 9001)),
+                cost: 6,
+                couponed: false,
+            },
+            RowSlot {
+                item: RowItem::Joker(Joker::new(JokerKind::Bloodstone, 9002)),
+                cost: 7,
+                couponed: false,
+            },
+        ];
+        shop.boosters.clear();
+        shop.vouchers.clear();
+        for s in 0..12 {
+            let (k, a) = teacher_move(&run, 5 << 20 | s);
+            if k == MoveKind::LeaveShop {
+                break;
+            }
+            assert_ne!(k, MoveKind::SellJoker, "nothing to sell here");
+            apply(&mut run, k, a).unwrap();
+        }
+        let kinds: Vec<JokerKind> = run.jokers.iter().map(|j| j.kind).collect();
+        assert!(kinds.contains(&JokerKind::AncientJoker), "{kinds:?}");
+        assert!(kinds.contains(&JokerKind::Bloodstone), "{kinds:?}");
     }
 
     #[test]
