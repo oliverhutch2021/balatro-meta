@@ -1,0 +1,28 @@
+{
+ "job": "teacher-moves",
+ "commit": "7ce6587c6e8bf4fed4d5cb8c21e83d2dda11883e",
+ "started": "2026-10-30T19:42:51+00:00",
+ "finished": "2026-10-30T20:20:51+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   16.3,
+   16.7,
+   16.3
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 1,
+  "record": 2278
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "record": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin --value-weight 1 --runs 10000 --seed 303 --record-moves ~/.cache/balatro-meta/data/moves-1 --out results/train/teacher-moves.json"
+ }
+}
