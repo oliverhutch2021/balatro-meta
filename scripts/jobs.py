@@ -34,7 +34,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SYNC = ROOT / ".sync"
 STATE = SYNC / "state"
 LOGS = SYNC / "logs"
-WATCH = SYNC / "watch"  # what the live viewer will read (later)
+WATCH = SYNC / "watch"  # what the live viewer reads (make watch)
 PY = sys.executable
 MAKE = ["make", "--no-print-directory"]
 
@@ -63,6 +63,13 @@ JOBS: dict[str, list[tuple]] = {
                           "20", "0", "results/bench/engine.json"]),
         ("python-speed", ["scripts/bench_env.py", "--n", "4096", "--seconds", "20",
                           "--out", "results/bench/python.json"]),
+    ],
+    # The number to beat: the greedy bot plays a million fresh-seed runs (Red Deck, White Stake) on all
+    # threads. `make watch` shows it live: runs a second, win rate, how runs end, jokers and hands.
+    "baseline": [
+        ("build", [*MAKE, "build"]),
+        ("greedy", ["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "baseline", "--",
+                    "--runs", "1000000", "--seed", "1", "--out", "results/baseline/greedy.json"]),
     ],
 }
 

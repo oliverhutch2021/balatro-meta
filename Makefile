@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench watch watch-dry watch-mod
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline watch watch-mod
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | expand -t 14
@@ -58,15 +58,16 @@ rng-check:  ## Phase 1 gate: the Rust RNG against LuaJIT and the game's own lua5
 bench:  ## Phase 1 gate: engine speed on all threads, in Rust and through Python (about two minutes)
 	$(PY) scripts/jobs.py run bench $(JOB_FLAGS)
 
+baseline:  ## The number to beat: the greedy bot plays a million runs on all threads (about 15 minutes; make watch shows it)
+	$(PY) scripts/jobs.py run baseline $(JOB_FLAGS)
+
 SPEED ?= 1
 PORT ?= 8790
-watch: build  ## Watch the bots play in your own Balatro, live in your browser with stats around it (setup: RUNNING.md)
-	$(PY) scripts/watch.py --speed $(SPEED) --port $(PORT)
+CHECKS ?= 1
+watch: build  ## Watch the running job live in your browser: its numbers and one run up close (setup: RUNNING.md)
+	$(PY) scripts/watch.py --speed $(SPEED) --port $(PORT) $(if $(filter 0,$(CHECKS)),--no-checks,)
 
-watch-dry:  ## Replay runs in the engine only, printed here (no game, no browser)
-	$(PY) scripts/watch.py --dry --runs 3
-
-watch-mod:  ## (Re)install the viewer's companion mod into your Balatro Mods folder (make watch does it too)
+watch-mod:  ## (Re)install the companion mod into your Balatro Mods folder (make watch does it too)
 	$(PY) scripts/watch.py --install-mod
 
 rng-game:  ## (dev) Only the game-runtime part of rng-check, outside the job runner

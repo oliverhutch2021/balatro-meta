@@ -36,13 +36,18 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   built), `env.rs` (moves as kind + argument), `bots.rs`, `scenario.rs`
   (building test positions).
 - `crates/bm-py`: Python bindings (`VecEnv`, `Game`); `python/balatro_meta`.
-- `scripts/watch.py` (BalatroBot link, engine-vs-game comparison),
-  `scripts/viewer.py` (the viewer's server and driver), `viewer/index.html`
-  (the page) and `mods/balatro_meta_watch` (the companion mod: input lock,
-  live speed, a live BMP video stream on 127.0.0.1:BalatroBot port + 1000,
-  snapshots on request, idle signal): `make watch` shows the user's own
-  Balatro playing in the browser with live stats, and checks every move.
-  The game's pictures never enter the repo (memory and `.sync/` only).
+- Jobs (`scripts/jobs.py`, like monopoly-strategy's) leave live files in
+  `.sync/watch/<job>/`: `progress.json` and `samples/` (runs to replay:
+  `best-*.json`, the job's 30 best so far, and `typical-*.json`).
+  `make baseline` is `crates/bm-core/examples/baseline.rs` (the greedy bot
+  on all threads). `make watch` is `scripts/viewer.py` (replays samples
+  with the engine, best first; serves `viewer/index.html`, which draws the
+  table itself) plus `scripts/checker.py` (the real-game checks: a hidden
+  BalatroBot game on port 12350, compared after every move using
+  `scripts/watch.py`'s BalatroBot link and comparison). The companion mod
+  `mods/balatro_meta_watch` (idle signal, run-setup deck for `start`,
+  optional lock and speed) keeps its files in
+  `balatro_meta/<BalatroBot port>/` in the game's save folder.
 - `reference/`: LuaJIT scripts that produce reference fixtures.
 - `tests/fixtures/`: committed fixtures the Rust tests compare against.
 - `rules/`: rules notes, one file per area, with sources.
@@ -55,8 +60,10 @@ tags, rounds, scoring, all 150 jokers, end of round and cash-out, the shop
 consumables, card creation with its streams, and the seals that make
 consumables. Per-frame joker values (Joker Stencil, Swashbuckler, Throwback,
 the deck tallies) are refreshed just before each hand is scored
-(`Run::refresh_frame_values`). Not yet checked against the real game: that is
-phase 3 (`make watch`). Open questions are the UNSURE sections of the notes.
+(`Run::refresh_frame_values`). The real-game check (phase 3) runs in the
+background of `make watch`; no rule difference found so far. Open questions are
+the UNSURE sections of the notes. Next: `make train` (a neural network, PPO,
+on the GPU), shown by `make watch` like the baseline.
 
 ## Commands
 

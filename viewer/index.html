@@ -9,10 +9,11 @@
 <style>
 :root {
   --felt: #173b45; --felt-2: #0c222a; --ink: #1f1b15; --muted: #6d665a;
-  --panel: #fbf8ef; --panel-2: #f1ebdc; --line: #e3dccb;
-  --chips: #2b7fd6; --mult: #e0453a; --money: #e8a92a; --good: #2c8a57; --bad: #c4452f; --gold: #c9962a;
+  --panel: #fbf8ef; --line: #e3dccb;
+  --chips: #2b7fd6; --mult: #e0453a; --money: #e8a92a; --good: #2c8a57; --bad: #c4452f;
   --display: 'Oswald', 'Arial Narrow', 'Roboto Condensed', sans-serif;
   --body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --table: #2f5d4f; --table-2: #1f4338;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -31,18 +32,18 @@ header .where { color: #a9c2c6; font-size: 13px; }
 .bad .dot { background: #ff6b5e; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(76,208,125,.7); } 70% { box-shadow: 0 0 0 9px rgba(76,208,125,0); }
   100% { box-shadow: 0 0 0 0 rgba(76,208,125,0); } }
-.layout { display: grid; grid-template-columns: 310px minmax(0, 1fr) 360px; grid-template-areas: "left centre right";
+.layout { display: grid; grid-template-columns: 300px minmax(0, 1fr) 350px; grid-template-areas: "left centre right";
   gap: 16px; padding: 0 16px 10px; align-items: start; }
 .left { grid-area: left; } .centre { grid-area: centre; } .right { grid-area: right; }
 .left, .right { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .centre { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 0; position: sticky; top: 8px; }
 @media (max-width: 1400px) {
-  .layout { grid-template-columns: minmax(0, 1fr) 360px; grid-template-areas: "centre right" "left right"; }
-  .left { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; }
+  .layout { grid-template-columns: minmax(0, 1fr) 350px; grid-template-areas: "centre right" "left right"; }
+  .left { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); align-items: start; }
   .centre { position: static; }
 }
 @media (max-width: 900px) {
-  .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "centre" "right" "left"; }
+  .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "centre" "right" "left"; padding: 0 8px 10px; }
 }
 .card { background: var(--panel); border-radius: 12px; padding: 12px 14px; box-shadow: 0 6px 18px rgba(0,0,0,.25); min-width: 0; }
 .card h2 { margin: 0 0 8px; font-family: var(--display); font-weight: 700; font-size: 12.5px; letter-spacing: .09em;
@@ -50,29 +51,128 @@ header .where { color: #a9c2c6; font-size: 13px; }
 .card h2 small { font-family: var(--body); font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 11.5px; }
 .counter { font-family: var(--display); font-weight: 700; font-size: 34px; line-height: 1; font-variant-numeric: tabular-nums; }
 .sub { color: var(--muted); font-size: 12px; margin-top: 4px; line-height: 1.35; }
-.steps { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; max-height: 54px; overflow-y: auto; }
+.steps { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .step { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #ece6d6; color: var(--muted); }
 .step.done { background: #d8eedf; color: #23633e; }
 .step.now { background: var(--ink); color: #fff; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 12.5px; margin-top: 8px; }
 .kv b { font-weight: 600; } .kv span { color: var(--muted); }
-/* the game */
-.screen { position: relative; width: 100%; max-width: calc((100vh - 130px) * 16 / 9); aspect-ratio: 16 / 9;
-  border-radius: 14px; overflow: hidden; background: #071418; box-shadow: 0 14px 30px rgba(0,0,0,.45); }
-.screen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block;
-  user-select: none; pointer-events: none; }
-.screen #still { background: #071418; }
-.screen .msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: #dfe9ea;
-  padding: 24px; background: rgba(7,20,24,.78); }
-.screen .msg h3 { margin: 0 0 6px; font-family: var(--display); letter-spacing: .06em; font-size: 26px; }
-.screen .msg p { margin: 0 auto; max-width: 560px; color: #a9c2c6; font-size: 13.5px; line-height: 1.45; }
-.screen .msg button { margin-top: 12px; }
-.banner { position: absolute; left: 12px; top: 12px; display: flex; gap: 8px; align-items: center; padding: 6px 12px;
-  border-radius: 999px; background: rgba(12,34,42,.86); color: #fff; font-size: 12.5px; font-weight: 600; }
-.banner button { padding: 3px 10px; font-size: 12px; }
-.mismatchbar { position: absolute; left: 12px; right: 12px; bottom: 12px; padding: 10px 14px; border-radius: 10px;
-  background: rgba(196,69,47,.95); color: #fff; font-size: 13px; line-height: 1.35; }
-.mismatchbar b { font-family: var(--display); letter-spacing: .05em; }
+.big2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.big2 div { background: #fff; border: 1px solid var(--line); border-radius: 9px; padding: 6px 8px; }
+.big2 b { display: block; font-family: var(--display); font-size: 22px; font-variant-numeric: tabular-nums; }
+.big2 span { font-size: 11px; color: var(--muted); }
+.mini-h { margin: 12px 0 5px; font-family: var(--display); font-weight: 700; font-size: 11.5px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; }
+.mini-h small { font-family: var(--body); font-weight: 400; letter-spacing: 0; text-transform: none; }
+.bars { display: grid; gap: 3px; }
+.barrow { display: grid; grid-template-columns: minmax(0, 118px) minmax(0, 1fr) 46px; gap: 6px; align-items: center; font-size: 11.5px; }
+.barrow .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.barrow .tr { height: 8px; background: #ece6d6; border-radius: 4px; overflow: hidden; }
+.barrow .tr i { display: block; height: 100%; background: var(--chips); border-radius: 4px; }
+.barrow .tr i.red { background: var(--mult); } .barrow .tr i.gold { background: var(--money); }
+.barrow .pct { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.log { margin: 0; padding: 8px 10px; background: #1f1b15; color: #e9e3d3; border-radius: 8px; font: 11px/1.45 ui-monospace,
+  'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow-y: auto; }
+.empty { color: var(--muted); font-size: 12px; }
+/* ---------------------------------------------------------------- the table */
+.tablewrap { width: 100%; max-width: calc((100vh - 120px) * 16 / 9); }
+.tbl { container-type: inline-size; position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden;
+  background: radial-gradient(ellipse at 60% 45%, var(--table) 0%, var(--table-2) 80%); box-shadow: 0 14px 30px rgba(0,0,0,.45);
+  display: grid; grid-template-columns: 23% 1fr; color: #f3efe2; }
+.ts { background: rgba(10,22,20,.55); padding: 1.4cqw 1.2cqw; display: flex; flex-direction: column; gap: .9cqw; min-height: 0; }
+.ts .box { background: rgba(0,0,0,.28); border-radius: .9cqw; padding: .8cqw 1cqw; }
+.ts .bname { font-family: var(--display); font-weight: 700; font-size: 2.1cqw; letter-spacing: .04em; line-height: 1.1; }
+.ts .bname.boss { color: #ff8a6b; }
+.ts .lab { font-size: 1.05cqw; color: #b9c7bf; text-transform: uppercase; letter-spacing: .08em; }
+.ts .target { font-family: var(--display); font-weight: 700; font-size: 2.6cqw; color: #ff8a6b; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.ts .reward { font-size: 1.15cqw; color: var(--money); }
+.ts .score { font-family: var(--display); font-weight: 700; font-size: 3.1cqw; line-height: 1; font-variant-numeric: tabular-nums; }
+.ts .handline { font-family: var(--display); font-size: 1.7cqw; min-height: 2.2cqw; }
+.ts .handline small { font-family: var(--body); font-size: 1.05cqw; color: #b9c7bf; }
+.ts .pair { display: grid; grid-template-columns: 1fr 1fr; gap: .7cqw; }
+.ts .pair .box { text-align: center; padding: .5cqw; }
+.ts .pair b { display: block; font-family: var(--display); font-size: 2.6cqw; line-height: 1.1; }
+.ts .hands b { color: #6cb4ff; } .ts .disc b { color: #ff7a6b; }
+.ts .money { font-family: var(--display); font-weight: 700; font-size: 3.2cqw; color: #ffc94d; text-align: center; }
+.tm { display: grid; grid-template-rows: auto 1fr auto; padding: 1.2cqw 1.4cqw 1cqw; gap: .8cqw; min-height: 0; min-width: 0; }
+.tm-top { display: flex; gap: 1.2cqw; align-items: flex-start; justify-content: space-between; min-width: 0; }
+.slots { display: flex; gap: .6cqw; flex-wrap: nowrap; align-items: flex-start; min-height: 9.6cqw; padding: .5cqw;
+  border-radius: .8cqw; background: rgba(0,0,0,.18); position: relative; min-width: 0; }
+.slots .cap { position: absolute; right: .6cqw; bottom: -1.9cqw; font-size: 1.05cqw; color: #b9c7bf; }
+.tm-mid { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1cqw; min-height: 0; text-align: center; }
+.tm-hand { display: flex; align-items: flex-end; justify-content: center; gap: .5cqw; min-height: 10cqw; position: relative; }
+.deckinfo { position: absolute; right: 0; bottom: 0; font-size: 1.1cqw; color: #b9c7bf; text-align: right; }
+.title { font-family: var(--display); font-weight: 700; font-size: 2.4cqw; letter-spacing: .05em; }
+.subt { font-size: 1.3cqw; color: #cfd9d2; }
+.row { display: flex; gap: 1cqw; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+/* playing cards */
+.pc { --w: 6.2cqw; width: var(--w); height: calc(var(--w) * 1.4); border-radius: calc(var(--w) * .1); background: #fdfbf4;
+  border: 1px solid #cfc7b2; box-shadow: 0 .25cqw 0 rgba(0,0,0,.35); position: relative; color: #23201a; flex: none;
+  overflow: hidden; font-family: var(--display); }
+.pc.sm { --w: 4.6cqw; }
+.pc.red { color: #c8332a; }
+.pc .rk { position: absolute; left: 7%; top: 4%; font-size: calc(var(--w) * .3); line-height: .95; font-weight: 700; text-align: center; }
+.pc .rk i { display: block; font-style: normal; font-size: .78em; }
+.pc .pip { position: absolute; inset: 0; display: grid; place-items: center; font-size: calc(var(--w) * .58); padding-top: 12%; }
+.pc .tag { position: absolute; left: 0; right: 0; bottom: 3%; text-align: center; font: 700 calc(var(--w) * .13)/1 var(--body); }
+.pc.e-BONUS { background: #d6e6fb; } .pc.e-BONUS .tag { color: #1f62b3; }
+.pc.e-MULT { background: #fbd9d4; } .pc.e-MULT .tag { color: #b3281f; }
+.pc.e-GOLD { background: linear-gradient(135deg, #f8e199, #d8a431); } .pc.e-STEEL { background: linear-gradient(135deg, #eef1f4, #a3aeb9); }
+.pc.e-GLASS { background: linear-gradient(135deg, rgba(232,246,255,.95), rgba(186,220,240,.85)); }
+.pc.e-LUCKY { background: #dcf2da; } .pc.e-LUCKY .tag { color: #237a3a; }
+.pc.e-WILD { background: #fff; box-shadow: 0 0 0 .25cqw #c86fd8 inset, 0 .25cqw 0 rgba(0,0,0,.35); }
+.pc.e-STONE { background: repeating-linear-gradient(135deg, #9b968b 0 .5cqw, #8f8a7f .5cqw 1cqw); }
+.pc.e-STONE .rk, .pc.e-STONE .pip { display: none; } .pc.e-STONE .tag { color: #eee; }
+.pc .seal { position: absolute; right: 7%; top: 8%; width: 20%; aspect-ratio: 1; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
+.seal.GOLD { background: #e3b23c; } .seal.RED { background: #d4403a; } .seal.BLUE { background: #3a7bd4; } .seal.PURPLE { background: #8a4fd0; }
+.ed-FOIL::after, .ed-HOLO::after, .ed-POLYCHROME::after { content: ''; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; }
+.ed-FOIL::after { background: linear-gradient(135deg, rgba(120,170,255,.35), rgba(255,255,255,0) 60%, rgba(120,170,255,.35)); }
+.ed-HOLO::after { background: linear-gradient(135deg, rgba(255,120,190,.35), rgba(255,255,255,0) 60%, rgba(255,120,190,.35)); }
+.ed-POLYCHROME::after { background: linear-gradient(135deg, rgba(255,80,80,.3), rgba(255,220,80,.3), rgba(80,220,255,.3), rgba(190,80,255,.3)); }
+.ed-NEGATIVE { filter: invert(.88) hue-rotate(180deg); }
+.debuff { filter: grayscale(.85) brightness(.75); }
+.debuff::before { content: '\2715'; position: absolute; inset: 0; display: grid; place-items: center; color: #ff4b3e;
+  font: 700 calc(var(--w, 6cqw) * .7)/1 var(--body); z-index: 2; }
+.down { background: repeating-linear-gradient(45deg, #6d2230 0 .5cqw, #84303f .5cqw 1cqw) !important; }
+.down > * { display: none; }
+/* jokers, consumables and shop items */
+.jk { --w: 6.6cqw; width: var(--w); height: calc(var(--w) * 1.4); border-radius: .7cqw; background: #f8f3e3; color: #23201a;
+  border: .3cqw solid #2f8be0; padding: .45cqw .35cqw; display: flex; flex-direction: column; justify-content: space-between;
+  text-align: center; position: relative; flex: none; overflow: hidden; box-shadow: 0 .25cqw 0 rgba(0,0,0,.35); }
+.jk .nm { font: 700 .98cqw/1.15 var(--body); overflow-wrap: anywhere; }
+.jk .val { font: 600 .95cqw/1.2 var(--body); }
+.jk .val .m { color: var(--mult); } .jk .val .c { color: var(--chips); } .jk .val .x { color: #b3281f; }
+.jk .sell { font: .85cqw/1 var(--body); color: #7b7360; }
+.jk.r1 { border-color: #2f8be0; } .jk.r2 { border-color: #3cae6a; } .jk.r3 { border-color: #e0453a; } .jk.r4 { border-color: #a35fd6; }
+.cs { --w: 5.4cqw; width: var(--w); height: calc(var(--w) * 1.4); border-radius: .7cqw; color: #fff; padding: .4cqw .3cqw;
+  display: flex; flex-direction: column; justify-content: center; text-align: center; font: 700 1cqw/1.15 var(--body);
+  position: relative; flex: none; overflow: hidden; box-shadow: 0 .25cqw 0 rgba(0,0,0,.35); background: #6b6b8a; }
+.cs.Tarot { background: linear-gradient(160deg, #7d5bb5, #4f3a80); } .cs.Planet { background: linear-gradient(160deg, #3b86c9, #1f4f86); }
+.cs.Spectral { background: linear-gradient(160deg, #2fa39a, #1d5d63); } .cs.voucher { background: linear-gradient(160deg, #c99a3a, #8a6420); }
+.cs.pack { background: linear-gradient(160deg, #c2533d, #7e2c22); }
+.cs small { display: block; font-weight: 500; font-size: .85cqw; opacity: .85; margin-top: .3cqw; }
+.item { display: flex; flex-direction: column; align-items: center; gap: .35cqw; }
+.price { font: 700 1.2cqw/1 var(--display); color: #ffc94d; background: rgba(0,0,0,.35); padding: .25cqw .7cqw; border-radius: 999px; }
+.shopband { background: rgba(0,0,0,.22); border-radius: 1cqw; padding: 1cqw 1.4cqw; display: flex; flex-direction: column; gap: 1cqw; align-items: center; }
+.blinds3 { display: flex; gap: 1.6cqw; justify-content: center; }
+.bl { width: 14cqw; border-radius: 1cqw; background: rgba(0,0,0,.28); padding: 1cqw; text-align: center; border: .2cqw solid transparent; }
+.bl.SELECT, .bl.CURRENT { border-color: #ffc94d; background: rgba(0,0,0,.4); }
+.bl.DEFEATED, .bl.SKIPPED { opacity: .45; }
+.bl .bn { font: 700 1.5cqw/1.15 var(--display); }
+.bl .bt { font: 700 2cqw/1.2 var(--display); color: #ff8a6b; }
+.bl .br { font-size: 1.1cqw; color: var(--money); }
+.bl .bs { font-size: 1cqw; color: #b9c7bf; text-transform: uppercase; letter-spacing: .08em; margin-top: .4cqw; }
+.bl .bg { font-size: 1cqw; color: #cfd9d2; margin-top: .3cqw; }
+.played { display: flex; flex-direction: column; align-items: center; gap: .8cqw; animation: rise .35s ease-out; }
+.played .what { font: 700 2cqw/1 var(--display); letter-spacing: .04em; }
+.played .what b { color: #ffc94d; }
+.played.discard { opacity: .8; }
+@keyframes rise { from { transform: translateY(1.5cqw); opacity: 0; } to { transform: none; opacity: 1; } }
+.bigmsg { font: 700 4cqw/1.1 var(--display); letter-spacing: .05em; }
+.bigmsg.win { color: #ffc94d; } .bigmsg.lose { color: #ff8a6b; }
+.tbl .banner { position: absolute; left: 25%; top: 1cqw; display: flex; gap: 8px; align-items: center; padding: 5px 12px;
+  border-radius: 999px; background: rgba(12,34,42,.9); color: #fff; font-size: 12.5px; font-weight: 600; z-index: 5; }
+.tbl .banner button { padding: 3px 10px; font-size: 12px; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; background: rgba(251,248,239,.95);
   padding: 7px 10px; border-radius: 999px; box-shadow: 0 6px 18px rgba(0,0,0,.3); }
 .toolbar .sep { width: 1px; background: var(--line); margin: 2px 4px; }
@@ -98,7 +198,7 @@ button:disabled { opacity: .45; cursor: default; }
 .tp .n { grid-row: span 2; width: 22px; height: 22px; border-radius: 50%; color: #fff; display: grid; place-items: center;
   font: 700 11px var(--body); }
 .tp .sw { font-weight: 700; } .tp .what { color: var(--muted); }
-#events { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 420px; overflow-y: auto; }
+#events { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 380px; overflow-y: auto; }
 #events li { font-size: 12.5px; line-height: 1.3; display: flex; gap: 7px; align-items: baseline; cursor: pointer;
   border-radius: 6px; padding: 1px 3px; }
 #events li:hover { background: #f4eedf; }
@@ -108,20 +208,6 @@ button:disabled { opacity: .45; cursor: default; }
 #events li.sep:hover { background: none; }
 #events .t { color: var(--muted); font-size: 11px; min-width: 30px; font-variant-numeric: tabular-nums; }
 #events .chip { width: 9px; height: 9px; border-radius: 50%; flex: none; transform: translateY(1px); }
-#events .bad { color: var(--bad); font-weight: 700; }
-/* the run */
-.roundbox { display: grid; gap: 6px; }
-.roundbox .top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.roundbox .top .counter { font-size: 28px; }
-.roundbox .blind { font-weight: 700; font-size: 13.5px; }
-.bar { height: 9px; border-radius: 5px; background: #ebe4d2; overflow: hidden; }
-.bar i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, var(--chips), var(--mult));
-  transition: width .4s ease; }
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-.stat { background: #fff; border: 1px solid var(--line); border-radius: 9px; padding: 5px 7px; text-align: center; }
-.stat b { display: block; font-family: var(--display); font-size: 19px; font-variant-numeric: tabular-nums; }
-.stat span { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-.stat.money b { color: var(--money); } .stat.hands b { color: var(--chips); } .stat.disc b { color: var(--mult); }
 .check { display: flex; gap: 10px; align-items: flex-start; }
 .check .icon { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff;
   font-weight: 800; font-size: 16px; background: var(--good); }
@@ -131,32 +217,11 @@ button:disabled { opacity: .45; cursor: default; }
 .check .txt b { font-size: 13.5px; }
 .diffs { margin: 6px 0 0; padding-left: 16px; font: 11.5px/1.4 ui-monospace, 'Cascadia Mono', Consolas, monospace;
   color: #7a2b20; word-break: break-word; }
-.jokers { display: grid; gap: 5px; }
-.joker { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 8px; padding: 6px 8px; border-radius: 9px;
-  border: 1px solid var(--line); background: #fff; }
-.joker .nm { font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.joker .sell { font-size: 11.5px; color: var(--muted); text-align: right; }
-.joker .val { grid-column: 1 / 3; font-size: 11.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 3px 8px; }
-.joker.debuffed { opacity: .5; }
-.v-mult { color: var(--mult); font-weight: 700; } .v-chips { color: var(--chips); font-weight: 700; }
-.v-x { color: var(--mult); font-weight: 800; }
-.ed { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; color: #fff; margin-left: 5px; vertical-align: 1px; }
-.ed.FOIL { background: #5d8fd6; } .ed.HOLO { background: #d65da6; } .ed.POLYCHROME { background: linear-gradient(90deg,#e6503c,#e6c33c,#3cc0e6,#a23ce6); }
-.ed.NEGATIVE { background: #3a3a3a; }
-.chips { display: flex; flex-wrap: wrap; gap: 5px; }
-.chipx { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; background: #ece6d6; color: var(--ink); }
-.chipx.tarot { background: #ece0f7; } .chipx.planet { background: #dcecf8; } .chipx.spectral { background: #dff3ef; }
-.chipx.voucher { background: #f7ecd1; } .chipx.tag { background: #e7e7e7; }
-.mini-h { margin: 10px 0 5px; font-family: var(--display); font-weight: 700; font-size: 11.5px; letter-spacing: .09em;
-  text-transform: uppercase; color: var(--muted); }
 table.levels { width: 100%; border-collapse: collapse; font-size: 12px; }
 table.levels td { padding: 2px 4px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
 table.levels td.l { color: var(--muted); }
 table.levels td.c { color: var(--chips); font-weight: 700; text-align: right; }
 table.levels td.m { color: var(--mult); font-weight: 700; }
-.shoprow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; font-size: 12.5px; }
-.shoprow .price { color: var(--money); font-weight: 700; text-align: right; }
-.empty { color: var(--muted); font-size: 12px; }
 footer { color: #93aeb3; font-size: 11.5px; padding: 0 18px 14px; line-height: 1.5; }
 </style>
 </head>
@@ -173,40 +238,27 @@ footer { color: #93aeb3; font-size: 11.5px; padding: 0 18px 14px; line-height: 1
       <div id="pc"></div>
     </div>
     <div class="card">
-      <h2>Run outlook <small>quick playouts</small></h2>
-      <svg id="chart" viewBox="0 0 300 170" role="img" aria-label="Projected outcome of the run after each move"></svg>
-      <div class="legend"><span><i style="background:var(--chips)"></i>projected final ante</span>
-        <span><i style="background:var(--good)"></i>clears this blind</span></div>
-      <div class="readout" id="readout"></div>
-      <div class="rewind">
-        <button id="prev">&#9664; Move</button><button id="nextm">Move &#9654;</button>
-        <button id="live" class="on">Live</button>
-        <span class="hint">Click or drag the chart to see an earlier move</span>
-      </div>
-      <div class="mini-h">Turning points</div>
-      <div class="tps" id="tps"><div class="empty">They appear once the run has a few projected moves.</div></div>
-      <div class="sub">Each point: up to 48 playouts by the greedy bot from the position after that move, with the
-        hidden cards reshuffled and fresh random streams (never the run's own).</div>
+      <h2>The search so far <small id="searchsub"></small></h2>
+      <div id="search"><div class="empty">The job's numbers appear here while it runs.</div></div>
     </div>
-    <div class="card">
-      <h2>Play by play <small id="nmoves"></small></h2>
-      <ul id="events"></ul>
+    <div class="card" id="logcard" hidden>
+      <h2>Latest from the job</h2>
+      <pre class="log" id="log"></pre>
     </div>
   </div>
 
   <div class="centre">
-    <div class="screen" id="screen">
-      <img id="feed" alt="">
-      <img id="still" alt="" hidden>
-      <div class="msg" id="msg"><div><h3>STARTING</h3><p>Connecting to your game.</p></div></div>
-      <div class="banner" id="viewing" hidden><span id="viewingtext"></span><button id="backlive">Back to live</button></div>
-      <div class="mismatchbar" id="mismatch" hidden></div>
+    <div class="tablewrap">
+      <div class="tbl" id="tbl"></div>
     </div>
     <div class="toolbar">
+      <button data-pick="best" title="Wins first, then the biggest hand; losses by how far they got">Best runs</button>
+      <button data-pick="typical" title="Runs picked at random as the job plays them">Typical runs</button>
+      <span class="sep"></span>
       <button id="pause">&#10074;&#10074; Pause</button>
       <span class="sep"></span>
-      <button data-speed="1" title="Normal game speed">1&times;</button><button data-speed="2">2&times;</button>
-      <button data-speed="4">4&times;</button><button data-speed="max" title="As fast as your PC goes">Max</button>
+      <button data-speed="1" title="Easy to follow">1&times;</button><button data-speed="2">2&times;</button>
+      <button data-speed="4">4&times;</button><button data-speed="max" title="As fast as the page can draw">Max</button>
       <span class="sep"></span>
       <button id="next" class="go">Next run</button>
       <button id="analysis">Analysis: on</button>
@@ -216,21 +268,29 @@ footer { color: #93aeb3; font-size: 11.5px; padding: 0 18px 14px; line-height: 1
   <div class="right">
     <div class="card">
       <h2>Now replaying <small id="source"></small></h2>
-      <div class="about" id="about"></div>
-    </div>
-    <div class="card roundbox" id="roundbox"></div>
-    <div class="card">
-      <h2>Engine &#8596; game <small id="sessiontxt"></small></h2>
-      <div id="check"></div>
+      <div id="about"></div>
     </div>
     <div class="card">
-      <h2>Jokers <small id="jslots"></small></h2>
-      <div class="jokers" id="jokers"></div>
-      <div id="extras"></div>
+      <h2>Run outlook <small>quick playouts</small></h2>
+      <svg id="chart" viewBox="0 0 300 170" role="img" aria-label="Projected outcome of the run after each move"></svg>
+      <div class="legend"><span><i style="background:var(--chips)"></i>projected final ante</span>
+        <span><i style="background:var(--good)"></i>clears this blind</span></div>
+      <div class="readout" id="readout"></div>
+      <div class="rewind">
+        <button id="prev">&#9664; Move</button><button id="nextm">Move &#9654;</button>
+        <button id="tolive" class="on">Live</button>
+        <span class="hint">Click or drag the chart to see an earlier move</span>
+      </div>
+      <div class="mini-h">Turning points</div>
+      <div class="tps" id="tps"><div class="empty">They appear once the run has a few projected moves.</div></div>
     </div>
-    <div class="card" id="shopcard" hidden>
-      <h2 id="shoptitle">Shop</h2>
-      <div id="shop"></div>
+    <div class="card">
+      <h2>Engine &#8596; your game <small id="checksub"></small></h2>
+      <div id="checks"></div>
+    </div>
+    <div class="card">
+      <h2>Play by play <small id="nmoves"></small></h2>
+      <ul id="events"></ul>
     </div>
     <div class="card">
       <h2>Hand levels</h2>
@@ -238,15 +298,14 @@ footer { color: #93aeb3; font-size: 11.5px; padding: 0 18px 14px; line-height: 1
     </div>
   </div>
 </div>
-<footer>Your copy of Balatro draws the game; this page shows it live (streamed from the game on this PC only) and
-  the engine's view of the same run. While the viewer runs, the game takes no mouse or keyboard input. Pictures
-  stay on your PC.</footer>
+<footer>The search plays its runs in the engine on your PC; the middle of the page replays one of them with the same
+  engine, drawn here. A hidden copy of your Balatro checks the engine against the real game. Nothing leaves your PC.</footer>
 
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
-const S = { state: null, run: null, moves: [], proj: {}, sel: null, frameSeq: '', speed: '1', paused: false,
-  analysis: true, lastMoves: 0, runId: '' };
+const S = { state: null, run: null, moves: [], proj: {}, sel: null, selView: null, speed: '1', paused: false,
+  analysis: true, pick: 'best', runId: '', pcAt: 0, polledAt: 0 };
 
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function num(x) {
@@ -255,6 +314,7 @@ function num(x) {
   if (a >= 1e15) return x.toExponential(3).replace('+', '');
   return Math.round(x).toLocaleString('en-GB');
 }
+function pct(x, d = 1) { return x === null || x === undefined ? '-' : (100 * x).toFixed(d) + '%'; }
 function ago(t) {
   const s = Math.max(0, Date.now() / 1000 - t);
   if (s < 90) return `${Math.round(s)} s ago`;
@@ -262,6 +322,8 @@ function ago(t) {
   return `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min ago`;
 }
 function isoAgo(iso) { const t = Date.parse(iso); return Number.isNaN(t) ? '' : ago(t / 1000); }
+function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+function setHTML(el, html) { if (el._html !== html) { el._html = html; el.innerHTML = html; } }
 async function post(body) {
   try { await fetch('/api/control', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) }); }
   catch (e) { /* the next poll shows the state */ }
@@ -274,277 +336,350 @@ async function pollState() {
     const r = await fetch('/api/state' + q, { cache: 'no-store' });
     const st = await r.json();
     S.state = st;
+    S.polledAt = Date.now();
     const run = st.run;
     if (run) {
-      if (run.id !== S.runId) { S.runId = run.id; S.moves = []; S.sel = null; S.proj = {}; }
+      if (run.id !== S.runId) { S.runId = run.id; S.moves = []; S.sel = null; S.selView = null; S.proj = {}; }
       if (run.moves.length && run.moves[0].n === S.moves.length + 1) S.moves = S.moves.concat(run.moves);
       else if (run.moves.length && run.moves[0].n === 1) S.moves = run.moves.slice();
       S.run = run;
     }
     S.proj = st.proj || {};
     S.speed = st.settings.speed; S.paused = st.settings.paused; S.analysis = st.settings.analysis;
-    updateLive(true);
+    S.pick = st.settings.pick || 'best';
     render();
   } catch (e) {
     setPill('bad', 'Viewer stopped');
-    showMsg('WAITING FOR THE VIEWER', 'The page can\'t reach the viewer. Start it again with make watch.');
   }
-  setTimeout(pollState, 500);
+  setTimeout(pollState, S.speed === 'max' ? 250 : 400);
 }
 
-// ------------------------------------------------------------------ the live picture
-// The game streams itself as video from the companion mod (127.0.0.1, this PC). Without the stream (an old
-// mod, or the page can't reach it), the viewer passes on pictures the mod saves a few times a second.
-const LV = { url: '', epoch: null, cid: 0, at: 0, loaded: false, idle: 0, fails: 0, until: 0, gone: 0 };
-function setLive(src) {
-  const img = $('feed'), old = img.getAttribute('src') || '';
-  if (src) img.src = src; else img.removeAttribute('src');
-  if (old.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(old), 2000);
-}
-function streamOn(url, epoch) {
-  const cid = ++LV.cid;
-  Object.assign(LV, { url, epoch, at: Date.now(), loaded: false, idle: 0 });
-  const img = $('feed');
-  img.onload = () => {
-    if (cid !== LV.cid) return;
-    if (!LV.loaded) { LV.loaded = true; LV.fails = 0; post({ stream_ok: true }); }
-    S.haveFrame = true;
-  };
-  img.onerror = () => { if (cid === LV.cid) streamFailed(); };
-  setLive(`${url}?e=${encodeURIComponent(epoch || '')}&t=${Date.now()}`);
-}
-function streamOff() {
-  if (!LV.url) return;
-  LV.cid++; LV.url = ''; LV.loaded = false;
-  setLive('');
-}
-function streamFailed() {
-  streamOff();
-  if (++LV.fails >= 3) { LV.fails = 0; LV.until = Date.now() + 30000; post({ stream_ok: false }); }
-}
-function updateLive(poll) {
-  const link = (S.state && S.state.link) || {};
-  const shown = S.sel === null && document.visibilityState === 'visible' && Date.now() > LV.until;
-  if (shown && LV.url && !link.stream) {  // believe a report without the stream only a few times in a row
-    if (poll) LV.gone++;
-    if (LV.gone < 3) return;
-  } else LV.gone = 0;
-  const want = shown ? link.stream : '';
-  if (!want) { streamOff(); return; }
-  if (want !== LV.url || link.stream_epoch !== LV.epoch) { streamOn(want, link.stream_epoch); return; }
-  const age = Date.now() - LV.at;
-  if (!LV.loaded) { if (age > 6000) streamFailed(); return; }
-  // The game no longer counts this page as watching (it restarted, or the connection dropped): reconnect.
-  if (poll) LV.idle = link.stream_clients ? 0 : LV.idle + 1;
-  if (age > 4000 && LV.idle >= 4) streamOn(want, link.stream_epoch);
-}
-document.addEventListener('visibilitychange', () => updateLive(false));
+// ------------------------------------------------------------------ drawing the game
+const SUIT = { S: ['♠', false], H: ['♥', true], D: ['♦', true], C: ['♣', false] };
+const RANK = { T: '10' };
+const ENH_TAG = { BONUS: '+30 chips', MULT: '+4 mult', GLASS: 'Glass', STEEL: 'Steel', STONE: 'Stone', GOLD: 'Gold',
+  LUCKY: 'Lucky', WILD: 'Wild' };
 
-let frameBusy = false;
-async function pollFrame() {
-  if (!frameBusy && !LV.url && S.sel === null && document.visibilityState === 'visible') {
-    frameBusy = true;
-    try {
-      const r = await fetch('/api/frame?have=' + encodeURIComponent(S.frameSeq), { cache: 'no-store' });
-      const blob = r.status === 200 ? await r.blob() : null;
-      if (blob && !LV.url && S.sel === null) {  // (the stream may have started meanwhile: it wins)
-        S.frameSeq = r.headers.get('X-Seq') || '';
-        $('feed').onload = $('feed').onerror = null;
-        setLive(URL.createObjectURL(blob));
-        S.haveFrame = true;
-      }
-    } catch (e) { /* retry */ }
-    frameBusy = false;
+function cardHTML(c, small) {
+  if (!c) return '';
+  if (c.face_down) return `<div class="pc down${small ? ' sm' : ''}"></div>`;
+  const [s, r] = (c.key || '?_?').split('_');
+  const [sym, red] = SUIT[s] || ['?', false];
+  const rank = RANK[r] || r;
+  const cls = ['pc', small ? 'sm' : '', red ? 'red' : '', c.enhancement ? 'e-' + c.enhancement : '',
+    c.edition ? 'ed-' + c.edition : '', c.debuff ? 'debuff' : ''].filter(Boolean).join(' ');
+  const tag = c.enhancement ? `<div class="tag">${esc(ENH_TAG[c.enhancement] || c.enhancement)}</div>` : '';
+  return `<div class="${cls}" title="${esc(cardTitle(c))}"><div class="rk">${esc(rank)}<i>${sym}</i></div>` +
+    `<div class="pip">${sym}</div>${tag}${c.seal ? `<div class="seal ${c.seal}"></div>` : ''}</div>`;
+}
+function cardTitle(c) {
+  const [s, r] = (c.key || '?_?').split('_');
+  const names = { S: 'Spades', H: 'Hearts', D: 'Diamonds', C: 'Clubs' };
+  const ranks = { T: '10', J: 'Jack', Q: 'Queen', K: 'King', A: 'Ace' };
+  return `${ranks[r] || r} of ${names[s] || s}` + (c.enhancement ? `, ${c.enhancement.toLowerCase()}` : '') +
+    (c.edition ? `, ${c.edition.toLowerCase()}` : '') + (c.seal ? `, ${c.seal.toLowerCase()} seal` : '') + (c.debuff ? ', debuffed' : '');
+}
+function jokerHTML(j) {
+  if (j.face_down) return `<div class="jk down"></div>`;
+  const vals = [];
+  if (j.mult) vals.push(`<span class="m">+${num(j.mult)} Mult</span>`);
+  if (j.x_mult && j.x_mult !== 1) vals.push(`<span class="x">X${+j.x_mult.toFixed(2)}</span>`);
+  if (j.chips) vals.push(`<span class="c">+${num(j.chips)} Chips</span>`);
+  if (j.hand) vals.push(`<span>${esc(j.hand)}</span>`);
+  const cls = ['jk', 'r' + (j.rarity || 1), j.edition ? 'ed-' + j.edition : '', j.debuff ? 'debuff' : ''].filter(Boolean).join(' ');
+  const extra = [j.eternal ? 'Eternal' : '', j.perishable !== null && j.perishable !== undefined ? `Perishable ${j.perishable}` : '',
+    j.rental ? 'Rental' : ''].filter(Boolean).join(' · ');
+  return `<div class="${cls}" title="${esc(j.name)}${j.edition ? ' (' + esc(j.edition.toLowerCase()) + ')' : ''}">` +
+    `<div class="nm">${esc(j.name)}</div><div class="val">${vals.join('<br>')}${extra ? `<br><span>${esc(extra)}</span>` : ''}</div>` +
+    `<div class="sell">${j.sell !== undefined ? 'sells $' + j.sell : ''}</div></div>`;
+}
+function consHTML(c, extraCls) {
+  const set = c.set || (extraCls === 'voucher' ? 'voucher' : '');
+  return `<div class="cs ${esc(set)} ${extraCls || ''} ${c.edition ? 'ed-' + c.edition : ''}">${esc(c.name || c.key)}` +
+    `${c.set ? `<small>${esc(c.set)}</small>` : ''}</div>`;
+}
+function itemHTML(i, kind) {
+  // A shop or pack item: a joker, a consumable, a playing card, a voucher or a pack.
+  let face;
+  if (kind === 'voucher') face = consHTML(i, 'voucher');
+  else if (kind === 'pack') face = `<div class="cs pack">${esc(i.name || i.key)}</div>`;
+  else if (i.key && /^[SHDC]_/.test(i.key)) face = cardHTML(i);
+  else if (i.set) face = consHTML(i);
+  else face = jokerHTML(i);
+  return `<div class="item">${face}${i.cost !== undefined ? `<div class="price">$${i.cost}</div>` : ''}</div>`;
+}
+
+function sidebar(v, m) {
+  const inBlind = v.state === 'SELECTING_HAND' || v.state === 'ROUND_EVAL' || (v.state === 'GAME_OVER' && v.blind_name);
+  const boss = v.blind_name && !/^(Small|Big) Blind$/.test(v.blind_name);
+  let blind;
+  if (inBlind && v.blind_name) {
+    blind = `<div class="box"><div class="bname ${boss ? 'boss' : ''}">${esc(v.blind_name)}${v.blind_disabled ? ' (off)' : ''}</div>` +
+      `<div class="lab">Score at least</div><div class="target">${num(v.blind_score)}</div>` +
+      `<div class="reward">Reward ${'$'.repeat(Math.max(0, Math.min(8, v.blind_reward || 0)))}</div></div>`;
+  } else {
+    const label = { BLIND_SELECT: 'Choose your next blind', SHOP: 'Shop', SMODS_BOOSTER_OPENED: 'Booster pack',
+      GAME_OVER: v.won ? 'Run won' : 'Run over' }[v.state] || '';
+    blind = `<div class="box"><div class="bname">${esc(label)}</div><div class="lab">Ante ${v.ante}</div></div>`;
   }
-  setTimeout(pollFrame, 120);
+  const hand = m && m.kind === 6 ? `${esc(m.hand || '')} <small>${num(m.score)} chips</small>` :
+    (v.last_hand ? `<small>Last hand:</small> ${esc(v.last_hand)}` : '');
+  return `<aside class="ts">${blind}` +
+    `<div class="box"><div class="lab">Round score</div><div class="score">${num(v.chips)}</div></div>` +
+    `<div class="handline">${hand}</div>` +
+    `<div class="pair"><div class="box hands"><div class="lab">Hands</div><b>${v.hands_left}</b></div>` +
+    `<div class="box disc"><div class="lab">Discards</div><b>${v.discards_left}</b></div></div>` +
+    `<div class="box money">$${v.money}</div>` +
+    `<div class="pair"><div class="box"><div class="lab">Ante</div><b>${v.ante}<small style="font-size:1.4cqw">/8</small></b></div>` +
+    `<div class="box"><div class="lab">Round</div><b>${v.round}</b></div></div></aside>`;
 }
 
-// ------------------------------------------------------------------ rendering
-function setPill(kind, text) {
-  $('pill').className = 'pill ' + kind;
-  $('pilltext').textContent = text;
+function middle(v, m) {
+  if (v.state === 'BLIND_SELECT') {
+    const b = v.blinds || {};
+    const one = (k, x) => !x ? '' : `<div class="bl ${x.status}"><div class="bn">${esc(x.name)}</div>` +
+      `<div class="bs">Score at least</div><div class="bt">${num(x.score)}</div>` +
+      `<div class="br">Reward ${'$'.repeat(Math.max(0, Math.min(8, x.reward || 0)))}</div>` +
+      `<div class="bs">${esc((x.status || '').toLowerCase())}</div>` +
+      (x.tag_name && k !== 'boss' ? `<div class="bg">Skip for: ${esc(x.tag_name)}</div>` : '') + `</div>`;
+    return `<div class="title">Choose your next blind</div><div class="blinds3">${one('small', b.small)}${one('big', b.big)}${one('boss', b.boss)}</div>` +
+      ((v.tags || []).length ? `<div class="subt">Tags: ${esc(v.tags.join(', '))}</div>` : '');
+  }
+  if (v.state === 'SHOP') {
+    const row = (v.shop || []).map(i => itemHTML(i, 'row')).join('');
+    const vou = (v.shop_vouchers || []).map(i => itemHTML(i, 'voucher')).join('');
+    const packs = (v.shop_packs || []).map(i => itemHTML(i, 'pack')).join('');
+    return `<div class="shopband"><div class="title">Shop</div><div class="row">${row || '<div class="subt">Sold out</div>'}</div>` +
+      `<div class="row">${vou}${packs}</div><div class="subt">Reroll $${v.reroll_cost}</div></div>`;
+  }
+  if (v.state === 'SMODS_BOOSTER_OPENED') {
+    const parts = (v.pack_key || '').replace(/^p_/, '').split('_');
+    const size = { jumbo: 'Jumbo ', mega: 'Mega ' }[parts[1]] || '';
+    const name = `${size}${cap(parts[0] || 'booster')} Pack`;
+    return `<div class="title">${esc(name)}</div><div class="row">${(v.pack || []).map(i => itemHTML(i, 'pack-card')).join('')}</div>` +
+      `<div class="subt">Choose ${v.pack_choices_left ?? ''}</div>`;
+  }
+  if (v.state === 'ROUND_EVAL') {
+    return `<div class="bigmsg win">Blind beaten</div><div class="subt">Cash out: <b style="color:#ffc94d">$${v.cash_out ?? '-'}</b></div>` +
+      playedHTML(m);
+  }
+  if (v.state === 'GAME_OVER') {
+    return v.won ? `<div class="bigmsg win">Run won</div>` :
+      `<div class="bigmsg lose">Run over</div><div class="subt">Lost at ante ${v.ante}${v.blind_name ? ' to ' + esc(v.blind_name) : ''}</div>` + playedHTML(m);
+  }
+  // In a blind: the hand just played (or discarded), else what's left to score.
+  const p = playedHTML(m);
+  if (p) return p;
+  const left = Math.max(0, (v.blind_score || 0) - (v.chips || 0));
+  return `<div class="subt">${num(left)} chips to go</div>`;
 }
-function showMsg(title, text, button) {
-  const m = $('msg');
-  if (!title) { m.hidden = true; return; }
-  m.hidden = false;
-  m.innerHTML = `<div><h3>${esc(title)}</h3><p>${esc(text)}</p>${button ? `<button class="go" id="msgbtn">${esc(button)}</button>` : ''}</div>`;
-  if (button) $('msgbtn').onclick = () => post({ restart: true });
+function playedHTML(m) {
+  if (!m || !m.cards || !m.cards.length) return '';
+  if (m.kind === 6) return `<div class="played"><div class="row">${m.cards.map(c => cardHTML(c)).join('')}</div>` +
+    `<div class="what">${esc(m.hand || '')} <b>${num(m.score)}</b></div></div>`;
+  return `<div class="played discard"><div class="row">${m.cards.map(c => cardHTML(c, true)).join('')}</div>` +
+    `<div class="subt">discarded</div></div>`;
 }
+
+function drawTable() {
+  const live = S.sel === null;
+  const v = live ? (S.run && S.run.view) : S.selView;
+  const k = live ? S.moves.length : S.sel;
+  const m = k > 0 ? S.moves[k - 1] : null;
+  const tbl = $('tbl');
+  if (!v) { setHTML(tbl, `<div style="grid-column:1/3;display:grid;place-items:center" class="title">Starting…</div>`); return; }
+  const jokers = (v.jokers || []).map(jokerHTML).join('');
+  const cons = (v.consumables || []).map(c => consHTML(c)).join('');
+  const showHand = v.state === 'SELECTING_HAND' || v.state === 'SMODS_BOOSTER_OPENED';
+  const hand = showHand ? (v.hand || []).map(c => cardHTML(c)).join('') : '';
+  const banner = live ? '' : `<div class="banner"><span>${k === 0 ? 'Start of the run' : `After move ${k}: ${esc(m ? m.what : '')}`}</span>` +
+    `<button id="backlive">Back to live</button></div>`;
+  setHTML(tbl, sidebar(v, m) + `<section class="tm"><div class="tm-top">` +
+    `<div class="slots" style="flex:1">${jokers}<span class="cap">${(v.jokers || []).length}/${v.joker_slots ?? 5} jokers</span></div>` +
+    `<div class="slots">${cons}<span class="cap">${(v.consumables || []).length}/${v.consumable_slots ?? 2}</span></div></div>` +
+    `<div class="tm-mid">${middle(v, m)}</div>` +
+    `<div class="tm-hand">${hand}<div class="deckinfo">${(v.vouchers || []).length ? esc(v.vouchers.join(', ')) + '<br>' : ''}` +
+    `Deck ${v.deck_left ?? '-'}/${v.deck_total ?? '-'}</div></div></section>${banner}`);
+}
+
+// ------------------------------------------------------------------ the panels
+function setPill(kind, text) { $('pill').className = 'pill ' + kind; $('pilltext').textContent = text; }
 
 function render() {
   const st = S.state; if (!st) return;
-  const link = st.link || {};
   $('where').textContent = `viewer on ${st.host}`;
-  // pill and centre message
-  updateLive(false);
-  const fps = LV.loaded && link.stream_fps ? ` · ${link.stream_fps} fps` : '';
-  if (link.game === 'connected') setPill(S.paused ? 'warn' : 'live', (S.paused ? 'Paused' : 'Live') + fps);
-  else if (link.game === 'engine') setPill('warn', 'Engine only');
-  else if (link.game === 'restart') setPill('warn', 'Game needs a restart');
-  else if (link.game === 'stale') setPill('warn', 'Picture paused');
-  else setPill('warn', link.message || 'Waiting');
-  if (S.sel !== null) showMsg(null);
-  else if (link.game === 'engine') showMsg('ENGINE ONLY', 'No game is connected, so there is no picture; the stats still follow the engine\'s run.');
-  else if (link.game === 'restart') showMsg('RESTART BALATRO', link.message, 'Restart Balatro');
-  else if (link.game === 'stale') showMsg('PICTURE PAUSED', link.message);
-  else if (link.game === 'waiting' || link.game === 'launching' || link.game === 'starting') showMsg('WAITING FOR THE GAME', link.message);
-  else if (!S.haveFrame) showMsg('WAITING FOR THE PICTURE', 'The game is connected; its first picture is on the way.' +
-    (link.mod_error ? ` (The mod reports: ${link.mod_error})` : ''));
-  else showMsg(null);
-  // toolbar
+  const job = (st.pc || {}).job;
+  const running = job && job.state === 'running';
+  if (S.paused) setPill('warn', 'Replay paused');
+  else if (running) setPill('live', `${cap(job.name)} running`);
+  else setPill('warn', job ? `${cap(job.name)} ${job.state || ''}`.trim() : 'No job running');
   document.querySelectorAll('[data-speed]').forEach(b => b.classList.toggle('on', b.dataset.speed === S.speed));
+  document.querySelectorAll('[data-pick]').forEach(b => b.classList.toggle('on', b.dataset.pick === S.pick));
   $('pause').innerHTML = S.paused ? '&#9654; Resume' : '&#10074;&#10074; Pause';
   $('pause').classList.toggle('on', S.paused);
   $('analysis').textContent = 'Analysis: ' + (S.analysis ? 'on' : 'off');
   $('analysis').classList.toggle('on', S.analysis);
   renderPC(st);
-  renderRun();
+  renderSearch(st);
+  renderAbout();
+  renderChecks(st.checks);
+  drawTable();
   renderChart();
   renderEvents();
+  renderLevels();
 }
 
+function liveRuns() {
+  // The job's run counter, moved on at its recent rate between reports.
+  const p = (S.state && S.state.pc || {}).progress;
+  const job = (S.state && S.state.pc || {}).job;
+  if (!p) return null;
+  let v = p.runs || 0;
+  if (job && job.state === 'running' && !p.done && p.rate && p.updated) {
+    const lag = Math.max(0, (S.state.now - p.updated)) + (Date.now() - S.polledAt) / 1000;
+    v += Math.min(p.rate * Math.min(lag, 3), (p.target || Infinity) - v);
+  }
+  return Math.max(0, Math.floor(v));
+}
+setInterval(() => { const n = liveRuns(); if (n !== null && $('runcount')) $('runcount').textContent = num(n); }, 100);
+
 function renderPC(st) {
-  const pc = st.pc || {}, job = pc.job, prog = pc.progress, se = st.session || {};
+  const pc = st.pc || {}, job = pc.job, p = pc.progress;
   let h = '';
-  if (prog && (prog.runs || prog.games)) {
-    h += `<div class="counter">${num(prog.runs || prog.games)}</div><div class="sub">runs simulated in this job` +
-      (prog.rate ? ` &middot; ${num(prog.rate)} a second` : '') + `</div>`;
+  if (p) {
+    h += `<div class="counter" id="runcount">${num(liveRuns())}</div><div class="sub">runs played by the ${esc(p.bot || 'bot')}` +
+      (p.rate ? ` &middot; about <b>${num(p.rate)}</b> a second` : '') + (p.threads ? ` on ${p.threads} thread${p.threads === 1 ? '' : 's'}` : '') +
+      (p.target ? ` &middot; ${pct(Math.min(1, (p.runs || 0) / p.target), 0)} of ${num(p.target)}` : '') + `</div>`;
+    h += `<div class="big2"><div><b>${pct(p.win_rate, 2)}</b><span>runs won` +
+      (p.win_ci ? ` (95%: ${pct(p.win_ci[0], 2)}–${pct(p.win_ci[1], 2)})` : '') + `</span></div>` +
+      `<div><b>${(p.mean_ante || 0).toFixed(2)}</b><span>average final ante</span></div></div>`;
   }
   if (job) {
     const steps = job.steps || [];
     const done = steps.filter(s => s.done).length;
     $('jobstate').textContent = job.state === 'running' ? 'running' : (job.state || '');
-    h += `<div class="sub"><b>Job ${esc(job.name)}</b> &middot; ${done} of ${steps.length} steps done` +
+    h += `<div class="sub" style="margin-top:8px"><b>Job ${esc(job.name)}</b> &middot; ${done} of ${steps.length} steps done` +
       (job.started ? ` &middot; started ${isoAgo(job.started)}` : '') + `</div>`;
-    h += `<div class="steps">${steps.map(s => `<span class="step ${s.done ? 'done' : (s.name === job.step && job.state === 'running' ? 'now' : '')}">${s.done ? '&#10003; ' : ''}${esc(s.name)}</span>`).join('')}</div>`;
+    h += `<div class="steps">${steps.map(s => `<span class="step ${s.done ? 'done' : (s.name === job.step && job.state === 'running' ? 'now' : '')}">` +
+      `${s.done ? '&#10003; ' : ''}${esc(s.name)}</span>`).join('')}</div>`;
   } else {
     $('jobstate').textContent = 'no job running';
+    h += `<div class="sub">No job is running. In another Ubuntu window, <b>make baseline</b> plays a million runs with the ` +
+      `greedy bot on every thread; until then the middle shows demo runs.</div>`;
   }
   const rows = [];
-  if (pc.bench && pc.bench.moves_per_s) rows.push(['Engine speed', `${num(pc.bench.moves_per_s)} moves a second on ${pc.bench.threads} threads`]);
-  const linked = ['connected', 'restart', 'stale'].includes((st.link || {}).game);
-  rows.push(['This viewer', `${se.runs || 0} runs, ${num(se.moves || 0)} moves` + (linked ? ' checked against your game' : ' played by the engine')]);
-  if (se.mismatches) rows.push(['Differences', `${se.mismatches} saved to .sync/watch/mismatches`]);
+  if (pc.bench && pc.bench.moves_per_s) rows.push(['Engine', `${num(pc.bench.moves_per_s)} moves a second on ${pc.bench.threads} threads (random play)`]);
+  const se = st.session || {};
+  rows.push(['This viewer', `${se.runs || 0} runs replayed, ${num(se.moves || 0)} moves`]);
   h += `<div class="kv">${rows.map(r => `<b>${esc(r[0])}</b><span>${esc(r[1])}</span>`).join('')}</div>`;
-  if (!job && !prog) h += `<div class="sub">When a training job runs (phase 4), its runs, speed and win rate show here.</div>`;
-  $('pc').innerHTML = h;
+  setHTML($('pc'), h);
+  const log = pc.log || [];
+  $('logcard').hidden = !log.length;
+  $('log').textContent = log.join('\n');
 }
 
-function viewAt() {
-  // The run's state at the selected move (or now).
-  const run = S.run; if (!run) return null;
-  if (S.sel === null || S.sel >= S.moves.length) return run.view;
-  return null;
+function bars(rows, total, cls) {
+  const max = Math.max(1, ...rows.map(r => r[1]));
+  return `<div class="bars">${rows.map(r => `<div class="barrow"><span class="nm" title="${esc(r[0])}">${esc(r[0])}</span>` +
+    `<span class="tr"><i class="${cls || ''}" style="width:${(100 * r[1] / max).toFixed(1)}%"></i></span>` +
+    `<span class="pct">${r[2] !== undefined ? r[2] : pct(r[1] / Math.max(1, total), 0)}</span></div>`).join('')}</div>`;
+}
+function renderSearch(st) {
+  const p = (st.pc || {}).progress;
+  if (!p) { $('searchsub').textContent = ''; return; }
+  $('searchsub').textContent = `${p.deck || ''} · ${p.stake || ''}`;
+  const runs = p.runs || 0;
+  let h = '';
+  const hist = p.ante_hist || [];
+  if (hist.length) {
+    const labels = ['1', '2', '3', '4', '5', '6', '7', '8', 'won'];
+    const max = Math.max(1, ...hist);
+    const w = 300 / hist.length;
+    h += `<div class="mini-h">Where runs end <small>final ante</small></div><svg viewBox="0 0 300 96" style="width:100%;height:auto">` +
+      hist.map((n, i) => { const bh = 58 * n / max; return `<rect x="${i * w + 4}" y="${76 - bh}" width="${w - 8}" height="${bh}" rx="3" fill="${i === 8 ? '#2c8a57' : '#2b7fd6'}"/>` +
+        `<text x="${i * w + w / 2}" y="90" font-size="10" text-anchor="middle" fill="#6d665a">${labels[i]}</text>` +
+        `<text x="${i * w + w / 2}" y="${72 - bh}" font-size="9" text-anchor="middle" fill="#1f1b15">${n && n / Math.max(1, runs) < 0.005 ? '<1%' : pct(n / Math.max(1, runs), 0)}</text>`; }).join('') + `</svg>`;
+  }
+  const best = p.best_runs || [];
+  const job = ((st.pc || {}).job || {}).name || '';
+  if (best.length) h += `<div class="mini-h">Best runs so far <small>click one to watch it</small></div><div class="tps">` +
+    best.slice(0, 6).map(r => `<button class="tp best" data-file="${esc(job + '/' + r[6])}"><span class="n" style="background:${r[4] ? 'var(--good)' : 'var(--chips)'}">${r[0]}</span>` +
+      `<span class="sw">${esc(cap(r[2]))}</span><span class="what">seed ${esc(r[1])} &middot; best hand ${num(r[3])}</span></button>`).join('') + `</div>`;
+  if ((p.lost_to || []).length) h += `<div class="mini-h">What ends the runs</div>` + bars(p.lost_to.slice(0, 6), runs - (p.wins || 0), 'red');
+  if ((p.jokers_bought || []).length) h += `<div class="mini-h">Jokers it takes <small>per run</small></div>` +
+    bars(p.jokers_bought.slice(0, 8).map(r => [r[0], r[1], (r[2] || 0).toFixed(3)]), runs, 'gold');
+  if ((p.jokers_in_wins || []).length) h += `<div class="mini-h">Jokers in its wins <small>share of wins</small></div>` +
+    bars(p.jokers_in_wins.slice(0, 6).map(r => [r[0], r[1], pct(r[2], 0)]), p.wins || 1);
+  if ((p.hands_played || []).length) {
+    const tot = p.hands_played.reduce((a, r) => a + r[1], 0);
+    h += `<div class="mini-h">Hands it plays</div>` + bars(p.hands_played.slice().sort((a, b) => b[1] - a[1]).slice(0, 8), tot);
+  }
+  const pr = p.per_run || {};
+  if (Object.keys(pr).length) h += `<div class="mini-h">An average run</div><div class="kv">` +
+    [['Moves', pr.moves], ['Jokers taken', pr.jokers_bought], ['Packs opened', pr.packs], ['Rerolls', pr.rerolls],
+     ['Blinds skipped', pr.skips], ['Money at the end', pr.money_at_end !== undefined ? '$' + pr.money_at_end.toFixed(1) : null]]
+      .filter(r => r[1] !== undefined && r[1] !== null).map(r => `<b>${r[0]}</b><span>${typeof r[1] === 'number' ? r[1].toFixed(1) : r[1]}</span>`).join('') + `</div>`;
+  const histo = p.history || [];
+  if (histo.length > 2) {
+    const ys = histo.map(r => r[2]), lo = Math.min(...ys) - 0.05, hi = Math.max(...ys) + 0.05;
+    const pts = histo.map((r, i) => `${(i / (histo.length - 1) * 296 + 2).toFixed(1)},${(46 - (r[2] - lo) / (hi - lo) * 42).toFixed(1)}`).join(' ');
+    h += `<div class="mini-h">Average final ante over time <small>${lo.toFixed(2)}–${hi.toFixed(2)}</small></div>` +
+      `<svg viewBox="0 0 300 50" style="width:100%;height:auto"><polyline points="${pts}" fill="none" stroke="#2b7fd6" stroke-width="2"/></svg>`;
+  }
+  setHTML($('search'), h || '<div class="empty">The job\'s numbers appear here while it runs.</div>');
 }
 
-function renderRun() {
+function renderAbout() {
   const run = S.run;
-  if (!run) { $('about').innerHTML = '<div class="empty">No run yet.</div>'; return; }
-  $('source').textContent = run.source === 'job' ? 'from your job' : 'demo';
-  $('about').innerHTML = `<div class="about"><b>${esc(run.label)}</b></div>` +
+  if (!run) { setHTML($('about'), '<div class="empty">No run yet.</div>'); return; }
+  $('source').textContent = run.source !== 'job' ? 'demo' : run.pick === 'best' ? 'best runs' : 'typical runs';
+  const title = run.pick === 'best' && run.rank ? `Best run #${run.rank} of the job so far` : cap(run.label);
+  // A best run's ending is why it was picked; a typical run's ending stays hidden until the replay gets there.
+  const ending = run.expected && (run.pick === 'best' || run.result) ? run.expected : null;
+  setHTML($('about'), `<div><b>${esc(title)}</b></div>` +
     `<div class="kv"><b>Seed</b><span>${esc(run.seed)}</span><b>Deck</b><span>Red Deck &middot; White Stake</span>` +
-    `<b>Player</b><span>${esc(run.bot)}</span><b>Started</b><span>${ago(run.started)}</span>` +
-    (run.result ? `<b>Result</b><span>${esc(run.result)}</span>` : '') + `</div>`;
-  // the round, at the selected move or now
-  const m = S.sel !== null ? (S.sel === 0 ? run.start : S.moves[S.sel - 1]) : (S.moves[S.moves.length - 1] || run.start);
-  const v = run.view || {};
-  if (m) {
-    const target = m.target || 0, chips = m.chips || 0;
-    const pct = target > 0 ? Math.min(100, 100 * chips / target) : 0;
-    const where = m.state === 'SHOP' ? 'Shop' : m.state === 'BLIND_SELECT' ? 'Choosing a blind' :
-      m.state === 'ROUND_EVAL' ? 'Cash out' : m.state === 'SMODS_BOOSTER_OPENED' ? 'Opening a pack' :
-      m.state === 'GAME_OVER' ? 'Run over' : (m.blind || 'Round');
-    $('roundbox').innerHTML = `<div class="top"><div class="counter">Ante ${m.ante}</div><div class="sub">Round ${m.round}` +
-      (S.sel !== null ? ` &middot; after move ${S.sel}` : '') + `</div></div>` +
-      `<div class="blind">${esc(where)}${m.blind && where !== m.blind ? ` &middot; ${esc(m.blind)}` : ''}</div>` +
-      (target ? `<div class="sub">${num(chips)} of ${num(target)} chips</div><div class="bar"><i style="width:${pct}%"></i></div>` : '') +
-      `<div class="stats"><div class="stat money"><b>$${m.money}</b><span>money</span></div>` +
-      `<div class="stat hands"><b>${m.hands_left}</b><span>hands</span></div>` +
-      `<div class="stat disc"><b>${m.discards_left}</b><span>discards</span></div>` +
-      `<div class="stat"><b>${S.moves.length}</b><span>moves</span></div></div>`;
-  }
-  // engine vs game
-  const se = S.state.session || {};
-  $('sessiontxt').textContent = `${se.runs || 0} runs this session`;
-  const link = S.state.link || {};
-  if (run.mismatch) {
-    const mm = run.mismatch;
-    $('check').innerHTML = `<div class="check bad"><div class="icon">!</div><div class="txt"><b>They differ after move ${mm.move}</b>` +
-      ` (${esc(mm.what)}).<ul class="diffs">${mm.differences.slice(0, 6).map(d => `<li>${esc(d)}</li>`).join('')}</ul>` +
-      `<div class="sub">Saved: ${esc(mm.file)}. The viewer moves on to the next run.</div></div></div>`;
-    $('mismatch').hidden = false;
-    $('mismatch').innerHTML = `<b>ENGINE AND GAME DIFFER</b> after move ${mm.move} (${esc(mm.what)}): ${esc(mm.differences[0] || '')}`;
+    `<b>Player</b><span>${esc(run.bot)}</span><b>Replay began</b><span>${ago(run.started)}</span>` +
+    (ending ? `<b>How it ends</b><span>${esc(ending)}</span>` : '') +
+    (run.result ? `<b>Replay</b><span>${esc(run.result)}</span>` : '') + `</div>`);
+}
+
+function renderChecks(c) {
+  if (!c) { setHTML($('checks'), '<div class="empty">The real-game checks are off (make watch CHECKS=0).</div>'); $('checksub').textContent = ''; return; }
+  $('checksub').textContent = c.state === 'running' ? 'hidden game, live' : (c.state || '');
+  const counts = `${num(c.runs)} runs, ${num(c.moves)} moves checked` + (c.stopped_early ? `, ${c.stopped_early} stopped early` : '') +
+    (c.errors ? `, ${c.errors} interrupted` : '');
+  let h;
+  if (c.differences) {
+    const d = c.last_difference || {};
+    h = `<div class="check bad"><div class="icon">!</div><div class="txt"><b>${c.differences} difference${c.differences > 1 ? 's' : ''} found</b>` +
+      `<div class="sub">${esc(counts)}</div>` + (d.what ? `<div class="sub">Latest: run ${esc(d.seed)}, after move ${d.move} (${esc(d.what)})</div>` +
+      `<ul class="diffs">${(d.differences || []).slice(0, 4).map(x => `<li>${esc(x)}</li>`).join('')}</ul><div class="sub">Saved: ${esc(d.file)}</div>` : '') + `</div></div>`;
+  } else if (c.moves) {
+    h = `<div class="check"><div class="icon">&#10003;</div><div class="txt"><b>No differences</b><div class="sub">${esc(counts)}: ` +
+      `money, hands, cards, chips, jokers, shop and packs agree after every move.</div></div></div>`;
   } else {
-    $('mismatch').hidden = true;
-    if (['connected', 'restart', 'stale'].includes(link.game)) {
-      $('check').innerHTML = `<div class="check"><div class="icon">&#10003;</div><div class="txt"><b>They agree on all ${S.moves.length} moves</b>` +
-        `<div class="sub">After every move the game's money, hands, cards, chips, jokers, shop and packs are compared with the engine's.</div></div></div>`;
-    } else {
-      $('check').innerHTML = `<div class="check idle"><div class="icon">&#8211;</div><div class="txt"><b>No game to check against</b>` +
-        `<div class="sub">The engine plays the run on its own until your game is connected.</div></div></div>`;
-    }
+    h = `<div class="check idle"><div class="icon">&#8211;</div><div class="txt"><b>${esc(c.message || 'Starting')}</b>` +
+      `<div class="sub">A hidden copy of your Balatro replays the job's runs at full speed and compares every move with the engine.</div></div></div>`;
   }
-  // jokers and the rest (now)
-  const jk = v.jokers || [];
-  $('jslots').textContent = `${jk.length}/${v.joker_slots ?? 5}`;
-  $('jokers').innerHTML = jk.length ? jk.map(jokerRow).join('') : '<div class="empty">No jokers yet.</div>';
-  let ex = '';
-  const cons = v.consumables || [];
-  if (cons.length) ex += `<div class="mini-h">Consumables ${cons.length}/${v.consumable_slots ?? 2}</div><div class="chips">` +
-    cons.map(c => `<span class="chipx ${kindClass(c.key)}">${esc(c.name || c.key)}${c.edition ? `<span class="ed ${c.edition}">${c.edition}</span>` : ''}</span>`).join('') + '</div>';
-  if ((v.vouchers || []).length) ex += `<div class="mini-h">Vouchers</div><div class="chips">${v.vouchers.map(x => `<span class="chipx voucher">${esc(x)}</span>`).join('')}</div>`;
-  if ((v.tags || []).length) ex += `<div class="mini-h">Tags</div><div class="chips">${v.tags.map(x => `<span class="chipx tag">${esc(x)}</span>`).join('')}</div>`;
-  $('extras').innerHTML = ex;
-  // shop or pack
-  const inShop = v.state === 'SHOP', inPack = v.state === 'SMODS_BOOSTER_OPENED';
-  $('shopcard').hidden = !(inShop || inPack);
-  if (inShop) {
-    $('shoptitle').textContent = `Shop · reroll $${v.reroll_cost}`;
-    const items = (v.shop || []).concat(v.shop_vouchers || [], v.shop_packs || []);
-    $('shop').innerHTML = items.length ? `<div class="shoprow">${items.map(i => `<span>${esc(i.name || i.key)}${i.edition ? `<span class="ed ${i.edition}">${i.edition}</span>` : ''}</span><span class="price">$${i.cost}</span>`).join('')}</div>` : '<div class="empty">Sold out.</div>';
-  } else if (inPack) {
-    $('shoptitle').textContent = `Pack · ${v.pack_choices_left ?? ''} to choose`;
-    $('shop').innerHTML = `<div class="chips">${(v.pack || []).map(i => `<span class="chipx ${kindClass(i.key)}">${esc(i.name || i.key)}</span>`).join('')}</div>`;
-  }
-  // hand levels
+  if (c.current) h += `<div class="sub" style="margin-top:6px">Now checking ${esc(c.current.label)} ${esc(c.current.seed)}, move ${c.current.move}</div>`;
+  else if (c.last) h += `<div class="sub" style="margin-top:6px">Last: ${esc(c.last.seed)}, ${esc(c.last.result)}</div>`;
+  setHTML($('checks'), h);
+}
+
+function renderLevels() {
+  const v = (S.sel === null ? (S.run && S.run.view) : S.selView) || {};
   const lv = v.hand_levels || [];
-  $('levels').innerHTML = lv.length ? `<table class="levels">${lv.map(h => `<tr><td>${esc(h.name)}</td><td class="l">lvl ${h.level}</td>` +
+  setHTML($('levels'), lv.length ? `<table class="levels">${lv.map(h => `<tr><td>${esc(h.name)}</td><td class="l">lvl ${h.level}</td>` +
     `<td class="c">${num(h.chips)}</td><td class="m">&times; ${num(h.mult)}</td><td class="l">${h.played} played</td></tr>`).join('')}</table>`
-    : '<div class="empty">No hand played yet.</div>';
-}
-
-function kindClass(key) {
-  if (!key) return '';
-  if (/^c_(fool|magician|high_priestess|empress|emperor|heirophant|lovers|chariot|justice|hermit|wheel|strength|hanged|death|temperance|devil|tower|star|moon|sun|judgement|world)/.test(key)) return 'tarot';
-  if (/^c_(mercury|venus|earth|mars|jupiter|saturn|uranus|neptune|pluto|planet_x|ceres|eris)/.test(key)) return 'planet';
-  if (key.startsWith('c_')) return 'spectral';
-  return '';
-}
-
-function jokerRow(j) {
-  if (j.face_down) return `<div class="joker"><div class="nm">Face down</div><div class="sell"></div></div>`;
-  const vals = [];
-  if (j.mult) vals.push(`<span class="v-mult">+${num(j.mult)} Mult</span>`);
-  if (j.x_mult && j.x_mult !== 1) vals.push(`<span class="v-x">X${+j.x_mult.toFixed(2)}</span>`);
-  if (j.chips) vals.push(`<span class="v-chips">+${num(j.chips)} Chips</span>`);
-  if (j.counter) vals.push(`<span>counter ${num(j.counter)}</span>`);
-  if (j.hand) vals.push(`<span>${esc(j.hand)}</span>`);
-  if (j.eternal) vals.push('<span>Eternal</span>');
-  if (j.perishable !== null && j.perishable !== undefined) vals.push(`<span>Perishable ${j.perishable}</span>`);
-  if (j.rental) vals.push('<span>Rental</span>');
-  if (j.debuff) vals.push('<span>debuffed</span>');
-  return `<div class="joker ${j.debuff ? 'debuffed' : ''}"><div class="nm">${esc(j.name)}${j.edition ? `<span class="ed ${j.edition}">${j.edition}</span>` : ''}</div>` +
-    `<div class="sell">sells $${j.sell}</div>${vals.length ? `<div class="val">${vals.join('')}</div>` : ''}</div>`;
+    : '<div class="empty">No hand played yet.</div>');
 }
 
 // ------------------------------------------------------------------ outlook chart
 const CH = { w: 300, h: 170, l: 30, r: 26, t: 8, b: 20 };
 function projAt(k) { return S.proj[String(k)] || null; }
 function chartX(k, n) { return CH.l + (CH.w - CH.l - CH.r) * (n <= 0 ? 0 : k / n); }
-function chartY(a) { return CH.t + (CH.h - CH.t - CH.b) * (1 - (a - 1) / 8); }   // ante 1..9
+function chartY(a) { return CH.t + (CH.h - CH.t - CH.b) * (1 - (a - 1) / 8); }
 function chartP(p) { return CH.t + (CH.h - CH.t - CH.b) * (1 - p); }
-
 function turningPoints() {
   const pts = [];
   let prev = projAt(0);
@@ -556,10 +691,8 @@ function turningPoints() {
   }
   return pts.filter(p => Math.abs(p.d) >= 0.25).sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 4);
 }
-
 function renderChart() {
   const n = S.moves.length;
-  const svg = $('chart');
   let h = '';
   for (let a = 1; a <= 9; a++) {
     const y = chartY(a);
@@ -576,7 +709,6 @@ function renderChart() {
   if (clear.length > 1) h += `<path d="${path(clear)}" fill="none" stroke="#2c8a57" stroke-width="1.1" opacity=".55"/>`;
   if (mean.length > 1) h += `<path d="${path(mean)}" fill="none" stroke="#2b7fd6" stroke-width="2"/>`;
   else if (mean.length === 1) h += `<circle cx="${mean[0][0]}" cy="${mean[0][1]}" r="2.5" fill="#2b7fd6"/>`;
-  // ante changes along the bottom
   let lastAnte = S.run && S.run.start ? S.run.start.ante : 1;
   for (let k = 1; k <= n; k++) {
     const m = S.moves[k - 1];
@@ -587,19 +719,16 @@ function renderChart() {
       lastAnte = m.ante;
     }
   }
-  // turning points
   turningPoints().forEach((tp, i) => {
     const p = projAt(tp.k); if (!p) return;
     const x = chartX(tp.k, n), y = chartY(Math.max(1, p.mean_ante));
     h += `<circle cx="${x}" cy="${y}" r="6.5" fill="${tp.d > 0 ? '#2c8a57' : '#c4452f'}"/><text x="${x}" y="${y + 3}" font-size="8.5" font-weight="700" text-anchor="middle" fill="#fff">${i + 1}</text>`;
   });
-  // selection
   const k = S.sel === null ? n : S.sel;
   const x = chartX(k, n);
   h += `<line x1="${x}" x2="${x}" y1="${CH.t}" y2="${CH.h - CH.b}" stroke="#1f1b15" stroke-width="1"/>`;
   h += `<text x="${CH.l}" y="${CH.h - 4}" font-size="8.5" fill="#8a8273">move 0</text><text x="${CH.w - CH.r}" y="${CH.h - 4}" font-size="8.5" text-anchor="end" fill="#8a8273">move ${n}</text>`;
-  svg.innerHTML = h;
-  // readout
+  setHTML($('chart'), h);
   const p = projAt(k);
   const m = k === 0 ? (S.run && S.run.start) : S.moves[k - 1];
   let r = `<b>${k === 0 ? 'Start of the run' : `After move ${k}`}</b>` + (m ? ` &middot; ante ${m.ante}${m.blind ? ', ' + esc(m.blind) : ''}` : '');
@@ -607,22 +736,19 @@ function renderChart() {
   else r += `<br>${S.analysis ? 'Projecting…' : 'Analysis is off.'}`;
   const err = S.state && S.state.settings && S.state.settings.analysis_error;
   if (err && S.analysis) r += `<br><span style="color:var(--bad)">${esc(err)}</span>`;
-  $('readout').innerHTML = r;
-  // turning point list
+  setHTML($('readout'), r);
   const tps = turningPoints();
-  $('tps').innerHTML = tps.length ? tps.map((tp, i) => {
+  setHTML($('tps'), tps.length ? tps.map((tp, i) => {
     const mv = S.moves[tp.k - 1];
     return `<button class="tp" data-k="${tp.k}"><span class="n" style="background:${tp.d > 0 ? 'var(--good)' : 'var(--bad)'}">${i + 1}</span>` +
       `<span class="sw">M${tp.k} &middot; ${esc(cap(mv ? mv.what : ''))}${mv && mv.detail ? ' ' + esc(mv.detail) : ''}</span>` +
       `<span class="what">${tp.from.toFixed(1)} &rarr; ${tp.to.toFixed(1)} projected ante` +
       `${mv && mv.shows && mv.shows.length ? ' &middot; showed ' + esc(mv.shows.join(', ')) : ''}</span></button>`;
-  }).join('') : '<div class="empty">They appear once the run has a few projected moves.</div>';
-  document.querySelectorAll('.tp').forEach(b => b.onclick = () => select(+b.dataset.k));
+  }).join('') : '<div class="empty">They appear once the run has a few projected moves.</div>');
   $('prev').disabled = k <= 0;
   $('nextm').disabled = S.sel === null;
-  $('live').classList.toggle('on', S.sel === null);
+  $('tolive').classList.toggle('on', S.sel === null);
 }
-
 function chartPick(ev) {
   const n = S.moves.length; if (!n) return;
   const rect = $('chart').getBoundingClientRect();
@@ -635,20 +761,16 @@ $('chart').addEventListener('pointerdown', e => { dragging = true; chartPick(e);
 window.addEventListener('pointerup', () => { dragging = false; });
 $('chart').addEventListener('pointermove', e => { if (dragging) chartPick(e); });
 
-function select(k) {
+let viewReq = 0;
+async function select(k) {
   const n = S.moves.length;
-  if (k === null || k >= n) {
-    S.sel = null; $('viewing').hidden = true; $('still').hidden = true; S.frameSeq = ''; render(); return;
-  }
+  if (k === null || k >= n) { S.sel = null; S.selView = null; render(); return; }
   S.sel = k;
-  const snaps = (S.run && S.run.snaps) || [];
-  const have = snaps.filter(x => x <= k);  // the move's own picture, or the nearest earlier one kept
-  const shown = have.length ? have[have.length - 1] : null;
-  $('viewing').hidden = false;
-  $('viewingtext').textContent = (k === 0 ? 'Start of the run' : `Move ${k}: ${S.moves[k - 1].what}`) +
-    (shown === null ? ' (no picture kept)' : shown < k ? ` (picture from move ${shown})` : '');
-  $('still').hidden = shown === null;
-  if (shown !== null) $('still').src = `/api/snap?run=${encodeURIComponent(S.runId)}&n=${shown}`;
+  const req = ++viewReq;
+  try {
+    const r = await fetch(`/api/view?run=${encodeURIComponent(S.runId)}&n=${k}`, { cache: 'no-store' });
+    if (r.ok && req === viewReq && S.sel === k) S.selView = await r.json();
+  } catch (e) { /* keep the last picture */ }
   render();
 }
 
@@ -662,29 +784,29 @@ function renderEvents() {
   const n = S.moves.length;
   $('nmoves').textContent = n ? `${n} moves` : '';
   const items = [];
-  let lastAnte = null;
   for (let i = n - 1; i >= Math.max(0, n - 250); i--) {
     const m = S.moves[i];
     items.push(`<li data-k="${m.n}" class="${S.sel === m.n ? 'sel' : ''}"><span class="t">M${m.n}</span><span class="chip" style="background:${chipColour(m.kind)}"></span>` +
-      `<span><b>${esc(cap(m.what))}</b>${m.detail ? ' &middot; ' + esc(m.detail) : ''}${m.ok ? '' : ' <span class="bad">differs</span>'}` +
+      `<span><b>${esc(cap(m.what))}</b>${m.detail ? ' &middot; ' + esc(m.detail) : ''}` +
       `${m.shows && m.shows.length ? `<br><span style="color:var(--muted)">${m.state === 'SHOP' ? 'Shop' : 'Pack'}: ${esc(m.shows.join(', '))}</span>` : ''}</span></li>`);
     const prevAnte = i > 0 ? S.moves[i - 1].ante : (S.run && S.run.start ? S.run.start.ante : m.ante);
     if (m.ante !== prevAnte) items.push(`<li class="sep">Ante ${m.ante}</li>`);
-    lastAnte = m.ante;
   }
   if (!n) items.push('<li class="sep">The moves appear here as the bot plays.</li>');
-  $('events').innerHTML = items.join('');
-  document.querySelectorAll('#events li[data-k]').forEach(li => li.onclick = () => select(+li.dataset.k));
+  setHTML($('events'), items.join(''));
 }
-function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
 
 // ------------------------------------------------------------------ controls
+$('search').addEventListener('click', e => { const b = e.target.closest('.tp.best'); if (b) post({ play: b.dataset.file }); });
+$('tps').addEventListener('click', e => { const b = e.target.closest('.tp'); if (b) select(+b.dataset.k); });
+$('events').addEventListener('click', e => { const li = e.target.closest('li[data-k]'); if (li) select(+li.dataset.k); });
+$('tbl').addEventListener('click', e => { if (e.target.closest('#backlive')) select(null); });
 $('pause').onclick = () => { S.paused = !S.paused; render(); post({ paused: S.paused }); };
 document.querySelectorAll('[data-speed]').forEach(b => b.onclick = () => { S.speed = b.dataset.speed; render(); post({ speed: S.speed }); });
+document.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => { S.pick = b.dataset.pick; render(); post({ pick: S.pick }); });
 $('next').onclick = () => post({ next: true });
 $('analysis').onclick = () => { S.analysis = !S.analysis; render(); post({ analysis: S.analysis }); };
-$('live').onclick = () => select(null);
-$('backlive').onclick = () => select(null);
+$('tolive').onclick = () => select(null);
 $('prev').onclick = () => select(S.sel === null ? Math.max(0, S.moves.length - 1) : Math.max(0, S.sel - 1));
 $('nextm').onclick = () => { if (S.sel !== null) select(S.sel + 1); };
 document.addEventListener('keydown', e => {
@@ -694,7 +816,6 @@ document.addEventListener('keydown', e => {
 });
 
 pollState();
-pollFrame();
 </script>
 </body>
 </html>

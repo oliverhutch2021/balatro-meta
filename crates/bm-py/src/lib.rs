@@ -458,6 +458,7 @@ impl Game {
             let h = PyDict::new(py);
             h.set_item("key", j.kind.key())?;
             h.set_item("name", j.kind.name())?;
+            h.set_item("rarity", j.kind.rarity())?;
             h.set_item("edition", edition_name(j.edition))?;
             h.set_item("debuff", j.debuffed)?;
             h.set_item("face_down", j.face_down)?;
@@ -529,6 +530,16 @@ impl Game {
                 },
             )?;
             b.set_item("status", slot_name(r.slots[s.index()]))?;
+            b.set_item(
+                "score",
+                bm_core::blinds::blind_target(
+                    r.ante,
+                    bm_core::blinds::scaling_for_stake(r.cfg.stake),
+                    kind,
+                    1.0,
+                ),
+            )?;
+            b.set_item("reward", kind.reward(r.cfg.stake))?;
             if s != BlindSlot::Boss {
                 b.set_item("tag_name", r.tags_offered[s.index()].name())?;
             }
@@ -545,7 +556,7 @@ impl Game {
         d.set_item("reroll_cost", r.reroll_cost)?;
         let consumables = pyo3::types::PyList::empty(py);
         for c in &r.consumables {
-            let h = item(py, c.kind.key().to_string(), c.edition)?;
+            let h = consumable_item(py, c)?;
             h.set_item("cost", c.cost)?;
             h.set_item("sell", c.sell_cost)?;
             consumables.append(h)?;
@@ -559,8 +570,8 @@ impl Game {
         if let Some(shop) = r.shop.as_ref() {
             for slot in &shop.row {
                 let h = match &slot.item {
-                    RowItem::Joker(j) => item(py, j.kind.key().to_string(), j.edition)?,
-                    RowItem::Consumable(c) => item(py, c.kind.key().to_string(), c.edition)?,
+                    RowItem::Joker(j) => joker_item(py, j)?,
+                    RowItem::Consumable(c) => consumable_item(py, c)?,
                     RowItem::Card(c) => playing_card(py, c)?,
                 };
                 h.set_item("cost", slot.cost)?;
@@ -594,8 +605,8 @@ impl Game {
         if let Some(p) = r.pack.as_ref() {
             for c in &p.cards {
                 let h = match c {
-                    PackCard::Joker(j) => item(py, j.kind.key().to_string(), j.edition)?,
-                    PackCard::Consumable(c) => item(py, c.kind.key().to_string(), c.edition)?,
+                    PackCard::Joker(j) => joker_item(py, j)?,
+                    PackCard::Consumable(c) => consumable_item(py, c)?,
                     PackCard::Card(c) => playing_card(py, c)?,
                 };
                 pack.append(h)?;
@@ -614,6 +625,30 @@ fn item<'py>(py: Python<'py>, key: String, e: Edition) -> PyResult<Bound<'py, Py
     h.set_item("name", item_name(&key))?;
     h.set_item("key", key)?;
     h.set_item("edition", edition_name(e))?;
+    Ok(h)
+}
+
+/// A joker offered in the shop or a pack, with its rarity (1 common to 4 legendary).
+fn joker_item<'py>(py: Python<'py>, j: &bm_core::jokers::Joker) -> PyResult<Bound<'py, PyDict>> {
+    let h = item(py, j.kind.key().to_string(), j.edition)?;
+    h.set_item("rarity", j.kind.rarity())?;
+    Ok(h)
+}
+
+/// A consumable, with its set (Tarot, Planet or Spectral).
+fn consumable_item<'py>(
+    py: Python<'py>,
+    c: &bm_core::create::Consumable,
+) -> PyResult<Bound<'py, PyDict>> {
+    let h = item(py, c.kind.key().to_string(), c.edition)?;
+    h.set_item(
+        "set",
+        match c.kind.set() {
+            bm_core::content::ConsumableSet::Tarot => "Tarot",
+            bm_core::content::ConsumableSet::Planet => "Planet",
+            bm_core::content::ConsumableSet::Spectral => "Spectral",
+        },
+    )?;
     Ok(h)
 }
 

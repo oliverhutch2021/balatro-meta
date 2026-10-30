@@ -1,21 +1,21 @@
-"""Watch the bots play in your own Balatro, with live stats around the game.
+"""Watch the search at work, and check the engine against your own Balatro.
 
-    make watch                 open the viewer in your browser (Ctrl+C stops; the game stays open)
-    make watch SPEED=4         start at another speed (1, 2, 4, 10 or max; the page can change it)
-    make watch-dry             replay runs in the engine only, printed here (no game, no browser)
+    make watch                 open the viewer in your browser (Ctrl+C stops it; a running job carries on)
+    make watch SPEED=4         start the replay at another speed (1, 2, 4 or max; the page can change it)
+    make watch CHECKS=0        the viewer without the hidden real-game checks
     make watch-mod             (re)install the companion mod into your Balatro Mods folder
 
-Your copy of Balatro does the drawing: BalatroBot plays exactly the moves the engine made, and the
-companion mod (mods/balatro_meta_watch) passes a picture of the game to the viewer page
-(scripts/viewer.py), blocks your mouse and keyboard while the bots play, and runs the game at the page's
-speed. Each replay is also a check of the engine: after every move the game's state (money, hands,
-discards, the cards in hand, the round's chips, the blinds and tags, jokers and consumables, the shop's
-cards, vouchers, packs and prices, and an open pack's cards) is compared with the engine's. A difference
-is saved to .sync/watch/mismatches/ with both states and the viewer moves on. BalatroBot has no call for
-"buy and use" or for a boss reroll; a replay stops (without a mismatch) before either.
+The viewer (scripts/viewer.py) replays, move by move, runs the running job has just played, and the page
+(viewer/index.html) draws them. The checks (scripts/checker.py) replay runs in a hidden copy of your
+Balatro through BalatroBot and compare the game with the engine after every move: money, hands,
+discards, the cards in hand, the round's chips, the blinds and tags, jokers and consumables (with their
+sell values), the shop's cards, vouchers, packs and prices, and an open pack's cards. A difference is
+saved to .sync/watch/mismatches/ with both states. This file holds the BalatroBot link and the
+comparison. BalatroBot has no call for "buy and use" or for a boss reroll; a check stops (without a
+difference) before either.
 
 Before the first time: RUNNING.md, step 5 (Lovely, Steamodded, BalatroBot; other gameplay mods off).
-make watch installs or updates the companion mod itself; restart Balatro once afterwards.
+make watch installs or updates the companion mod itself.
 """
 from __future__ import annotations
 
@@ -152,27 +152,6 @@ def try_urls() -> Api | None:
         except (urllib.error.URLError, OSError, RuntimeError, ValueError):
             continue
     return None
-
-
-def launch_game(speed: float) -> bool:
-    """Open Balatro through BalatroBot's launcher (uvx on Windows). False if uvx isn't installed."""
-    try:
-        from rng_game import find_balatro, sh, windows_profile
-    except ImportError:
-        return False
-    prof = windows_profile()
-    uvx = prof / ".local" / "bin" / "uvx.exe" if prof else None
-    if not uvx or not uvx.exists():
-        return False
-    game = find_balatro()
-    lovely = game / "winmm.dll" if (game / "winmm.dll").exists() else game / "version.dll"
-    cmd = [str(uvx), "balatrobot", "serve", "--gamespeed", str(max(1, round(speed))),
-           "--balatro-path", sh("wslpath", "-w", str(game)),
-           "--love-path", sh("wslpath", "-w", str(game / "Balatro.exe")),
-           "--lovely-path", sh("wslpath", "-w", str(lovely))]
-    print("Opening Balatro through BalatroBot:", " ".join(cmd[1:]))
-    subprocess.Popen(cmd, cwd="/mnt/c", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-    return True
 
 
 # ------------------------------------------------------------------ states
@@ -395,19 +374,6 @@ def save_dir() -> Path | None:
         return None
 
 
-def newest_sample() -> dict | None:
-    files = sorted(WATCH.glob("*/samples/*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-    for p in files:
-        try:
-            s = json.loads(p.read_text())
-            if s.get("seed") and isinstance(s.get("moves"), list):
-                s["_from"] = f"{p.parent.parent.name} job"
-                return s
-        except (OSError, ValueError):
-            continue
-    return None
-
-
 # ------------------------------------------------------------------ replay
 def fresh_seed() -> str:
     """A new random seed (never one a bot trained on: training seeds come from the jobs' samplers)."""
@@ -532,23 +498,20 @@ def install_mod(folder: Path | None = None) -> str | None:
     dest.mkdir(parents=True, exist_ok=True)
     for f in src.iterdir():
         (dest / f.name).write_bytes(f.read_bytes())
-    return (f"Installed the viewer's companion mod in {dest}. If Balatro is open, restart it once so it "
-            "loads (the viewer has a button for that).")
+    return (f"Installed the companion mod in {dest}. The hidden game for the checks loads it; a Balatro you "
+            "have open picks it up the next time it starts.")
 
 
 def main() -> None:
     import argparse
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--dry", action="store_true", help="engine only, printed here: no game, no browser")
-    ap.add_argument("--engine-only", action="store_true", help="the viewer page without a game")
-    ap.add_argument("--runs", type=int, default=0, help="--dry: stop after this many runs (0 = until Ctrl+C)")
-    ap.add_argument("--seed", default="", help="replay this seed with the greedy bot")
-    ap.add_argument("--speed", default="1", help="the visible game's speed: 1 (normal), 2, 4 or max")
+    ap.add_argument("--speed", default="1", help="the replay's speed: 1 (easy to follow), 2, 4 or max")
     ap.add_argument("--port", type=int, default=8790)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--no-browser", action="store_true")
-    ap.add_argument("--no-launch", action="store_true", help="don't open the game if BalatroBot isn't running")
+    ap.add_argument("--no-checks", action="store_true", help="no hidden real-game checks")
+    ap.add_argument("--no-launch", action="store_true", help="check only against a hidden game already running")
     ap.add_argument("--install-mod", action="store_true")
     a = ap.parse_args()
     import viewer
@@ -556,17 +519,9 @@ def main() -> None:
     if a.install_mod:
         print(install_mod() or "The companion mod is already up to date.")
         return
-    if a.dry:
-        v = viewer.Viewer("max")
-        drv = viewer.Driver(v, viewer.GameFiles(None), None, engine_only=True, seed=a.seed, runs=a.runs or 0)
-        try:
-            drv.loop()
-        except KeyboardInterrupt:
-            print("\nStopped.")
-        return
     speed = a.speed if a.speed in viewer.SPEEDS else viewer.DEFAULT_SPEED
-    viewer.serve(port=a.port, host=a.host, speed=speed, engine_only=a.engine_only, launch=not a.no_launch,
-                 seed=a.seed, browser=not a.no_browser)
+    viewer.serve(port=a.port, host=a.host, speed=speed, checks=not a.no_checks, launch=not a.no_launch,
+                 browser=not a.no_browser)
 
 
 if __name__ == "__main__":

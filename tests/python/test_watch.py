@@ -1,14 +1,16 @@
-"""make watch's game driver, against a stand-in for BalatroBot.
+"""The real-game checks (scripts/checker.py) against a stand-in for BalatroBot.
 
-The stand-in serves BalatroBot's JSON-RPC methods from a second engine run and shows the hand in a
-scrambled order, so the driver must re-align it before every play. With the same rules on both
-sides, a replay must finish with no mismatch; a stand-in that pays $1 extra must be caught.
+The stand-in serves BalatroBot's JSON-RPC methods from a second engine run, shows the hand in a
+scrambled order (so the checker must re-align it before every play) and, like the real game, shows a
+price and a sell value on every card. With the same rules on both sides, a check must finish with no
+difference; a stand-in that pays $1 extra, prices a card wrongly or values a joker wrongly must be caught.
 """
 from __future__ import annotations
 
 import json
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -17,18 +19,16 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import checker
 import watch
 from balatro_meta._engine import Game
 
-import viewer
-
 
 def replay(api, seed: str, tmp_path, moves=None):
-    """One run through the viewer's driver against `api` (no mod, no pictures)."""
-    v = viewer.Viewer("max")
-    drv = viewer.Driver(v, viewer.GameFiles(None), None, api=api, launch=False, say=lambda *_: None)
-    ok, msg = drv.play_run(seed, moves, "test")
-    return ok, msg, v
+    """One run checked against `api` (no companion mod: nothing to wait for)."""
+    c = checker.Checker(api=api, files=checker.ModFiles(None), launch=False, say=lambda *_: None)
+    ok, msg = c.check_run(seed, moves, "test")
+    return ok, msg, c
 
 
 def area(items: list, cheat_price: bool = False) -> dict:
@@ -158,7 +158,7 @@ def serve(fake: FakeGame):
 @pytest.mark.parametrize("seed", ["WATCH001", "K4QJ2B7X", "ZZ9ZZ9ZZ"])
 def test_replay_agrees_with_an_identical_game(seed, tmp_path, monkeypatch):
     monkeypatch.setattr(watch, "WATCH", tmp_path)
-    monkeypatch.setattr(viewer, "WATCH", tmp_path)
+    monkeypatch.setattr(checker, "WATCH", tmp_path)
     srv = serve(FakeGame())
     api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
     ok, msg = replay(api, seed, tmp_path)[:2]
@@ -170,7 +170,7 @@ def test_replay_agrees_with_an_identical_game(seed, tmp_path, monkeypatch):
 def test_shop_and_pack_moves_reach_the_game(tmp_path, monkeypatch):
     """The greedy bot buys, opens packs and uses Planets: those moves must be sent and agree."""
     monkeypatch.setattr(watch, "WATCH", tmp_path)
-    monkeypatch.setattr(viewer, "WATCH", tmp_path)
+    monkeypatch.setattr(checker, "WATCH", tmp_path)
     fake = FakeGame()
     sent: list[str] = []
     rpc = fake.rpc
@@ -186,7 +186,7 @@ def test_shop_and_pack_moves_reach_the_game(tmp_path, monkeypatch):
 
 def test_a_wrong_shop_price_is_caught(tmp_path, monkeypatch):
     monkeypatch.setattr(watch, "WATCH", tmp_path)
-    monkeypatch.setattr(viewer, "WATCH", tmp_path)
+    monkeypatch.setattr(checker, "WATCH", tmp_path)
     srv = serve(FakeGame(cheat_price=True))
     api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
     ok, msg = replay(api, "WATCH003", tmp_path)[:2]
@@ -196,7 +196,7 @@ def test_a_wrong_shop_price_is_caught(tmp_path, monkeypatch):
 
 def test_a_wrong_sell_value_is_caught(tmp_path, monkeypatch):
     monkeypatch.setattr(watch, "WATCH", tmp_path)
-    monkeypatch.setattr(viewer, "WATCH", tmp_path)
+    monkeypatch.setattr(checker, "WATCH", tmp_path)
     srv = serve(FakeGame(cheat_sell=True))
     api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
     for seed in ("SHOPPER1", "SHOPPER2", "SHOPPER3"):  # runs where the bot buys a joker
@@ -209,13 +209,14 @@ def test_a_wrong_sell_value_is_caught(tmp_path, monkeypatch):
 
 def test_a_difference_is_caught_and_saved(tmp_path, monkeypatch):
     monkeypatch.setattr(watch, "WATCH", tmp_path)
-    monkeypatch.setattr(viewer, "WATCH", tmp_path)
+    monkeypatch.setattr(checker, "WATCH", tmp_path)
     srv = serve(FakeGame(cheat=True))
     api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
-    ok, msg, v = replay(api, "WATCH002", tmp_path)
+    ok, msg, c = replay(api, "WATCH002", tmp_path)
     srv.shutdown()
     assert not ok and "money" in msg
-    assert v.run.mismatch and v.session["mismatches"] == 1  # shown on the page
+    st = c.summary()  # shown on the page
+    assert st["differences"] == 1 and st["last_difference"]["differences"]
     saved = list((tmp_path / "mismatches").glob("*.json"))
     assert len(saved) == 1 and json.loads(saved[0].read_text())["differences"]
 
@@ -224,7 +225,7 @@ def test_a_difference_is_caught_and_saved(tmp_path, monkeypatch):
 def test_the_windows_bridge_relays_calls(tmp_path, monkeypatch):
     """The relay that reaches BalatroBot on Windows' localhost, run here with this Python."""
     monkeypatch.setattr(watch, "WATCH", tmp_path)
-    monkeypatch.setattr(viewer, "WATCH", tmp_path)
+    monkeypatch.setattr(checker, "WATCH", tmp_path)
     srv = serve(FakeGame())
     url = f"http://127.0.0.1:{srv.server_address[1]}"
     bridge = watch.WinBridge(sys.executable, str(ROOT / "scripts" / "win_bridge.py"), cwd=None)
@@ -245,11 +246,11 @@ def test_the_windows_bridge_relays_calls(tmp_path, monkeypatch):
         bridge.close()
 
 
-def test_a_refused_start_is_reported_and_the_viewer_carries_on(tmp_path, monkeypatch):
+def test_a_refused_start_is_reported_and_the_checks_carry_on(tmp_path, monkeypatch):
     """BalatroBot failing inside `start` (as it did after a lost run, before the companion mod readied the
-    run-setup deck) is shown as the game refusing a call, and the link to the game is kept."""
+    run-setup deck) is counted as an interrupted check, and the link to the game is kept."""
     monkeypatch.setattr(watch, "WATCH", tmp_path)
-    monkeypatch.setattr(viewer, "WATCH", tmp_path)
+    monkeypatch.setattr(checker, "WATCH", tmp_path)
     fake = FakeGame()
     rpc = fake.rpc
 
@@ -261,10 +262,64 @@ def test_a_refused_start_is_reported_and_the_viewer_carries_on(tmp_path, monkeyp
     fake.rpc = refuse_start
     srv = serve(fake)
     api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
-    v = viewer.Viewer("max")
-    drv = viewer.Driver(v, viewer.GameFiles(None), None, api=api, launch=False, seed="REFUSED1", runs=1,
-                        say=lambda *_: None)
-    drv.loop()
+    lines = []
+    c = checker.Checker(api=api, files=checker.ModFiles(None), launch=False, say=lines.append)
+    stop = threading.Event()
+    t = threading.Thread(target=c.loop, args=(stop,), daemon=True)
+    t.start()
+    deadline = time.time() + 10
+    while time.time() < deadline and c.summary()["errors"] < 1:
+        time.sleep(0.05)
+    stop.set()
+    t.join(5)
     srv.shutdown()
-    assert v.run.result.startswith("the game refused a call") and "viewed_back" in v.run.result
-    assert drv.api is api, "a refusal is not a lost connection"
+    st = c.summary()
+    assert st["errors"] >= 1 and st["differences"] == 0
+    assert "refused" in st["last"]["result"] and "viewed_back" in st["last"]["result"]
+    assert c.api is api, "a refusal is not a lost connection"
+
+
+class AlwaysIdle(checker.ModFiles):
+    """A companion mod that reports an idle game, freshly, every time it is read."""
+
+    def __init__(self) -> None:
+        super().__init__(Path("/nonexistent"), 12350)
+        self.reads = 0
+
+    def write_control(self, **values) -> None:
+        self.last_control = values
+
+    def read_state(self):
+        self.reads += 1
+        return {"version": checker.MOD_VERSION, "time": str(self.reads), "busy": "0", "end": "1"}
+
+
+def test_the_checks_take_the_jobs_best_runs_first(tmp_path, monkeypatch):
+    import viewer
+
+    monkeypatch.setattr(watch, "WATCH", tmp_path)
+    monkeypatch.setattr(checker, "WATCH", tmp_path)
+    samples = tmp_path / "watch" / "job" / "samples"
+    samples.mkdir(parents=True)
+    g = Game("CHECKME1")
+    moves = []
+    for _ in range(6):
+        k, a = g.greedy_move()
+        g.step(k, a)
+        moves.append([k, a])
+    (samples / "typical-1.json").write_text(json.dumps({"seed": "TYPICAL1", "moves": moves, "pick": "typical"}))
+    (samples / "best-0000000001.json").write_text(json.dumps(
+        {"seed": "CHECKME1", "moves": moves, "pick": "best", "won": False, "stage": 3, "closeness": 0.5}))
+    jobs = viewer.JobFiles(tmp_path / "watch", tmp_path / "logs")
+    srv = serve(FakeGame())
+    api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
+    mod = AlwaysIdle()
+    c = checker.Checker(jobs=jobs, api=api, files=mod, launch=False, say=lambda *_: None)
+    seed, got, _ = c.next_run()
+    assert seed == "CHECKME1" and [list(m) for m in got] == moves
+    assert c.next_run()[0] == "TYPICAL1"
+    assert c.next_run()[1] is None, "then demo runs"
+    ok, msg = c.check_run("CHECKME1", [tuple(m) for m in moves], "best run")
+    srv.shutdown()
+    assert ok and c.summary()["moves"] == 6, msg
+    assert mod.reads > 0, "the checks waited for the game through the mod's reports"
