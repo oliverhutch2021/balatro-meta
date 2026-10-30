@@ -224,6 +224,30 @@ def job_files(tmp_path: Path, seeds=("PAGEBEST", "PAGETYPI")) -> tuple[viewer.Jo
     return viewer.JobFiles(watch, tmp_path / "logs"), runs
 
 
+def training_progress() -> dict:
+    """The network's progress.json while it trains (scripts/train_policy.py): all its runs, the latest ("now"), and
+    three blocks of 1,000 runs, getting better."""
+    fields = ["end_runs", "end_seconds", "runs", "wins", "ante", "moves", "refused", "jokers", "packs", "rerolls",
+              "money", "cut"]
+    blocks = [[1000 * (k + 1), 600.0 * (k + 1), 1000, 50 + 100 * k, 5000 + 400 * k, 300000, 2000 - 500 * k, 5000,
+               9000, 3000, 20000, 10 - 4 * k] for k in range(3)]
+    return {"kind": "baseline", "bot": "network (PPO)", "deck": "Red Deck", "stake": "White Stake", "done": False,
+            "updated": time.time(), "elapsed": 1800, "threads": 16, "target": 3400, "runs": 3400, "rate": 1.9,
+            "wins": 420, "win_rate": 0.25, "win_ci": [0.23, 0.27], "mean_ante": 6.1,
+            "ante_hist": [100, 200, 300, 600, 700, 500, 400, 180, 420],
+            "lost_to": [["Big Blind", 1500], ["The Wall", 900], ["Too many moves", 580]],
+            "hands_played": [["Pair", 9000], ["Flush", 3000]], "jokers_bought": [["Joker", 2000, 0.588]],
+            "jokers_in_wins": [["Blueprint", 300, 0.714]], "per_run": {"moves": 290, "refused": 1.2, "jokers_bought": 5.1},
+            "now": {"runs": 1000, "wins": 250, "win_rate": 0.25, "mean_ante": 6.4, "label": "last 1,000 runs",
+                    "ante_hist": [0, 10, 40, 150, 200, 150, 120, 80, 250], "lost_to": [["The Wall", 500], ["Big Blind", 250]],
+                    "hands_played": [["Flush", 2000]], "jokers_bought": [["Blueprint", 400, 0.4]],
+                    "jokers_in_wins": [["Blueprint", 200, 0.8]], "per_run": {"moves": 270, "refused": 0.5}},
+            "block_fields": fields, "block_runs": 1000, "blocks": blocks,
+            "best_runs": [[1, "PAGEBEST", "lost at ante 2 to Big Blind (40% of its target)", 812, False, 7,
+                           "best-0000000007.json"]],
+            "history": []}
+
+
 def start_server(v, jobs, checks=None):
     srv = ThreadingHTTPServer(("127.0.0.1", 0), viewer.make_handler(v, jobs, checks))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -409,6 +433,21 @@ def test_the_page_draws_the_run(tmp_path):
                                                                "Red seal", "Foil"], got["mods"]
             shop = page.evaluate(RUN_INFO_CHECK, run_info_view("SHOP"))
             assert all(shop[k] == got[k] for k in ("sa", "ha", "spades", "clubs", "all", "head")), "the same in the shop"
+            # While the network trains: its numbers for the latest runs (first) or all of them, and the training block
+            # by block.
+            (tmp_path / "watch" / "baseline" / "progress.json").write_text(json.dumps(training_progress()))
+            page.wait_for_function("() => document.querySelector('#search [data-sv]') !== null", timeout=15000)
+            text = page.inner_text("#search")
+            assert "The latest 1,000 runs: 25.0% won" in text and "The Wall" in text and "Too many moves" not in text
+            assert page.locator("#search .trow").count() == 9, "win rate, ante, jokers, packs, rerolls, money, moves..."
+            assert "through the training" in text.lower() and "3 blocks of 1,000" in text and "3,000 runs in 0.5 h" in text
+            assert "best runs so far" in text.lower()
+            page.click("#search [data-sv='all']")
+            page.wait_for_function("() => document.querySelector('#search [data-sv=all]').classList.contains('on')")
+            text = page.inner_text("#search")
+            assert "Too many moves" in text and "The latest 1,000 runs" not in text
+            page.click("#search [data-sv='now']")
+            page.wait_for_function("() => document.querySelector('#search [data-sv=now]').classList.contains('on')")
             assert not errors, errors
             browser.close()
     finally:

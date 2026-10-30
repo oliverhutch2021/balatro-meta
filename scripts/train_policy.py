@@ -24,6 +24,7 @@ Moves the real game's bridge can't make (buy and use at once, boss reroll) and d
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import math
 import os
@@ -63,6 +64,14 @@ REFUSED_COST = 0.01
 FREE_COST = 0.0002
 MAX_MOVES = 3000  # a run still going after this many moves is cut short
 FREE_STREAK = 16  # reorder moves in a row before reordering is put aside until another move
+# The job's numbers for make watch (RunBook): "now" is the latest NOW_RUNS runs; the training's progress is kept a
+# block of BLOCK_RUNS runs at a time, and beyond MAX_BLOCKS blocks the oldest merge in pairs.
+NOW_RUNS = 1000
+BLOCK_RUNS = 1000
+MAX_BLOCKS = 400
+BLOCK_FIELDS = ("end_runs", "end_seconds", "runs", "wins", "ante", "moves", "refused", "jokers", "packs", "rerolls",
+                "money", "cut")
+CUT = "Too many moves"  # what ends a run cut short (the engine's tally::CUT)
 
 
 def engine():
@@ -609,10 +618,13 @@ class Watch:
         for p in files[:-40]:
             p.unlink(missing_ok=True)
 
-    def report(self, stats: dict, done: bool = False, extra: dict | None = None) -> None:
+    def report(self, stats: dict, done: bool = False, extra=None) -> None:
+        """Write progress.json (at most once a second unless done); `extra` is a dict or a function making one."""
         if not self.dir or (time.time() - self.last < 1.0 and not done):
             return
         self.last = time.time()
+        if callable(extra):
+            extra = extra()
         write_json(self.dir / "progress.json", progress_body(stats, self.bot, self.target, self.threads, done,
                                                              self.history, extra))
 
@@ -668,6 +680,117 @@ def new_stats() -> dict:
     return {"runs": 0, "wins": 0, "moves": 0, "ante_hist": [0] * 9, "elapsed": 0.0, "rate": 0.0}
 
 
+def new_totals() -> dict:
+    return {"runs": 0, "wins": 0, "ante_hist": [0] * 9, "moves": 0, "refused": 0, "rerolls": 0, "skips": 0,
+            "packs": 0, "vouchers": 0, "blinds_beaten": 0, "money": 0, "jokers": 0, "lost_to": {}, "bought": {},
+            "held": {}, "held_won": {}, "hands": [0] * 12}
+
+
+END_KEYS = ("won", "ante", "lost_to", "money", "held", "bought", "moves", "refused", "rerolls", "skips", "packs",
+            "vouchers", "blinds_beaten", "hands")
+
+
+def add_end(t: dict, end: dict) -> None:
+    """Count one finished run (the engine's VecEnv.take_endings / cut_run) into totals."""
+    won = bool(end["won"])
+    t["runs"] += 1
+    t["wins"] += int(won)
+    t["ante_hist"][min(max(int(end["ante"]), 1), 9) - 1] += 1
+    for k in ("moves", "refused", "rerolls", "skips", "packs", "vouchers", "blinds_beaten", "money"):
+        t[k] += int(end[k])
+    t["jokers"] += len(end["bought"])
+    if not won:
+        t["lost_to"][end["lost_to"]] = t["lost_to"].get(end["lost_to"], 0) + 1
+    for j in end["bought"]:
+        t["bought"][j] = t["bought"].get(j, 0) + 1
+    for j in end["held"]:
+        t["held"][j] = t["held"].get(j, 0) + 1
+        if won:
+            t["held_won"][j] = t["held_won"].get(j, 0) + 1
+    t["hands"] = [a + int(b) for a, b in zip(t["hands"], end["hands"], strict=False)]
+
+
+def breakdown(t: dict, hand_names) -> dict:
+    """What make watch shows of a job's runs, with examples/baseline.rs's field names."""
+    runs, wins = t["runs"], t["wins"]
+    per = max(runs, 1)
+    lo, hi = wilson(wins, runs)
+
+    def table(counts: dict, of: int) -> list:
+        rows = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:20]
+        return [[k, n, round(n / max(of, 1), 6)] for k, n in rows]
+
+    return {"runs": runs, "wins": wins, "win_rate": wins / per, "win_ci": [lo, hi],
+            "mean_ante": sum((i + 1) * n for i, n in enumerate(t["ante_hist"])) / per, "ante_hist": list(t["ante_hist"]),
+            "blinds_beaten_per_run": t["blinds_beaten"] / per,
+            "lost_to": [[k, n] for k, n in sorted(t["lost_to"].items(), key=lambda kv: (-kv[1], kv[0]))[:12]],
+            "hands_played": [[hand_names[i], n] for i, n in enumerate(t["hands"]) if n],
+            "jokers_bought": table(t["bought"], runs), "jokers_held_at_end": table(t["held"], runs),
+            "jokers_in_wins": table(t["held_won"], wins),
+            "per_run": {"moves": t["moves"] / per, "jokers_bought": t["jokers"] / per, "rerolls": t["rerolls"] / per,
+                        "skips": t["skips"] / per, "packs": t["packs"] / per, "vouchers": t["vouchers"] / per,
+                        "money_at_end": t["money"] / per, "refused": t["refused"] / per}}
+
+
+class RunBook:
+    """The job's numbers from every finished run, for make watch: over all runs, over the latest NOW_RUNS ("now"),
+    and block by block (BLOCK_FIELDS), so the viewer can show the network changing as it trains. Its state goes in
+    the PPO checkpoint, so a resumed run carries on counting."""
+
+    def __init__(self, hand_names, state: dict | None = None, block_runs: int = BLOCK_RUNS,
+                 now_runs: int = NOW_RUNS) -> None:
+        s = state or {}
+        self.hand_names = list(hand_names)
+        self.total = s.get("total") or new_totals()
+        self.recent = collections.deque(s.get("recent") or [], maxlen=now_runs)
+        self.block_runs = int(s.get("block_runs") or block_runs)
+        self.blocks = [list(b) for b in s.get("blocks") or []]
+        self.block = s.get("block") or dict.fromkeys(BLOCK_FIELDS[2:], 0)
+
+    def add(self, end: dict, seconds: float) -> None:
+        end = {k: end[k] for k in END_KEYS}
+        add_end(self.total, end)
+        self.recent.append(end)
+        b = self.block
+        for k, x in (("runs", 1), ("wins", int(end["won"])), ("ante", int(end["ante"])), ("moves", end["moves"]),
+                     ("refused", end["refused"]), ("jokers", len(end["bought"])), ("packs", end["packs"]),
+                     ("rerolls", end["rerolls"]), ("money", end["money"]), ("cut", int(end["lost_to"] == CUT))):
+            b[k] += int(x)
+        if b["runs"] >= self.block_runs:
+            self.blocks.append([self.total["runs"], round(seconds, 1), *(b[k] for k in BLOCK_FIELDS[2:])])
+            self.block = dict.fromkeys(BLOCK_FIELDS[2:], 0)
+            if len(self.blocks) > MAX_BLOCKS:
+                self.blocks = merge_blocks(self.blocks)
+                self.block_runs *= 2
+
+    def fields(self) -> dict:
+        """progress.json's breakdown of the runs (what ends them, jokers, hands, an average run), the same for the
+        latest runs under "now", and the blocks."""
+        now = new_totals()
+        for e in self.recent:
+            add_end(now, e)
+        out = breakdown(self.total, self.hand_names)
+        for k in ("runs", "wins", "win_rate", "win_ci", "mean_ante", "ante_hist"):
+            del out[k]  # the job's own counters say these
+        return {**out, "now": {**breakdown(now, self.hand_names), "label": f"last {len(self.recent):,} runs"},
+                "block_fields": list(BLOCK_FIELDS), "block_runs": self.block_runs, "blocks": self.blocks}
+
+    def state(self) -> dict:
+        return {"total": self.total, "recent": list(self.recent), "block_runs": self.block_runs,
+                "blocks": self.blocks, "block": self.block}
+
+
+def merge_blocks(blocks: list) -> list:
+    """Pairs of blocks as one (ending where the second ends); an odd last block stays as it is."""
+    out = []
+    for i in range(0, len(blocks) - 1, 2):
+        a, b = blocks[i], blocks[i + 1]
+        out.append([b[0], b[1], *(x + y for x, y in zip(a[2:], b[2:], strict=True))])
+    if len(blocks) % 2:
+        out.append(blocks[-1])
+    return out
+
+
 def eval_policy(a) -> dict:
     """Play the baseline job's seeds with the network's likeliest moves."""
     torch = need_torch()
@@ -693,6 +816,7 @@ def eval_policy(a) -> dict:
     watch = Watch(Path(os.environ["BM_WATCH_DIR"]) if os.environ.get("BM_WATCH_DIR") else None,
                   "network", a.runs, a.threads)
     stats = new_stats()
+    book = RunBook(e.HAND_NAMES, block_runs=a.block_runs)
     guard = Guard(n)
     t0 = time.time()
     finished = 0
@@ -705,6 +829,7 @@ def eval_policy(a) -> dict:
         args = to_moves(kind_np, slot.cpu().numpy(), to.cpu().numpy(), cards.cpu().numpy())
         _, done, won, refused, ante = env.step(kind_np, args)
         cleared = env.cleared
+        endings = dict(env.take_endings()) if done.any() else {}
         ended = done.copy()
         for i in range(n):
             if slot_run[i] < 0:
@@ -713,6 +838,7 @@ def eval_policy(a) -> dict:
             blinds[i] += int(cleared[i])
             cut = moves[i] >= MAX_MOVES
             if done[i] or cut:
+                book.add(endings[i] if done[i] else env.cut_run(i), time.time() - t0)
                 r = slot_run[i]
                 stage = 24 if won[i] else ended_stage(blinds[i], int(ante[i]))
                 stages[r] = chr(65 + stage)
@@ -732,15 +858,16 @@ def eval_policy(a) -> dict:
         guard.after(kind_np, refused, ended)
         stats["elapsed"] = time.time() - t0
         stats["rate"] = stats["runs"] / max(stats["elapsed"], 1e-9)
-        watch.report(stats)
+        watch.report(stats, extra=book.fields)
     runs, wins = stats["runs"], stats["wins"]
     lo, hi = wilson(wins, runs)
     mean = sum((i + 1) * k for i, k in enumerate(stats["ante_hist"])) / max(runs, 1)
+    fields = book.fields()
     report = progress_body(stats, "network", a.runs, a.threads, True, [], {
         "model": str(a.model), "seed_base": a.seed, "greedy": not a.sample, "run_stages": "".join(stages),
-        "refused_moves": 0})
+        "refused_moves": book.total["refused"], **fields})
     report.update({"win_ci": [lo, hi], "mean_ante": mean})
-    watch.report(stats, done=True)
+    watch.report(stats, done=True, extra=fields)
     if a.out:
         write_json(Path(a.out), report)
     print(f"{runs:,} runs: {wins:,} won ({wins / max(runs, 1):.2%}, 95% range {lo:.2%} to {hi:.2%}), "
@@ -769,7 +896,8 @@ def ppo(a) -> dict:
             model = build_model(torch, a.width, a.layers, a.heads, a.width * 3).to(device)
             print("Starting from scratch.", flush=True)
         ck = None
-        state = {"updates": 0, "steps": 0, "seconds": 0.0, "stats": new_stats(), "history": [], "recent": []}
+        state = {"updates": 0, "steps": 0, "seconds": 0.0, "stats": new_stats(), "history": [], "recent": [],
+                 "book": None}
     opt = torch.optim.Adam(model.parameters(), lr=a.lr, eps=1e-5)
     if ck and "opt" in ck:
         opt.load_state_dict(ck["opt"])
@@ -797,6 +925,7 @@ def ppo(a) -> dict:
     watch.history = state.get("history", [])
     stats = state["stats"]
     recent: list = state.get("recent", [])
+    book = RunBook(e.HAND_NAMES, state.get("book"), block_runs=a.block_runs)
     stop = {"now": False}
 
     def on_signal(*_):
@@ -826,6 +955,7 @@ def ppo(a) -> dict:
     def save_all() -> None:
         state["seconds"] = seconds0 + time.time() - t_start
         state["stats"], state["recent"], state["history"] = stats, recent[-5000:], watch.history
+        state["book"] = book.state()
         save(torch, latest, model, {"opt": opt.state_dict(), "state": state})
 
     guard = Guard(N)
@@ -853,7 +983,12 @@ def ppo(a) -> dict:
             r = cleared * BLIND_REWARD + won * WIN_REWARD - refused * REFUSED_COST \
                 - np.isin(kind_np, FREE) * FREE_COST
             cut = (moves >= MAX_MOVES) & ~done
+            seconds = seconds0 + time.time() - t_start
+            if done.any():
+                for _, end in env.take_endings():
+                    book.add(end, seconds)
             for i in np.flatnonzero(cut):
+                book.add(env.cut_run(int(i)), seconds)
                 env.set_seed(int(i), e.run_seed(a.seed + 7919, trunc))
                 trunc += 1
             ended = done | cut
@@ -938,7 +1073,8 @@ def ppo(a) -> dict:
                  "recent_win_rate": win_recent, "recent_mean_ante": ante_recent,
                  "losses": {k: round(v / max(nb, 1), 5) for k, v in losses.items()}}
         lo, hi = wilson(int(win_recent * len(last)), len(last))
-        watch.report(stats, extra={**extra, "win_rate": win_recent, "win_ci": [lo, hi], "mean_ante": ante_recent})
+        head = {**extra, "win_rate": win_recent, "win_ci": [lo, hi], "mean_ante": ante_recent}
+        watch.report(stats, extra=lambda head=head: {**book.fields(), **head})
         if state["updates"] % a.print_every == 0:
             print(f"update {state['updates']}: {stats['runs']:,} runs, last {len(last):,}: won {win_recent:.2%}, "
                   f"mean final ante {ante_recent:.2f}; policy {losses['policy'] / max(nb, 1):.4f}, "
@@ -951,14 +1087,15 @@ def ppo(a) -> dict:
     last = recent[-2000:]
     win_recent = sum(w for w, _ in last) / max(len(last), 1)
     lo, hi = wilson(sum(w for w, _ in last), len(last))
-    watch.report(stats, done=True, extra={"updates": state["updates"], "steps": state["steps"],
+    fields = book.fields()
+    watch.report(stats, done=True, extra={**fields, "updates": state["updates"], "steps": state["steps"],
                                           "recent_runs": len(last), "win_rate": win_recent, "win_ci": [lo, hi],
                                           "mean_ante": sum(an for _, an in last) / max(len(last), 1)})
     report = {"kind": "ppo", "updates": state["updates"], "steps": state["steps"], "runs": stats["runs"],
               "seconds": round(seconds0 + time.time() - t_start, 1), "recent_runs": len(last),
               "recent_win_rate": sum(w for w, _ in last) / max(len(last), 1),
               "recent_mean_ante": sum(an for _, an in last) / max(len(last), 1), "history": watch.history,
-              "device": str(device), "envs": N, "steps_per_update": T, "model": str(latest)}
+              "device": str(device), "envs": N, "steps_per_update": T, "model": str(latest), **fields}
     if a.report:
         write_json(Path(a.report), report)
     if stop["now"] and seconds0 + time.time() - t_start < a.hours * 3600:
@@ -1011,12 +1148,14 @@ def main() -> None:
     p.add_argument("--save-minutes", type=float, default=10.0)
     p.add_argument("--value-warmup", type=int, default=20, help="updates that train only the value, from --init")
     p.add_argument("--print-every", type=int, default=5)
+    p.add_argument("--block-runs", type=int, default=BLOCK_RUNS, help="runs per point of the training's progress")
     v = sub.add_parser("eval", parents=[net])
     v.add_argument("--model", required=True)
     v.add_argument("--runs", type=int, default=5000)
     v.add_argument("--envs", type=int, default=1024)
     v.add_argument("--out")
     v.add_argument("--sample", action="store_true", help="sample moves instead of taking the likeliest")
+    v.add_argument("--block-runs", type=int, default=BLOCK_RUNS, help="runs per block in the live numbers")
     a = ap.parse_args()
     if a.cmd == "imitate":
         imitate(a)

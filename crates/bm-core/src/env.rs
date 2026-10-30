@@ -8,6 +8,7 @@ use crate::blinds::BlindSlot;
 use crate::card::SortMode;
 use crate::observe::{encode, screen};
 use crate::state::{Phase, Run, RunConfig};
+use crate::tally::{RunEnd, Tally};
 
 /// Move kinds. The argument is:
 /// - a hand bitmask for Play and Discard;
@@ -351,6 +352,10 @@ pub struct Env {
     seeds: SeedSampler,
     pub stake: u8,
     pub episodes: u64,
+    /// The run's counts so far (`tally::Tally`).
+    pub tally: Tally,
+    /// How the last finished run ended, until the caller takes it.
+    pub ended: Option<RunEnd>,
 }
 
 /// The seed of run `i` of a job with seed base `base` (the baseline job's runs, so other bots can play the
@@ -382,6 +387,8 @@ impl Env {
             seeds,
             stake,
             episodes: 0,
+            tally: Tally::default(),
+            ended: None,
         }
     }
 
@@ -390,6 +397,7 @@ impl Env {
         cfg.stake = self.stake;
         self.run = Run::new(cfg);
         self.episodes += 1;
+        self.tally = Tally::default();
     }
 
     /// Start a new run on this seed (to play chosen seeds, such as another bot's).
@@ -397,12 +405,14 @@ impl Env {
         let mut cfg = RunConfig::new(seed);
         cfg.stake = self.stake;
         self.run = Run::new(cfg);
+        self.tally = Tally::default();
     }
 
     /// Apply a move; at the end of an episode (lost, or won by beating
     /// ante 8) report it and start a new one. A refused move changes nothing.
     pub fn step(&mut self, kind: i64, arg: u64) -> StepInfo {
         let Some(k) = MoveKind::from_index(kind) else {
+            self.tally.refused += 1;
             return StepInfo {
                 refused: true,
                 ante: self.run.ante,
@@ -410,7 +420,9 @@ impl Env {
             };
         };
         let in_round = self.run.phase == Phase::Round;
+        let pending = Tally::before(&self.run, k, arg);
         let refused = apply(&mut self.run, k, arg).is_err();
+        self.tally.after(&self.run, pending, refused);
         let won = self.run.won;
         let done = won || self.run.phase == Phase::GameOver;
         let info = StepInfo {
@@ -422,6 +434,7 @@ impl Env {
             cleared: in_round && (won || self.run.phase == Phase::RoundEval),
         };
         if done {
+            self.ended = Some(RunEnd::new(&self.run, std::mem::take(&mut self.tally)));
             self.reset();
         }
         info

@@ -47,7 +47,10 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   words, for the viewer),
   `planner.rs` (the teacher's rounds: which hand to build, tried on fair
   copies; digging; taking value from a round it can already win),
-  `scenario.rs` (building test positions).
+  `scenario.rs` (building test positions), `tally.rs` (what a run did and how it ended, counted as
+  `examples/baseline.rs` counts it; `env::Env` hands each finished run's `RunEnd` to `VecEnv.take_endings`, so
+  `scripts/train_policy.py`'s `RunBook` shows the network's runs like the teacher's: all, the latest 1,000 and
+  block by block).
 - `crates/bm-py`: Python bindings (`VecEnv`, `Game`); `python/balatro_meta`.
 - Jobs (`scripts/jobs.py`, like monopoly-strategy's) leave live files in
   `.sync/watch/<job>/`: `progress.json` and `samples/` (runs to replay:

@@ -153,6 +153,9 @@ Your browser opens the viewer, in the style of Monopoly Meta's:
 - **Your PC and the search so far**: runs played and runs a second (live), win rate with its 95% range,
   the average final ante, where runs end, what ends them, the jokers the bot takes and the ones in its
   wins, the hands it plays, the best runs so far (click one to watch it), and the job's latest output.
+  While the network trains or plays, a switch shows these for **Now** (its latest 1,000 runs, how it plays
+  at this point) or **All runs**, and **Through the training** draws, block by block of 1,000 runs, its win
+  rate, final ante, jokers taken, packs, rerolls, money at the end, moves, refused moves and runs cut short.
 - **Progress**: every version of the bot measured on this PC, oldest to newest, against the 90% goal: its win
   rate with its 95% range, how far its runs got and what changed in it, with the running job's win rate so far
   as a live point. Each job step that measures a bot adds a line to `results/progress.jsonl` as it finishes,
@@ -252,10 +255,11 @@ make train
      (`results/train/eval-imitate.json`), to compare with the teacher on the same seeds.
   3. **ppo** (8 hours): thousands of runs at once on all 16 threads, the network on the GPU, rewarded for
      every blind beaten and for winning. `make watch` shows it live: runs played, the win rate of its last
-     2,000 runs, and its runs to replay. Ctrl+C stops it after saving; `make train` again carries on where
+     2,000 runs, how it plays now against all its runs so far, how it changes block by block, and its runs
+     to replay. Ctrl+C stops it after saving; `make train` again carries on where
      it stopped. The network is saved in `models/policy/` (not committed).
   4. **eval**: it plays 5,000 of the usual seeds, the same ones as the teacher's in
-     `results/value/teacher-plain.json`, and the Progress panel adds it to the chart.
+     `results/value/teacher-plain.json` and `teacher-w1.json`, and the Progress panel adds it to the chart.
 
 ## Later steps
 

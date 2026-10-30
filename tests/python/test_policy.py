@@ -131,6 +131,45 @@ def test_the_guard_breaks_loops():
     assert not m[0, tp.MOVE_JOKER] and m[1, tp.MOVE_JOKER] and m[0, tp.LEAVE_SHOP]
 
 
+def ending(won=False, ante=2, lost_to="Big Blind", bought=(), held=(), hands=None, **counts) -> dict:
+    """A finished run as the engine's VecEnv.take_endings gives it."""
+    end = {"won": won, "ante": 9 if won else ante, "lost_to": "" if won else lost_to, "money": 10, "held": list(held),
+           "bought": list(bought), "moves": 100, "refused": 0, "rerolls": 0, "skips": 0, "packs": 1, "vouchers": 0,
+           "blinds_beaten": 3, "hands": hands or [1, 2] + [0] * 10, "best_hand": 50.0}
+    return {**end, **counts}
+
+
+def test_the_run_book_counts_all_runs_the_latest_and_blocks():
+    names = [f"Hand {i}" for i in range(12)]
+    book = tp.RunBook(names, block_runs=2, now_runs=3)
+    runs = [ending(bought=["Joker"], held=["Joker"]), ending(lost_to="The Wall", rerolls=4),
+            ending(won=True, bought=["Blueprint"], held=["Blueprint", "Joker"]), ending(lost_to=tp.CUT),
+            ending(won=True, held=["Blueprint"], money=40)]
+    for i, r in enumerate(runs):
+        book.add(r, seconds=10.0 * i)
+    f = book.fields()
+    assert f["lost_to"] == [["Big Blind", 1], ["The Wall", 1], [tp.CUT, 1]]
+    assert f["jokers_bought"] == [["Blueprint", 1, 0.2], ["Joker", 1, 0.2]]
+    assert f["jokers_in_wins"] == [["Blueprint", 2, 1.0], ["Joker", 1, 0.5]], "share of the wins holding it at the end"
+    assert f["hands_played"] == [["Hand 0", 5], ["Hand 1", 10]] and f["per_run"]["rerolls"] == 0.8
+    assert "runs" not in f and "win_rate" not in f, "the job's own counters say those"
+    now = f["now"]
+    assert (now["runs"], now["wins"], now["label"]) == (3, 2, "last 3 runs"), "the latest runs only"
+    assert now["ante_hist"] == [0, 1, 0, 0, 0, 0, 0, 0, 2] and now["lost_to"] == [[tp.CUT, 1]]
+    # Two blocks of two runs; the fifth run waits in the next one.
+    i = {k: n for n, k in enumerate(f["block_fields"])}
+    assert [b[i["end_runs"]] for b in f["blocks"]] == [2, 4] and [b[i["wins"]] for b in f["blocks"]] == [0, 1]
+    assert f["blocks"][1][i["cut"]] == 1 and f["blocks"][1][i["end_seconds"]] == 30.0
+    # Its state carries on in a checkpoint.
+    again = tp.RunBook(names, book.state(), block_runs=99)
+    again.add(ending(), seconds=50.0)
+    assert again.fields()["blocks"][-1][i["end_runs"]] == 6 and again.total["runs"] == 6
+    # Beyond MAX_BLOCKS, blocks merge in pairs and new blocks are twice as long.
+    many = [[2 * (k + 1), float(k), 2, 1, 4, 10, 0, 1, 1, 0, 5, 0] for k in range(5)]
+    merged = tp.merge_blocks(many)
+    assert [b[0] for b in merged] == [4, 8, 10] and merged[0][2:4] == [4, 2] and merged[2] == many[4]
+
+
 def test_imitate_ppo_and_eval_end_to_end(moves, tmp_path):
     def run(*args, env=None):
         r = subprocess.run([sys.executable, str(ROOT / "scripts" / "train_policy.py"), *args, "--cpu",
@@ -147,16 +186,23 @@ def test_imitate_ppo_and_eval_end_to_end(moves, tmp_path):
     watch = tmp_path / "watch"
     out = run("ppo", "--init", str(tmp_path / "imitate.pt"), "--dir", str(tmp_path / "ppo"), "--max-updates", "4",
               "--envs", "16", "--steps", "8", "--minibatch", "64", "--save-minutes", "0", "--value-warmup", "1",
-              env={"BM_WATCH_DIR": str(watch)})
+              "--block-runs", "2", env={"BM_WATCH_DIR": str(watch)})
     assert "Done:" in out and (tmp_path / "ppo" / "latest.pt").exists()
     first = torch.load(tmp_path / "ppo" / "latest.pt", weights_only=False)["state"]
     prog = json.loads((watch / "progress.json").read_text())
     assert prog["runs"] == first["stats"]["runs"] > 0 and prog["bot"] == "network (PPO)"
+    # The live numbers break the runs down as the teacher's jobs do, for all runs and the latest, block by block.
+    assert first["book"]["total"]["runs"] == first["stats"]["runs"], "every finished run is counted once"
+    assert sum(n for _, n in prog["lost_to"]) == prog["runs"] - prog["wins"]
+    assert {"moves", "jokers_bought", "packs", "money_at_end", "refused"} <= set(prog["per_run"])
+    assert prog["now"]["runs"] == min(prog["runs"], tp.NOW_RUNS) and prog["now"]["label"].startswith("last ")
+    assert len(prog["blocks"]) == prog["runs"] // 2 and prog["block_fields"] == list(tp.BLOCK_FIELDS)
     out = run("ppo", "--dir", str(tmp_path / "ppo"), "--max-updates", "7", "--envs", "16", "--steps", "8",
-              "--minibatch", "64")
+              "--minibatch", "64", "--block-runs", "2")
     assert "Resuming" in out
     second = torch.load(tmp_path / "ppo" / "latest.pt", weights_only=False)["state"]
     assert first["updates"] == 4 and second["updates"] == 7 and second["stats"]["runs"] > first["stats"]["runs"]
+    assert second["book"]["total"]["runs"] == second["stats"]["runs"], "a resumed run carries on counting"
     # Saved runs replay with the engine to their recorded end.
     for f in sorted((watch / "samples").glob("typical-*.json"))[:5]:
         s = json.loads(f.read_text())
@@ -169,3 +215,4 @@ def test_imitate_ppo_and_eval_end_to_end(moves, tmp_path):
     ev = json.loads((tmp_path / "eval.json").read_text())
     assert ev["kind"] == "baseline" and ev["done"] and ev["runs"] == 10 and len(ev["run_stages"]) == 10
     assert "?" not in ev["run_stages"] and sum(ev["ante_hist"]) == 10
+    assert sum(n for _, n in ev["lost_to"]) == 10 - ev["wins"] and ev["now"]["runs"] == 10 and ev["per_run"]["moves"] > 0

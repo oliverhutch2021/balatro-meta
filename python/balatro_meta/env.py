@@ -92,6 +92,15 @@ class VecEnv:
             self._ante.copy(),
         )
 
+    def take_endings(self) -> list[tuple[int, dict]]:
+        """The runs that ended since the last call, as (index, how it ended): see the engine's VecEnv.take_endings
+        (won, ante, lost_to, money, held and bought jokers, move counts, hands played, best_hand)."""
+        return self._env.take_endings()
+
+    def cut_run(self, i: int) -> dict:
+        """Run `i` cut short (counted as lost to "Too many moves"); start it again with set_seed."""
+        return self._env.cut_run(i)
+
     def set_seed(self, i: int, seed: str) -> None:
         """Start run `i` again on this seed."""
         self._env.set_seed(i, seed)

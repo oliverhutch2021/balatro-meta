@@ -14,6 +14,7 @@ use bm_core::observe::{
 use bm_core::packs::PackCard;
 use bm_core::shop::RowItem;
 use bm_core::state::{Phase, Run, RunConfig};
+use bm_core::tally::RunEnd;
 use pyo3::buffer::PyBuffer;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -237,6 +238,31 @@ impl VecEnv {
         Ok(())
     }
 
+    /// The runs that ended in the last steps, each as (index, how it ended): `won`, `ante` (9 for a win),
+    /// `lost_to` (the blind, "" for a win), `money`, `held` and `bought` (joker names), the counts `moves`,
+    /// `refused`, `rerolls`, `skips`, `packs`, `vouchers` and `blinds_beaten`, `hands` (hands played, in
+    /// `HAND_NAMES` order) and `best_hand`. Each ending is given once.
+    fn take_endings<'py>(&mut self, py: Python<'py>) -> PyResult<Vec<(usize, Bound<'py, PyDict>)>> {
+        let mut out = Vec::new();
+        for (i, e) in self.envs.iter_mut().enumerate() {
+            if let Some(end) = e.ended.take() {
+                out.push((i, end_dict(py, &end)?));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Run `i` cut short by its player's move limit, as `take_endings` gives a run (lost to "Too many
+    /// moves"); the caller starts it again (`set_seed`).
+    fn cut_run<'py>(&mut self, py: Python<'py>, i: usize) -> PyResult<Bound<'py, PyDict>> {
+        let e = self
+            .envs
+            .get_mut(i)
+            .ok_or_else(|| PyValueError::new_err("no such run"))?;
+        let end = RunEnd::cut(&e.run, std::mem::take(&mut e.tally));
+        end_dict(py, &end)
+    }
+
     /// Start run `i` again on this seed (to play chosen seeds, such as another bot's).
     fn set_seed(&mut self, i: usize, seed: &str) -> PyResult<()> {
         let s = bm_rng::normalize_seed(seed)
@@ -336,6 +362,33 @@ impl VecEnv {
         d.set_item("deck_left", s.deck_left)?;
         Ok(d)
     }
+}
+
+fn end_dict<'py>(py: Python<'py>, end: &RunEnd) -> PyResult<Bound<'py, PyDict>> {
+    let t = &end.tally;
+    let d = PyDict::new(py);
+    d.set_item("won", end.won)?;
+    d.set_item("ante", end.ante)?;
+    d.set_item("lost_to", end.lost_to)?;
+    d.set_item("money", end.money)?;
+    d.set_item(
+        "held",
+        end.held.iter().map(|k| k.name()).collect::<Vec<_>>(),
+    )?;
+    d.set_item(
+        "bought",
+        t.bought.iter().map(|k| k.name()).collect::<Vec<_>>(),
+    )?;
+    d.set_item("moves", t.moves)?;
+    d.set_item("refused", t.refused)?;
+    d.set_item("rerolls", t.rerolls)?;
+    d.set_item("skips", t.skips)?;
+    d.set_item("packs", t.packs)?;
+    d.set_item("vouchers", t.vouchers)?;
+    d.set_item("blinds_beaten", t.blinds_beaten)?;
+    d.set_item("hands", t.hands.to_vec())?;
+    d.set_item("best_hand", t.best_hand)?;
+    Ok(d)
 }
 
 fn enh_name(e: Enhancement) -> Option<&'static str> {
@@ -809,6 +862,13 @@ fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("OBS_LEN", OBS_LEN)?;
     m.add("N_MOVE_KINDS", N_MOVE_KINDS)?;
+    m.add(
+        "HAND_NAMES",
+        bm_core::poker::HandType::ALL
+            .iter()
+            .map(|h| h.name())
+            .collect::<Vec<_>>(),
+    )?;
     m.add("VALUE_LEN", VALUE_LEN)?;
     m.add("OBS_LAYOUT", obs_layout())?;
     m.add_function(wrap_pyfunction!(run_seed, m)?)?;

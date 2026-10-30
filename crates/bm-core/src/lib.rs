@@ -26,6 +26,7 @@ pub mod scoring;
 pub mod shop;
 pub mod state;
 pub mod tags;
+pub mod tally;
 pub mod teacher;
 pub mod value;
 
