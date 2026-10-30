@@ -227,7 +227,8 @@ def game_view(gs: dict) -> dict:
         "discards_left": rnd.get("discards_left"),
         "chips": rnd.get("chips"),
         "hand": [card_entry(c) for c in hand],
-        "jokers": [dict({"key": j.get("key"), "edition": norm_mod((j.get("modifier") or {}).get("edition"))},
+        "jokers": [dict({"key": j.get("key"), "edition": norm_mod((j.get("modifier") or {}).get("edition")),
+                         "face_down": bool((j.get("state") or {}).get("hidden"))},
                         **({"sell": j["cost"]["sell"]} if isinstance(j.get("cost"), dict)
                            and j["cost"].get("sell") is not None else {}))
                    for j in jokers],
@@ -244,7 +245,8 @@ def game_view(gs: dict) -> dict:
 def engine_view(game) -> dict:
     v = dict(game.view())
     v["hand"] = [{k: c[k] for k in ("key", "enhancement", "edition", "seal", "debuff")} for c in v["hand"]]
-    v["jokers"] = [{"key": j["key"], "edition": j["edition"], "sell": j["sell"]} for j in v["jokers"]]
+    v["jokers"] = [{"key": j["key"], "edition": j["edition"], "sell": j["sell"], "face_down": j["face_down"]}
+                   for j in v["jokers"]]
     v["blinds"] = {k: {"name": b["name"], "status": b["status"], "tag_name": b.get("tag_name")}
                    for k, b in v["blinds"].items()}
     # Opened booster slots leave the game's area; the engine keeps them as None.
@@ -294,8 +296,8 @@ def differences(e: dict, g: dict) -> list[str]:
             out.append(f"{name}: engine {ev!r}, game {gv!r}")
 
     def cmp_jokers():
-        if not same_items(e["jokers"], g["jokers"], HELD_FIELDS):
-            shown = ("key", "edition", "sell")
+        if not same_items(e["jokers"], g["jokers"], (*HELD_FIELDS, "face_down")):
+            shown = ("key", "edition", "sell", "face_down")
             ev = [{k: j.get(k) for k in shown} for j in e["jokers"]]
             gv = [{k: j.get(k) for k in shown} for j in g["jokers"]]
             out.append(f"jokers: engine {ev!r}, game {gv!r}")

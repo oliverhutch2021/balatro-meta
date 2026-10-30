@@ -69,7 +69,7 @@ class FakeGame:
         blinds = {k: {"type": k.upper(), "name": b["name"], "status": b["status"], "tag_name": b.get("tag_name")}
                   for k, b in v["blinds"].items()}
         money = v["money"] + (1 if self.cheat and v["state"] == "SHOP" else 0)
-        jokers = [{"key": j["key"], "modifier": {"edition": j["edition"]},
+        jokers = [{"key": j["key"], "modifier": {"edition": j["edition"]}, "state": {"hidden": j["face_down"]},
                    "cost": {"buy": 2 * j["sell"], "sell": j["sell"] + (1 if self.cheat_sell and i == 0 else 0)}}
                   for i, j in enumerate(v["jokers"])]
         return {"state": v["state"], "round_num": v["round"], "ante_num": v["ante"], "money": money,
@@ -323,3 +323,18 @@ def test_the_checks_take_the_jobs_best_runs_first(tmp_path, monkeypatch):
     srv.shutdown()
     assert ok and c.summary()["moves"] == 6, msg
     assert mod.reads > 0, "the checks waited for the game through the mod's reports"
+
+
+def test_face_down_jokers_are_compared_by_their_true_values():
+    """Under Amber Acorn the jokers are face down: the bot's screen hides their sell values, but the check
+    compares the true ones (as BalatroBot reports them), and also which jokers are face down."""
+    base = {"state": "SHOP", "ante": 8, "money": 112, "consumables": [], "shop": [], "shop_vouchers": [],
+            "shop_packs": [], "reroll_cost": 5, "hand": [], "blinds": {}}
+    e = dict(base, jokers=[{"key": "j_egg", "edition": "FOIL", "sell": 63, "face_down": True}])
+    g = dict(base, jokers=[{"key": "j_egg", "edition": "FOIL", "sell": 63, "face_down": True}])
+    assert not [d for d in watch.differences(e, g) if d.startswith("jokers")]
+    g_up = dict(base, jokers=[{"key": "j_egg", "edition": "FOIL", "sell": 63, "face_down": False}])
+    assert [d for d in watch.differences(e, g_up) if d.startswith("jokers")], "a joker the wrong way up is caught"
+    view = watch.game_view({"state": "SHOP", "jokers": {"cards": [
+        {"key": "j_egg", "modifier": {"edition": "FOIL"}, "state": {"hidden": True}, "cost": {"buy": 6, "sell": 63}}]}})
+    assert view["jokers"] == [{"key": "j_egg", "edition": "FOIL", "face_down": True, "sell": 63}]

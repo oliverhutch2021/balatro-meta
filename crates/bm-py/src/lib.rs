@@ -465,7 +465,8 @@ impl Game {
             h.set_item("eternal", j.eternal)?;
             h.set_item("perishable", v.perishable)?;
             h.set_item("rental", j.rental)?;
-            h.set_item("sell", v.sell_value)?;
+            // The true sell value, also for a face-down joker (the bot's screen hides it).
+            h.set_item("sell", bm_core::run::joker_sell_value(j))?;
             h.set_item("mult", v.mult)?;
             h.set_item("x_mult", v.x_mult)?;
             h.set_item("chips", v.chips)?;
