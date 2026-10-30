@@ -38,14 +38,14 @@ pub enum Plan {
 
 /// A hand card as plans see it: rank id (1..=14 where needed), suit, and whether it counts for either.
 #[derive(Clone, Copy)]
-struct Seen {
+pub(crate) struct Seen {
     rank: u8,
     suit: Suit,
     stone: bool,
     wild: bool,
 }
 
-fn seen(run: &Run) -> Vec<Seen> {
+pub(crate) fn seen(run: &Run) -> Vec<Seen> {
     run.hand
         .iter()
         .map(|&id| {
@@ -107,7 +107,7 @@ impl Plan {
     }
 
     /// The plans this hand allows (Best always), most promising first.
-    fn options(hand: &[Seen]) -> Vec<Plan> {
+    pub(crate) fn options(hand: &[Seen]) -> Vec<Plan> {
         let mut by_rank = [0u8; 15];
         let mut by_suit = [0u8; 4];
         let mut wild = 0u8;
@@ -227,6 +227,23 @@ pub fn quick_best(run: &Run) -> (f64, u64) {
             *c |= 1 << f;
         }
     }
+    // The Psychic scores only five-card hands: pad each with the lowest other cards.
+    let psychic = run
+        .blind
+        .as_ref()
+        .is_some_and(|b| b.active_boss() == Some(crate::blinds::Boss::Psychic));
+    if psychic && n >= 5 {
+        let mut low: Vec<usize> = (0..n).collect();
+        low.sort_by_key(|&i| hand[i].rank);
+        for c in &mut cands {
+            for &i in &low {
+                if c.count_ones() >= 5 {
+                    break;
+                }
+                *c |= 1 << i;
+            }
+        }
+    }
     let mut best = (f64::MIN, cands.first().copied().unwrap_or(1));
     for &m in &cands {
         if m.count_ones() == 0 || m.count_ones() > 5 {
@@ -273,7 +290,7 @@ fn throw(run: &Run, hand: &[Seen], keep: u64) -> u64 {
 }
 
 /// The plan's move now, given `best` (the best hand now) and whether it beats the blind.
-fn plan_move(run: &Run, plan: Plan, best: (f64, u64)) -> (MoveKind, u64) {
+pub(crate) fn plan_move(run: &Run, plan: Plan, best: (f64, u64)) -> (MoveKind, u64) {
     let target = run.blind.as_ref().map_or(0.0, |b| b.chips);
     let last = run.hands_left <= 1;
     if best.0 >= target - run.round_chips || (last && run.discards_left == 0) {
@@ -306,60 +323,361 @@ fn plan_move(run: &Run, plan: Plan, best: (f64, u64)) -> (MoveKind, u64) {
     }
 }
 
-/// One try of `plan` from `first` on a fair copy: (beat the blind, how close it got).
-fn try_plan(run: &Run, plan: Plan, first: (MoveKind, u64), salt: u64) -> (bool, f64) {
+/// How a try plays the rest of the round: towards a shape, or (the blind already beatable) taking value
+/// first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Policy {
+    Plan(Plan),
+    Farm(Farm),
+}
+
+/// Ways to finish a round whose blind the hand in hand already beats.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Farm {
+    /// Play the winning hand now (`four`: padded with spare cards to exactly four, for Square Joker).
+    Win { four: bool },
+    /// Throw spare cards (outside the winning hand) for what throwing them pays, while discards last, then
+    /// win (`single`: one card on its own first, for Trading Card).
+    Throw { single: bool },
+    /// Play spare cards as extra hands while more than one hand is left (`cards` at a time: one for Sixth
+    /// Sense or DNA, four for Square Joker, five to draw the most), then win.
+    Extra { cards: u8 },
+}
+
+fn policy_move(run: &Run, policy: Policy) -> (MoveKind, u64) {
+    match policy {
+        Policy::Plan(p) => plan_move(run, p, quick_best(run)),
+        Policy::Farm(f) => farm_move(run, f),
+    }
+}
+
+/// One try of `policy` from `first` on a fair copy: (beat the blind, how close it got, what the round added
+/// besides, when `reference` is given: see `value::round_gain`).
+fn try_policy(
+    run: &Run,
+    policy: Policy,
+    first: (MoveKind, u64),
+    salt: u64,
+    reference: Option<(f64, f64)>,
+) -> (bool, f64, f64) {
     let target = run.blind.as_ref().map_or(1.0, |b| b.chips).max(1.0);
     let mut c = fair_copy(run, salt);
     if apply(&mut c, first.0, first.1).is_err() {
-        return (false, 0.0);
+        return (false, 0.0, 0.0);
     }
     let mut steps = 0;
     while c.phase == Phase::Round && steps < 40 {
-        let m = plan_move(&c, plan, quick_best(&c));
+        let m = policy_move(&c, policy);
         if apply(&mut c, m.0, m.1).is_err() {
             break;
         }
         steps += 1;
     }
     let beat = c.phase == Phase::RoundEval || c.won;
-    (
-        beat,
-        if beat {
-            1.0
-        } else {
-            (c.round_chips / target).min(1.0)
-        },
-    )
+    let close = if beat {
+        1.0
+    } else {
+        (c.round_chips / target).min(1.0)
+    };
+    let gain = match reference {
+        Some(r) if beat => {
+            if c.phase == Phase::RoundEval {
+                let _ = apply(&mut c, MoveKind::CashOut, 0);
+            }
+            crate::value::round_gain(run, &c, r)
+        }
+        _ => 0.0,
+    };
+    (beat, close, gain)
+}
+
+/// Whether rounds are judged by what they add as well as by beating the blind (the value teacher).
+fn value_aware() -> bool {
+    crate::teacher::by_value()
+}
+
+/// Chips and mult of a hand, to weigh what a round adds against (on a fair copy: chance effects must not
+/// peek at the run's streams).
+fn reference(run: &Run, mask: u64, salt: u64) -> (f64, f64) {
+    let h = crate::bots::preview(&fair_copy(run, salt ^ 0x2EF), mask);
+    (h.chips.max(1.0), h.mult.max(1.0))
 }
 
 /// The planner's move for a round where the best hand now doesn't beat the blind: the move of the plan that
-/// beats it most often on fair copies. `best` is the best hand now (from a full search).
+/// beats it most often on fair copies (the value teacher: among plans that beat it equally often, the one
+/// that adds the most to the run). `best` is the best hand now (from a full search).
 pub fn plan(run: &Run, best: (f64, u64), salt: u64) -> (MoveKind, u64) {
     if run.forced_card().is_some() {
         return (MoveKind::Play, best.1); // Cerulean Bell: every selection holds its card; keep it simple
     }
+    let reference = value_aware().then(|| reference(run, best.1, salt));
     let hand = seen(run);
-    let mut choice: Option<(f64, (MoveKind, u64))> = None;
+    let mut choice: Option<((u64, f64), (MoveKind, u64))> = None;
     for (n, p) in Plan::options(&hand).into_iter().enumerate() {
         let first = plan_move(run, p, best);
         if choice.as_ref().is_some_and(|(_, m)| *m == first) {
             continue; // the same move now as a better-scoring plan
         }
-        let mut score = 0.0;
+        let (mut beats, mut close, mut gain) = (0u64, 0.0, 0.0);
         for t in 0..TRIES {
-            let (beat, close) = try_plan(
+            let (beat, c, g) = try_policy(
                 run,
-                p,
+                Policy::Plan(p),
                 first,
                 salt.wrapping_mul(0x9E37).wrapping_add((n as u64) << 32 | t),
+                reference,
             );
-            score += if beat { 1.0 } else { 0.0 } + 0.01 * close;
+            beats += u64::from(beat);
+            close += c;
+            gain += g;
         }
-        if choice.as_ref().is_none_or(|(s, _)| score > *s) {
-            choice = Some((score, first));
+        // Beating the blind first; then what the round adds (when it is beaten at all), else how close.
+        let key = (
+            beats,
+            if beats > 0 && reference.is_some() {
+                gain / beats as f64
+            } else {
+                close
+            },
+        );
+        if choice
+            .as_ref()
+            .is_none_or(|(k, _)| key.0 > k.0 || (key.0 == k.0 && key.1 > k.1))
+        {
+            choice = Some((key, first));
         }
     }
     choice.map_or((MoveKind::Play, best.1), |(_, m)| m)
+}
+
+/// How often the best-hand plan beats the blind from here, on fair copies (a quick read of a round's
+/// difficulty).
+pub fn beat_rate(run: &Run, salt: u64) -> f64 {
+    let fair = fair_copy(run, salt ^ 0xBEA7);
+    let best = quick_best(&fair);
+    let first = plan_move(&fair, Plan::Best, best);
+    let n = 6u64;
+    let beats = (0..n)
+        .filter(|&t| {
+            try_policy(
+                run,
+                Policy::Plan(Plan::Best),
+                first,
+                salt.wrapping_add(0xB0 + t),
+                None,
+            )
+            .0
+        })
+        .count();
+    beats as f64 / n as f64
+}
+
+/// Tries per way of finishing a beatable round.
+const FARM_TRIES: u64 = 6;
+/// The least gain worth taking value before winning (below it, estimates differ by noise).
+const FARM_MARGIN: f64 = 0.005;
+
+/// Spare cards ordered for throwing: the ones throwing pays for first (Mail-In Rebate's rank, Purple Seals,
+/// Jacks for Hit the Road, Castle's suit, face cards for Faceless Joker when three or more can go at once),
+/// the ones worth more kept in hand last (Steel and Gold cards, Gold and Blue Seals, face cards for Reserved
+/// Parking, Kings for Baron, Queens for Shoot the Moon), lowest rank first otherwise.
+fn throw_order(run: &Run, spare: &[usize]) -> Vec<usize> {
+    use crate::card::Seal;
+    use crate::joker_data::JokerKind as J;
+    let has = |k: J| run.count_jokers(k) > 0;
+    let (mail, road, castle) = (has(J::MailInRebate), has(J::HitTheRoad), has(J::Castle));
+    let (parking, baron, moon) = (has(J::ReservedParking), has(J::Baron), has(J::ShootTheMoon));
+    let faces = spare
+        .iter()
+        .filter(|&&i| run.card(run.hand[i]).rank.is_face())
+        .count();
+    let faceless = has(J::FacelessJoker) && faces >= 3;
+    let mut v = spare.to_vec();
+    v.sort_by_key(|&i| {
+        let c = run.card(run.hand[i]);
+        let pays = (mail && c.rank == run.mail_rank)
+            || c.seal == Seal::Purple
+            || (road && c.rank == Rank::Jack)
+            || (castle && c.suit == run.castle_suit)
+            || (faceless && c.rank.is_face());
+        let keep = matches!(c.enhancement, Enhancement::Steel | Enhancement::Gold)
+            || matches!(c.seal, Seal::Blue | Seal::Gold)
+            || (parking && c.rank.is_face())
+            || (baron && c.rank == Rank::King)
+            || (moon && c.rank == Rank::Queen);
+        (
+            if pays {
+                0
+            } else if keep {
+                2
+            } else {
+                1
+            },
+            c.rank.id(),
+        )
+    });
+    v
+}
+
+/// Spare cards to play as an extra hand: one card (a 6 for Sixth Sense, the best card for DNA, a Gold
+/// Seal card that pays when it scores), or the lowest `cards` (the ones worth keeping in hand last).
+fn extra_play(run: &Run, spare: &[usize], cards: usize) -> u64 {
+    use crate::joker_data::JokerKind as J;
+    let order = throw_order(run, spare);
+    if cards == 1 {
+        let first_hand = run.hands_played_round == 0;
+        let gold = || {
+            spare
+                .iter()
+                .copied()
+                .find(|&i| run.card(run.hand[i]).seal == crate::card::Seal::Gold)
+        };
+        let pick = if first_hand && run.count_jokers(J::SixthSense) > 0 {
+            spare
+                .iter()
+                .copied()
+                .find(|&i| run.card(run.hand[i]).rank == Rank::Six)
+                .or_else(gold)
+        } else if first_hand && run.count_jokers(J::DNA) > 0 {
+            spare.iter().copied().max_by_key(|&i| {
+                let c = run.card(run.hand[i]);
+                (
+                    c.seal != crate::card::Seal::None,
+                    c.enhancement != Enhancement::None,
+                    c.rank.id(),
+                )
+            })
+        } else {
+            gold()
+        };
+        return 1 << pick.unwrap_or(order[0]);
+    }
+    order.into_iter().take(cards).fold(0u64, |m, i| m | 1 << i)
+}
+
+/// The move of a way to finish a beatable round. If the hand no longer beats the blind (a boss took a card),
+/// it plays to beat it like the planner's best-hand plan.
+pub(crate) fn farm_move(run: &Run, farm: Farm) -> (MoveKind, u64) {
+    let best = quick_best(run);
+    let target = run.blind.as_ref().map_or(0.0, |b| b.chips);
+    if best.0 < target - run.round_chips {
+        return plan_move(run, Plan::Best, best);
+    }
+    let keep = best.1;
+    let spare: Vec<usize> = (0..run.hand.len())
+        .filter(|&i| keep >> i & 1 == 0)
+        .collect();
+    match farm {
+        Farm::Win { four } => {
+            if four && keep.count_ones() < 4 && spare.len() + (keep.count_ones() as usize) >= 4 {
+                let need = 4 - keep.count_ones() as usize;
+                let padded = throw_order(run, &spare)
+                    .into_iter()
+                    .take(need)
+                    .fold(keep, |m, i| m | 1 << i);
+                if preview_score(run, padded) >= target - run.round_chips {
+                    return (MoveKind::Play, padded);
+                }
+            }
+            (MoveKind::Play, keep)
+        }
+        Farm::Throw { single } => {
+            let first_throw = run.discards_used_round == 0;
+            if run.discards_left > 0 && !spare.is_empty() && (!single || first_throw) {
+                let n = if single { 1 } else { 5 };
+                let out = throw_order(run, &spare)
+                    .into_iter()
+                    .take(n)
+                    .fold(0u64, |m, i| m | 1 << i);
+                (MoveKind::Discard, out)
+            } else {
+                (MoveKind::Play, keep)
+            }
+        }
+        Farm::Extra { cards } => {
+            let c = cards as usize;
+            let gold_left = spare
+                .iter()
+                .any(|&i| run.card(run.hand[i]).seal == crate::card::Seal::Gold);
+            let single_done = c == 1 && run.hands_played_round > 0 && !gold_left;
+            if run.hands_left > 1 && spare.len() >= c && !single_done {
+                (MoveKind::Play, extra_play(run, &spare, c))
+            } else {
+                (MoveKind::Play, keep)
+            }
+        }
+    }
+}
+
+/// The value teacher's move when the hand in hand beats the blind: win now, or take value first (throwing
+/// spare cards for what that pays, playing spare cards to grow jokers or for Sixth Sense or DNA, a fourth
+/// card for Square Joker), whichever adds the most to the run on fair copies, among ways that still beat
+/// the blind every time.
+pub fn finish(run: &Run, best: (f64, u64), salt: u64) -> (MoveKind, u64) {
+    use crate::joker_data::JokerKind as J;
+    if run.forced_card().is_some() {
+        return (MoveKind::Play, best.1);
+    }
+    let has = |k: J| run.count_jokers(k) > 0;
+    let reference = reference(run, best.1, salt);
+    // Moves are worked out on a fair copy (the same cards in hand): never on the run's own streams.
+    let fair = fair_copy(run, salt ^ 0xF00D);
+    let mut options = vec![Farm::Win { four: false }];
+    if has(J::SquareJoker) {
+        options.push(Farm::Win { four: true });
+    }
+    if run.discards_left > 0 {
+        options.push(Farm::Throw { single: false });
+        if has(J::TradingCard) && run.discards_used_round == 0 {
+            options.push(Farm::Throw { single: true });
+        }
+    }
+    if run.hands_left > 1 {
+        options.push(Farm::Extra { cards: 5 });
+        if has(J::SquareJoker) {
+            options.push(Farm::Extra { cards: 4 });
+        }
+        let gold_seal = run
+            .hand
+            .iter()
+            .any(|&id| run.card(id).seal == crate::card::Seal::Gold);
+        if gold_seal || (run.hands_played_round == 0 && (has(J::SixthSense) || has(J::DNA))) {
+            options.push(Farm::Extra { cards: 1 });
+        }
+    }
+    let mut chosen: Option<(f64, (MoveKind, u64))> = None;
+    for (n, f) in options.into_iter().enumerate() {
+        let first = farm_move(&fair, f);
+        if chosen.as_ref().is_some_and(|(_, m)| *m == first) {
+            continue;
+        }
+        let tries = if matches!(f, Farm::Win { .. }) {
+            1
+        } else {
+            FARM_TRIES
+        };
+        let (mut all, mut gain) = (true, 0.0);
+        for t in 0..tries {
+            let (beat, _, g) = try_policy(
+                run,
+                Policy::Farm(f),
+                first,
+                salt.wrapping_mul(0x51ED).wrapping_add((n as u64) << 32 | t),
+                Some(reference),
+            );
+            all &= beat;
+            gain += g;
+        }
+        if !all {
+            continue;
+        }
+        let g = gain / tries as f64;
+        let margin = if chosen.is_none() { 0.0 } else { FARM_MARGIN };
+        if chosen.as_ref().is_none_or(|(b, _)| g > *b + margin) {
+            chosen = Some((g, first));
+        }
+    }
+    chosen.map_or((MoveKind::Play, best.1), |(_, m)| m)
 }
 
 /// Every subset-based best hand, for the planner's tests.

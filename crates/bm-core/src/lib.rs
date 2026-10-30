@@ -25,6 +25,7 @@ pub mod shop;
 pub mod state;
 pub mod tags;
 pub mod teacher;
+pub mod value;
 
 pub use bm_rng;
 pub use run::Refused;

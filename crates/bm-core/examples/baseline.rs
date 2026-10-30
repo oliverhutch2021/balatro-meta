@@ -68,6 +68,8 @@ struct RunSummary {
     closeness: f64,
     /// Every move, when this run may become a sample.
     record: Option<Vec<(u8, u64)>>,
+    /// One CSV row about how the run ended (`--runs-csv`), for studying where the bot falls short.
+    detail: Option<String>,
 }
 
 impl RunSummary {
@@ -132,6 +134,44 @@ fn run_seed(base: u64, i: u64) -> String {
 type Bot = fn(&Run, u64) -> (MoveKind, u64);
 
 /// One run by `bot`, start to end.
+/// The header of the `--runs-csv` table (one row per run, written by `detail_row`).
+const DETAIL_HEADER: &str = "seed,won,ante,lost_to,stage,closeness,money_end,jokers,n_jokers,n_xmult,\
+main_hand,main_level,hands_played,rerolls,packs,vouchers,skips,best_hand,deck,hand_size,joker_slots";
+
+fn detail_row(run: &Run, s: &RunSummary) -> String {
+    let jokers: Vec<&str> = run.jokers.iter().map(|j| j.kind.name()).collect();
+    let n_xmult = run.jokers.iter().filter(|j| j.x_mult > 1.0).count();
+    let (main, played) = HandType::ALL
+        .iter()
+        .map(|&h| (h, run.hand_levels.get(h).played))
+        .max_by_key(|&(h, n)| (n, std::cmp::Reverse(h as usize)))
+        .unwrap_or((HandType::HighCard, 0));
+    format!(
+        "{},{},{},{},{},{:.3},{},{},{},{},{},{},{},{},{},{},{},{:.0},{},{},{}",
+        s.seed,
+        u8::from(s.won),
+        s.end,
+        s.lost_to,
+        s.stage,
+        s.closeness,
+        run.money,
+        jokers.join(";"),
+        jokers.len(),
+        n_xmult,
+        main.name(),
+        run.hand_levels.get(main).level,
+        played,
+        s.rerolls,
+        s.packs,
+        s.vouchers,
+        s.skips,
+        s.best_hand,
+        run.playing_cards.len(),
+        run.hand_size_real,
+        run.joker_slots
+    )
+}
+
 fn play(seed: String, salt: u64, keep: bool, bot: Bot) -> RunSummary {
     let mut run = Run::new(RunConfig::new(&seed));
     let mut s = RunSummary {
@@ -224,8 +264,14 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot) -> RunSummary {
     }
     s.money_end = run.money;
     s.held = run.jokers.iter().map(|j| j.kind).collect();
+    if DETAIL.load(Ordering::Relaxed) {
+        s.detail = Some(detail_row(&run, &s));
+    }
     s
 }
+
+/// Whether runs keep a `--runs-csv` row.
+static DETAIL: AtomicBool = AtomicBool::new(false);
 
 /// Everything counted so far.
 struct Totals {
@@ -621,6 +667,22 @@ fn main() {
         _ => std::thread::available_parallelism().map_or(1, |n| n.get()),
     };
     let out = opt("--out");
+    // A table of every run (`--runs-csv`), and experimental teacher options (`--teacher-options a,b`) for
+    // A/B tests on the same seeds.
+    let runs_csv = opt("--runs-csv");
+    DETAIL.store(runs_csv.is_some(), Ordering::Relaxed);
+    if let Some(o) = opt("--teacher-options") {
+        let names: Vec<String> = o
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .collect();
+        if let Err(e) = bm_core::teacher::set_options(&names) {
+            panic!("{e}");
+        }
+        println!("Teacher options: {}", names.join(", "));
+    }
+    let details: Mutex<Vec<String>> = Mutex::new(Vec::new());
     let (bot, bot_name): (Bot, &str) = match opt("--bot").as_deref().unwrap_or("greedy") {
         "greedy" => (greedy_move, "greedy bot"),
         "teacher" => (teacher_move, "teacher bot"),
@@ -664,7 +726,10 @@ fn main() {
                         if i >= target || over {
                             break;
                         }
-                        let s = play(run_seed(base, i), i, true, bot);
+                        let mut s = play(run_seed(base, i), i, true, bot);
+                        if let Some(d) = s.detail.take() {
+                            details.lock().unwrap().push(d);
+                        }
                         local.add(&s);
                         let mut b = best.lock().unwrap();
                         if b.wants(&s) {
@@ -832,6 +897,18 @@ fn main() {
         }
         std::fs::write(p, &text).expect("write the results");
         println!("Results: {}", p.display());
+    }
+    if let Some(p) = runs_csv {
+        let mut rows = details.into_inner().unwrap();
+        rows.sort();
+        let mut text = String::from(DETAIL_HEADER);
+        for r in rows {
+            text.push('\n');
+            text.push_str(&r);
+        }
+        text.push('\n');
+        std::fs::write(&p, text).expect("write the runs table");
+        println!("Runs table: {p}");
     }
     assert_eq!(t.refused, 0, "the bot made a move the engine refused");
 }

@@ -31,6 +31,11 @@ pub fn candidate_masks(n: usize, forced: Option<usize>) -> Vec<u64> {
 
 /// What playing these hand positions would score now, judged on a fair copy.
 pub fn preview_score(fair: &Run, mask: u64) -> f64 {
+    preview(fair, mask).score
+}
+
+/// The whole evaluation of playing these hand positions now (hand type, chips, mult, score), on a copy.
+pub fn preview(fair: &Run, mask: u64) -> crate::scoring::HandScore {
     let mut sim = fair.clone();
     let mut chosen = Vec::new();
     for (i, &id) in fair.hand.iter().enumerate() {
@@ -41,7 +46,7 @@ pub fn preview_score(fair: &Run, mask: u64) -> f64 {
     sim.hand.retain(|id| !chosen.contains(id));
     sim.play = chosen;
     sim.hands_left -= 1;
-    evaluate_play(&mut sim).score
+    evaluate_play(&mut sim)
 }
 
 fn joker_room(run: &Run, e: Edition) -> bool {

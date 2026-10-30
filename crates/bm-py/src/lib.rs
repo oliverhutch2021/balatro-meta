@@ -432,6 +432,30 @@ impl Game {
         Ok(d)
     }
 
+    /// The teacher's view of this position (its value model, `bm_core::value`): the chance of beating each
+    /// blind ahead, the hand that scores most, a typical round's total, and the value. None once the run
+    /// is over. For the viewer; the bot itself never sees anything beyond the screen.
+    fn value_view<'py>(&self, py: Python<'py>, salt: u64) -> PyResult<Option<Bound<'py, PyDict>>> {
+        let run = self.run.clone();
+        let b = py.detach(move || {
+            if run.phase == bm_core::Phase::GameOver || run.won {
+                None
+            } else {
+                bm_core::value::breakdown(&run, salt)
+            }
+        });
+        let Some(b) = b else {
+            return Ok(None);
+        };
+        let d = PyDict::new(py);
+        let chances: Vec<(f64, f64)> = b.blinds.iter().map(|&(t, p, _)| (t, p)).collect();
+        d.set_item("chances", chances)?;
+        d.set_item("main", b.main.name())?;
+        d.set_item("total", b.next_total)?;
+        d.set_item("value", b.total)?;
+        Ok(Some(d))
+    }
+
     /// The full state, in the real game's terms (for replay checks).
     fn view<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let r = &self.run;

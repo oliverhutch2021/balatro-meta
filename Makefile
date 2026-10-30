@@ -61,7 +61,7 @@ bench:  ## Phase 1 gate: engine speed on all threads, in Rust and through Python
 baseline:  ## The number to beat: the greedy bot plays a million runs on all threads (about 20 minutes; make watch shows it)
 	$(PY) scripts/jobs.py run baseline $(JOB_FLAGS)
 
-teacher:  ## The teacher bot (plans its hands, digs, sells, rerolls, Tarots) plays 100,000 runs (about 45 minutes; make watch shows it)
+teacher:  ## The teacher bot (every decision by value) plays 12,000 runs (about 50 minutes; make watch shows it)
 	$(PY) scripts/jobs.py run teacher $(JOB_FLAGS)
 
 SPEED ?= 1

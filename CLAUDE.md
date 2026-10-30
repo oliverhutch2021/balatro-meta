@@ -34,9 +34,12 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   (card creation, pools, prices), `shop.rs`, `packs.rs`, `consumables.rs`,
   `observe.rs` (the fair-play wall: the only place the bot's input is
   built), `env.rs` (moves as kind + argument), `bots.rs` (greedy bot,
-  projections), `teacher.rs` (the rule-based teacher bot: the network's
-  warm start), `planner.rs` (the teacher's hand planning: which hand to
-  build this round, tried on fair copies; discards and digging),
+  projections), `teacher.rs` (the teacher bot, the network's warm start:
+  every decision by value), `value.rs` (the value of a position: scoring
+  power measured by playing the coming rounds out on fair copies, against
+  the blinds ahead; growth; money as scoring power for later shops),
+  `planner.rs` (the teacher's rounds: which hand to build, tried on fair
+  copies; digging; taking value from a round it can already win),
   `scenario.rs` (building test positions).
 - `crates/bm-py`: Python bindings (`VecEnv`, `Game`); `python/balatro_meta`.
 - Jobs (`scripts/jobs.py`, like monopoly-strategy's) leave live files in

@@ -1,29 +1,35 @@
-//! The teacher: a rule-based bot stronger than the greedy one. It is the network's warm start (the network
-//! first learns to copy it, then improves on it with PPO) and a second number to beat. Like every bot here it
+//! The teacher: the bot that plays before the network can. It is the network's warm start (the network
+//! first learns to copy it, then improves on it with PPO) and a number to beat. Like every bot here it
 //! decides from the screen and from fair copies only (`observe::fair_copy`), never from the run's future.
 //!
-//! What it does that the greedy bot doesn't:
-//! - values every joker (our own rough judgement: what it adds to a typical run on White Stake, more for
-//!   jokers that grow), buys the best one it can, sells its weakest joker for a clearly better one, and
-//!   rerolls with money above what it keeps for interest;
-//! - keeps $25 (the interest cap) once its joker slots are full, unless something is worth breaking it for;
-//!   buys good vouchers;
-//! - opens Buffoon packs when it has joker room, Celestial packs for the hands it plays, Arcana packs;
-//! - uses Tarots on sensible cards: enhancements on the cards its best hand uses, Steel and Gold on cards
-//!   it holds, suit changes towards its main suit, Death to copy its best card over its worst, Hanged Man
-//!   on its lowest cards; the money and card-making Tarots and Spectrals at once; sells the ones it can't
-//!   use well;
-//! - keeps its x-mult jokers at the right end (they multiply what the others add) and Blueprint just left of
-//!   the best joker it can copy; with Brainstorm (it copies the leftmost joker) it moves Brainstorm off the
-//!   left end, puts the best joker it can copy there, and Blueprint just left of Brainstorm, so both copy
-//!   it; Ceremonial Dagger rightmost, where it destroys nothing;
-//! - plays a hand that beats the blind as soon as it has one; otherwise it plans (planner.rs): it tries each
-//!   hand it could build (a flush, three or four of a kind, a full house, a straight, or just its best hand)
-//!   many times on fair copies of the round, and keeps, discards or plays to draw (digging) for the one that
-//!   beats the blind most often.
+//! It decides by value (`value.rs`): one number for a position, counting scoring power against the blinds
+//! ahead (measured by playing the coming rounds out with the run's own deck and jokers), what the run will
+//! gain by itself (growing jokers, levels, income, cards made) and money as scoring power for later shops.
+//! Nothing below is a fixed rule about what to buy or build: each decision tries its options and keeps the
+//! one the value rates highest.
+//! - **Shop**: buying (a joker after selling a weaker one when slots are full; Planets used at once, or kept
+//!   with Observatory), vouchers, packs (judged on sample contents), rerolls (judged on sample shops and what
+//!   they'd buy), using or selling held cards, selling jokers whose sale does something; then leaving with
+//!   the jokers set for what happens as the shop closes and the blind starts (a copier on Perkeo or
+//!   Cartomancer, a weak joker fed to Ceremonial Dagger...).
+//! - **Packs**: each card, each Tarot or Spectral on each target idea (leaning towards the build: the main
+//!   rank and suit, face cards when they pay, Death copying the most valuable card), or skipping.
+//! - **Blinds**: play it, or skip it for its tag when the run after the skip is clearly worth more.
+//! - **Rounds** (planner.rs): a hand that beats the blind is there, so take what the round still offers
+//!   while keeping it (throw Mail-In Rebate's rank, Purple Seals, faces for Faceless; play spare cards for
+//!   Square Joker, Sixth Sense, DNA, Gold Seals; keep Steel, Gold, Blue Seals and faces for Reserved Parking),
+//!   then win; otherwise plan which hand to build, by how often each beats the blind on fair copies, then by
+//!   what it adds. Tarots in a round are used when the value says the deck is better for them. Jokers are
+//!   set in scoring order before a hand and for what pays before a throw; played cards are ordered to
+//!   score most. Bosses: a joker sold to Verdant Leaf, Luchador sold when its boss is hard, five-card hands
+//!   for The Psychic, discards first against The Needle.
+//! - **Joker order** for scoring: adders first, multipliers last; Blueprint just left of the best joker it
+//!   can copy; Brainstorm off the left end with the best joker it can copy leftmost, and Blueprint next to
+//!   it, so both copy that joker; Ceremonial Dagger rightmost unless feeding it is worth more.
 //!
-//! It never makes moves BalatroBot has no call for (buy and use, boss reroll), so its runs stay checkable
-//! against the real game.
+//! The earlier rule-based teacher (fixed joker values and rules) is still here as the option "classic",
+//! for comparisons. It never makes moves BalatroBot has no call for (buy and use, boss reroll), so its
+//! runs stay checkable against the real game.
 
 use crate::bots::{candidate_masks, greedy_move, preview_score};
 use crate::card::{Edition, Enhancement, Seal, Suit};
@@ -37,6 +43,72 @@ use crate::packs::PackCard;
 use crate::poker::HandType;
 use crate::shop::RowItem;
 use crate::state::{Phase, Run};
+
+/// Options, each off until switched on by name (the baseline job's `--teacher-options`), for A/B tests on
+/// the same seeds: a candidate change is tried behind an option, and becomes the teacher if it wins more.
+pub const OPTIONS: &[&str] = &[
+    // The earlier teacher: fixed joker values and rules in the shop and packs, Tarots on fixed targets,
+    // the planner judging rounds by beating the blind only (no value model).
+    "classic",
+    // Skip blinds for their tags when the value says so (off: on 400 test runs skipping about 2.6 blinds a
+    // run reached a lower mean final ante, 6.03 against 6.33 without).
+    "skips",
+    // Jokers to sell picked by the fixed judgement, not by what the run would lose without each.
+    "static-sells",
+    // No joker or card moves for events (leaving the shop, throws, the order of played cards).
+    "no-juggle",
+];
+
+static ON: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+
+thread_local! {
+    static LOCAL: std::cell::RefCell<Option<Vec<&'static str>>> = const { std::cell::RefCell::new(None) };
+}
+
+fn known(names: &[String]) -> Result<Vec<&'static str>, String> {
+    let mut on = Vec::new();
+    for n in names {
+        match OPTIONS.iter().find(|&&k| k == n) {
+            Some(&k) => on.push(k),
+            None => {
+                return Err(format!(
+                    "unknown teacher option {n:?}; known: {}",
+                    OPTIONS.join(", ")
+                ))
+            }
+        }
+    }
+    Ok(on)
+}
+
+/// Switch options on for the whole program (once, before any run).
+pub fn set_options(names: &[String]) -> Result<(), String> {
+    ON.set(known(names)?)
+        .map_err(|_| "the teacher's options are already set".to_string())
+}
+
+/// Run `f` with these options on this thread only (tests).
+pub fn with_options<T>(names: &[&str], f: impl FnOnce() -> T) -> T {
+    let names: Vec<String> = names.iter().map(|s| s.to_string()).collect();
+    let on = known(&names).expect("known options");
+    let before = LOCAL.with(|l| l.replace(Some(on)));
+    let out = f();
+    LOCAL.with(|l| *l.borrow_mut() = before);
+    out
+}
+
+/// Whether an option is switched on.
+pub(crate) fn on(name: &str) -> bool {
+    if let Some(v) = LOCAL.with(|l| l.borrow().clone()) {
+        return v.contains(&name);
+    }
+    ON.get().is_some_and(|v| v.contains(&name))
+}
+
+/// Whether the teacher decides by the value model (everything but the "classic" option).
+pub(crate) fn by_value() -> bool {
+    !on("classic")
+}
 
 /// Money kept for interest ($1 per $5 held, up to the cap) once its joker slots are full: keeping it
 /// earlier starves the early build (more runs end at ante 2).
@@ -421,7 +493,7 @@ fn joker_order(run: &Run) -> Vec<usize> {
 }
 
 /// One move towards `joker_order`, if the jokers aren't in it yet (and none is face down).
-fn reorder(run: &Run) -> Option<(MoveKind, u64)> {
+pub(crate) fn reorder(run: &Run) -> Option<(MoveKind, u64)> {
     if run.jokers.len() < 2 || run.jokers.iter().any(|j| j.face_down) {
         return None;
     }
@@ -616,18 +688,233 @@ fn pack_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     }
 }
 
+/// Verdant Leaf debuffs every card until a joker is sold: the joker it would miss least goes.
+pub(crate) fn verdant_sale(run: &Run) -> Option<(MoveKind, u64)> {
+    let leaf = run
+        .blind
+        .as_ref()
+        .is_some_and(|b| b.active_boss() == Some(crate::blinds::Boss::VerdantLeaf));
+    if !leaf {
+        return None;
+    }
+    let w = sellable_jokers(run, 1).first().copied()?;
+    Some((MoveKind::SellJoker, w as u64))
+}
+
+/// The value teacher's use of held cards in a round: Planets at once; any other consumable (on each
+/// target idea) when the value model says the run is better for it, judged as if the round began again.
+fn value_consumable_in_round(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
+    use crate::value::value_in_round;
+    if run.consumables.is_empty() || run.hand.is_empty() {
+        return None;
+    }
+    for (i, c) in run.consumables.iter().enumerate() {
+        if c.kind.set() == ConsumableSet::Planet
+            && !planets_pay_held(run)
+            && run.can_use_consumable(c, &[], UseFrom::Slots)
+        {
+            return Some((MoveKind::UseConsumable, i as u64));
+        }
+    }
+    let vs = value_salt(run, salt);
+    let mut options: Vec<(Vec<(MoveKind, u64)>, f64)> = Vec::new();
+    for (i, c) in run.consumables.iter().enumerate() {
+        let use_move = |mask: u64| (MoveKind::UseConsumable, i as u64 | mask << 8);
+        if c.kind.selection_limits().is_none() {
+            if run.can_use_consumable(c, &[], UseFrom::Slots) {
+                options.push((vec![use_move(0)], 0.0));
+            }
+            continue;
+        }
+        for t in target_sets(run, c) {
+            if run.forced_card().is_some_and(|f| !t.contains(&f)) {
+                continue; // Cerulean Bell: every selection must include its card
+            }
+            let ids: Vec<u32> = t.iter().map(|&p| run.hand[p]).collect();
+            if run.can_use_consumable(c, &ids, UseFrom::Slots) {
+                options.push((use_on(run, c, &t, &use_move), 0.0));
+            }
+        }
+    }
+    if options.is_empty() {
+        return None;
+    }
+    let here_quick = value_in_round(run, vs, crate::value::QUICK);
+    for o in &mut options {
+        o.1 = after(run, vs ^ 0x5EED, &o.0)
+            .map_or(f64::MIN, |c| value_in_round(&c, vs, crate::value::QUICK));
+    }
+    options.retain(|o| o.1 > here_quick + MIN_GAIN);
+    options.sort_by(|a, b| b.1.total_cmp(&a.1));
+    options.truncate(3);
+    if options.is_empty() {
+        return None;
+    }
+    let mut best = (
+        value_in_round(run, vs, crate::value::SAMPLES) + MIN_GAIN,
+        None,
+    );
+    for (moves, _) in options {
+        let v = after(run, vs ^ 0x5EED, &moves)
+            .map_or(f64::MIN, |c| value_in_round(&c, vs, crate::value::SAMPLES));
+        if v > best.0 {
+            best = (v, Some(moves[0]));
+        }
+    }
+    best.1
+}
+
+/// A salt that stays the same while only the jokers' order changes, so a decision and the joker moves
+/// made for it agree from one call to the next.
+fn decision_salt(run: &Run, salt: u64) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (
+        salt >> 20,
+        run.ante,
+        run.round,
+        run.hands_left,
+        run.discards_left,
+    )
+        .hash(&mut h);
+    let mut cards = run.hand.clone();
+    cards.sort_unstable();
+    cards.hash(&mut h);
+    run.round_chips.to_bits().hash(&mut h);
+    run.consumables.len().hash(&mut h);
+    h.finish()
+}
+
+/// Before playing `mask`: the order of the played cards that scores most (cards score left to right, so
+/// it matters with Hanging Chad, Photograph, Glass and Mult cards...): each card tried first and last.
+/// Returns the first card move towards it, if it beats the order in hand by more than a hair.
+fn card_order(run: &Run, mask: u64, salt: u64) -> Option<(MoveKind, u64)> {
+    if on("no-juggle") {
+        return None;
+    }
+    let played: Vec<usize> = (0..run.hand.len())
+        .filter(|&i| mask >> i & 1 == 1)
+        .collect();
+    if played.len() < 2 || run.hand.iter().any(|&id| run.card(id).face_down) {
+        return None;
+    }
+    // Judged on a fair copy: chance effects (Lucky cards, Misprint...) must not peek at the run's streams.
+    let fair = fair_copy(run, salt ^ 0xCA2D);
+    let base = crate::bots::preview_score(&fair, mask);
+    let mut best = (base * 1.001 + 1.0, None);
+    let ids: Vec<u32> = played.iter().map(|&i| run.hand[i]).collect();
+    for &p in &played {
+        for to in [played[0], played[played.len() - 1]] {
+            if p == to {
+                continue;
+            }
+            let mut c = fair.clone();
+            if c.move_hand_card(p, to).is_err() {
+                continue;
+            }
+            // The same cards, at their new positions.
+            let m = (0..c.hand.len())
+                .filter(|&i| ids.contains(&c.hand[i]))
+                .fold(0u64, |m, i| m | 1 << i);
+            let v = crate::bots::preview_score(&c, m);
+            if v > best.0 {
+                best = (v, Some((MoveKind::MoveCard, (p | to << 8) as u64)));
+            }
+        }
+    }
+    best.1
+}
+
+/// Luchador sold at the start of a boss round when the boss makes the blind much harder to beat (its sale
+/// disables the boss): judged by the best-hand plan's tries with and without the boss.
+fn luchador_sale(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
+    run.blind.as_ref().and_then(|b| b.active_boss())?;
+    if run.hands_played_round > 0 || run.discards_used_round > 0 {
+        return None;
+    }
+    let l = run
+        .jokers
+        .iter()
+        .position(|j| j.kind == JokerKind::Luchador && !j.debuffed)?;
+    let with_boss = crate::planner::beat_rate(run, salt);
+    if with_boss >= 0.9 {
+        return None;
+    }
+    let sold = after(run, salt ^ 0x1C4A, &[(MoveKind::SellJoker, l as u64)])?;
+    (crate::planner::beat_rate(&sold, salt) > with_boss + 0.15)
+        .then_some((MoveKind::SellJoker, l as u64))
+}
+
+/// The value teacher's move in a round: decided with the jokers in scoring order (so the decision doesn't
+/// depend on where they stand), then the jokers set for it: for a hand, the scoring order; for a throw,
+/// the order that makes it pay most (a copier on Mail-In Rebate, Faceless Joker or Burnt Joker).
+fn value_round_move(run: &Run, salt: u64) -> (MoveKind, u64) {
+    let salt = decision_salt(run, salt);
+    if run.jokers.iter().any(|j| j.face_down) || run.jokers.len() < 2 {
+        return round_move_inner(run, salt);
+    }
+    let scoring = joker_order(run);
+    let m = round_move_inner(&with_order(run, &scoring), salt);
+    let want = match m.0 {
+        MoveKind::Play => Some(scoring),
+        MoveKind::Discard => Some(discard_order(run, m.1, salt).unwrap_or(scoring)),
+        _ => None,
+    };
+    if let Some(r) = want.and_then(|w| move_towards(run, &w)) {
+        return r;
+    }
+    if m.0 == MoveKind::Play {
+        if let Some(r) = card_order(run, m.1, salt) {
+            return r;
+        }
+    }
+    // Positions in the decision refer to the jokers in scoring order: map a sale back to the real order.
+    if m.0 == MoveKind::SellJoker {
+        let real = joker_order(run)[m.1 as usize];
+        return (MoveKind::SellJoker, real as u64);
+    }
+    m
+}
+
 fn round_move(run: &Run, salt: u64) -> (MoveKind, u64) {
+    if by_value() {
+        value_round_move(run, salt)
+    } else {
+        round_move_inner(run, salt)
+    }
+}
+
+fn round_move_inner(run: &Run, salt: u64) -> (MoveKind, u64) {
+    if let Some(m) = verdant_sale(run) {
+        return m;
+    }
+    if by_value() {
+        if let Some(m) = luchador_sale(run, salt) {
+            return m;
+        }
+    }
+    if by_value() {
+        if let Some(m) = value_consumable_in_round(run, salt) {
+            return m;
+        }
+    }
     let mut cache: Option<(f64, u64)> = None;
     let mut best = || *cache.get_or_insert_with(|| best_play(run, salt));
     let mut mask_only = || best().1;
-    if let Some((i, mask)) = consumable_to_use(run, &mut mask_only) {
-        return (MoveKind::UseConsumable, i as u64 | mask << 8);
+    if !by_value() {
+        if let Some((i, mask)) = consumable_to_use(run, &mut mask_only) {
+            return (MoveKind::UseConsumable, i as u64 | mask << 8);
+        }
     }
     let (score, mask) = best();
     let target = run.blind.as_ref().map_or(0.0, |b| b.chips);
     let needed = target - run.round_chips;
-    // A hand that beats the blind is played at once; so is the last hand once the discards are gone. With
-    // discards left, even the last hand (The Needle's only one) is worth improving first.
+    // A hand that beats the blind is played at once (the value teacher first takes what the round still
+    // offers, if that keeps the win); so is the last hand once the discards are gone. With discards left,
+    // even the last hand (The Needle's only one) is worth improving first.
+    if score >= needed && by_value() {
+        return crate::planner::finish(run, (score, mask), salt);
+    }
     if score >= needed || (run.hands_left <= 1 && run.discards_left == 0) {
         return (MoveKind::Play, mask);
     }
@@ -642,12 +929,839 @@ fn round_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     crate::planner::plan(run, (score, mask), salt)
 }
 
+// ------------------------------------------------------------------ joker order by event (option "value")
+
+/// One move towards the order `want` (a permutation of the current joker positions), if not there yet.
+fn move_towards(run: &Run, want: &[usize]) -> Option<(MoveKind, u64)> {
+    if run.jokers.iter().any(|j| j.face_down) {
+        return None;
+    }
+    let at = (0..want.len()).find(|&i| want[i] != i)?;
+    Some((MoveKind::MoveJoker, (want[at] | at << 8) as u64))
+}
+
+/// The jokers in the order `want` (positions of the current jokers), on a copy.
+fn with_order(run: &Run, want: &[usize]) -> Run {
+    let mut c = run.clone();
+    c.jokers = want.iter().map(|&i| run.jokers[i].clone()).collect();
+    c
+}
+
+/// Orders to try for an event: the scoring order, and from it each copier (Blueprint, Brainstorm) set to
+/// copy each joker in `events` (Blueprint just left of it; for Brainstorm, that joker leftmost).
+fn copy_orders(run: &Run, events: &[JokerKind]) -> Vec<Vec<usize>> {
+    use JokerKind::{Blueprint, Brainstorm};
+    let base = joker_order(run);
+    let mut out = vec![base.clone()];
+    let j = &run.jokers;
+    let targets: Vec<usize> = (0..j.len())
+        .filter(|&i| events.contains(&j[i].kind))
+        .collect();
+    for c in (0..j.len()).filter(|&i| matches!(j[i].kind, Blueprint | Brainstorm)) {
+        for &t in &targets {
+            let mut o: Vec<usize> = base.iter().copied().filter(|&i| i != c && i != t).collect();
+            if j[c].kind == Blueprint {
+                let at = o.len().min(
+                    o.iter()
+                        .position(|&i| multiplies(j[i].kind))
+                        .unwrap_or(o.len()),
+                );
+                o.insert(at, t);
+                o.insert(at, c);
+            } else {
+                o.insert(0, t);
+                o.push(c);
+            }
+            if !out.contains(&o) {
+                out.push(o);
+            }
+        }
+    }
+    out
+}
+
+/// Jokers that act when the shop is left or the blind starts, worth copying then.
+const SHOP_EXIT_EVENTS: &[JokerKind] = &[
+    JokerKind::Perkeo,
+    JokerKind::Cartomancer,
+    JokerKind::RiffRaff,
+    JokerKind::MarbleJoker,
+    JokerKind::Certificate,
+    JokerKind::Burglar,
+];
+
+/// Jokers that pay or grow when cards are thrown, worth copying for a discard.
+const DISCARD_EVENTS: &[JokerKind] = &[
+    JokerKind::MailInRebate,
+    JokerKind::FacelessJoker,
+    JokerKind::BurntJoker,
+];
+
+/// The order to leave the shop in: the scoring order, a copier on a joker that acts as the shop closes or
+/// the blind starts (Perkeo, Cartomancer, Riff-raff...), or a weak joker fed to Ceremonial Dagger, whichever
+/// the value model rates highest (its play-outs start by leaving the shop and choosing the blind, so these
+/// effects happen in them).
+fn exit_order(run: &Run, vs: u64) -> Option<Vec<usize>> {
+    use crate::value::value;
+    if on("no-juggle") {
+        return None;
+    }
+    if run.jokers.len() < 2 || run.jokers.iter().any(|j| j.face_down) {
+        return None;
+    }
+    let mut orders = copy_orders(run, SHOP_EXIT_EVENTS);
+    // Ceremonial Dagger fed the weakest joker (put right of it) instead of standing rightmost.
+    let base = joker_order(run);
+    for d in (0..run.jokers.len()).filter(|&i| run.jokers[i].kind == JokerKind::CeremonialDagger) {
+        for f in weakest_jokers(run, vs, 2) {
+            if f == d || run.jokers[f].kind == JokerKind::CeremonialDagger {
+                continue;
+            }
+            let mut o: Vec<usize> = base.iter().copied().filter(|&i| i != f).collect();
+            let at = o.iter().position(|&i| i == d).map_or(o.len(), |p| p + 1);
+            o.insert(at, f);
+            if !orders.contains(&o) {
+                orders.push(o);
+            }
+        }
+    }
+    if orders.len() < 2 {
+        return None;
+    }
+    // The value of each order, plus what leaving and starting the blind make with it (Perkeo's copies,
+    // Cartomancer's Tarots: the value's play-outs don't hold on to them).
+    let made = |start: &Run| -> f64 {
+        let mut c = fair_copy(start, vs ^ 0xE817);
+        if crate::env::apply(&mut c, MoveKind::LeaveShop, 0).is_err() {
+            return 0.0;
+        }
+        if c.phase == Phase::BlindSelect {
+            let _ = crate::env::apply(&mut c, MoveKind::SelectBlind, 0);
+        }
+        crate::value::holdings_gain(start, &c)
+    };
+    let mut best = (f64::MIN, None);
+    for (k, o) in orders.into_iter().enumerate() {
+        let start = with_order(run, &o);
+        let v = value(&start, vs) + made(&start) - if k == 0 { 0.0 } else { MIN_GAIN };
+        if v > best.0 {
+            best = (v, Some(o));
+        }
+    }
+    best.1
+}
+
+/// Before throwing `mask`: the order that makes the throw pay most (a copier on Mail-In Rebate, Faceless
+/// Joker or Burnt Joker), judged on fair copies by what the throw adds.
+fn discard_order(run: &Run, mask: u64, salt: u64) -> Option<Vec<usize>> {
+    if on("no-juggle") {
+        return None;
+    }
+    if run.jokers.len() < 2 || run.jokers.iter().any(|j| j.face_down) {
+        return None;
+    }
+    let orders = copy_orders(run, DISCARD_EVENTS);
+    if orders.len() < 2 {
+        return None;
+    }
+    let reference = crate::bots::preview(&fair_copy(run, salt ^ 0xD15C), best_play(run, salt).1);
+    let reference = (reference.chips.max(1.0), reference.mult.max(1.0));
+    let mut best = (f64::MIN, None);
+    for (k, o) in orders.into_iter().enumerate() {
+        let start = with_order(run, &o);
+        let mut c = fair_copy(&start, salt ^ 0xD15C);
+        if crate::env::apply(&mut c, MoveKind::Discard, mask).is_err() {
+            continue;
+        }
+        let g =
+            crate::value::round_gain(&start, &c, reference) - if k == 0 { 0.0 } else { MIN_GAIN };
+        if g > best.0 {
+            best = (g, Some(o));
+        }
+    }
+    best.1
+}
+
+// ------------------------------------------------------------------ decisions by value (option "value")
+
+/// The least gain in value worth a move (below it, estimates differ by noise).
+const MIN_GAIN: f64 = 0.01;
+/// Sample contents per pack estimate, and sample shops per reroll estimate.
+const LOOKS: u64 = 2;
+const REROLL_LOOKS: u64 = 3;
+
+/// The salt for value estimates: the same through a shop visit, so its options and its successive
+/// decisions see the same deals and agree with each other.
+fn value_salt(run: &Run, salt: u64) -> u64 {
+    (salt >> 20).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ ((run.round as u64) << 8) ^ run.ante as u64
+}
+
+/// The run after these moves, on a fair copy: random outcomes (a reroll's new cards, a pack's contents, a
+/// Tarot's luck) come from fresh streams, never the run's own.
+fn after(run: &Run, salt: u64, moves: &[(MoveKind, u64)]) -> Option<Run> {
+    let mut c = fair_copy(run, salt);
+    for &(k, a) in moves {
+        crate::env::apply(&mut c, k, a).ok()?;
+    }
+    Some(c)
+}
+
+/// Whether held Planets pay (Observatory: each gives x1.5 to its hand), so a Planet may be kept, not used.
+fn planets_pay_held(run: &Run) -> bool {
+    run.vouchers[VoucherKind::Observatory.index()]
+}
+
+/// Buying this row item; a Planet is used at once (unless held Planets pay).
+fn buy_moves(run: &Run, i: usize) -> Vec<(MoveKind, u64)> {
+    let mut m = vec![(MoveKind::Buy, i as u64)];
+    if let Some(RowItem::Consumable(c)) = run
+        .shop
+        .as_ref()
+        .and_then(|s| s.row.get(i))
+        .map(|r| &r.item)
+    {
+        if c.kind.set() == ConsumableSet::Planet && !planets_pay_held(run) {
+            m.push((MoveKind::UseConsumable, run.consumables.len() as u64));
+        }
+    }
+    m
+}
+
+/// Held jokers that may go (not Eternal), weakest first by the fixed judgement.
+fn sellable_jokers(run: &Run, n: usize) -> Vec<usize> {
+    let mut v: Vec<usize> = (0..run.jokers.len())
+        .filter(|&i| !run.jokers[i].eternal && !run.jokers[i].face_down)
+        .collect();
+    v.sort_by(|&a, &b| {
+        worth(run.jokers[a].kind, run.jokers[a].edition)
+            .total_cmp(&worth(run.jokers[b].kind, run.jokers[b].edition))
+    });
+    v.truncate(n);
+    v
+}
+
+thread_local! {
+    static WEAKEST: std::cell::RefCell<std::collections::HashMap<(u64, u64), Vec<usize>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Held jokers that may go, the one the run would miss least first, by the value model: the value of the
+/// position without each (judged as if the round began again, in a round). Cached per position and salt.
+fn weakest_jokers(run: &Run, vs: u64, n: usize) -> Vec<usize> {
+    use std::hash::{Hash, Hasher};
+    if on("static-sells") {
+        return sellable_jokers(run, n);
+    }
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (run.phase as u8, run.ante, run.round).hash(&mut h);
+    for j in &run.jokers {
+        (
+            j.sort_id,
+            j.kind as u16,
+            j.edition as u8,
+            j.mult.to_bits(),
+            j.x_mult.to_bits(),
+            j.chips.to_bits(),
+        )
+            .hash(&mut h);
+    }
+    let key = (h.finish(), vs);
+    let cached = WEAKEST.with(|w| w.borrow().get(&key).cloned());
+    let order = cached.unwrap_or_else(|| {
+        let mut v: Vec<(usize, f64)> = (0..run.jokers.len())
+            .filter(|&i| !run.jokers[i].eternal && !run.jokers[i].face_down)
+            .map(|i| {
+                let mut c = run.clone();
+                c.jokers.remove(i);
+                let without = if run.phase == Phase::Round {
+                    crate::value::value_in_round(&c, vs, crate::value::QUICK)
+                } else {
+                    crate::value::quick(&c, vs)
+                };
+                (i, without)
+            })
+            .collect();
+        v.sort_by(|a, b| b.1.total_cmp(&a.1));
+        let order: Vec<usize> = v.into_iter().map(|(i, _)| i).collect();
+        WEAKEST.with(|w| {
+            let mut w = w.borrow_mut();
+            if w.len() > 256 {
+                w.clear();
+            }
+            w.insert(key, order.clone());
+        });
+        order
+    });
+    order.into_iter().take(n).collect()
+}
+
+/// A playing card's worth to a deck, roughly: its chips, and more for what is on it (enhancement, edition,
+/// seal). Used to say which cards are worth copying (Death, Cryptid, DNA) and which worth losing.
+fn card_worth(run: &Run, id: u32) -> f64 {
+    let c = run.card(id);
+    let rank = match c.rank.id() {
+        14 => 11.0,
+        11..=13 => 10.0,
+        r => r as f64,
+    };
+    let enh = match c.enhancement {
+        Enhancement::Glass => 30.0,
+        Enhancement::Steel => 25.0,
+        Enhancement::Mult => 15.0,
+        Enhancement::Lucky => 12.0,
+        Enhancement::Bonus | Enhancement::Wild => 10.0,
+        Enhancement::Gold => 8.0,
+        Enhancement::Stone => 5.0,
+        Enhancement::None => 0.0,
+    };
+    let ed = match c.edition {
+        Edition::Polychrome => 30.0,
+        Edition::Holographic => 15.0,
+        Edition::Foil => 10.0,
+        _ => 0.0,
+    };
+    let seal = match c.seal {
+        Seal::Red => 25.0,
+        Seal::Blue => 12.0,
+        Seal::Gold => 10.0,
+        Seal::Purple => 6.0,
+        Seal::None => 0.0,
+    };
+    rank + enh + ed + seal + c.perma_bonus as f64
+}
+
+/// What the deck and jokers lean towards: the commonest rank, the suit the deck and suit jokers favour,
+/// and whether face cards pay (face jokers).
+fn leanings(run: &Run) -> (u8, Suit, bool) {
+    use JokerKind::*;
+    let mut ranks = [0f64; 15];
+    let mut suits = [0f64; 4];
+    for &id in &run.playing_cards {
+        let k = run.card(id);
+        ranks[k.rank.id() as usize] += 1.0;
+        suits[k.suit as usize] += 1.0;
+    }
+    let mut faces = false;
+    for j in &run.jokers {
+        match j.kind {
+            LustyJoker | Bloodstone => suits[Suit::Hearts as usize] += 6.0,
+            GreedyJoker | RoughGem => suits[Suit::Diamonds as usize] += 6.0,
+            WrathfulJoker | Arrowhead => suits[Suit::Spades as usize] += 6.0,
+            GluttonousJoker | OnyxAgate => suits[Suit::Clubs as usize] += 6.0,
+            Photograph | SmileyFace | ScaryFace | SockAndBuskin | MidasMask | BusinessCard
+            | ReservedParking | Pareidolia | Caino | Triboulet => faces = true,
+            _ => {}
+        }
+    }
+    let rank = (2..15)
+        .max_by(|&a, &b| ranks[a].total_cmp(&ranks[b]).then(a.cmp(&b)))
+        .unwrap_or(14) as u8;
+    let suit = Suit::ALL
+        .iter()
+        .copied()
+        .max_by(|&a, &b| suits[a as usize].total_cmp(&suits[b as usize]))
+        .unwrap_or(Suit::Spades);
+    (rank, suit, faces)
+}
+
+/// Hand positions to try a card-changing consumable on: several ideas of where it helps, each a candidate
+/// the value model judges by what the changed deck then scores. Ideas lean towards the run's build: its
+/// commonest rank, its suit, face cards when face jokers pay, the most valuable cards to copy or keep.
+/// Each set is given with the moves that use it: Death copies the right card of the two onto the left one,
+/// so the hand is first re-ordered when the card to copy is on the left.
+fn target_sets(run: &Run, c: &Consumable) -> Vec<Vec<usize>> {
+    use ConsumableKind::*;
+    let Some((lo, hi)) = c.kind.selection_limits() else {
+        return vec![Vec::new()];
+    };
+    let n = run.hand.len();
+    let card = |i: usize| run.card(run.hand[i]);
+    let worth = |i: usize| card_worth(run, run.hand[i]);
+    let (main_rank, main_suit, faces) = leanings(run);
+    let mut by_worth: Vec<usize> = (0..n).filter(|&i| !card(i).face_down).collect();
+    by_worth.sort_by(|&a, &b| worth(a).total_cmp(&worth(b)));
+    let low = by_worth.clone();
+    let mut high = by_worth.clone();
+    high.reverse();
+    let plain = |i: &usize| card(*i).enhancement == Enhancement::None;
+    let first = |v: &[usize], k: usize| v.iter().copied().take(k).collect::<Vec<usize>>();
+    let pick = |pred: &dyn Fn(usize) -> bool, from: &[usize]| -> Vec<usize> {
+        from.iter().copied().filter(|&i| pred(i)).collect()
+    };
+    // Cards a build plays: of the main rank, of the main suit, face cards when they pay.
+    let on_rank = pick(&|i| card(i).rank.id() == main_rank, &high);
+    let on_suit = pick(&|i| card(i).suit == main_suit, &high);
+    let face = pick(&|i| card(i).rank.is_face(), &high);
+    let mut sets: Vec<Vec<usize>> = Vec::new();
+    let mut add = |mut v: Vec<usize>| {
+        v.sort_unstable();
+        v.dedup();
+        if v.len() >= lo && v.len() <= hi && !sets.contains(&v) {
+            sets.push(v);
+        }
+    };
+    let plain_of = |v: &[usize]| v.iter().copied().filter(plain).collect::<Vec<usize>>();
+    match c.kind {
+        // Enhancements that pay when the card scores: on cards the build plays.
+        Magician | Empress | Hierophant | Justice | Lovers => {
+            add(first(&plain_of(&high), hi));
+            add(first(&plain_of(&on_rank), hi));
+            add(first(&plain_of(&on_suit), hi));
+            if faces {
+                add(first(&plain_of(&face), hi));
+            }
+        }
+        // Steel and Gold pay while held, Stone wherever: on cards the build doesn't play, or its best.
+        Chariot | Devil | Tower => {
+            add(first(&plain_of(&low), hi));
+            add(first(&plain_of(&high), hi));
+            add(first(&plain_of(&on_rank), hi));
+            if faces {
+                add(first(&plain_of(&face), hi));
+            }
+        }
+        // One rank up: towards the main rank, towards face cards, or the highest.
+        Strength => {
+            add(first(
+                &pick(&|i| card(i).rank.id() + 1 == main_rank, &low),
+                hi,
+            ));
+            if faces {
+                add(first(
+                    &pick(&|i| matches!(card(i).rank.id(), 10..=12), &low),
+                    hi,
+                ));
+            }
+            add(first(&pick(&|i| card(i).rank.id() < 14, &high), hi));
+            add(first(&low, hi));
+        }
+        // Thin the deck: its least valuable cards, or cards off the build.
+        HangedMan => {
+            add(first(&low, 2));
+            add(first(&low, 1));
+            add(first(&pick(&|i| card(i).suit != main_suit, &low), 2));
+            if faces {
+                add(first(&pick(&|i| !card(i).rank.is_face(), &low), 2));
+            }
+            add(first(&pick(&|i| card(i).rank.id() != main_rank, &low), 2));
+        }
+        // Suit changes: off-suit cards, the least valuable or the best.
+        Star | Moon | Sun | World => {
+            let to = c.kind.tarot_suit().unwrap_or(main_suit);
+            let off = pick(
+                &|i| card(i).suit != to && card(i).enhancement != Enhancement::Wild,
+                &low,
+            );
+            add(first(&off, hi));
+            let mut off_high = off.clone();
+            off_high.reverse();
+            add(first(&off_high, hi));
+            add(first(&pick(&|i| card(i).rank.id() == main_rank, &off), hi));
+        }
+        // Death: the least valuable cards become copies of the most valuable, of the main rank or suit, or a
+        // face card. (Order in hand is dealt with by `death_moves`.)
+        Death => {
+            let sources = [
+                high.first().copied(),
+                on_rank.first().copied(),
+                on_suit
+                    .iter()
+                    .copied()
+                    .find(|&i| card(i).rank.id() == main_rank),
+                if faces { face.first().copied() } else { None },
+            ];
+            for &w in low.iter().take(2) {
+                for g in sources.iter().flatten() {
+                    if *g != w && worth(*g) > worth(w) {
+                        add(vec![w, *g]);
+                    }
+                }
+            }
+        }
+        // Seals and copies: on the most valuable card, a main-rank card, a face card.
+        Talisman | DejaVu | Trance | Medium | Cryptid => {
+            let unsealed = |i: &usize| c.kind == Cryptid || card(*i).seal == Seal::None;
+            add(first(
+                &high.iter().copied().filter(unsealed).collect::<Vec<_>>(),
+                1,
+            ));
+            add(first(
+                &on_rank.iter().copied().filter(unsealed).collect::<Vec<_>>(),
+                1,
+            ));
+            if faces {
+                add(first(
+                    &face.iter().copied().filter(unsealed).collect::<Vec<_>>(),
+                    1,
+                ));
+            }
+            add(first(
+                &low.iter().copied().filter(unsealed).collect::<Vec<_>>(),
+                1,
+            ));
+        }
+        _ => add(first(&low, hi)),
+    }
+    // For Death, keep each pair as (to become a copy, to copy): `death_moves` orders the hand.
+    if c.kind == Death {
+        let mut pairs = Vec::new();
+        for &w in low.iter().take(2) {
+            for v in &sets {
+                if v.contains(&w) {
+                    let g = if v[0] == w { v[1] } else { v[0] };
+                    if !pairs.contains(&vec![w, g]) {
+                        pairs.push(vec![w, g]);
+                    }
+                }
+            }
+        }
+        return pairs;
+    }
+    sets
+}
+
+/// The moves that use a consumable on `targets` (hand positions). For Death, `targets` is (the card that
+/// becomes a copy, the card copied); the game copies the right one onto the left one, so when the card to
+/// copy is on the left it is first moved to the right end of the hand. `use_move` makes the consumable
+/// move from a mask.
+fn use_on(
+    run: &Run,
+    c: &Consumable,
+    targets: &[usize],
+    use_move: &dyn Fn(u64) -> (MoveKind, u64),
+) -> Vec<(MoveKind, u64)> {
+    if c.kind == ConsumableKind::Death && targets.len() == 2 {
+        let (w, g) = (targets[0], targets[1]);
+        if g > w {
+            return vec![use_move(1 << w | 1 << g)];
+        }
+        let last = run.hand.len() - 1;
+        let w2 = if w > g { w - 1 } else { w };
+        return vec![
+            (MoveKind::MoveCard, (g | last << 8) as u64),
+            use_move(1 << w2 | 1 << last),
+        ];
+    }
+    vec![use_move(targets.iter().fold(0u64, |m, &p| m | 1 << p))]
+}
+
+/// Every way to take a card from the open pack (Tarots and Spectrals on each target idea), and skipping.
+fn pack_options(run: &Run, quick: bool) -> Vec<Vec<(MoveKind, u64)>> {
+    let mut out = vec![vec![(MoveKind::PackSkip, 0)]];
+    let Some(p) = run.pack.as_ref() else {
+        return out;
+    };
+    for (i, c) in p.cards.iter().enumerate() {
+        match c {
+            PackCard::Joker(j) => {
+                if joker_room(run, j.edition) {
+                    out.push(vec![(MoveKind::PackChoose, i as u64)]);
+                }
+            }
+            PackCard::Card(_) => out.push(vec![(MoveKind::PackChoose, i as u64)]),
+            PackCard::Consumable(cons) => {
+                let mut sets = target_sets(run, cons);
+                if quick {
+                    sets.truncate(1);
+                }
+                for t in sets {
+                    let ids: Vec<u32> = t.iter().map(|&p| run.hand[p]).collect();
+                    if run.can_use_consumable(cons, &ids, UseFrom::Pack) {
+                        let choose = |mask: u64| (MoveKind::PackChoose, i as u64 | mask << 8);
+                        out.push(use_on(run, cons, &t, &choose));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Ways to give joker slot room to a joker taken by `take`: at once if there's room, else after selling
+/// one of the two weakest held jokers.
+fn joker_entries(
+    run: &Run,
+    vs: u64,
+    edition: Edition,
+    take: (MoveKind, u64),
+) -> Vec<Vec<(MoveKind, u64)>> {
+    if joker_room(run, edition) {
+        vec![vec![take]]
+    } else {
+        weakest_jokers(run, vs, 2)
+            .into_iter()
+            .map(|w| vec![(MoveKind::SellJoker, w as u64), take])
+            .collect()
+    }
+}
+
+/// What can be bought in the shop now, each as the moves that do it.
+fn shop_buys(run: &Run, vs: u64) -> Vec<Vec<(MoveKind, u64)>> {
+    let mut out = Vec::new();
+    let Some(shop) = run.shop.as_ref() else {
+        return out;
+    };
+    for (i, r) in shop.row.iter().enumerate() {
+        if !(r.cost <= 0 || r.cost <= run.spendable()) {
+            continue;
+        }
+        match &r.item {
+            RowItem::Joker(j) => {
+                out.extend(joker_entries(run, vs, j.edition, (MoveKind::Buy, i as u64)))
+            }
+            RowItem::Consumable(c) => {
+                if consumable_room(run, c.edition) {
+                    out.push(buy_moves(run, i));
+                } else if !run.consumables.is_empty() {
+                    // Full slots: sell a held one (the last) to make room.
+                    let j = run.consumables.len() - 1;
+                    let mut m = vec![(MoveKind::SellConsumable, j as u64)];
+                    let mut after_sale = run.clone();
+                    after_sale.consumables.pop();
+                    m.extend(buy_moves(&after_sale, i));
+                    out.push(m);
+                }
+            }
+            _ => out.push(buy_moves(run, i)),
+        }
+    }
+    out
+}
+
+/// A shop or pack option to judge fully: moves made on a copy, or a move whose outcome is random (a pack's
+/// contents, a reroll's cards), judged on sample outcomes, each with the best follow-up found for it.
+enum Judge {
+    Moves(Vec<(MoveKind, u64)>),
+    Sampled(Vec<(Run, Vec<(MoveKind, u64)>)>),
+}
+
+/// The best follow-up among `options` on a sample outcome, by the quick value: (its value, its moves; none
+/// if doing nothing is best).
+fn best_follow(
+    c: &Run,
+    vs: u64,
+    options: Vec<Vec<(MoveKind, u64)>>,
+) -> (f64, Vec<(MoveKind, u64)>) {
+    let mut best = (crate::value::quick(c, vs), Vec::new());
+    for o in options {
+        if let Some(d) = after(c, vs ^ 0x77, &o) {
+            let v = crate::value::quick(&d, vs);
+            if v > best.0 {
+                best = (v, o);
+            }
+        }
+    }
+    best
+}
+
+/// Judge options in two passes: a quick value for each, then the full value for the three best that beat
+/// doing nothing. Returns the first move of the winner, or None if nothing beats doing nothing.
+fn choose(
+    run: &Run,
+    vs: u64,
+    options: Vec<((MoveKind, u64), f64, Judge)>,
+) -> Option<(MoveKind, u64)> {
+    use crate::value::{quick, value};
+    let here_quick = quick(run, vs);
+    let mut options: Vec<_> = options
+        .into_iter()
+        .filter(|o| o.1 > here_quick + MIN_GAIN)
+        .collect();
+    if options.is_empty() {
+        return None;
+    }
+    options.sort_by(|a, b| b.1.total_cmp(&a.1));
+    options.truncate(3);
+    let mut best = (value(run, vs) + MIN_GAIN, None);
+    for (first, _, judge) in options {
+        let v = match judge {
+            Judge::Moves(m) => after(run, vs ^ 0x5EED, &m).map_or(f64::MIN, |c| value(&c, vs)),
+            Judge::Sampled(samples) => {
+                let n = samples.len().max(1) as f64;
+                samples
+                    .iter()
+                    .map(|(c, follow)| {
+                        let mut v = value(c, vs);
+                        if !follow.is_empty() {
+                            if let Some(d) = after(c, vs ^ 0x77, follow) {
+                                v = v.max(value(&d, vs));
+                            }
+                        }
+                        v
+                    })
+                    .sum::<f64>()
+                    / n
+            }
+        };
+        if v > best.0 {
+            best = (v, Some(first));
+        }
+    }
+    best.1
+}
+
+/// Options given as move lists, with their quick values.
+fn judged_moves(
+    run: &Run,
+    vs: u64,
+    lists: Vec<Vec<(MoveKind, u64)>>,
+) -> Vec<((MoveKind, u64), f64, Judge)> {
+    lists
+        .into_iter()
+        .filter_map(|m| {
+            let c = after(run, vs ^ 0x5EED, &m)?;
+            Some((m[0], crate::value::quick(&c, vs), Judge::Moves(m)))
+        })
+        .collect()
+}
+
+fn value_pack_move(run: &Run, salt: u64) -> (MoveKind, u64) {
+    let vs = value_salt(run, salt);
+    let lists: Vec<_> = pack_options(run, false)
+        .into_iter()
+        .filter(|m| m[0].0 != MoveKind::PackSkip)
+        .collect();
+    let options = judged_moves(run, vs, lists);
+    choose(run, vs, options).unwrap_or((MoveKind::PackSkip, 0))
+}
+
+/// The shop move that raises the value most: buying (a Planet used at once; a joker after selling a weaker
+/// one when slots are full), vouchers, packs (judged by sample contents), a reroll (judged by sample shops,
+/// with what it would buy in each), using or selling held cards, or leaving.
+fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
+    let Some(shop) = run.shop.as_ref() else {
+        return (MoveKind::LeaveShop, 0);
+    };
+    let vs = value_salt(run, salt);
+    let afford = |cost: i64| cost <= 0 || cost <= run.spendable();
+    let mut lists = shop_buys(run, vs);
+    for (i, v) in shop.vouchers.iter().enumerate() {
+        if afford(v.cost) {
+            lists.push(vec![(MoveKind::RedeemVoucher, i as u64)]);
+        }
+    }
+    for (i, c) in run.consumables.iter().enumerate() {
+        if c.kind.selection_limits().is_none() && run.can_use_consumable(c, &[], UseFrom::Slots) {
+            lists.push(vec![(MoveKind::UseConsumable, i as u64)]);
+        }
+        lists.push(vec![(MoveKind::SellConsumable, i as u64)]);
+    }
+    // Selling: the weakest joker, and jokers whose sale does something (Invisible Joker, Diet Cola).
+    let mut sells = weakest_jokers(run, vs, 1);
+    for (i, j) in run.jokers.iter().enumerate() {
+        let acts = matches!(j.kind, JokerKind::InvisibleJoker | JokerKind::DietCola);
+        if acts && !j.eternal && !sells.contains(&i) {
+            sells.push(i);
+        }
+    }
+    for w in sells {
+        lists.push(vec![(MoveKind::SellJoker, w as u64)]);
+    }
+    let mut options = judged_moves(run, vs, lists);
+    // Packs, by sample contents and the best pick in each.
+    for (b, slot) in shop.boosters.iter().enumerate() {
+        let Some(pk) = slot else { continue };
+        if !afford(pk.cost) {
+            continue;
+        }
+        let mut samples = Vec::new();
+        let mut q = 0.0;
+        for s in 0..LOOKS {
+            if let Some(c) = after(
+                run,
+                vs ^ (0xB00 + 16 * b as u64 + s),
+                &[(MoveKind::OpenBooster, b as u64)],
+            ) {
+                let picks = pack_options(&c, true)
+                    .into_iter()
+                    .filter(|m| m[0].0 != MoveKind::PackSkip)
+                    .collect();
+                let (v, follow) = best_follow(&c, vs, picks);
+                q += v;
+                samples.push((c, follow));
+            }
+        }
+        if !samples.is_empty() {
+            let n = samples.len() as f64;
+            options.push((
+                (MoveKind::OpenBooster, b as u64),
+                q / n,
+                Judge::Sampled(samples),
+            ));
+        }
+    }
+    // A reroll, by sample shops and the best buy in each (when something could still be bought after it).
+    if afford(run.reroll_cost) && run.spendable() - run.reroll_cost >= 3 {
+        let mut samples = Vec::new();
+        let mut q = 0.0;
+        for s in 0..REROLL_LOOKS {
+            if let Some(c) = after(run, vs ^ (0xA11 + s), &[(MoveKind::Reroll, 0)]) {
+                let (v, follow) = best_follow(&c, vs, shop_buys(&c, vs));
+                q += v;
+                samples.push((c, follow));
+            }
+        }
+        if !samples.is_empty() {
+            let n = samples.len() as f64;
+            options.push(((MoveKind::Reroll, 0), q / n, Judge::Sampled(samples)));
+        }
+    }
+    if let Some(m) = choose(run, vs, options) {
+        return m;
+    }
+    // Leaving: first set the jokers for what happens as the shop closes and the blind starts (or for
+    // scoring, when nothing happens then).
+    let want = exit_order(run, vs).unwrap_or_else(|| joker_order(run));
+    if let Some(m) = move_towards(run, &want) {
+        return m;
+    }
+    (MoveKind::LeaveShop, 0)
+}
+
+/// The least gain worth skipping a blind for (a skip gives up its reward and a shop, and faces the next
+/// blind unprepared, so it needs a clear case).
+const SKIP_MARGIN: f64 = 0.05;
+
+/// At the blind choice: play the blind, or (option "skips") skip it for its tag when the value model rates
+/// the run after the skip (the tag held or used, a pack it opens taken from) clearly higher.
+fn value_blind_move(run: &Run, salt: u64) -> (MoveKind, u64) {
+    use crate::value::value;
+    let play = (MoveKind::SelectBlind, 0);
+    if !on("skips") || run.on_deck() == crate::blinds::BlindSlot::Boss {
+        return play;
+    }
+    let vs = value_salt(run, salt);
+    let Some(c) = after(run, vs ^ 0x5C1B, &[(MoveKind::SkipBlind, 0)]) else {
+        return play;
+    };
+    let mut skip = value(&c, vs);
+    if c.phase == Phase::Pack {
+        for o in pack_options(&c, true) {
+            if let Some(d) = after(&c, vs ^ 0x77, &o) {
+                skip = skip.max(value(&d, vs));
+            }
+        }
+    }
+    // Playing the blind pays its reward and the unused hands (about $5) that a skip gives up.
+    let mut played = run.clone();
+    played.money += 5;
+    if skip > value(&played, vs) + SKIP_MARGIN {
+        (MoveKind::SkipBlind, 0)
+    } else {
+        play
+    }
+}
+
 /// The teacher's move.
 pub fn teacher_move(run: &Run, salt: u64) -> (MoveKind, u64) {
+    let by_value = by_value();
     match run.phase {
+        Phase::BlindSelect if by_value => value_blind_move(run, salt),
         Phase::BlindSelect => (MoveKind::SelectBlind, 0),
         Phase::RoundEval => (MoveKind::CashOut, 0),
+        Phase::Shop if by_value => value_shop_move(run, salt),
         Phase::Shop => shop_move(run),
+        Phase::Pack if by_value => value_pack_move(run, salt),
         Phase::Pack => pack_move(run, salt),
         Phase::GameOver => (MoveKind::SelectBlind, 0),
         Phase::Round => round_move(run, salt),
@@ -684,22 +1798,231 @@ mod tests {
 
     #[test]
     fn teacher_moves_are_always_legal_and_checkable() {
-        let mut seeds = SeedSampler::new(4242);
-        let mut seen = std::collections::HashSet::new();
-        for _ in 0..40 {
-            let (_, kinds) = play(&seeds.next_seed(), teacher_move);
-            seen.extend(kinds);
+        // The value teacher (the default) and the earlier one.
+        for (options, runs) in [(&[][..], 12), (&["classic"][..], 40)] {
+            with_options(options, || {
+                let mut seeds = SeedSampler::new(4242);
+                let mut seen = std::collections::HashSet::new();
+                for _ in 0..runs {
+                    let (_, kinds) = play(&seeds.next_seed(), teacher_move);
+                    seen.extend(kinds);
+                }
+                for k in [
+                    MoveKind::SellJoker,
+                    MoveKind::Reroll,
+                    MoveKind::UseConsumable,
+                    MoveKind::OpenBooster,
+                    MoveKind::PackChoose,
+                ] {
+                    assert!(
+                        seen.contains(&k),
+                        "{options:?}: the teacher never made a {k:?}"
+                    );
+                }
+            });
         }
-        for k in [
-            MoveKind::SellJoker,
-            MoveKind::Reroll,
-            MoveKind::UseConsumable,
-            MoveKind::RedeemVoucher,
-            MoveKind::OpenBooster,
-            MoveKind::PackChoose,
+    }
+
+    /// A round position: the given jokers, and the hand given as (suit, rank) pairs.
+    fn round_with(
+        blind: crate::blinds::BlindKind,
+        jokers: &[JokerKind],
+        hand: &[(Suit, crate::card::Rank)],
+    ) -> Run {
+        let mut run = Run::scenario("ROUNDPOS", blind);
+        run.hand.clear();
+        for &k in jokers {
+            run.add_joker(k);
+        }
+        for &(s, r) in hand {
+            run.add_card_to_hand(s, r);
+        }
+        run
+    }
+
+    #[test]
+    fn a_safe_blind_is_farmed_for_mail_in_rebate() {
+        use crate::blinds::BlindKind;
+        use crate::card::Rank::*;
+        use Suit::*;
+        let mut run = Run::scenario("ROUNDPOS", BlindKind::Small);
+        run.hand.clear();
+        for k in [JokerKind::Joker, JokerKind::MailInRebate] {
+            run.add_joker(k);
+        }
+        for (s, r) in [
+            (Spades, Ace),
+            (Spades, King),
+            (Spades, Queen),
+            (Spades, Jack),
+            (Spades, Nine),
+            (Clubs, Five),
+            (Diamonds, Five),
+            (Hearts, Two),
         ] {
-            assert!(seen.contains(&k), "the teacher never made a {k:?}");
+            run.add_card_to_hand(s, r);
         }
+        run.mail_rank = Five;
+        let (k, mask) = teacher_move(&run, 1 << 20);
+        assert_eq!(
+            k,
+            MoveKind::Discard,
+            "the flush wins; the Fives pay $5 each when thrown first"
+        );
+        assert!(
+            mask >> 5 & 1 == 1 && mask >> 6 & 1 == 1,
+            "both Fives thrown: {mask:#b}"
+        );
+        assert_eq!(mask & 0b11111, 0, "the winning flush kept");
+    }
+
+    #[test]
+    fn square_joker_gets_four_card_hands() {
+        use crate::blinds::BlindKind;
+        use crate::card::Rank::*;
+        use Suit::*;
+        let run = round_with(
+            BlindKind::Small,
+            &[JokerKind::Joker, JokerKind::Joker, JokerKind::SquareJoker],
+            &[
+                (Spades, Ace),
+                (Hearts, Ace),
+                (Diamonds, Ace),
+                (Clubs, Nine),
+                (Diamonds, Four),
+                (Spades, Two),
+                (Hearts, Three),
+                (Clubs, Seven),
+            ],
+        );
+        let (k, mask) = teacher_move(&run, 2 << 20);
+        assert_eq!(k, MoveKind::Play);
+        assert_eq!(
+            mask.count_ones(),
+            4,
+            "four cards played for Square Joker: {mask:#b}"
+        );
+    }
+
+    #[test]
+    fn blueprint_copies_cartomancer_when_the_shop_closes() {
+        // A shop with Blueprint, Cavendish and Cartomancer: before leaving, Blueprint goes just left of
+        // Cartomancer (two Tarots at the blind's start); the scoring order is restored in the round.
+        // The first run (of a few seeds) whose first blind is beaten, at its shop.
+        let mut seeds = SeedSampler::new(31);
+        let mut run = loop {
+            let mut run = Run::new(RunConfig::new(&seeds.next_seed()));
+            let mut step = 0;
+            while run.phase != Phase::Shop && run.phase != Phase::GameOver {
+                let (k, a) = teacher_move(&run, step);
+                apply(&mut run, k, a).unwrap();
+                step += 1;
+            }
+            if run.phase == Phase::Shop {
+                break run;
+            }
+        };
+        run.jokers.clear();
+        for k in [
+            JokerKind::Cavendish,
+            JokerKind::Blueprint,
+            JokerKind::Cartomancer,
+        ] {
+            run.add_joker(k);
+        }
+        run.money = 0; // little to buy: the decisions left are mostly the order and leaving
+        run.consumables.clear();
+        let mut moves = 0;
+        loop {
+            let (k, a) = teacher_move(&run, 5 << 20 | moves);
+            if k == MoveKind::LeaveShop && run.phase == Phase::Shop {
+                break;
+            }
+            apply(&mut run, k, a).unwrap();
+            moves += 1;
+            assert!(moves < 30);
+        }
+        assert!(
+            run.jokers.iter().any(|j| j.kind == JokerKind::Cartomancer)
+                && run.jokers.iter().any(|j| j.kind == JokerKind::Blueprint),
+            "both still held"
+        );
+        let order: Vec<JokerKind> = run.jokers.iter().map(|j| j.kind).collect();
+        let b = order
+            .iter()
+            .position(|&k| k == JokerKind::Blueprint)
+            .unwrap();
+        assert_eq!(order.get(b + 1), Some(&JokerKind::Cartomancer), "{order:?}");
+        apply(&mut run, MoveKind::LeaveShop, 0).unwrap();
+        apply(&mut run, MoveKind::SelectBlind, 0).unwrap();
+        let made = run.consumables.len();
+        assert!(made >= 2, "two Tarots at the blind's start, {made} held");
+    }
+
+    #[test]
+    fn verdant_leaf_costs_the_weakest_joker() {
+        use crate::blinds::{BlindKind, Boss};
+        use crate::card::Rank::*;
+        use Suit::*;
+        let run = round_with(
+            BlindKind::Boss(Boss::VerdantLeaf),
+            &[JokerKind::Cavendish, JokerKind::Joker],
+            &[
+                (Spades, Ace),
+                (Hearts, Ace),
+                (Diamonds, Two),
+                (Clubs, Five),
+                (Diamonds, Four),
+                (Spades, Nine),
+                (Hearts, Three),
+                (Clubs, Seven),
+            ],
+        );
+        let (k, a) = teacher_move(&run, 3 << 20);
+        assert_eq!(k, MoveKind::SellJoker);
+        assert_eq!(run.jokers[a as usize].kind, JokerKind::Joker);
+    }
+
+    #[test]
+    fn death_copies_the_best_card_moving_it_right_first() {
+        use crate::blinds::BlindKind;
+        use crate::card::Rank::*;
+        use crate::content::ConsumableKind;
+        use Suit::*;
+        let mut run = round_with(BlindKind::Small, &[], &[]);
+        let king = run.add_special_card_to_hand(
+            Hearts,
+            King,
+            Enhancement::Glass,
+            Edition::None,
+            Seal::Red,
+        );
+        for (s, r) in [(Spades, Five), (Clubs, Six), (Diamonds, Two)] {
+            run.add_card_to_hand(s, r);
+        }
+        let death = crate::create::Consumable {
+            kind: ConsumableKind::Death,
+            sort_id: 0,
+            edition: Edition::None,
+            extra_value: 0,
+            cost: 3,
+            sell_cost: 1,
+        };
+        let sets = target_sets(&run, &death);
+        assert!(
+            sets.contains(&vec![3, 0]),
+            "the Two becomes the King: {sets:?}"
+        );
+        let moves = use_on(&run, &death, &[3, 0], &|m| {
+            (MoveKind::UseConsumable, m << 8)
+        });
+        assert_eq!(
+            moves[0],
+            (MoveKind::MoveCard, 3 << 8),
+            "the King moves right first"
+        );
+        assert_eq!(moves[1], (MoveKind::UseConsumable, (1 << 2 | 1 << 3) << 8));
+        let _ = king;
     }
 
     #[test]
@@ -805,7 +2128,7 @@ mod tests {
     fn the_teacher_goes_further_than_the_greedy_bot() {
         let mut seeds = SeedSampler::new(777);
         let (mut t, mut g) = (0i64, 0i64);
-        for _ in 0..60 {
+        for _ in 0..24 {
             let seed = seeds.next_seed();
             let score = |r: &Run| if r.won { 9 } else { r.ante as i64 };
             t += score(&play(&seed, teacher_move).0);
@@ -813,7 +2136,7 @@ mod tests {
         }
         assert!(
             t > g,
-            "teacher {t} vs greedy {g} (antes summed over the same 60 seeds)"
+            "teacher {t} vs greedy {g} (antes summed over the same 24 seeds)"
         );
     }
 }

@@ -437,9 +437,15 @@ class Analyst:
                 g = Game(rec.seed)
                 for m in moves[:k]:
                     g.step(*m)
-                p = g.projection(48, 350, (hash(rec.id) & 0xFFFF) * 1000 + k)
+                salt = (hash(rec.id) & 0xFFFF) * 1000 + k
+                p = g.projection(48, 350, salt)
                 out = {"mean_ante": round(p["mean_ante"], 3), "p_win": round(p["p_win"], 3),
                        "p_clear": round(p["p_clear"], 3), "n": p["playouts"], "final_ante": p["final_ante"]}
+                # The teacher's own view of the position (its value model), when the engine has it.
+                v = g.value_view(salt) if hasattr(g, "value_view") else None
+                if v:
+                    out["teacher"] = {"chances": [[round(t), round(c, 3)] for t, c in v["chances"]],
+                                      "main": v["main"], "total": round(v["total"])}
             except Exception as exc:  # noqa: BLE001 - a failed projection is shown, never fatal
                 self.fail(f"Projection failed at move {k}: {type(exc).__name__}: {exc}")
                 time.sleep(5)

@@ -222,6 +222,11 @@ def test_projections_follow_the_run(tmp_path):
     p = v.run.proj[n]
     assert 1 <= p["mean_ante"] <= 9 and 0 <= p["p_clear"] <= 1 and p["n"] >= 8
     assert v.analysis_error is None
+    # The teacher's own view of a position still in play: its chance against each blind ahead.
+    views = [q["teacher"] for q in v.run.proj.values() if "teacher" in q]
+    assert views, "the teacher's view is given for positions still in play"
+    t = views[0]
+    assert t["chances"] and all(0 <= c <= 1 and tg > 0 for tg, c in t["chances"]) and t["total"] >= 0 and t["main"]
 
 
 def test_a_failing_projection_is_shown_not_fatal(monkeypatch):

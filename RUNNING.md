@@ -100,17 +100,21 @@ Then, the same way:
 make teacher
 ```
 
-The teacher bot is a rule-based bot written to teach the network. When its best hand won't beat the blind,
-it plans: for each hand it could build (a flush, three or four of a kind, a full house, a straight, or
-just its best hand) it plays the rest of the round out many times on copies with the hidden cards
-reshuffled, and goes for the one that wins most often: discarding towards it, and once the discards are
-gone, playing its spare cards to draw new ones (digging) while it has hands to spare. It also sells its
-weakest joker for a clearly better one, rerolls with money to spare, buys good vouchers, uses Tarots on
-sensible cards, and orders its jokers: x-mult jokers at the right end, Blueprint just left of the best
-joker it can copy, Brainstorm off the left end with the best joker it can copy moved there (and a
-Blueprint next to Brainstorm then copies that joker too), Ceremonial Dagger rightmost. It plays 100,000
-runs (about 45 minutes) into `results/baseline/teacher.json`. On a 4,000-run test it won 5.8% of runs
-(the greedy bot: 0.07%), with a mean final ante of 4.9 (greedy: 3.1).
+The teacher bot is the bot that plays before the network can, and the network's warm start. It decides by
+value: one number for a position (`crates/bm-core/src/value.rs`) that counts its scoring power against
+the blinds ahead (measured by playing the coming rounds out on copies with the hidden cards reshuffled,
+using the run's own deck, jokers, levels, enhancements and seals), what the run gains by itself (growing
+jokers, levels, income, cards made) and money as scoring power for later shops. Every shop, pack, Tarot,
+skip and round decision tries its options and keeps the one that raises that number most; nothing about
+what to buy or build is a fixed rule. In a round it plans which hand to build (and digs for it), and once
+it holds a winning hand it first takes what the round still offers (throwing Mail-In Rebate's rank or
+Purple Seals, four-card hands for Square Joker, a lone 6 for Sixth Sense, Gold Seals played, Steel and
+Blue Seals kept...) as long as the win stays certain. It moves Blueprint and Brainstorm onto whatever
+pays at each moment (Perkeo or Cartomancer as the shop closes, Mail-In Rebate before a throw, the best
+scorer before a hand). The plan's "teacher's playbook" section lists every idea, where it came from and
+what it did. It plays 12,000 runs (about 50 minutes; it thinks far more per move than the greedy bot) into
+`results/baseline/teacher.json`. On 400 fresh test runs it won 19% (the earlier rule-based teacher on
+the same seeds: 4.2%; the greedy bot: 0.07%), with a mean final ante of 6.1 (earlier: 4.8; greedy: 3.1).
 
 In the second:
 
@@ -129,10 +133,12 @@ Your browser opens the viewer, in the style of Monopoly Meta's:
 - **Your PC and the search so far**: runs played and runs a second (live), win rate with its 95% range,
   the average final ante, where runs end, what ends them, the jokers the bot takes and the ones in its
   wins, the hands it plays, the best runs so far (click one to watch it), and the job's latest output.
-- **Run outlook**: for the run on screen, quick playouts after every move (hidden cards reshuffled, fresh
-  random streams) project where it ends and how likely it is to clear the current blind. Click or drag
-  the chart, or click a move in the play by play, to see the table as it was after that move. Turning
-  points list the moves that changed the outlook most.
+- **Run outlook**: for the run on screen, quick playouts by the greedy bot after every move (hidden cards
+  reshuffled, fresh random streams) project where it ends and how likely it is to clear the current blind,
+  and the teacher's own view of the position: its chance of beating each blind ahead, the hand it scores
+  most with and a round's typical total (the value model it decides by). Click or drag the chart, or
+  click a move in the play by play, to see the table as it was after that move. Turning points list the
+  moves that changed the outlook most.
 - **Engine and your game**: a hidden copy of your Balatro (no window) replays the job's runs at full
   speed through BalatroBot, and after every move compares money, hands, discards, the cards in hand,
   round chips, blinds, tags, jokers and consumables (with their sell values), the shop's cards,

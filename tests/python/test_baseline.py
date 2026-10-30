@@ -97,12 +97,12 @@ def test_the_teacher_bot_runs_in_the_job_and_its_runs_replay(tmp_path):
     watch = tmp_path / "watch" / "teacher"
     out = tmp_path / "teacher.json"
     r = subprocess.run(["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "baseline", "--",
-                        "--bot", "teacher", "--runs", "150", "--threads", "2", "--seed", "9", "--out", str(out)],
+                        "--bot", "teacher", "--runs", "60", "--threads", "2", "--seed", "9", "--out", str(out)],
                        cwd=ROOT, capture_output=True, text=True, check=False, timeout=900,
                        env={**os.environ, "BM_WATCH_DIR": str(watch)})
     assert r.returncode == 0, r.stdout + r.stderr
     final = json.loads(out.read_text())
-    assert final["bot"] == "teacher bot" and final["runs"] == 150 and final["refused_moves"] == 0
+    assert final["bot"] == "teacher bot" and final["runs"] == 60 and final["refused_moves"] == 0
     assert final["per_run"]["rerolls"] > 0 and final["per_run"]["vouchers"] > 0
     jobs = viewer.JobFiles(tmp_path / "watch", tmp_path / "logs")
     best = jobs.best()

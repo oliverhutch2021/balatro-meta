@@ -844,7 +844,12 @@ function renderChart() {
   const p = projAt(k);
   const m = k === 0 ? (S.run && S.run.start) : S.moves[k - 1];
   let r = `<b>${k === 0 ? 'Start of the run' : `After move ${k}`}</b>` + (m ? ` &middot; ante ${m.ante}${m.blind ? ', ' + esc(m.blind) : ''}` : '');
-  if (p) r += `<br>Projected to end at <b>${p.mean_ante >= 8.95 ? 'a win' : 'ante ' + p.mean_ante.toFixed(1)}</b> &middot; clears this blind <b>${Math.round(100 * p.p_clear)}%</b> &middot; wins <b>${Math.round(100 * p.p_win)}%</b> <span>(${p.n} playouts)</span>`;
+  if (p) r += `<br>Greedy playouts: end at <b>${p.mean_ante >= 8.95 ? 'a win' : 'ante ' + p.mean_ante.toFixed(1)}</b> &middot; clear this blind <b>${Math.round(100 * p.p_clear)}%</b> &middot; win <b>${Math.round(100 * p.p_win)}%</b> <span>(${p.n} playouts)</span>`;
+  if (p && p.teacher) {
+    const t = p.teacher;
+    const ch = t.chances.slice(0, 4).map(([tg, c]) => `<b>${Math.round(100 * c)}%</b> vs ${num(tg)}`).join(' &middot; ');
+    r += `<br>Teacher's view: ${ch}<br>scores most with <b>${esc(t.main)}</b>, a round's total about <b>${num(t.total)}</b>`;
+  }
   else r += `<br>${S.analysis ? 'Projecting…' : 'Analysis is off.'}`;
   const err = S.state && S.state.settings && S.state.settings.analysis_error;
   if (err && S.analysis) r += `<br><span style="color:var(--bad)">${esc(err)}</span>`;
