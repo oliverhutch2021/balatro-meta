@@ -338,3 +338,110 @@ def test_face_down_jokers_are_compared_by_their_true_values():
     view = watch.game_view({"state": "SHOP", "jokers": {"cards": [
         {"key": "j_egg", "modifier": {"edition": "FOIL"}, "state": {"hidden": True}, "cost": {"buy": 6, "sell": 63}}]}})
     assert view["jokers"] == [{"key": "j_egg", "edition": "FOIL", "face_down": True, "sell": 63}]
+
+
+class FakeHiddenGame:
+    """Stands in for the hidden Balatro's process control: counts stops and launches, reports a memory size."""
+
+    def __init__(self, mb=500.0):
+        self.mb, self.stops, self.launches, self.launched_at = mb, 0, 0, 0.0
+
+    def stop(self):
+        self.stops += 1
+
+    def launch(self):
+        self.launches += 1
+        self.launched_at = time.time()
+        return True
+
+    def memory_mb(self):
+        return self.mb
+
+
+def test_the_hidden_game_gets_fresh_starts(tmp_path, monkeypatch):
+    monkeypatch.setattr(checker, "WATCH", tmp_path)
+    c = checker.Checker(files=checker.ModFiles(None), launch=True, say=lambda *_: None)
+    c.game = FakeHiddenGame()
+    assert c.due_restart() is None, "nothing running yet"
+    c.started_at = time.time()
+    assert c.due_restart() is None and c.summary()["memory_mb"] == 500
+    c.started_at = time.time() - checker.RESTART_EVERY - 1
+    assert "hourly" in c.due_restart()
+    c.started_at, c.memory_checked, c.game.mb = time.time(), 0.0, 3500.0
+    assert "3,500 MB" in c.due_restart()
+    c.restart("a test")
+    st = c.summary()
+    assert c.game.stops == 1 and c.api is None and c.started_at == 0 and c.game.launched_at == 0
+    assert st["restarts"] == 1 and st["last_restart"]["reason"] == "a test" and st["state"] == "starting"
+    # The next connect starts a new one at once (no game answers here).
+    monkeypatch.setattr(watch, "windows_bridge", lambda: None)
+    assert not c.connect() and c.game.launches == 1
+
+
+def test_a_game_that_stops_answering_is_restarted(tmp_path, monkeypatch):
+    monkeypatch.setattr(watch, "WATCH", tmp_path)
+    monkeypatch.setattr(checker, "WATCH", tmp_path)
+    monkeypatch.setattr(watch, "windows_bridge", lambda: None)
+    fake = FakeGame()
+    srv = serve(fake)
+    api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
+    c = checker.Checker(api=api, files=checker.ModFiles(None), launch=True, say=lambda *_: None)
+    c.game = FakeHiddenGame()
+    assert c.connect()
+    c.started_at = time.time()
+    srv.shutdown()
+    srv.server_close()  # the game is gone
+    assert not c.connect()
+    assert c.game.stops == 1 and c.summary()["restarts"] == 1 and c.api is None
+    assert not c.connect() and c.game.launches == 1, "and started again at once"
+
+
+def test_old_logs_of_the_hidden_game_are_pruned(tmp_path):
+    save = tmp_path / "Balatro"
+    ours = save / "balatro_meta" / "logs"
+    lovely = save / "Mods" / "lovely" / "log"
+    lovely.mkdir(parents=True)
+    import os
+
+    for i in range(4):
+        d = ours / f"2026-10-30T0{i}-00-00"
+        d.mkdir(parents=True)
+        (d / "12350.log").write_text("x")
+        os.utime(d, (1000 + i, 1000 + i))
+    for i in range(4):
+        f = lovely / f"lovely-2026.10.30-0{i}.00.00.log"
+        f.write_text("INFO - BB.SERVER :: HTTP server listening on http://127.0.0.1:12350\n")
+        os.utime(f, (1000 + i, 1000 + i))
+    mine = lovely / "lovely-2026.10.29-23.00.00.log"
+    mine.write_text("INFO - BB.SERVER :: HTTP server listening on http://127.0.0.1:12346\n")
+    os.utime(mine, (900, 900))
+    checker.HiddenGame(12350, save).prune_logs()
+    assert sorted(d.name for d in ours.iterdir()) == ["2026-10-30T02-00-00", "2026-10-30T03-00-00"]
+    left = sorted(f.name for f in lovely.iterdir())
+    assert left == ["lovely-2026.10.29-23.00.00.log", "lovely-2026.10.30-02.00.00.log", "lovely-2026.10.30-03.00.00.log"], \
+        "the newest two of the hidden game's logs stay, and a Balatro you play keeps all of its own"
+
+
+def test_a_stopped_bridge_is_replaced(monkeypatch):
+    class Dead:
+        class proc:
+            @staticmethod
+            def poll():
+                return 1
+
+    monkeypatch.setattr(watch, "_bridge", [Dead()])
+    monkeypatch.setattr(watch, "Path", Path)
+    started = []
+
+    def fake_bridge(python, script, cwd="/mnt/c"):
+        started.append(1)
+        return "new bridge"
+
+    monkeypatch.setattr(watch, "WinBridge", fake_bridge)
+    monkeypatch.setitem(sys.modules, "rng_game", type(sys)("rng_game"))
+    sys.modules["rng_game"].find_windows_python = lambda: "python.exe"
+    sys.modules["rng_game"].win_path = lambda p: str(p)
+    real_read = Path.read_text
+    monkeypatch.setattr(Path, "read_text", lambda self, *a, **k: "Linux microsoft-standard-WSL2"
+                        if str(self) == "/proc/version" else real_read(self, *a, **k))
+    assert watch.windows_bridge() == "new bridge" and started == [1]

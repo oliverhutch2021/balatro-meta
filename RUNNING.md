@@ -139,6 +139,10 @@ One-time setup for the checks, on Windows:
 
 `make watch` installs or updates the companion mod (`mods/balatro_meta_watch`) itself and starts the hidden
 game through BalatroBot's launcher on its own port (12350), so it never touches a Balatro you have open.
+It can run overnight: Balatro's memory grows over a long session, so the hidden game gets a fresh start
+every hour (sooner if it passes 3 GB, and at once if it crashes or stops answering), and only the newest
+two of its log files are kept (it logs every call, about 100 MB an hour); a Balatro you play yourself keeps
+all of its logs.
 BalatroBot listens on Windows' own localhost, which Ubuntu can't reach by default, so the checks talk to it
 through a small relay run with your Windows Python (the same miniconda the RNG check uses). If the panel
 keeps waiting for the hidden game, look in `%AppData%\Balatro\balatro_meta\logs` (BalatroBot's log for

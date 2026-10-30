@@ -756,6 +756,10 @@ function renderChecks(c) {
   }
   if (c.current) h += `<div class="sub" style="margin-top:6px">Now checking ${esc(c.current.label)} ${esc(c.current.seed)}, move ${c.current.move}</div>`;
   else if (c.last) h += `<div class="sub" style="margin-top:6px">Last: ${esc(c.last.seed)}, ${esc(c.last.result)}</div>`;
+  const game = [c.up_since ? `up ${ago(c.up_since).replace(' ago', '')}` : '', c.memory_mb ? `${num(c.memory_mb)} MB` : '',
+    c.restarts ? `restarted ${c.restarts} time${c.restarts > 1 ? 's' : ''}` + (c.last_restart ? ` (last: ${esc(c.last_restart.reason)})` : '') : '']
+    .filter(Boolean).join(' &middot; ');
+  if (game) h += `<div class="sub">Hidden game: ${game}</div>`;
   setHTML($('checks'), h);
 }
 

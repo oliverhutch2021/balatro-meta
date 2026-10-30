@@ -97,7 +97,10 @@ _bridge: list = []  # the one bridge of this process, once started (or [None] if
 
 
 def windows_bridge() -> WinBridge | None:
-    """Start the bridge once, under WSL only (needs a Windows Python; BM_WIN_PYTHON overrides)."""
+    """Start the bridge once, under WSL only (needs a Windows Python; BM_WIN_PYTHON overrides); a new one if
+    the last one has stopped."""
+    if _bridge and _bridge[0] is not None and _bridge[0].proc.poll() is not None:
+        _bridge.clear()
     if not _bridge:
         bridge = None
         try:
@@ -115,12 +118,14 @@ def windows_bridge() -> WinBridge | None:
 
 
 class Api:
-    def __init__(self, url: str, bridge: WinBridge | None = None) -> None:
+    def __init__(self, url: str, bridge: WinBridge | None = None, timeout: float = 120.0) -> None:
         self.url = url
         self.bridge = bridge
+        self.timeout = timeout
         self.n = 0
 
-    def call(self, method: str, params: dict | None = None, timeout: float = 120.0):
+    def call(self, method: str, params: dict | None = None, timeout: float | None = None):
+        timeout = self.timeout if timeout is None else timeout
         self.n += 1
         body = {"jsonrpc": "2.0", "method": method, "id": self.n}
         if params:

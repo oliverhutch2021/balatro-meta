@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import threading
 import time
@@ -38,6 +39,13 @@ from watch import (
 
 CHECK_PORT = 12350
 MOD_VERSION = "0.4.0"
+# Overnight: Balatro's memory grows over a long session and can run out, so the hidden game gets a fresh
+# start every hour, or sooner when it gets big, and at once when it stops answering.
+RESTART_EVERY = 3600  # seconds
+MEMORY_LIMIT_MB = 3000  # working set (checked every few minutes)
+MEMORY_CHECK_EVERY = 300  # seconds
+CALL_TIMEOUT = 30  # seconds for one BalatroBot call: longer means the game is stuck
+KEEP_LOGS = 2  # log files of earlier hidden-game sessions kept (each grows about 100 MB an hour)
 
 
 class ModFiles:
@@ -112,6 +120,7 @@ class HiddenGame:
         cmd = self.command()
         if cmd is None:
             return False
+        self.prune_logs()
         self.launched_at = time.time()
         self.proc = subprocess.Popen(cmd, cwd="/mnt/c", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                      start_new_session=True)
@@ -133,6 +142,49 @@ class HiddenGame:
             self.proc.terminate()
         self.proc = None
 
+    def memory_mb(self) -> float | None:
+        """How much memory the hidden game uses (its working set), or None if that can't be read."""
+        script = (f"$c = Get-NetTCPConnection -LocalPort {self.port} -State Listen -ErrorAction SilentlyContinue | "
+                  f"Select-Object -First 1; if ($c) {{ (Get-Process -Id $c.OwningProcess).WorkingSet64 }}")
+        try:
+            r = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script], cwd="/mnt/c",
+                               capture_output=True, text=True, timeout=30, check=False)
+            return int(r.stdout.strip().splitlines()[-1]) / 2**20
+        except (OSError, subprocess.TimeoutExpired, ValueError, IndexError):
+            return None
+
+    def names_this_port(self, log: Path) -> bool:
+        """A Lovely log written by the hidden game (BalatroBot names its port early on)."""
+        try:
+            with log.open("rb") as f:
+                return f"127.0.0.1:{self.port}".encode() in f.read(1 << 20)
+        except OSError:
+            return False
+
+    def prune_logs(self) -> None:
+        """Logs of earlier hidden-game sessions, all but the newest few: BalatroBot's (in our own folder) and
+        Lovely's (only files that name this port, so a Balatro you play yourself keeps all of its logs)."""
+        if self.save_folder is None:
+            return
+
+        def newest_last(paths):
+            out = []
+            for p in paths:
+                try:
+                    out.append((p.stat().st_mtime, p))
+                except OSError:
+                    continue
+            return [p for _, p in sorted(out)]
+
+        for d in newest_last(d for d in (self.save_folder / "balatro_meta" / "logs").glob("*") if d.is_dir())[:-KEEP_LOGS]:
+            shutil.rmtree(d, ignore_errors=True)
+        lovely = newest_last((self.save_folder / "Mods" / "lovely" / "log").glob("lovely-*.log"))
+        for f in [f for f in lovely if self.names_this_port(f)][:-KEEP_LOGS]:
+            try:
+                f.unlink()
+            except OSError:
+                pass  # still open: next time
+
 
 class Checker:
     """Replays runs in the hidden game and in the engine together, comparing after every move."""
@@ -150,9 +202,12 @@ class Checker:
         self.lock = threading.Lock()
         self.stop_event = threading.Event()
         self.checked: set[str] = set()
+        self.started_at = 0.0  # when the hidden game now running first answered
+        self.memory_checked = 0.0
         self.state = {"state": "starting", "message": "Starting the hidden game", "runs": 0, "moves": 0,
-                      "differences": 0, "stopped_early": 0, "errors": 0, "last_difference": None,
-                      "current": None, "last": None, "port": port, "updated": time.time()}
+                      "differences": 0, "stopped_early": 0, "errors": 0, "restarts": 0, "last_restart": None,
+                      "memory_mb": None, "up_since": None, "last_difference": None, "current": None, "last": None,
+                      "port": port, "updated": time.time()}
 
     # -- what the page shows
     def summary(self) -> dict:
@@ -184,13 +239,20 @@ class Checker:
                 return True
             except (OSError, RuntimeError, ValueError):
                 self.api = None
+                if self.launch_allowed and self.started_at:
+                    self.restart("it stopped answering")
+                    return False
         url = f"http://127.0.0.1:{self.port}"
-        for api in (Api(url), Api(url, watch.windows_bridge()) if watch.windows_bridge() else None):
+        bridge = watch.windows_bridge()
+        for api in (Api(url, timeout=CALL_TIMEOUT), Api(url, bridge, timeout=CALL_TIMEOUT) if bridge else None):
             if api is None:
                 continue
             try:
                 api.call("health", timeout=3)
                 self.api = api
+                if not self.started_at:
+                    self.started_at = time.time()
+                    self.note(up_since=self.started_at)
                 return True
             except (OSError, RuntimeError, ValueError):
                 continue
@@ -205,6 +267,32 @@ class Checker:
         if self.state["state"] != "off":
             self.note(state="starting", message="Waiting for the hidden copy of Balatro to start")
         return False
+
+    def restart(self, reason: str) -> None:
+        """Close the hidden game; the next connect starts a fresh one at once."""
+        self.note(state="starting", message=f"Restarting the hidden game: {reason}",
+                  last_restart={"reason": reason, "time": time.time()}, up_since=None, memory_mb=None)
+        self.add("restarts")
+        self.say(f"[checks] restarting the hidden game: {reason}")
+        self.game.stop()
+        self.api = None
+        self.game.launched_at = 0.0
+        self.started_at = 0.0
+
+    def due_restart(self) -> str | None:
+        """Why the hidden game should get a fresh start now, or None."""
+        if not self.launch_allowed or not self.started_at:
+            return None
+        if time.time() - self.started_at > RESTART_EVERY:
+            return "its hourly fresh start (Balatro's memory grows over a long session)"
+        if time.time() - self.memory_checked > MEMORY_CHECK_EVERY:
+            self.memory_checked = time.time()
+            mb = self.game.memory_mb()
+            if mb is not None:
+                self.note(memory_mb=round(mb))
+                if mb > MEMORY_LIMIT_MB:
+                    return f"it was using {mb:,.0f} MB of memory"
+        return None
 
     def wait_idle(self, cash_out: bool = False) -> None:
         """Wait until the game has played out the last move: no blocking events queued, twice in a row, in
@@ -327,14 +415,21 @@ class Checker:
                     self.note(state="error", message="The hidden game runs without the companion mod: restart "
                               "make watch (it reinstalls the mod)")
                 continue
+            reason = self.due_restart()
+            if reason:
+                self.restart(reason)
+                continue
             seed, moves, label = self.next_run()
             self.note(state="running", message="Checking runs in a hidden copy of your game")
             try:
                 ok, msg = self.check_run(seed, moves, label)
-            except (OSError, ValueError) as exc:
-                self.api = None
+            except (OSError, ValueError) as exc:  # it crashed, hung or stopped answering
                 ok, msg = None, f"lost the hidden game: {exc}"
                 self.add("errors")
+                if self.launch_allowed:
+                    self.restart("it stopped answering")
+                else:
+                    self.api = None
             except RuntimeError as exc:  # BalatroBot refused a call or failed in it
                 ok, msg = None, f"the game refused a call: {exc}"
                 self.add("errors")
