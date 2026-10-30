@@ -63,7 +63,7 @@ def details(v: dict) -> dict:
             "blind_disabled", "hands_left", "discards_left", "hand_size", "joker_slots", "consumable_slots",
             "hand", "jokers", "consumables", "vouchers", "tags", "hand_levels", "last_hand", "deck_left",
             "deck_total", "reroll_cost", "won", "hands_played_run", "blinds", "cash_out", "pack_key",
-            "pack_choices_left", "shop", "shop_vouchers", "pack")
+            "pack_choices_left", "shop", "shop_vouchers", "pack", "deck_cards", "voucher_keys")
     out = {k: v.get(k) for k in keep}
     out["shop_packs"] = [p for p in (v.get("shop_packs") or []) if p]
     return out

@@ -65,7 +65,9 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   head; imitation of the teacher's recorded moves, then PPO on `VecEnv`,
   checkpoints in `models/policy/`, evaluation on the baseline job's seeds).
   `make watch` is `scripts/viewer.py` (replays samples with the engine, best
-  first; serves `viewer/index.html`, which draws the table itself) plus `scripts/checker.py` (the real-game checks: a hidden
+  first; serves `viewer/index.html`, which draws the table itself, the run's details under the ante: vouchers,
+  the deck by card from the view's `deck_cards`, its upgrades, hand levels with `planet` keys) plus
+  `scripts/checker.py` (the real-game checks: a hidden
   BalatroBot game on port 12350, compared after every move using
   `scripts/watch.py`'s BalatroBot link and comparison). The companion mod
   `mods/balatro_meta_watch` (idle signal, run-setup deck for `start`,

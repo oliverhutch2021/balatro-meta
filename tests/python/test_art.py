@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import art
+import test_viewer
 
 import viewer
 
@@ -35,6 +36,7 @@ function Game:set_render_settings()
         {name = "Tarot", path = "resources/textures/"..self.SETTINGS.GRAPHICS.texture_scaling.."x/Consumables.png",px=71,py=95},
         {name = 'tags', path = "resources/textures/"..self.SETTINGS.GRAPHICS.texture_scaling.."x/Tags.png",px=34,py=34},
         {name = 'stickers', path = "resources/textures/"..self.SETTINGS.GRAPHICS.texture_scaling.."x/Stickers.png",px=71,py=95},
+        {name = "Voucher", path = "resources/textures/"..self.SETTINGS.GRAPHICS.texture_scaling.."x/Vouchers.png",px=71,py=95},
     }
 end
 function Game:init_item_prototypes()
@@ -55,13 +57,20 @@ function Game:init_item_prototypes()
     self.P_CENTERS = {
         c_base={max = 500, order = 1, name = "Default Base", pos = {x=1,y=0}, set = "Default", config = {}},
         m_bonus =   {max = 500, order = 2, name = "Bonus", set = "Enhanced", pos = {x=0,y=1}, config = {bonus = 30}},
+        m_glass =   {max = 500, order = 6, name = "Glass", set = "Enhanced", pos = {x=1,y=1}, config = {Xmult = 2}},
+        m_stone =   {max = 500, order = 8, name = "Stone", set = "Enhanced", pos = {x=0,y=0}, config = {bonus = 50}},
         b_red=              {name = "Red Deck", stake = 1, order = 1, pos =   {x=0,y=0}, set = "Back", config = {}},
         j_joker=            {order = 1,  rarity = 1, cost = 2, name = "Joker", pos = {x=0,y=0}, set = "Joker", config = {mult = 4}},
         j_star=             {order = 2,  rarity = 4, cost = 20, name = "Star", pos = {x=1,y=0}, soul_pos = {x=1, y=1}, set = "Joker", config = {}},
         c_pluto=            {order = 1, cost = 3, name = "Pluto", pos = {x=1,y=0}, set = "Planet", config = {}},
+        c_mercury=          {order = 2, cost = 3, name = "Mercury", pos = {x=0,y=0}, set = "Planet", config = {}},
+        c_jupiter=          {order = 6, cost = 3, name = "Jupiter", pos = {x=1,y=0}, set = "Planet", config = {}},
+        v_overstock_norm=   {order = 1, cost = 10, name = "Overstock", pos = {x=0,y=0}, set = "Voucher", config = {}},
+        v_clearance_sale=   {order = 3, cost = 10, name = "Clearance Sale", pos = {x=1,y=0}, set = "Voucher", config = {}},
     }
     self.shared_seals = {
         Gold = Sprite(0, 0, self.CARD_W, self.CARD_H, self.ASSET_ATLAS["centers"], {x = 1,y = 1}),
+        Red = Sprite(0, 0, self.CARD_W, self.CARD_H, self.ASSET_ATLAS["centers"], {x = 0,y = 1}),
     }
     self.shared_sticker_eternal = Sprite(0, 0, self.CARD_W, self.CARD_H, self.ASSET_ATLAS["stickers"], {x = 0,y = 0})
 end
@@ -86,8 +95,9 @@ LAYOUT_CHECK = """n => {
   const cards = [...document.querySelectorAll('#tbl .slots .jk')].map(r);
   const inside = cards.every(c => c.right <= jbox.right + 1 && c.left >= jbox.left - 1) && jbox.right <= cbox.left;
   // The note shown while looking at an earlier move covers none of the table's boxes.
-  const banner = r(document.querySelector('#tbl .banner'));
-  const covered = [...document.querySelectorAll('#tbl .ts .box, #tbl .slots, #tbl .tm-mid > *')].filter(e => hit(r(e), banner));
+  const note = document.querySelector('#tbl .banner'), banner = r(note);
+  const covered = [...document.querySelectorAll('#tbl .ts .box, #tbl .ts .sec, #tbl .slots, #tbl .tm-mid > *')]
+    .filter(e => e !== note && hit(r(e), banner));
   S.sel = null; S.selView = null;
   return {caps: caps.length, overlaps, inside, covered: covered.map(e => e.className)};
 }"""
@@ -104,7 +114,7 @@ PLAN_CHECK = """() => {
 }"""
 SHEETS = {"Deck.png": (2, 2, 142, 190), "Centers.png": (2, 2, 142, 190), "Jokers.png": (2, 2, 142, 190),
           "Consumables.png": (2, 1, 142, 190), "Tags.png": (2, 1, 68, 68), "Stickers.png": (1, 1, 142, 190),
-          "Chips.png": (3, 2, 68, 68)}
+          "Chips.png": (3, 2, 68, 68), "Vouchers.png": (2, 1, 142, 190)}
 
 
 def blank_png(w: int, h: int, shade: int) -> bytes:
@@ -127,7 +137,7 @@ def game_exe(tmp_path) -> Path:
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("game.lua", DEFS)
         for i, (name, (cols, rows, w, h)) in enumerate(SHEETS.items()):
-            z.writestr(f"resources/textures/2x/{name}", blank_png(cols * w, rows * h, 40 * i))
+            z.writestr(f"resources/textures/2x/{name}", blank_png(cols * w, rows * h, 30 * i))
         z.writestr("resources/fonts/m6x11plus.ttf", b"\x00\x01\x00\x00 not really a font")
     exe = tmp_path / "Balatro.exe"
     exe.write_bytes(b"MZ" + b"\x00" * 1000 + buf.getvalue())
@@ -145,6 +155,7 @@ def test_the_game_definitions_are_read_at_runtime():
     assert s["c_pluto"] == ["Tarot", 1, 0]
     assert s["tag_economy"] == ["tags", 1, 0] and s["bl_hook"] == ["blind_chips", 0, 1]
     assert s["seal_Gold"] == ["centers", 1, 1] and s["sticker_eternal"] == ["stickers", 0, 0]
+    assert s["v_overstock_norm"] == ["Voucher", 0, 0] and s["seal_Red"] == ["centers", 0, 1]
     assert layout["names"] == {"Economy Tag": "tag_economy", "Small Blind": "bl_small", "The Hook": "bl_hook"}
 
 
@@ -225,6 +236,11 @@ def test_the_page_draws_with_the_game_art(game_exe, tmp_path):
                 got = page.evaluate(LAYOUT_CHECK, n)
                 assert got["caps"] == n and got["overlaps"] == [], got
                 assert got["inside"] and got["covered"] == [], got
+            # The run in detail, in the left panel under the counters, drawn with the game's pictures: the
+            # vouchers, the deck's enhancements, seals and editions, and each levelled hand's planet.
+            got = page.evaluate(test_viewer.RUN_INFO_CHECK, test_viewer.run_info_view("SELECTING_HAND"))
+            assert got["inside"] and got["vouchers"] == 2 and got["mod_art"] == 6 and got["planet_art"] == 3, got
+            assert got["sa"] == ["0", "z"] and got["all"] == "45", got
             # The teacher's plan in words sits in the outlook card.
             got = page.evaluate(PLAN_CHECK)
             assert got["shown"] and got["inside"], got

@@ -44,6 +44,54 @@ def jobs_at(tmp_path: Path) -> viewer.JobFiles:
     return viewer.JobFiles(tmp_path / "watch", tmp_path / "logs")
 
 
+def run_info_view(state: str) -> dict:
+    """A position for the run's details in the left panel: a full deck but for the 2 of Clubs (destroyed), with a
+    second Ace of Hearts (held, red seal), the 5 of Clubs made Stone, a few more upgrades, and six cards held."""
+    cards = [{"key": f"{s}_{r}", "enhancement": None, "edition": None, "seal": None, "left": True}
+             for s in "SHCD" for r in "AKQJT98765432" if f"{s}_{r}" != "C_2"]
+    by = {c["key"]: c for c in cards}
+    cards.append({"key": "H_A", "enhancement": None, "edition": None, "seal": "RED", "left": False})
+    by["C_5"]["enhancement"] = "STONE"
+    by["S_K"]["enhancement"] = "BONUS"
+    by["D_Q"]["enhancement"] = "GLASS"
+    by["H_7"]["seal"] = "GOLD"
+    by["S_2"]["edition"] = "FOIL"
+    for k in ("S_A", "S_K", "H_7", "D_Q", "S_2"):
+        by[k]["left"] = False
+    return {"state": state, "ante": 3, "round": 8, "money": 14, "hands_left": 3, "discards_left": 2, "chips": 120,
+            "blind_name": "Big Blind", "blind_score": 1200, "blind_reward": 4, "jokers": [], "joker_slots": 5,
+            "consumables": [], "consumable_slots": 2, "hand": [], "shop": [], "shop_vouchers": [], "shop_packs": [],
+            "reroll_cost": 5, "vouchers": ["Overstock", "Clearance Sale"],
+            "voucher_keys": ["v_overstock_norm", "v_clearance_sale"],
+            "deck_left": sum(c["left"] for c in cards), "deck_total": len(cards), "deck_cards": cards,
+            "hand_levels": [{"name": "Pair", "planet": "c_mercury", "level": 1, "chips": 10, "mult": 2, "played": 5},
+                            {"name": "Flush", "planet": "c_jupiter", "level": 3, "chips": 65, "mult": 8, "played": 2},
+                            {"name": "High Card", "planet": "c_pluto", "level": 2, "chips": 15, "mult": 2, "played": 1}]}
+
+
+# Draws a position on the page (as an earlier move) and reads the left panel's run details back, in one go so no
+# poll redraws in between: the deck grid cell by cell, the upgrades, the hands, the vouchers, and whether it fits.
+RUN_INFO_CHECK = """view => {
+  S.sel = 1; S.selView = view;
+  drawTable();
+  const q = s => document.querySelector(s), qa = s => [...document.querySelectorAll(s)];
+  const grid = qa('#tbl .ts .dgrid > span').map(e => [e.textContent, e.className]);
+  const at = (s, r) => grid[(1 + 'SHCD'.indexOf(s)) * 15 + 1 + 'AKQJT98765432'.indexOf(r)];
+  const r = e => e.getBoundingClientRect();
+  const panel = r(q('#tbl .ts')), table = r(q('#tbl')), secs = qa('#tbl .ts .sec').map(r);
+  const out = {cells: grid.length, sa: at('S', 'A'), ha: at('H', 'A'), c2: at('C', '2'), c5: at('C', '5'),
+    spades: grid[15 + 14][0], clubs: grid[3 * 15 + 14][0], all: grid[grid.length - 1][0],
+    head: q('#tbl .ri-deck .lab span').textContent, mods: qa('#tbl .mods .mod').map(e => e.title),
+    levels: qa('#tbl .hle .hn').map(e => e.textContent), vouchers: qa('#tbl .ri-vouchers .vou').length,
+    voucher_text: q('#tbl .ri-vouchers').textContent, mod_art: qa('#tbl .mods .art').length,
+    planet_art: qa('#tbl .hle .art').length,
+    inside: secs.length === 3 && secs.every(s => s.bottom <= panel.bottom + 0.5 && s.right <= panel.right + 0.5) &&
+      panel.bottom <= table.bottom + 0.5};
+  S.sel = null; S.selView = null;
+  return out;
+}"""
+
+
 def test_best_runs_come_first_then_start_again(tmp_path):
     samples = tmp_path / "watch" / "baseline" / "samples"
     mv = [[0, 0]]
@@ -99,6 +147,16 @@ def test_a_saved_run_replays_to_its_recorded_end(tmp_path):
     plays = [m for m in run.moves if m["kind"] == 6]
     assert plays and all(m["cards"] and m["hand"] and m["score"] >= 0 for m in plays)
     assert all(m["cards"] for m in run.moves if m["kind"] == 7)
+    # The deck card by card (and which are still to draw), the vouchers' pictures and each hand's planet.
+    end_view = run.view
+    assert len(end_view["deck_cards"]) == end_view["deck_total"]
+    assert sum(c["left"] for c in end_view["deck_cards"]) == end_view["deck_left"]
+    assert all(c["key"][0] in "SHDC" and c["key"][1] == "_" for c in end_view["deck_cards"])
+    assert len(end_view["voucher_keys"]) == len(end_view["vouchers"])
+    assert all(k.startswith("v_") for k in end_view["voucher_keys"])
+    assert all(h["planet"].startswith("c_") for h in end_view["hand_levels"])
+    start = viewer.view_at("REPLAY01", [], 0)
+    assert len(start["deck_cards"]) == 52 and all(c["left"] for c in start["deck_cards"]) and start["voucher_keys"] == []
     # The run at any move, for rewinding.
     k = len(moves) // 2
     assert viewer.view_at("REPLAY01", [tuple(m) for m in moves], k)["money"] == run.moves[k - 1]["money"]
@@ -337,6 +395,20 @@ def test_the_page_draws_the_run(tmp_path):
             page.wait_for_function("() => document.querySelectorAll('#proglist .prow').length > 1", timeout=15000)
             assert "Now:" in page.inner_text("#proglist") and "goal 90%" in page.inner_text("#progsub")
             assert page.locator("#progchart circle.pulse").count() == 1
+            # The run in detail under the counters: every card by suit and rank (in a blind, those still to draw),
+            # the deck's upgrades, the vouchers and the hands levelled (here without the game's pictures).
+            got = page.evaluate(RUN_INFO_CHECK, run_info_view("SELECTING_HAND"))
+            assert got["cells"] == 6 * 15 and got["inside"], got
+            assert got["sa"] == ["0", "z"] and got["ha"] == ["1", ""], "the held Ace of Spades, one Ace of Hearts left"
+            assert got["c2"][1] == "n0" and got["c5"][1] == "n0", "a destroyed card, and a Stone card has no rank"
+            assert (got["spades"], got["all"], got["head"]) == ("10", "45", "46 of 52 left to draw"), got
+            assert got["levels"] == ["Flush", "High Card", "Pair"], "levelled hands first, then the most played"
+            assert "Overstock, Clearance Sale" in got["voucher_text"]
+            got = page.evaluate(RUN_INFO_CHECK, run_info_view("SHOP"))
+            assert got["ha"] == ["2", "dup"] and got["sa"] == ["1", ""] and (got["clubs"], got["all"]) == ("11", "51")
+            assert got["head"] == "52 cards"
+            assert [m.split(":")[0] for m in got["mods"]] == ["Bonus card", "Glass card", "Stone card", "Gold seal",
+                                                               "Red seal", "Foil"], got["mods"]
             assert not errors, errors
             browser.close()
     finally:

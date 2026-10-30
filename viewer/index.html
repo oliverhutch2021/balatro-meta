@@ -75,25 +75,70 @@ header .where { color: #a9c2c6; font-size: 13px; }
   'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow-y: auto; }
 .empty { color: var(--muted); font-size: 12px; }
 /* ---------------------------------------------------------------- the table */
-.tablewrap { width: 100%; max-width: calc((100vh - 120px) * 16 / 9); }
-.tbl { container-type: inline-size; position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden;
+.tablewrap { width: 100%; max-width: calc((100vh - 120px) * 16 / 10); }
+.tbl { container-type: inline-size; position: relative; width: 100%; aspect-ratio: 16 / 10; border-radius: 14px; overflow: hidden;
   background: radial-gradient(ellipse at 60% 45%, var(--table) 0%, var(--table-2) 80%); box-shadow: 0 14px 30px rgba(0,0,0,.45);
-  display: grid; grid-template-columns: 23% 1fr; color: #f3efe2; }
-.ts { background: rgba(10,22,20,.55); padding: 1.4cqw 1.2cqw; display: flex; flex-direction: column; gap: .9cqw; min-height: 0; }
-.ts .box { background: rgba(0,0,0,.28); border-radius: .9cqw; padding: .8cqw 1cqw; }
-.ts .bname { font-family: var(--display); font-weight: 700; font-size: 2.1cqw; letter-spacing: .04em; line-height: 1.1; }
+  display: grid; grid-template-columns: 26% 1fr; color: #f3efe2; }
+.ts { background: rgba(10,22,20,.55); padding: 1.2cqw; display: flex; flex-direction: column; gap: .7cqw; min-height: 0;
+  min-width: 0; overflow: hidden; }
+.ts .box { background: rgba(0,0,0,.28); border-radius: .9cqw; padding: .6cqw .9cqw; min-width: 0; }
+.ts .bname { font-family: var(--display); font-weight: 700; font-size: 1.9cqw; letter-spacing: .04em; line-height: 1.1; }
 .ts .bname.boss { color: #ff8a6b; }
 .ts .lab { font-size: 1.05cqw; color: #b9c7bf; text-transform: uppercase; letter-spacing: .08em; }
-.ts .target { font-family: var(--display); font-weight: 700; font-size: 2.6cqw; color: #ff8a6b; line-height: 1.05; font-variant-numeric: tabular-nums; }
-.ts .reward { font-size: 1.15cqw; color: var(--money); }
-.ts .score { font-family: var(--display); font-weight: 700; font-size: 3.1cqw; line-height: 1; font-variant-numeric: tabular-nums; }
-.ts .handline { font-family: var(--display); font-size: 1.7cqw; min-height: 2.2cqw; }
+.ts .tgt { display: flex; align-items: baseline; justify-content: space-between; gap: .6cqw; }
+.ts .target { font-family: var(--display); font-weight: 700; font-size: 2.4cqw; color: #ff8a6b; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.ts .reward { font-size: 1.15cqw; color: var(--money); white-space: nowrap; }
+.ts .scorebox { display: flex; align-items: center; justify-content: space-between; gap: .8cqw; }
+.ts .score { font-family: var(--display); font-weight: 700; font-size: 2.8cqw; line-height: 1; font-variant-numeric: tabular-nums;
+  white-space: nowrap; text-align: right; }
+.ts .handline { font-family: var(--display); font-size: 1.6cqw; min-height: 2cqw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ts .handline small { font-family: var(--body); font-size: 1.05cqw; color: #b9c7bf; }
-.ts .pair { display: grid; grid-template-columns: 1fr 1fr; gap: .7cqw; }
-.ts .pair .box { text-align: center; padding: .5cqw; }
-.ts .pair b { display: block; font-family: var(--display); font-size: 2.6cqw; line-height: 1.1; }
+.ts .trio { display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: .6cqw; }
+.ts .pair { display: grid; grid-template-columns: 1fr 1fr; gap: .6cqw; }
+.ts .trio .box, .ts .pair .box { text-align: center; padding: .4cqw .3cqw; }
+.ts .trio .lab, .ts .pair .lab { letter-spacing: .03em; }
+.ts .trio b, .ts .pair b { display: block; font-family: var(--display); font-size: 2.3cqw; line-height: 1.1; white-space: nowrap; }
 .ts .hands b { color: #6cb4ff; } .ts .disc b { color: #ff7a6b; }
-.ts .money { font-family: var(--display); font-weight: 700; font-size: 3.2cqw; color: #ffc94d; text-align: center; }
+.ts .money { display: grid; place-items: center; }
+.ts .trio .money b { font-size: 2.6cqw; color: #ffc94d; overflow: hidden; max-width: 100%; }
+/* the run in detail, under the counters: vouchers, the deck card by card and its upgrades, hand levels */
+.ts .ri { display: flex; flex-direction: column; gap: .75cqw; padding-top: .75cqw; border-top: .12cqw solid rgba(255,255,255,.14); }
+.ts .sec .lab { display: flex; justify-content: space-between; gap: .6cqw; margin-bottom: .35cqw; }
+.ts .sec .lab span { text-transform: none; letter-spacing: 0; color: #f3efe2; white-space: nowrap; }
+.ts .none { font-size: 1.05cqw; color: #8fa39a; }
+.vrow { display: flex; align-items: flex-start; }
+.vrow > * + * { margin-left: var(--ov, .25cqw); }
+.ts .art.vou, .ts .art.mc, .ts .art.pl { display: block; image-rendering: auto; filter: drop-shadow(0 .14cqw 0 rgba(0,0,0,.35)); }
+.vou { width: 2.2cqw; height: calc(2.2cqw * 1.338); }
+.dgrid { display: grid; grid-template-columns: 1.5cqw repeat(4, minmax(0, 1fr)) minmax(0, 1.4fr) repeat(8, minmax(0, 1fr)) 2.2cqw; font-size: 1.08cqw; line-height: 1.42;
+  text-align: center; font-variant-numeric: tabular-nums; background: rgba(0,0,0,.22); border-radius: .6cqw; padding: .25cqw .3cqw; }
+.dgrid .h { color: #8fa39a; }
+.dgrid .s { font-weight: 700; }
+.dgrid .S { color: #c9c4ff; } .dgrid .H { color: #ff7a8a; } .dgrid .C { color: #7fd6c8; } .dgrid .D { color: #ffb36b; }
+.dgrid .n0 { color: rgba(243,239,226,.2); }
+.dgrid .z { color: rgba(243,239,226,.38); }
+.dgrid .dup { color: #ffc94d; font-weight: 700; }
+.dgrid .t { color: #b9c7bf; }
+.mods { display: flex; flex-wrap: wrap; gap: .35cqw .65cqw; margin-top: .45cqw; }
+.mod { display: inline-flex; align-items: center; gap: .3cqw; font-size: 1.05cqw; font-weight: 700; }
+.mc { width: 1.65cqw; height: calc(1.65cqw * 1.338); }
+/* an edition on a plain card: the game draws them with shaders, so the page tints the card */
+.ts .mc[class*=ed-]::after { mix-blend-mode: multiply; opacity: .95; border-radius: .2cqw; }
+.ts .mc.ed-FOIL::after { background: linear-gradient(135deg, #5f8fff, #e3edff 55%, #5f8fff); }
+.ts .mc.ed-HOLO::after { background: linear-gradient(135deg, #ff5f95, #ffe3ee 55%, #ff5f95); }
+.ts .mc.ed-POLYCHROME::after { background: linear-gradient(135deg, #ff7272, #ffe072, #72ffbe, #72b2ff, #cf72ff); }
+.ts .art.mc.ed-NEGATIVE { filter: invert(.88) hue-rotate(180deg) drop-shadow(0 .14cqw 0 rgba(0,0,0,.35)); }
+.mt { font-size: .95cqw; font-weight: 600; padding: .2cqw .4cqw; border-radius: .4cqw; background: rgba(255,255,255,.12); }
+.mt.GOLD { color: #ffd166; } .mt.RED { color: #ff8a7a; } .mt.BLUE { color: #8cc4ff; } .mt.PURPLE { color: #c9a2ff; }
+.hl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .3cqw .7cqw; }
+.hle { display: flex; align-items: center; gap: .4cqw; min-width: 0; font-size: 1.05cqw; }
+.pl { width: 1.7cqw; height: calc(1.7cqw * 1.338); }
+.hle .hn { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hle .lv { font-size: 1.05cqw; color: #b9c7bf; white-space: nowrap; }
+.hle .lv.up { color: #7cc0ff; }
+/* a crowded panel (many upgrades, many hands levelled) gives up its last rows rather than spill off the table */
+.ts.tight { gap: .5cqw; } .ts.tight .ri { gap: .5cqw; padding-top: .5cqw; } .ts.tight .dgrid { line-height: 1.25; }
+.ts.tight .hle:nth-child(n+5) { display: none; }
 .tm { display: grid; grid-template-rows: auto 1fr auto; padding: 1.2cqw 1.4cqw 1cqw; gap: .8cqw; min-height: 0; min-width: 0; }
 .tm-top { display: flex; gap: 1.2cqw; align-items: flex-start; justify-content: space-between; min-width: 0; }
 .slots { display: flex; gap: .6cqw; flex-wrap: nowrap; align-items: flex-start; min-height: 9.6cqw; padding: .5cqw;
@@ -104,7 +149,9 @@ header .where { color: #a9c2c6; font-size: 13px; }
 .slots > :not(.slotcap) + :not(.slotcap) { margin-left: var(--ov, 0cqw); }
 .slots > .item > .cap { max-width: min(6.6cqw, calc(7.1cqw + var(--ov, 0cqw))); }
 .tm-mid { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1cqw; min-height: 0; text-align: center; }
-.tm-hand { display: flex; align-items: flex-end; justify-content: center; gap: .5cqw; min-height: 10cqw; position: relative; }
+.tm-hand { display: flex; align-items: flex-end; justify-content: center; min-height: 10cqw; position: relative; }
+/* a big hand overlaps, like the jokers (--hov is set by drawTable) */
+.tm-hand > .pc + .pc { margin-left: var(--hov, .5cqw); }
 .deckinfo { position: absolute; right: 0; bottom: 0; font-size: 1.1cqw; color: #b9c7bf; text-align: right; }
 .title { font-family: var(--display); font-weight: 700; font-size: 2.4cqw; letter-spacing: .05em; }
 .subt { font-size: 1.3cqw; color: #cfd9d2; }
@@ -190,11 +237,12 @@ header .where { color: #a9c2c6; font-size: 13px; }
 @keyframes rise { from { transform: translateY(1.5cqw); opacity: 0; } to { transform: none; opacity: 1; } }
 .bigmsg { font: 700 4cqw/1.1 var(--display); letter-spacing: .05em; }
 .bigmsg.win { color: #ffc94d; } .bigmsg.lose { color: #ff8a6b; }
-/* viewing an earlier move: a note in the free space at the foot of the left panel, clear of the cards */
-.tbl .banner { position: absolute; left: 1.2cqw; bottom: 1.2cqw; width: calc(23% - 2.4cqw); display: flex; flex-direction: column;
-  gap: .6cqw; padding: .8cqw 1cqw; border-radius: .8cqw; background: rgba(12,34,42,.92); color: #fff;
-  font: 600 1.25cqw/1.3 var(--body); z-index: 5; box-shadow: 0 0 0 .15cqw #ffc94d inset; }
-.tbl .banner button { padding: .4cqw .8cqw; font-size: 1.2cqw; }
+/* viewing an earlier move: a note at the head of the middle of the table, above what that move shows */
+.tbl .banner { display: flex; align-items: center; gap: .8cqw; max-width: 100%; padding: .45cqw .5cqw .45cqw 1.1cqw;
+  border-radius: 999px; background: rgba(12,34,42,.92); color: #fff; font: 600 1.15cqw/1.25 var(--body);
+  box-shadow: 0 0 0 .15cqw #ffc94d inset; }
+.tbl .banner span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tbl .banner button { flex: none; padding: .35cqw .8cqw; font-size: 1.1cqw; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; background: rgba(251,248,239,.95);
   padding: 7px 10px; border-radius: 999px; box-shadow: 0 6px 18px rgba(0,0,0,.3); }
 .toolbar .sep { width: 1px; background: var(--line); margin: 2px 4px; }
@@ -539,8 +587,8 @@ function sidebar(v, m) {
   let blind;
   if (inBlind && v.blind_name) {
     blind = `<div class="box"><div class="bname ${boss ? 'boss' : ''}">${chipHTML(v.blind_name)}${esc(v.blind_name)}${v.blind_disabled ? ' (off)' : ''}</div>` +
-      `<div class="lab">Score at least</div><div class="target">${num(v.blind_score)}</div>` +
-      `<div class="reward">Reward ${'$'.repeat(Math.max(0, Math.min(8, v.blind_reward || 0)))}</div></div>`;
+      `<div class="lab">Score at least</div><div class="tgt"><span class="target">${num(v.blind_score)}</span>` +
+      `<span class="reward">Reward ${'$'.repeat(Math.max(0, Math.min(8, v.blind_reward || 0)))}</span></div></div>`;
   } else {
     const label = { BLIND_SELECT: 'Choose your next blind', SHOP: 'Shop', SMODS_BOOSTER_OPENED: 'Booster pack',
       GAME_OVER: v.won ? 'Run won' : 'Run over' }[v.state] || '';
@@ -548,14 +596,119 @@ function sidebar(v, m) {
   }
   const hand = m && m.kind === 6 ? `${esc(m.hand || '')} <small>${num(m.score)} chips</small>` :
     (v.last_hand ? `<small>Last hand:</small> ${esc(v.last_hand)}` : '');
+  const score = num(v.chips);
   return `<aside class="ts">${blind}` +
-    `<div class="box"><div class="lab">Round score</div><div class="score">${num(v.chips)}</div></div>` +
+    `<div class="box scorebox"><div class="lab">Round<br>score</div>` +
+    `<div class="score"${score.length > 9 ? ' style="font-size:2.1cqw"' : ''}>${score}</div></div>` +
     `<div class="handline">${hand}</div>` +
-    `<div class="pair"><div class="box hands"><div class="lab">Hands</div><b>${v.hands_left}</b></div>` +
-    `<div class="box disc"><div class="lab">Discards</div><b>${v.discards_left}</b></div></div>` +
-    `<div class="box money">$${v.money}</div>` +
-    `<div class="pair"><div class="box"><div class="lab">Ante</div><b>${v.ante}<small style="font-size:1.4cqw">/8</small></b></div>` +
-    `<div class="box"><div class="lab">Round</div><b>${v.round}</b></div></div></aside>`;
+    `<div class="trio"><div class="box hands"><div class="lab">Hands</div><b>${v.hands_left}</b></div>` +
+    `<div class="box disc"><div class="lab">Discards</div><b>${v.discards_left}</b></div>` +
+    `<div class="box money"><b>$${v.money}</b></div></div>` +
+    `<div class="pair"><div class="box"><div class="lab">Ante</div><b>${v.ante}<small style="font-size:1.3cqw">/8</small></b></div>` +
+    `<div class="box"><div class="lab">Round</div><b>${v.round}</b></div></div>` +
+    `<div class="ri">${vouchersInfo(v)}${deckInfo(v)}${levelsInfo(v)}</div></aside>`;
+}
+
+// The run in detail (the left panel, under the counters), drawn with your game's pictures when the viewer has
+// them: the vouchers bought, every card in the deck by suit and rank (in a blind: the cards still to draw),
+// the deck's enhancements, seals and editions, and the hands levelled or played.
+const DECK_SUITS = ['S', 'H', 'C', 'D'];
+const DECK_RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'];
+const MOD_ORDER = { enhancement: ['BONUS', 'MULT', 'WILD', 'GLASS', 'STEEL', 'STONE', 'GOLD', 'LUCKY'],
+  seal: ['GOLD', 'RED', 'BLUE', 'PURPLE'], edition: ['FOIL', 'HOLO', 'POLYCHROME', 'NEGATIVE'] };
+const SHORT_HAND = { 'Three of a Kind': '3 of a Kind', 'Four of a Kind': '4 of a Kind', 'Five of a Kind': '5 of a Kind',
+  'Straight Flush': 'Str. Flush' };
+const PANEL_W = 23.6;  // the left panel's inner width, in cqw
+
+function vouchersInfo(v) {
+  const names = v.vouchers || [], keys = v.voucher_keys || [];
+  let body = '<div class="none">None bought yet</div>';
+  const icons = ART && names.length && names.map((n, i) => keys[i] && layers([cell(keys[i])]));
+  if (icons && icons.every(Boolean)) {
+    // One row; a long list overlaps, like cards in a crowded hand.
+    const w = 2.2, k = names.length;
+    const ov = k > 1 && k * w + (k - 1) * 0.25 > PANEL_W ? (PANEL_W - k * w) / (k - 1) : 0.25;
+    body = `<div class="vrow" style="--ov:${ov.toFixed(2)}cqw">` +
+      names.map((n, i) => `<span class="art vou" style="${icons[i]}" title="${esc(n)}"></span>`).join('') + '</div>';
+  } else if (names.length) {
+    body = `<div class="none" style="color:#f3efe2">${esc(names.join(', '))}</div>`;
+  }
+  return `<div class="sec ri-vouchers"><div class="lab">Vouchers<span>${names.length || ''}</span></div>${body}</div>`;
+}
+
+function deckTally(cards) {
+  // Each card's count by key (Stone cards have no rank or suit and are left out), in the deck and still to draw,
+  // and how many cards carry each enhancement, seal and edition.
+  const t = { full: {}, left: {}, enhancement: {}, seal: {}, edition: {} };
+  for (const c of cards) {
+    for (const f of ['enhancement', 'seal', 'edition']) if (c[f]) t[f][c[f]] = (t[f][c[f]] || 0) + 1;
+    if (c.enhancement === 'STONE') continue;
+    t.full[c.key] = (t.full[c.key] || 0) + 1;
+    if (c.left) t.left[c.key] = (t.left[c.key] || 0) + 1;
+  }
+  return t;
+}
+
+function modHTML(field, name, n) {
+  const low = name.toLowerCase();
+  const label = field === 'seal' ? `${cap(low)} seal` : field === 'enhancement' ? `${cap(low)} card` : cap(low);
+  let st = null, cls = '';
+  if (ART) {
+    if (field === 'enhancement') st = layers([cell(ENH_KEY[name])]);
+    else if (field === 'seal') st = layers([cell('seal_' + cap(low)), cell('c_base')]);
+    else { st = layers([cell('c_base')]); cls = ' ed-' + name; }
+  }
+  const icon = st ? `<span class="art mc${cls}" style="${st}"></span>` : `<span class="mt ${field === 'seal' ? name : ''}">${esc(label)}</span>`;
+  return `<span class="mod" title="${esc(label)}: ${n} in the deck">${icon}&times;${n}</span>`;
+}
+
+function deckInfo(v) {
+  const cards = v.deck_cards;
+  if (!cards) return '';
+  const inRound = v.state === 'SELECTING_HAND';
+  const t = deckTally(cards);
+  const count = inRound ? t.left : t.full;
+  let g = '<span></span>' + DECK_RANKS.map(r => `<span class="h">${RANK[r] || r}</span>`).join('') + '<span class="h">&Sigma;</span>';
+  const byRank = {};
+  let all = 0;
+  for (const s of DECK_SUITS) {
+    let row = 0, cells = '';
+    for (const r of DECK_RANKS) {
+      const key = s + '_' + r, n = count[key] || 0, owned = t.full[key] || 0;
+      row += n;
+      byRank[r] = (byRank[r] || 0) + n;
+      cells += `<span class="${!owned ? 'n0' : n === 0 ? 'z' : n > 1 ? 'dup' : ''}">${owned ? n : '&middot;'}</span>`;
+    }
+    all += row;
+    g += `<span class="s ${s}">${SUIT[s][0]}</span>${cells}<span class="t ${s}">${row}</span>`;
+  }
+  g += '<span class="h">&Sigma;</span>' + DECK_RANKS.map(r => `<span class="t">${byRank[r]}</span>`).join('') +
+    `<span class="t">${all}</span>`;
+  const total = v.deck_total ?? cards.length;
+  const head = inRound ? `${v.deck_left ?? '-'} of ${total} left to draw` : `${total} cards`;
+  const mods = [];
+  for (const f of ['enhancement', 'seal', 'edition']) {
+    const names = MOD_ORDER[f].concat(Object.keys(t[f]).filter(k => !MOD_ORDER[f].includes(k)));
+    for (const name of names) if (t[f][name]) mods.push(modHTML(f, name, t[f][name]));
+  }
+  return `<div class="sec ri-deck"><div class="lab">Deck<span>${head}</span></div><div class="dgrid">${g}</div>` +
+    (mods.length ? `<div class="mods">${mods.join('')}</div>` : '<div class="none" style="margin-top:.4cqw">No enhancements, seals or editions</div>') +
+    '</div>';
+}
+
+function levelsInfo(v) {
+  // Levelled hands first, then the most played; the full table is in the Hand levels card.
+  const lv = (v.hand_levels || []).slice().sort((a, b) => b.level - a.level || b.played - a.played);
+  let body = '<div class="none">No hand played yet</div>';
+  if (lv.length) {
+    body = '<div class="hl">' + lv.slice(0, 6).map(h => {
+      const st = ART && h.planet && layers([cell(h.planet, true), cell(h.planet)]);
+      return `<div class="hle" title="${esc(h.name)}: level ${h.level}, ${num(h.chips)} chips &times; ${num(h.mult)} mult, played ${h.played}">` +
+        (st ? `<span class="art pl" style="${st}"></span>` : '') +
+        `<span class="hn">${esc(SHORT_HAND[h.name] || h.name)}</span><b class="lv${h.level > 1 ? ' up' : ''}">lvl ${h.level}</b></div>`;
+    }).join('') + '</div>';
+  }
+  return `<div class="sec ri-levels" data-n="${lv.length}"><div class="lab">Hand levels<span>${lv.length > 6 ? `+${lv.length - 6} more` : ''}</span></div>${body}</div>`;
 }
 
 function middle(v, m) {
@@ -616,13 +769,16 @@ function drawTable() {
   const cons = (v.consumables || []).map(c => consHTML(c)).join('');
   const showHand = v.state === 'SELECTING_HAND' || v.state === 'SMODS_BOOSTER_OPENED';
   const hand = showHand ? (v.hand || []).map(c => cardHTML(c)).join('') : '';
+  // A big hand overlaps rather than run under the deck's count in the corner.
+  const nh = showHand ? (v.hand || []).length : 0, handRoom = 71.2 - 13;
+  const hov = nh > 1 && nh * 6.2 + (nh - 1) * 0.5 > handRoom ? (handRoom - nh * 6.2) / (nh - 1) : 0.5;
   const banner = live ? '' : `<div class="banner"><span>${k === 0 ? 'Start of the run' : `After move ${k}: ${esc(m ? m.what : '')}`}</span>` +
     `<button id="backlive">Back to live</button></div>`;
   // The consumable area keeps the width of its slots; the joker area takes the rest, and a crowded row overlaps.
   const consW = ART ? 6.4 : 5.4, nc = Math.max(1, v.consumable_slots ?? 2);
   const consBox = nc * consW + (nc - 1) * 0.6 + 1;
   const nj = (v.jokers || []).length, jokW = 6.6;
-  const room = 74.2 - 1.2 - Math.max(consBox, 1 + (v.consumables || []).length * (consW + 0.6)) - 1.2;
+  const room = 71.2 - 1.2 - Math.max(consBox, 1 + (v.consumables || []).length * (consW + 0.6)) - 1.2;
   const need = nj * jokW + Math.max(0, nj - 1) * 0.6;
   const ov = nj > 1 && need > room ? Math.max(-jokW * 0.8, (room - need) / (nj - 1)) : 0;
   setHTML(tbl, sidebar(v, m) + `<section class="tm"><div class="tm-top">` +
@@ -630,9 +786,14 @@ function drawTable() {
     `<span class="slotcap">${nj}/${v.joker_slots ?? 5} jokers</span></div>` +
     `<div class="slots" style="min-width:${consBox.toFixed(1)}cqw">${cons}` +
     `<span class="slotcap">${(v.consumables || []).length}/${v.consumable_slots ?? 2}</span></div></div>` +
-    `<div class="tm-mid">${middle(v, m)}</div>` +
-    `<div class="tm-hand">${hand}<div class="deckinfo">${(v.vouchers || []).length ? esc(v.vouchers.join(', ')) + '<br>' : ''}` +
-    `Deck ${v.deck_left ?? '-'}/${v.deck_total ?? '-'}</div></div></section>${banner}`);
+    `<div class="tm-mid">${banner}${middle(v, m)}</div>` +
+    `<div class="tm-hand" style="--hov:${hov.toFixed(2)}cqw">${hand}<div class="deckinfo">Deck ${v.deck_left ?? '-'}/${v.deck_total ?? '-'}</div></div></section>`);
+  const ts = tbl.querySelector('.ts');
+  if (ts && !ts.classList.contains('tight') && ts.scrollHeight > ts.clientHeight + 1) {
+    ts.classList.add('tight');
+    const lv = ts.querySelector('.ri-levels'), n = lv ? +lv.dataset.n : 0;
+    if (n > 4) lv.querySelector('.lab span').textContent = `+${n - 4} more`;
+  }
 }
 
 // ------------------------------------------------------------------ the panels

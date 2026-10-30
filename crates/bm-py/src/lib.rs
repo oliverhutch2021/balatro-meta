@@ -569,12 +569,38 @@ impl Game {
                 .map(|v| v.name())
                 .collect::<Vec<_>>(),
         )?;
+        d.set_item(
+            "voucher_keys",
+            bm_core::content::VoucherKind::all()
+                .filter(|v| r.vouchers[v.index()])
+                .map(|v| v.key())
+                .collect::<Vec<_>>(),
+        )?;
+        // The deck as the game's deck view shows it: every playing card the run owns, and whether it is still
+        // to be drawn this round.
+        let to_draw: std::collections::HashSet<u32> = r.deck.iter().copied().collect();
+        let deck_cards = pyo3::types::PyList::empty(py);
+        for &id in &r.playing_cards {
+            let c = r.card(id);
+            let h = PyDict::new(py);
+            h.set_item("key", c.key())?;
+            h.set_item("enhancement", enh_name(c.enhancement))?;
+            h.set_item("edition", edition_name(c.edition))?;
+            h.set_item("seal", seal_name(c.seal))?;
+            h.set_item("left", to_draw.contains(&id))?;
+            deck_cards.append(h)?;
+        }
+        d.set_item("deck_cards", deck_cards)?;
         let levels = pyo3::types::PyList::empty(py);
         for t in bm_core::poker::HandType::ALL {
             let i = r.hand_levels.get(t);
             if i.visible && (i.played > 0 || i.level > 1) {
                 let h = PyDict::new(py);
                 h.set_item("name", t.name())?;
+                h.set_item(
+                    "planet",
+                    bm_core::content::ConsumableKind::planet_for(t).key(),
+                )?;
                 h.set_item("level", i.level)?;
                 h.set_item("chips", i.chips)?;
                 h.set_item("mult", i.mult)?;
