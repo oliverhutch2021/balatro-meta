@@ -91,6 +91,17 @@ LAYOUT_CHECK = """n => {
   S.sel = null; S.selView = null;
   return {caps: caps.length, overlaps, inside, covered: covered.map(e => e.className)};
 }"""
+PLAN_CHECK = """() => {
+  const k = S.moves.length;
+  S.sel = null;
+  S.proj[String(k)] = {mean_ante: 5.2, p_win: 0.2, p_clear: 0.9, n: 48,
+    teacher: {chances: [[300, 0.98]], main: 'Flush', total: 4200,
+              plan: ['Beats the Small Blind 98% of the time.', 'Scores most with Flush (level 3).']}};
+  renderChart();
+  const el = document.querySelector('#plan');
+  const r = el.getBoundingClientRect(), card = el.closest('.card').getBoundingClientRect();
+  return {text: el.textContent, shown: r.height > 10, inside: r.left >= card.left - 0.5 && r.right <= card.right + 0.5};
+}"""
 SHEETS = {"Deck.png": (2, 2, 142, 190), "Centers.png": (2, 2, 142, 190), "Jokers.png": (2, 2, 142, 190),
           "Consumables.png": (2, 1, 142, 190), "Tags.png": (2, 1, 68, 68), "Stickers.png": (1, 1, 142, 190),
           "Chips.png": (3, 2, 68, 68)}
@@ -214,6 +225,10 @@ def test_the_page_draws_with_the_game_art(game_exe, tmp_path):
                 got = page.evaluate(LAYOUT_CHECK, n)
                 assert got["caps"] == n and got["overlaps"] == [], got
                 assert got["inside"] and got["covered"] == [], got
+            # The teacher's plan in words sits in the outlook card.
+            got = page.evaluate(PLAN_CHECK)
+            assert got["shown"] and got["inside"], got
+            assert got["text"].startswith("Teacher's plan") and "Scores most with Flush" in got["text"], got
             assert not errors, errors
             browser.close()
     finally:

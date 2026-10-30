@@ -101,20 +101,28 @@ make teacher
 ```
 
 The teacher bot is the bot that plays before the network can, and the network's warm start. It decides by
-value: one number for a position (`crates/bm-core/src/value.rs`) that counts its scoring power against
-the blinds ahead (measured by playing the coming rounds out on copies with the hidden cards reshuffled,
-using the run's own deck, jokers, levels, enhancements and seals), what the run gains by itself (growing
-jokers, levels, income, cards made) and money as scoring power for later shops. Every shop, pack, Tarot,
-skip and round decision tries its options and keeps the one that raises that number most; nothing about
-what to buy or build is a fixed rule. In a round it plans which hand to build (and digs for it), and once
-it holds a winning hand it first takes what the round still offers (throwing Mail-In Rebate's rank or
-Purple Seals, four-card hands for Square Joker, a lone 6 for Sixth Sense, Gold Seals played, Steel and
-Blue Seals kept...) as long as the win stays certain. It moves Blueprint and Brainstorm onto whatever
-pays at each moment (Perkeo or Cartomancer as the shop closes, Mail-In Rebate before a throw, the best
-scorer before a hand). The plan's "teacher's playbook" section lists every idea, where it came from and
-what it did. It plays 12,000 runs (about 50 minutes; it thinks far more per move than the greedy bot) into
-`results/baseline/teacher.json`. On 400 fresh test runs it won 19% (the earlier rule-based teacher on
-the same seeds: 4.2%; the greedy bot: 0.07%), with a mean final ante of 6.1 (earlier: 4.8; greedy: 3.1).
+value: one number for a position (`crates/bm-core/src/value.rs`) that counts its scoring power against the
+blinds ahead (measured by playing the coming rounds out on copies with the hidden cards reshuffled, using
+the run's own deck, jokers, levels, enhancements and seals), the deck's power (24 hands dealt from the whole
+deck and scored by the engine: how often it deals each hand, what each scores at its level, and what seals,
+retriggers and jokers add to it, with no hand type favoured), what the run gains by itself (growing jokers,
+levels, income, cards made; a joker that pays for one kind of hand counts by how often the run plays it) and
+money as scoring power for the shops still to come (none at the last one, so it doesn't die rich). Every
+shop, pack, Tarot, skip and round decision tries its options and keeps the one that raises that number most,
+each option and doing nothing judged on the same deals; nothing about what to buy or build is a fixed rule.
+In a round it plans which hand to build (and digs for it), and once it holds a winning hand it first takes
+what the round still offers (throwing Mail-In Rebate's rank or Purple Seals, four-card hands for Square
+Joker, a lone 6 for Sixth Sense, Gold Seals played, Steel and Blue Seals kept...) as long as the win stays
+certain. Before every hand it tries every order of its jokers (up to six) and plays the one that scores most
+(+mult before x-mult and Polychrome jokers, copiers on the best joker for that hand); for an extra hand
+played only to dig for value it takes the opposite order, so the hand scores little and the round goes on.
+It moves Blueprint and Brainstorm onto whatever pays at each moment (Perkeo or Cartomancer as the shop
+closes, Mail-In Rebate before a throw). The plan's "teacher's playbook" section lists every idea, where it
+came from and what it did. It plays 12,000 runs (about an hour and a quarter; it thinks far more per move
+than the greedy bot) into `results/baseline/teacher.json`. On 400 fresh test runs (seeds used by neither
+version while building) it won 26% (95% range 22 to 31%), with a mean final ante of 6.4; the version before
+these changes won 21.5% on the same seeds (mean final ante 6.1), the earlier rule-based teacher about 4% and
+the greedy bot 0.07% (mean final ante 3.1).
 
 In the second:
 
@@ -136,9 +144,11 @@ Your browser opens the viewer, in the style of Monopoly Meta's:
 - **Run outlook**: for the run on screen, quick playouts by the greedy bot after every move (hidden cards
   reshuffled, fresh random streams) project where it ends and how likely it is to clear the current blind,
   and the teacher's own view of the position: its chance of beating each blind ahead, the hand it scores
-  most with and a round's typical total (the value model it decides by). Click or drag the chart, or
-  click a move in the play by play, to see the table as it was after that move. Turning points list the
-  moves that changed the outlook most.
+  most with and a round's typical total (the value model it decides by), and the teacher's plan in a few
+  plain sentences made from the same model: the risk ahead, the hands its deck deals, what its jokers pay
+  for, its money plan and what it is looking for. Click or drag the chart, or click a move in the play by
+  play, to see the table as it was after that move. Turning points list the moves that changed the
+  outlook most.
 - **Engine and your game**: a hidden copy of your Balatro (no window) replays the job's runs at full
   speed through BalatroBot, and after every move compares money, hands, discards, the cards in hand,
   round chips, blinds, tags, jokers and consumables (with their sell values), the shop's cards,

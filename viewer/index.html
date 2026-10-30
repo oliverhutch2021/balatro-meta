@@ -208,6 +208,11 @@ button:disabled { opacity: .45; cursor: default; }
 #chart { width: 100%; height: auto; display: block; cursor: crosshair; user-select: none; touch-action: pan-y; }
 .readout { min-height: 34px; margin-top: 4px; font-size: 12px; color: var(--muted); line-height: 1.4; font-variant-numeric: tabular-nums; }
 .readout b { color: var(--ink); }
+.plan { margin-top: 8px; padding: 6px 10px 7px; border-left: 3px solid var(--good); background: #f3eee0;
+  border-radius: 0 6px 6px 0; font-size: 12px; line-height: 1.45; color: var(--ink); }
+.plan .h { font-family: var(--display); font-weight: 700; font-size: 10.5px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+.plan:empty { display: none; }
 .rewind { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
 .rewind button { font-size: 12px; padding: 4px 10px; }
 .rewind .hint { font-size: 11.5px; color: var(--muted); }
@@ -298,6 +303,7 @@ footer { color: #93aeb3; font-size: 11.5px; padding: 0 18px 14px; line-height: 1
       <div class="legend"><span><i style="background:var(--chips)"></i>projected final ante</span>
         <span><i style="background:var(--good)"></i>clears this blind</span></div>
       <div class="readout" id="readout"></div>
+      <div class="plan" id="plan"></div>
       <div class="rewind">
         <button id="prev">&#9664; Move</button><button id="nextm">Move &#9654;</button>
         <button id="tolive" class="on">Live</button>
@@ -854,6 +860,9 @@ function renderChart() {
   const err = S.state && S.state.settings && S.state.settings.analysis_error;
   if (err && S.analysis) r += `<br><span style="color:var(--bad)">${esc(err)}</span>`;
   setHTML($('readout'), r);
+  // The teacher's plan in words, made from the same value model.
+  const plan = p && p.teacher && p.teacher.plan && p.teacher.plan.length ? p.teacher.plan : null;
+  setHTML($('plan'), plan ? `<div class="h">Teacher's plan</div>${plan.map(esc).join(' ')}` : '');
   const tps = turningPoints();
   setHTML($('tps'), tps.length ? tps.map((tp, i) => {
     const mv = S.moves[tp.k - 1];

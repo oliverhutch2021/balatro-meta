@@ -716,17 +716,32 @@ pub fn joker_tokens(s: &Screen) -> [u16; MAX_JOKERS] {
     t
 }
 
+/// A card's place in a fair copy's draw order (a well-mixed hash of the salt and the card).
+fn card_key(salt: u64, id: u64) -> u64 {
+    let mut z = salt ^ id.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
 /// A copy of the run for lookahead whose hidden parts are reshuffled from
 /// what the player could know: the draw order, every future random event
 /// (a fresh seed, so future bosses, tags, shops and rolls are new) and the
 /// order of face-down jokers. `salt` picks the reshuffle.
+///
+/// The draw order comes from the salt and each card alone, never from the
+/// cards' real order: copies of positions that hold the same cards deal them
+/// alike (so the options of one decision, and doing nothing, are all judged
+/// on the same deals), and a card added or removed changes the deals only
+/// where it comes in.
 pub fn fair_copy(run: &Run, salt: u64) -> Run {
     let mut c = run.clone();
     let mut sampler = SeedSampler::new(salt);
     let seed = sampler.next_seed();
     c.rng = Streams::new(&seed);
     let mut g = LuaRandom::new(sampler.next_u64() as f64 / u64::MAX as f64);
-    shuffle(&mut c.deck, &mut g);
+    let order = sampler.next_u64();
+    c.deck.sort_by_cached_key(|&id| card_key(order, id as u64));
     let down: Vec<usize> = (0..c.jokers.len())
         .filter(|&i| c.jokers[i].face_down)
         .collect();

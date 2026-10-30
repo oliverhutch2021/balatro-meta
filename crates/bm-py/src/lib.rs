@@ -442,9 +442,10 @@ impl Game {
                 None
             } else {
                 bm_core::value::breakdown(&run, salt)
+                    .map(|b| (bm_core::explain::plan_from(&run, salt, &b), b))
             }
         });
-        let Some(b) = b else {
+        let Some((plan, b)) = b else {
             return Ok(None);
         };
         let d = PyDict::new(py);
@@ -453,6 +454,8 @@ impl Game {
         d.set_item("main", b.main.name())?;
         d.set_item("total", b.next_total)?;
         d.set_item("value", b.total)?;
+        // The plan in words (from the same model), for the viewer.
+        d.set_item("plan", plan)?;
         Ok(Some(d))
     }
 

@@ -227,6 +227,9 @@ def test_projections_follow_the_run(tmp_path):
     assert views, "the teacher's view is given for positions still in play"
     t = views[0]
     assert t["chances"] and all(0 <= c <= 1 and tg > 0 for tg, c in t["chances"]) and t["total"] >= 0 and t["main"]
+    # And its plan in words, from the same model.
+    assert t["plan"] and all(isinstance(line, str) and line for line in t["plan"])
+    assert any(line.startswith("Beats ") for line in t["plan"]) and any("Scores most with" in line for line in t["plan"])
 
 
 def test_a_failing_projection_is_shown_not_fatal(monkeypatch):

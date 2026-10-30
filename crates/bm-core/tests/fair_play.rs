@@ -159,6 +159,19 @@ fn fair_copies_have_new_futures() {
 }
 
 #[test]
+fn a_fair_copy_never_reads_the_real_draw_order() {
+    // The same cards in another order give the same fair copies: lookahead learns nothing of the real
+    // order, and positions holding the same cards are judged on the same deals.
+    let mut run = Run::new(RunConfig::new("FAIRCOPY"));
+    run.select_blind().unwrap();
+    let mut other = run.clone();
+    other.deck.reverse();
+    for salt in 0..5 {
+        assert_eq!(fair_copy(&run, salt).deck, fair_copy(&other, salt).deck);
+    }
+}
+
+#[test]
 fn the_input_changes_when_the_screen_does() {
     let mut run = Run::new(RunConfig::new("CHANGES1"));
     let (mut a, mut b) = (Vec::new(), Vec::new());

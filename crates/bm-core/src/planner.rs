@@ -67,7 +67,7 @@ fn in_window(rank: u8, low: u8) -> bool {
 
 impl Plan {
     /// Hand positions this plan keeps.
-    fn keep(self, hand: &[Seen]) -> u64 {
+    pub(crate) fn keep(self, hand: &[Seen]) -> u64 {
         let mut mask = 0u64;
         match self {
             Plan::Best => {}
@@ -273,7 +273,7 @@ fn mask_first(mask: u64, k: u32) -> u64 {
 }
 
 /// Up to five hand positions to throw: those outside `keep`, lowest rank first (Stone cards first of all).
-fn throw(run: &Run, hand: &[Seen], keep: u64) -> u64 {
+pub(crate) fn throw(run: &Run, hand: &[Seen], keep: u64) -> u64 {
     let mut out: Vec<usize> = (0..hand.len()).filter(|&i| keep >> i & 1 == 0).collect();
     out.sort_by_key(|&i| (!hand[i].stone, hand[i].rank));
     let mut mask = out.into_iter().take(5).fold(0u64, |m, i| m | 1 << i);
@@ -362,13 +362,26 @@ fn try_policy(
 ) -> (bool, f64, f64) {
     let target = run.blind.as_ref().map_or(1.0, |b| b.chips).max(1.0);
     let mut c = fair_copy(run, salt);
-    if apply(&mut c, first.0, first.1).is_err() {
+    // The first move is an extra hand when it is one of the policy's from this hand.
+    let first_extra =
+        matches!(policy, Policy::Farm(Farm::Extra { .. })) && policy_step(&c, policy).1;
+    let ok = if first_extra {
+        play_extra(&mut c, first)
+    } else {
+        apply(&mut c, first.0, first.1).is_ok()
+    };
+    if !ok {
         return (false, 0.0, 0.0);
     }
     let mut steps = 0;
     while c.phase == Phase::Round && steps < 40 {
-        let m = policy_move(&c, policy);
-        if apply(&mut c, m.0, m.1).is_err() {
+        let (m, extra) = policy_step(&c, policy);
+        let ok = if extra {
+            play_extra(&mut c, m)
+        } else {
+            apply(&mut c, m.0, m.1).is_ok()
+        };
+        if !ok {
             break;
         }
         steps += 1;
@@ -505,6 +518,8 @@ fn throw_order(run: &Run, spare: &[usize]) -> Vec<usize> {
             || (parking && c.rank.is_face())
             || (baron && c.rank == Rank::King)
             || (moon && c.rank == Rank::Queen);
+        // Within each group, the cards worth least to this run first (jokers' builds included).
+        let worth = (crate::value::card_value(run, run.hand[i]) * 10.0) as i64;
         (
             if pays {
                 0
@@ -513,7 +528,7 @@ fn throw_order(run: &Run, spare: &[usize]) -> Vec<usize> {
             } else {
                 1
             },
-            c.rank.id(),
+            worth,
         )
     });
     v
@@ -558,10 +573,16 @@ fn extra_play(run: &Run, spare: &[usize], cards: usize) -> u64 {
 /// The move of a way to finish a beatable round. If the hand no longer beats the blind (a boss took a card),
 /// it plays to beat it like the planner's best-hand plan.
 pub(crate) fn farm_move(run: &Run, farm: Farm) -> (MoveKind, u64) {
+    farm_step(run, farm).0
+}
+
+/// `farm_move`, and whether the move is an extra hand (spare cards played, the round to go on).
+fn farm_step(run: &Run, farm: Farm) -> ((MoveKind, u64), bool) {
+    let plain = |m: (MoveKind, u64)| (m, false);
     let best = quick_best(run);
     let target = run.blind.as_ref().map_or(0.0, |b| b.chips);
     if best.0 < target - run.round_chips {
-        return plan_move(run, Plan::Best, best);
+        return plain(plan_move(run, Plan::Best, best));
     }
     let keep = best.1;
     let spare: Vec<usize> = (0..run.hand.len())
@@ -576,10 +597,10 @@ pub(crate) fn farm_move(run: &Run, farm: Farm) -> (MoveKind, u64) {
                     .take(need)
                     .fold(keep, |m, i| m | 1 << i);
                 if preview_score(run, padded) >= target - run.round_chips {
-                    return (MoveKind::Play, padded);
+                    return plain((MoveKind::Play, padded));
                 }
             }
-            (MoveKind::Play, keep)
+            plain((MoveKind::Play, keep))
         }
         Farm::Throw { single } => {
             let first_throw = run.discards_used_round == 0;
@@ -589,9 +610,9 @@ pub(crate) fn farm_move(run: &Run, farm: Farm) -> (MoveKind, u64) {
                     .into_iter()
                     .take(n)
                     .fold(0u64, |m, i| m | 1 << i);
-                (MoveKind::Discard, out)
+                plain((MoveKind::Discard, out))
             } else {
-                (MoveKind::Play, keep)
+                plain((MoveKind::Play, keep))
             }
         }
         Farm::Extra { cards } => {
@@ -601,9 +622,9 @@ pub(crate) fn farm_move(run: &Run, farm: Farm) -> (MoveKind, u64) {
                 .any(|&i| run.card(run.hand[i]).seal == crate::card::Seal::Gold);
             let single_done = c == 1 && run.hands_played_round > 0 && !gold_left;
             if run.hands_left > 1 && spare.len() >= c && !single_done {
-                (MoveKind::Play, extra_play(run, &spare, c))
+                ((MoveKind::Play, extra_play(run, &spare, c)), true)
             } else {
-                (MoveKind::Play, keep)
+                plain((MoveKind::Play, keep))
             }
         }
     }
@@ -614,9 +635,14 @@ pub(crate) fn farm_move(run: &Run, farm: Farm) -> (MoveKind, u64) {
 /// card for Square Joker), whichever adds the most to the run on fair copies, among ways that still beat
 /// the blind every time.
 pub fn finish(run: &Run, best: (f64, u64), salt: u64) -> (MoveKind, u64) {
+    finish_choice(run, best, salt).0
+}
+
+/// `finish`'s move, and whether it is an extra hand (played for what playing it gives, the round to go on).
+pub(crate) fn finish_choice(run: &Run, best: (f64, u64), salt: u64) -> ((MoveKind, u64), bool) {
     use crate::joker_data::JokerKind as J;
     if run.forced_card().is_some() {
-        return (MoveKind::Play, best.1);
+        return ((MoveKind::Play, best.1), false);
     }
     let has = |k: J| run.count_jokers(k) > 0;
     let reference = reference(run, best.1, salt);
@@ -645,10 +671,10 @@ pub fn finish(run: &Run, best: (f64, u64), salt: u64) -> (MoveKind, u64) {
             options.push(Farm::Extra { cards: 1 });
         }
     }
-    let mut chosen: Option<(f64, (MoveKind, u64))> = None;
+    let mut chosen: Option<(f64, (MoveKind, u64), bool)> = None;
     for (n, f) in options.into_iter().enumerate() {
-        let first = farm_move(&fair, f);
-        if chosen.as_ref().is_some_and(|(_, m)| *m == first) {
+        let (first, extra) = farm_step(&fair, f);
+        if chosen.as_ref().is_some_and(|(_, m, _)| *m == first) {
             continue;
         }
         let tries = if matches!(f, Farm::Win { .. }) {
@@ -673,11 +699,37 @@ pub fn finish(run: &Run, best: (f64, u64), salt: u64) -> (MoveKind, u64) {
         }
         let g = gain / tries as f64;
         let margin = if chosen.is_none() { 0.0 } else { FARM_MARGIN };
-        if chosen.as_ref().is_none_or(|(b, _)| g > *b + margin) {
-            chosen = Some((g, first));
+        if chosen.as_ref().is_none_or(|(b, _, _)| g > *b + margin) {
+            chosen = Some((g, first, extra));
         }
     }
-    chosen.map_or((MoveKind::Play, best.1), |(_, m)| m)
+    chosen.map_or(((MoveKind::Play, best.1), false), |(_, m, e)| (m, e))
+}
+
+/// One move of `policy` in a try, and whether it is an extra hand (see `farm_step`).
+fn policy_step(run: &Run, policy: Policy) -> ((MoveKind, u64), bool) {
+    match policy {
+        Policy::Farm(f) => farm_step(run, f),
+        Policy::Plan(_) => (policy_move(run, policy), false),
+    }
+}
+
+/// An extra hand in a try is played as the teacher plays it: with the jokers in the order that scores least,
+/// so it doesn't end the round early; they go back to scoring order after it.
+fn play_extra(c: &mut Run, m: (MoveKind, u64)) -> bool {
+    if c.jokers.len() < 2 || c.jokers.iter().any(|j| j.face_down) {
+        return apply(c, m.0, m.1).is_ok();
+    }
+    let low = crate::teacher::low_order(c);
+    set_order(c, low);
+    let ok = apply(c, m.0, m.1).is_ok();
+    let back = crate::teacher::joker_order(c);
+    set_order(c, back);
+    ok
+}
+
+fn set_order(c: &mut Run, order: Vec<usize>) {
+    c.jokers = order.iter().map(|&i| c.jokers[i].clone()).collect();
 }
 
 /// Every subset-based best hand, for the planner's tests.

@@ -44,6 +44,13 @@ use crate::poker::HandType;
 use crate::shop::RowItem;
 use crate::state::{Phase, Run};
 
+/// A list of moves made one after another.
+type Moves = Vec<(MoveKind, u64)>;
+/// A round move, and whether it is a hand meant to keep the round going.
+type Choice = ((MoveKind, u64), bool);
+/// A joker order (positions) with the score it gives a hand.
+type Scored = (Vec<usize>, f64);
+
 /// Options, each off until switched on by name (the baseline job's `--teacher-options`), for A/B tests on
 /// the same seeds: a candidate change is tried behind an option, and becomes the teacher if it wins more.
 pub const OPTIONS: &[&str] = &[
@@ -431,7 +438,9 @@ fn useless(run: &Run, c: &Consumable) -> bool {
 /// - Ceremonial Dagger destroys its right neighbour at every blind: it goes rightmost, where it can't.
 ///
 /// The order depends only on which jokers there are, never on where they stand, so moving towards it ends.
-fn joker_order(run: &Run) -> Vec<usize> {
+/// Before each hand the teacher measures the order instead (`hand_order`); this one is for deciding, and
+/// for the shop.
+pub(crate) fn joker_order(run: &Run) -> Vec<usize> {
     use JokerKind::{Blueprint, Brainstorm, CeremonialDagger};
     let j = &run.jokers;
     let all_of = |k: JokerKind| -> Vec<usize> {
@@ -447,7 +456,16 @@ fn joker_order(run: &Run) -> Vec<usize> {
     let mut rest: Vec<usize> = (0..j.len())
         .filter(|&i| !matches!(j[i].kind, Blueprint | Brainstorm | CeremonialDagger))
         .collect();
-    rest.sort_by_key(|&i| (multiplies(j[i].kind), j[i].kind as usize, j[i].sort_id));
+    // Adders first, Polychrome ones last among them (their x1.5 comes after their own effect, so it
+    // multiplies every adder before them), then multipliers.
+    rest.sort_by_key(|&i| {
+        (
+            multiplies(j[i].kind),
+            j[i].edition == Edition::Polychrome,
+            j[i].kind as usize,
+            j[i].sort_id,
+        )
+    });
     let value =
         |i: usize| worth(j[i].kind, j[i].edition) + if multiplies(j[i].kind) { 1.0 } else { 0.0 };
     let target = rest
@@ -717,12 +735,13 @@ fn value_consumable_in_round(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
         }
     }
     let vs = value_salt(run, salt);
-    let mut options: Vec<(Vec<(MoveKind, u64)>, f64)> = Vec::new();
+    // Each option: its moves, the consumable it uses, and its quick value.
+    let mut options: Vec<(Moves, usize, f64)> = Vec::new();
     for (i, c) in run.consumables.iter().enumerate() {
         let use_move = |mask: u64| (MoveKind::UseConsumable, i as u64 | mask << 8);
         if c.kind.selection_limits().is_none() {
             if run.can_use_consumable(c, &[], UseFrom::Slots) {
-                options.push((vec![use_move(0)], 0.0));
+                options.push((vec![use_move(0)], i, 0.0));
             }
             continue;
         }
@@ -732,33 +751,51 @@ fn value_consumable_in_round(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
             }
             let ids: Vec<u32> = t.iter().map(|&p| run.hand[p]).collect();
             if run.can_use_consumable(c, &ids, UseFrom::Slots) {
-                options.push((use_on(run, c, &t, &use_move), 0.0));
+                options.push((use_on(run, c, &t, &use_move), i, 0.0));
             }
         }
     }
     if options.is_empty() {
         return None;
     }
-    let here_quick = value_in_round(run, vs, crate::value::QUICK);
+    // A held card's worth stands for using it well later. It is used now when that realises at least half
+    // of that worth: the run after using it beats the halfway mark between the card gone unused and the
+    // card kept.
+    let with_quick = value_in_round(run, vs, crate::value::QUICK);
+    let with_full = std::cell::OnceCell::new();
+    let without = |i: usize, samples: usize| {
+        let mut c = run.clone();
+        c.consumables.remove(i);
+        let gone = value_in_round(&c, vs, samples);
+        let kept = if samples == crate::value::QUICK {
+            with_quick
+        } else {
+            *with_full.get_or_init(|| value_in_round(run, vs, crate::value::SAMPLES))
+        };
+        gone + 0.5 * (kept - gone).max(0.0)
+    };
+    let mut base_quick = std::collections::HashMap::new();
     for o in &mut options {
-        o.1 = after(run, vs ^ 0x5EED, &o.0)
+        let b = *base_quick
+            .entry(o.1)
+            .or_insert_with(|| without(o.1, crate::value::QUICK));
+        let v = after(run, vs ^ 0x5EED, &o.0)
             .map_or(f64::MIN, |c| value_in_round(&c, vs, crate::value::QUICK));
+        o.2 = v - b;
     }
-    options.retain(|o| o.1 > here_quick + MIN_GAIN);
-    options.sort_by(|a, b| b.1.total_cmp(&a.1));
+    options.retain(|o| o.2 > MIN_GAIN);
+    options.sort_by(|a, b| b.2.total_cmp(&a.2));
     options.truncate(3);
-    if options.is_empty() {
-        return None;
-    }
-    let mut best = (
-        value_in_round(run, vs, crate::value::SAMPLES) + MIN_GAIN,
-        None,
-    );
-    for (moves, _) in options {
+    let mut best = (MIN_GAIN, None);
+    let mut base_full = std::collections::HashMap::new();
+    for (moves, i, _) in options {
+        let b = *base_full
+            .entry(i)
+            .or_insert_with(|| without(i, crate::value::SAMPLES));
         let v = after(run, vs ^ 0x5EED, &moves)
             .map_or(f64::MIN, |c| value_in_round(&c, vs, crate::value::SAMPLES));
-        if v > best.0 {
-            best = (v, Some(moves[0]));
+        if v - b > best.0 {
+            best = (v - b, Some(moves[0]));
         }
     }
     best.1
@@ -851,19 +888,22 @@ fn luchador_sale(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
 fn value_round_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     let salt = decision_salt(run, salt);
     if run.jokers.iter().any(|j| j.face_down) || run.jokers.len() < 2 {
-        return round_move_inner(run, salt);
+        return round_choice(run, salt).0;
     }
     let scoring = joker_order(run);
-    let m = round_move_inner(&with_order(run, &scoring), salt);
+    let (m, keep_going) =
+        cached_choice(run, salt, || round_choice(&with_order(run, &scoring), salt));
     let want = match m.0 {
-        MoveKind::Play => Some(scoring),
+        MoveKind::Play if on("no-juggle") => Some(scoring),
+        MoveKind::Play => Some(hand_order(run, m.1, salt, keep_going)),
         MoveKind::Discard => Some(discard_order(run, m.1, salt).unwrap_or(scoring)),
         _ => None,
     };
     if let Some(r) = want.and_then(|w| move_towards(run, &w)) {
         return r;
     }
-    if m.0 == MoveKind::Play {
+    // Cards set to score the most, unless the hand is meant to score little.
+    if m.0 == MoveKind::Play && !keep_going {
         if let Some(r) = card_order(run, m.1, salt) {
             return r;
         }
@@ -876,6 +916,66 @@ fn value_round_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     m
 }
 
+thread_local! {
+    /// The round decision while the jokers are being moved for it (moving them changes nothing else).
+    static CHOICES: std::cell::RefCell<std::collections::HashMap<u64, Choice>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// `decide()`, remembered for this position with the jokers in any order.
+fn cached_choice(
+    run: &Run,
+    salt: u64,
+    decide: impl FnOnce() -> ((MoveKind, u64), bool),
+) -> ((MoveKind, u64), bool) {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (
+        salt,
+        run.money,
+        run.hands_left,
+        run.discards_left,
+        run.round,
+    )
+        .hash(&mut h);
+    run.round_chips.to_bits().hash(&mut h);
+    run.hand.hash(&mut h);
+    for c in &run.consumables {
+        (c.kind as u16, c.sort_id).hash(&mut h);
+    }
+    let mut jokers: Vec<_> = run
+        .jokers
+        .iter()
+        .map(|j| {
+            (
+                j.sort_id,
+                j.kind as u16,
+                j.edition as u8,
+                j.debuffed,
+                j.counter,
+                j.mult.to_bits(),
+                j.x_mult.to_bits(),
+                j.chips.to_bits(),
+            )
+        })
+        .collect();
+    jokers.sort_unstable();
+    jokers.hash(&mut h);
+    let key = h.finish();
+    if let Some(c) = CHOICES.with(|c| c.borrow().get(&key).copied()) {
+        return c;
+    }
+    let c = decide();
+    CHOICES.with(|m| {
+        let mut m = m.borrow_mut();
+        if m.len() > 64 {
+            m.clear();
+        }
+        m.insert(key, c);
+    });
+    c
+}
+
 fn round_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     if by_value() {
         value_round_move(run, salt)
@@ -885,17 +985,24 @@ fn round_move(run: &Run, salt: u64) -> (MoveKind, u64) {
 }
 
 fn round_move_inner(run: &Run, salt: u64) -> (MoveKind, u64) {
+    round_choice(run, salt).0
+}
+
+/// The round move, and whether it is a hand played only for what playing it gives, with the round meant to
+/// go on (`finish`'s extra hands): such a hand should score little, so it doesn't end the round early.
+fn round_choice(run: &Run, salt: u64) -> ((MoveKind, u64), bool) {
+    let plain = |m: (MoveKind, u64)| (m, false);
     if let Some(m) = verdant_sale(run) {
-        return m;
+        return plain(m);
     }
     if by_value() {
         if let Some(m) = luchador_sale(run, salt) {
-            return m;
+            return plain(m);
         }
     }
     if by_value() {
         if let Some(m) = value_consumable_in_round(run, salt) {
-            return m;
+            return plain(m);
         }
     }
     let mut cache: Option<(f64, u64)> = None;
@@ -903,7 +1010,7 @@ fn round_move_inner(run: &Run, salt: u64) -> (MoveKind, u64) {
     let mut mask_only = || best().1;
     if !by_value() {
         if let Some((i, mask)) = consumable_to_use(run, &mut mask_only) {
-            return (MoveKind::UseConsumable, i as u64 | mask << 8);
+            return plain((MoveKind::UseConsumable, i as u64 | mask << 8));
         }
     }
     let (score, mask) = best();
@@ -913,20 +1020,290 @@ fn round_move_inner(run: &Run, salt: u64) -> (MoveKind, u64) {
     // offers, if that keeps the win); so is the last hand once the discards are gone. With discards left,
     // even the last hand (The Needle's only one) is worth improving first.
     if score >= needed && by_value() {
-        return crate::planner::finish(run, (score, mask), salt);
+        return crate::planner::finish_choice(run, (score, mask), salt);
     }
     if score >= needed || (run.hands_left <= 1 && run.discards_left == 0) {
-        return (MoveKind::Play, mask);
+        return plain((MoveKind::Play, mask));
     }
     if run.forced_card().is_some() && run.discards_left > 0 {
         // Cerulean Bell: as the greedy bot (every selection must hold the boss's card).
-        return match greedy_move(run, salt) {
+        return plain(match greedy_move(run, salt) {
             (MoveKind::Discard, m) => (MoveKind::Discard, m),
             _ => (MoveKind::Play, mask),
-        };
+        });
     }
     // The best hand now falls short: build towards the hand that beats the blind most often.
-    crate::planner::plan(run, (score, mask), salt)
+    plain(crate::planner::plan(run, (score, mask), salt))
+}
+
+// ------------------------------------------------------------------ joker order for each hand
+
+/// The jokers in the order that scores least, the opposite of the scoring order: multipliers (and
+/// Polychrome jokers) first, then the adders, Brainstorm leftmost and Blueprint rightmost, where they copy
+/// nothing. The planner plays its extra hands this way when it tries them out.
+pub(crate) fn low_order(run: &Run) -> Vec<usize> {
+    use JokerKind::{Blueprint, Brainstorm};
+    let j = &run.jokers;
+    let by_id = |v: &mut Vec<usize>| v.sort_by_key(|&i| j[i].sort_id);
+    let mut storms: Vec<usize> = (0..j.len()).filter(|&i| j[i].kind == Brainstorm).collect();
+    let mut prints: Vec<usize> = (0..j.len()).filter(|&i| j[i].kind == Blueprint).collect();
+    by_id(&mut storms);
+    by_id(&mut prints);
+    let mut rest: Vec<usize> = (0..j.len())
+        .filter(|&i| !matches!(j[i].kind, Blueprint | Brainstorm))
+        .collect();
+    rest.sort_by_key(|&i| {
+        (
+            !(multiplies(j[i].kind) || j[i].edition == Edition::Polychrome),
+            j[i].kind as usize,
+            j[i].sort_id,
+        )
+    });
+    storms.extend(rest);
+    storms.extend(prints);
+    storms
+}
+
+/// Most jokers whose every order is tried for a hand (720 orders); with more, a search from the scoring
+/// and least-scoring orders, moving one joker at a time while that helps.
+const ALL_ORDERS_UP_TO: usize = 6;
+
+/// Every order of the jokers, as permutations of the current positions, listed by the jokers themselves
+/// (by creation, never by where they stand now), so the choice stays the same while they are moved to it.
+fn all_orders(run: &Run) -> Vec<Vec<usize>> {
+    let n = run.jokers.len();
+    let mut base: Vec<usize> = (0..n).collect();
+    base.sort_by_key(|&i| run.jokers[i].sort_id);
+    let mut out = Vec::new();
+    let mut p: Vec<usize> = (0..n).collect();
+    loop {
+        out.push(p.iter().map(|&k| base[k]).collect());
+        let Some(i) = (1..n).rev().find(|&i| p[i - 1] < p[i]) else {
+            break;
+        };
+        let j = (i..n).rev().find(|&j| p[j] > p[i - 1]).unwrap_or(i);
+        p.swap(i - 1, j);
+        p[i..].reverse();
+    }
+    out
+}
+
+/// Joker orders tried for a hand, with their scores: every order (up to six jokers), else those met on a
+/// climb from the scoring order (and, when `low`, a descent from the least-scoring order), each step
+/// moving the one joker that helps most.
+fn scored_orders(
+    run: &Run,
+    low: bool,
+    score: &mut dyn FnMut(&[usize]) -> f64,
+) -> Vec<(Vec<usize>, f64)> {
+    let n = run.jokers.len();
+    if n <= ALL_ORDERS_UP_TO {
+        return all_orders(run)
+            .into_iter()
+            .map(|o| {
+                let s = score(&o);
+                (o, s)
+            })
+            .collect();
+    }
+    let here: Vec<usize> = (0..n).collect();
+    let s_here = score(&here);
+    let mut out: Vec<(Vec<usize>, f64)> = vec![(here, s_here)];
+    let starts = if low {
+        vec![(joker_order(run), 1.0), (low_order(run), -1.0)]
+    } else {
+        vec![(joker_order(run), 1.0)]
+    };
+    for (start, sign) in starts {
+        let s0 = score(&start);
+        let mut at = (start, s0);
+        out.push(at.clone());
+        for _ in 0..4 {
+            let mut step: Option<(Vec<usize>, f64)> = None;
+            for i in 0..n {
+                for to in 0..n {
+                    if i == to {
+                        continue;
+                    }
+                    let mut o = at.0.clone();
+                    let x = o.remove(i);
+                    o.insert(to, x);
+                    let s = score(&o);
+                    out.push((o.clone(), s));
+                    if sign * s > sign * step.as_ref().map_or(at.1, |b| b.1) {
+                        step = Some((o, s));
+                    }
+                }
+            }
+            match step {
+                Some(b) => at = b,
+                None => break,
+            }
+        }
+    }
+    out
+}
+
+/// What each copier copies in `order` (positions in `order`), as joker positions, chains followed: Blueprint
+/// its right neighbour, Brainstorm the leftmost joker.
+fn copies_in(run: &Run, order: &[usize]) -> Vec<Option<usize>> {
+    use JokerKind::{Blueprint, Brainstorm};
+    let kind = |p: usize| run.jokers[order[p]].kind;
+    let resolve = |mut p: usize| -> Option<usize> {
+        for _ in 0..=order.len() {
+            let next = match kind(p) {
+                Blueprint => p + 1,
+                Brainstorm => 0,
+                _ => return Some(order[p]),
+            };
+            if next >= order.len() || next == p || !kind(next).info().blueprint_compat {
+                return None;
+            }
+            p = next;
+        }
+        None
+    };
+    (0..order.len())
+        .filter(|&p| matches!(kind(p), Blueprint | Brainstorm))
+        .map(resolve)
+        .collect()
+}
+
+thread_local! {
+    /// Chosen hand orders (as the jokers' creation ids), while the jokers are being moved to them.
+    static HAND_ORDERS: std::cell::RefCell<std::collections::HashMap<u64, Vec<u64>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Before playing `mask`: the jokers' order for it, measured on a fair copy (every order of up to six
+/// jokers). To win, or to score as much as the hand can: the order that scores most (adders before
+/// multipliers and Polychrome jokers, copiers on the best joker for this hand, The Duo and Baron where they
+/// pay...). For a hand played only for what playing it gives, with the round meant to go on
+/// (`keep_going`): an order that scores under what the blind still needs, so the round doesn't end early:
+/// the opposite of the scoring order. Among the orders that do the job, the copiers go where this hand pays
+/// the run most (Blueprint on Hiker, Space Joker or Business Card...), judged by what playing it adds.
+fn hand_order(run: &Run, mask: u64, salt: u64, keep_going: bool) -> Vec<usize> {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (
+        salt,
+        mask,
+        keep_going,
+        run.round_chips.to_bits(),
+        run.hands_left,
+    )
+        .hash(&mut h);
+    run.blind.as_ref().map(|b| b.chips.to_bits()).hash(&mut h);
+    run.hand.hash(&mut h);
+    let mut ids: Vec<_> = run
+        .jokers
+        .iter()
+        .map(|j| (j.sort_id, j.kind as u16, j.edition as u8, j.debuffed))
+        .collect();
+    ids.sort_unstable();
+    ids.hash(&mut h);
+    let key = h.finish();
+    let as_positions = |sorts: &[u64]| -> Option<Vec<usize>> {
+        sorts
+            .iter()
+            .map(|s| run.jokers.iter().position(|j| j.sort_id == *s))
+            .collect()
+    };
+    if let Some(v) = HAND_ORDERS.with(|c| c.borrow().get(&key).cloned()) {
+        if let Some(o) = as_positions(&v) {
+            return o;
+        }
+    }
+    let o = measure_hand_order(run, mask, salt, keep_going);
+    let sorts: Vec<u64> = o.iter().map(|&i| run.jokers[i].sort_id).collect();
+    HAND_ORDERS.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.len() > 256 {
+            c.clear();
+        }
+        c.insert(key, sorts);
+    });
+    o
+}
+
+/// A winning hand keeps this margin over what the blind needs when its order is chosen for what it pays
+/// rather than for its score (chance effects may score less than the copy did).
+const WIN_MARGIN: f64 = 1.25;
+
+fn measure_hand_order(run: &Run, mask: u64, salt: u64, keep_going: bool) -> Vec<usize> {
+    let fair = fair_copy(run, salt ^ 0x0DE5);
+    let needed = run.blind.as_ref().map_or(0.0, |b| b.chips) - run.round_chips;
+    let arranged = |o: &[usize]| {
+        let mut c = fair.clone();
+        c.jokers = o.iter().map(|&i| fair.jokers[i].clone()).collect();
+        c
+    };
+    let mut probe = fair.clone();
+    let scored = scored_orders(run, keep_going, &mut |o: &[usize]| {
+        probe.jokers = o.iter().map(|&i| fair.jokers[i].clone()).collect();
+        crate::bots::preview_score(&probe, mask)
+    });
+    let top = scored.iter().map(|o| o.1).fold(f64::MIN, f64::max);
+    // The orders that do the job: under the target when the round is to go on; to win, over it with a
+    // margin (chance effects may score less than the copy did); a hand that can't win scores what it can.
+    let ok: Box<dyn Fn(f64) -> bool> = if keep_going {
+        Box::new(move |s| s < needed)
+    } else if top >= needed * WIN_MARGIN {
+        Box::new(move |s| s >= needed * WIN_MARGIN)
+    } else {
+        Box::new(move |s| s >= top)
+    };
+    // Better for the hand's purpose: the least score to go on, the most otherwise (the most headroom against
+    // chance); on a tie, the first found (the orders are listed by the jokers themselves, so it is the same
+    // order wherever they stand).
+    let better = |a: &Scored, b: &Scored| {
+        let (x, y) = if keep_going { (b.1, a.1) } else { (a.1, b.1) };
+        x > y
+    };
+    let extreme = || {
+        let mut out: Option<&Scored> = None;
+        for o in &scored {
+            if out.is_none_or(|b| better(o, b)) {
+                out = Some(o);
+            }
+        }
+        out.map_or_else(|| (0..run.jokers.len()).collect(), |o| o.0.clone())
+    };
+    // One candidate per way the copiers copy: the best of those that do the job.
+    let mut groups: Vec<(Vec<Option<usize>>, &Scored)> = Vec::new();
+    for o in scored.iter().filter(|o| ok(o.1)) {
+        let k = copies_in(run, &o.0);
+        match groups.iter_mut().find(|g| g.0 == k) {
+            Some(g) => {
+                if better(o, g.1) {
+                    g.1 = o;
+                }
+            }
+            None => groups.push((k, o)),
+        }
+    }
+    if groups.len() < 2 {
+        return groups.first().map_or_else(extreme, |g| g.1 .0.clone());
+    }
+    // What playing the hand adds to the run with each (money, cards, jokers grown, levels...).
+    let h = crate::bots::preview(&arranged(&groups[0].1 .0), mask);
+    let reference = (h.chips.max(1.0), h.mult.max(1.0));
+    let mut best: Option<(f64, &Scored)> = None;
+    for (_, o) in groups {
+        let start = arranged(&o.0);
+        let mut end = start.clone();
+        if crate::env::apply(&mut end, MoveKind::Play, mask).is_err() {
+            continue;
+        }
+        let g = crate::value::round_gain(&start, &end, reference);
+        if best
+            .as_ref()
+            .is_none_or(|b| g > b.0 + 1e-9 || (g > b.0 - 1e-9 && better(o, b.1)))
+        {
+            best = Some((g, o));
+        }
+    }
+    best.map_or_else(extreme, |b| b.1 .0.clone())
 }
 
 // ------------------------------------------------------------------ joker order by event (option "value")
@@ -957,6 +1334,34 @@ fn copy_orders(run: &Run, events: &[JokerKind]) -> Vec<Vec<usize>> {
     let targets: Vec<usize> = (0..j.len())
         .filter(|&i| events.contains(&j[i].kind))
         .collect();
+    // Every copier on one event joker: it leftmost (Brainstorm copies it) with each Blueprint chained just
+    // left of Brainstorm (Blueprint copying Brainstorm copies it too); with no Brainstorm, the Blueprints
+    // chained just left of it.
+    let prints: Vec<usize> = (0..j.len()).filter(|&i| j[i].kind == Blueprint).collect();
+    let storms: Vec<usize> = (0..j.len()).filter(|&i| j[i].kind == Brainstorm).collect();
+    if prints.len() + storms.len() >= 2 {
+        for &t in &targets {
+            let rest: Vec<usize> = base
+                .iter()
+                .copied()
+                .filter(|i| *i != t && !prints.contains(i) && !storms.contains(i))
+                .collect();
+            let mut o = Vec::with_capacity(j.len());
+            if storms.is_empty() {
+                o.extend(&rest);
+                o.extend(&prints);
+                o.push(t);
+            } else {
+                o.push(t);
+                o.extend(&rest);
+                o.extend(&prints);
+                o.extend(&storms);
+            }
+            if !out.contains(&o) {
+                out.push(o);
+            }
+        }
+    }
     for c in (0..j.len()).filter(|&i| matches!(j[i].kind, Blueprint | Brainstorm)) {
         for &t in &targets {
             let mut o: Vec<usize> = base.iter().copied().filter(|&i| i != c && i != t).collect();
@@ -1195,41 +1600,6 @@ fn weakest_jokers(run: &Run, vs: u64, n: usize) -> Vec<usize> {
     order.into_iter().take(n).collect()
 }
 
-/// A playing card's worth to a deck, roughly: its chips, and more for what is on it (enhancement, edition,
-/// seal). Used to say which cards are worth copying (Death, Cryptid, DNA) and which worth losing.
-fn card_worth(run: &Run, id: u32) -> f64 {
-    let c = run.card(id);
-    let rank = match c.rank.id() {
-        14 => 11.0,
-        11..=13 => 10.0,
-        r => r as f64,
-    };
-    let enh = match c.enhancement {
-        Enhancement::Glass => 30.0,
-        Enhancement::Steel => 25.0,
-        Enhancement::Mult => 15.0,
-        Enhancement::Lucky => 12.0,
-        Enhancement::Bonus | Enhancement::Wild => 10.0,
-        Enhancement::Gold => 8.0,
-        Enhancement::Stone => 5.0,
-        Enhancement::None => 0.0,
-    };
-    let ed = match c.edition {
-        Edition::Polychrome => 30.0,
-        Edition::Holographic => 15.0,
-        Edition::Foil => 10.0,
-        _ => 0.0,
-    };
-    let seal = match c.seal {
-        Seal::Red => 25.0,
-        Seal::Blue => 12.0,
-        Seal::Gold => 10.0,
-        Seal::Purple => 6.0,
-        Seal::None => 0.0,
-    };
-    rank + enh + ed + seal + c.perma_bonus as f64
-}
-
 /// What the deck and jokers lean towards: the commonest rank, the suit the deck and suit jokers favour,
 /// and whether face cards pay (face jokers).
 fn leanings(run: &Run) -> (u8, Suit, bool) {
@@ -1240,6 +1610,17 @@ fn leanings(run: &Run) -> (u8, Suit, bool) {
         let k = run.card(id);
         ranks[k.rank.id() as usize] += 1.0;
         suits[k.suit as usize] += 1.0;
+    }
+    // What the jokers pay for in each rank (a plain card of it).
+    for (r, slot) in ranks.iter_mut().enumerate().skip(2) {
+        if let Some(rank) = crate::card::Rank::ALL
+            .iter()
+            .copied()
+            .find(|k| k.id() as usize == r)
+        {
+            let card = crate::card::Card::new(0, Suit::Spades, rank);
+            *slot += crate::value::joker_bonus(run, &card) / 4.0;
+        }
     }
     let mut faces = false;
     for j in &run.jokers {
@@ -1276,7 +1657,7 @@ fn target_sets(run: &Run, c: &Consumable) -> Vec<Vec<usize>> {
     };
     let n = run.hand.len();
     let card = |i: usize| run.card(run.hand[i]);
-    let worth = |i: usize| card_worth(run, run.hand[i]);
+    let worth = |i: usize| crate::value::card_value(run, run.hand[i]);
     let (main_rank, main_suit, faces) = leanings(run);
     let mut by_worth: Vec<usize> = (0..n).filter(|&i| !card(i).face_down).collect();
     by_worth.sort_by(|&a, &b| worth(a).total_cmp(&worth(b)));
@@ -1361,6 +1742,20 @@ fn target_sets(run: &Run, c: &Consumable) -> Vec<Vec<usize>> {
         // Death: the least valuable cards become copies of the most valuable, of the main rank or suit, or a
         // face card. (Order in hand is dealt with by `death_moves`.)
         Death => {
+            // The deck's commonest exact card in hand too (one strong card copied over and over: The
+            // Idol, Flush Five).
+            let mut copies: std::collections::HashMap<(u8, u8), usize> =
+                std::collections::HashMap::new();
+            for &id in &run.playing_cards {
+                let k = run.card(id);
+                *copies.entry((k.rank.id(), k.suit as u8)).or_insert(0) += 1;
+            }
+            let commonest = high.iter().copied().max_by_key(|&i| {
+                copies
+                    .get(&(card(i).rank.id(), card(i).suit as u8))
+                    .copied()
+                    .unwrap_or(0)
+            });
             let sources = [
                 high.first().copied(),
                 on_rank.first().copied(),
@@ -1369,6 +1764,7 @@ fn target_sets(run: &Run, c: &Consumable) -> Vec<Vec<usize>> {
                     .copied()
                     .find(|&i| card(i).rank.id() == main_rank),
                 if faces { face.first().copied() } else { None },
+                commonest,
             ];
             for &w in low.iter().take(2) {
                 for g in sources.iter().flatten() {
@@ -1960,6 +2356,72 @@ mod tests {
     }
 
     #[test]
+    fn death_copies_what_the_jokers_pay_for() {
+        // With Baron, a plain King is worth more to copy than a plain Ace; the Two becomes the King.
+        use crate::blinds::BlindKind;
+        use crate::card::Rank::*;
+        use crate::content::ConsumableKind;
+        use Suit::*;
+        let mut run = round_with(
+            BlindKind::Small,
+            &[JokerKind::Baron],
+            &[
+                (Spades, Two),
+                (Hearts, Ace),
+                (Clubs, King),
+                (Diamonds, Seven),
+            ],
+        );
+        let k = crate::value::card_value(&run, run.hand[2]);
+        let a = crate::value::card_value(&run, run.hand[1]);
+        assert!(k > a, "with Baron a King ({k}) beats an Ace ({a})");
+        let death = crate::create::Consumable {
+            kind: ConsumableKind::Death,
+            sort_id: 0,
+            edition: Edition::None,
+            extra_value: 0,
+            cost: 3,
+            sell_cost: 1,
+        };
+        let sets = target_sets(&run, &death);
+        assert_eq!(sets.first(), Some(&vec![0, 2]), "{sets:?}");
+        run.jokers.clear();
+        let sets = target_sets(&run, &death);
+        assert_eq!(
+            sets.first(),
+            Some(&vec![0, 1]),
+            "without Baron the Ace: {sets:?}"
+        );
+    }
+
+    #[test]
+    fn every_copier_can_copy_one_event_joker() {
+        // Blueprint chained onto Brainstorm, Brainstorm on the leftmost: both copy Cartomancer.
+        let mut run = Run::scenario("CHAINORD", crate::blinds::BlindKind::Small);
+        for k in [
+            JokerKind::Cavendish,
+            JokerKind::Blueprint,
+            JokerKind::Brainstorm,
+            JokerKind::Cartomancer,
+        ] {
+            run.add_joker(k);
+        }
+        let orders = copy_orders(&run, SHOP_EXIT_EVENTS);
+        let kinds = |o: &Vec<usize>| o.iter().map(|&i| run.jokers[i].kind).collect::<Vec<_>>();
+        assert!(
+            orders.iter().any(|o| kinds(o)
+                == vec![
+                    JokerKind::Cartomancer,
+                    JokerKind::Cavendish,
+                    JokerKind::Blueprint,
+                    JokerKind::Brainstorm
+                ]),
+            "{:?}",
+            orders.iter().map(kinds).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
     fn verdant_leaf_costs_the_weakest_joker() {
         use crate::blinds::{BlindKind, Boss};
         use crate::card::Rank::*;
@@ -2065,6 +2527,67 @@ mod tests {
         // Ceremonial Dagger rightmost: it destroys the joker to its right at every blind.
         let o = order(&[CeremonialDagger, Cavendish, Joker]);
         assert_eq!(o, vec![Joker, Cavendish, CeremonialDagger]);
+    }
+
+    #[test]
+    fn each_hand_gets_the_joker_order_for_its_purpose() {
+        // A Polychrome Joker (+4, then x1.5), Gros Michel (+15) and Cavendish (x3), set worst first.
+        use crate::blinds::BlindKind;
+        use crate::card::Rank::*;
+        use Suit::*;
+        let mut run = round_with(
+            BlindKind::Small,
+            &[
+                JokerKind::Cavendish,
+                JokerKind::Joker,
+                JokerKind::GrosMichel,
+            ],
+            &[
+                (Spades, Ace),
+                (Hearts, Ace),
+                (Clubs, Two),
+                (Diamonds, Seven),
+            ],
+        );
+        run.jokers[1].edition = Edition::Polychrome;
+        let mask = 0b11;
+        let score = |run: &Run, o: &[usize]| {
+            let mut c = fair_copy(run, 9 ^ 0x0DE5);
+            c.jokers = o.iter().map(|&i| run.jokers[i].clone()).collect();
+            preview_score(&c, mask)
+        };
+        let all = all_orders(&run);
+        assert_eq!(all.len(), 6);
+        let top = all.iter().map(|o| score(&run, o)).fold(0.0, f64::max);
+        let low = all.iter().map(|o| score(&run, o)).fold(f64::MAX, f64::min);
+        let kinds =
+            |run: &Run, o: &[usize]| o.iter().map(|&i| run.jokers[i].kind).collect::<Vec<_>>();
+        // A blind only the best order comes near: the adders first, the Polychrome one last of them.
+        let mut hard = run.clone();
+        hard.blind.as_mut().unwrap().chips = top;
+        let o = hand_order(&hard, mask, 9, false);
+        assert_eq!(score(&hard, &o), top);
+        assert_eq!(
+            kinds(&hard, &o),
+            vec![
+                JokerKind::GrosMichel,
+                JokerKind::Joker,
+                JokerKind::Cavendish
+            ]
+        );
+        // A blind every order beats easily: still the most headroom (chance effects may score less).
+        let mut easy = run.clone();
+        easy.blind.as_mut().unwrap().chips = low / 2.0;
+        assert_eq!(score(&easy, &hand_order(&easy, mask, 9, false)), top);
+        // A hand meant to keep the round going, on a blind the best order would beat: it scores under it.
+        let mut go_on = run.clone();
+        go_on.blind.as_mut().unwrap().chips = (top + low) / 2.0;
+        let o = hand_order(&go_on, mask, 9, true);
+        assert!(
+            score(&go_on, &o) < (top + low) / 2.0,
+            "{:?}",
+            kinds(&go_on, &o)
+        );
     }
 
     #[test]

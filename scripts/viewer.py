@@ -445,7 +445,8 @@ class Analyst:
                 v = g.value_view(salt) if hasattr(g, "value_view") else None
                 if v:
                     out["teacher"] = {"chances": [[round(t), round(c, 3)] for t, c in v["chances"]],
-                                      "main": v["main"], "total": round(v["total"])}
+                                      "main": v["main"], "total": round(v["total"]),
+                                      "plan": list(v.get("plan", []))}
             except Exception as exc:  # noqa: BLE001 - a failed projection is shown, never fatal
                 self.fail(f"Projection failed at move {k}: {type(exc).__name__}: {exc}")
                 time.sleep(5)

@@ -76,6 +76,9 @@ pub struct Outlook {
     pub mult: f64,
     /// The hand type that scored the most points.
     pub main: HandType,
+    /// The share of hands played of each type (by `HandType as usize`): what the run's per-hand effects
+    /// are weighed by, so no single type switches them on or off.
+    pub shares: [f64; 12],
 }
 
 /// A fair copy of the run, moved on to the start of its next round (closing a pack, cashing out, leaving
@@ -171,6 +174,7 @@ pub fn outlook(run: &Run, salt: u64, samples: usize) -> Option<Outlook> {
     let mut boss = Vec::new();
     let (mut chips, mut mult, mut n) = (0.0, 0.0, 0.0);
     let mut points = [0.0f64; 12];
+    let mut counts = [0.0f64; 12];
     let boss_ahead = run.phase != Phase::Round
         && !matches!(run.slots[BlindSlot::Boss.index()], SlotState::Defeated)
         && !run.slots[..2]
@@ -191,6 +195,7 @@ pub fn outlook(run: &Run, salt: u64, samples: usize) -> Option<Outlook> {
             mult += mu;
             n += 1.0;
             points[h as usize] += sc;
+            counts[h as usize] += 1.0;
         }
         if let Some(b) = b.as_mut() {
             take_target_away(b);
@@ -202,12 +207,21 @@ pub fn outlook(run: &Run, salt: u64, samples: usize) -> Option<Outlook> {
         .copied()
         .max_by(|a, b| points[*a as usize].total_cmp(&points[*b as usize]))
         .unwrap_or(HandType::Pair);
+    let mut shares = [0.0f64; 12];
+    if n > 0.0 {
+        for (s, c) in shares.iter_mut().zip(counts) {
+            *s = c / n;
+        }
+    } else {
+        shares[main as usize] = 1.0;
+    }
     Some(Outlook {
         next,
         boss,
         chips: if n > 0.0 { chips / n } else { 10.0 },
         mult: if n > 0.0 { mult / n } else { 2.0 },
         main,
+        shares,
     })
 }
 
@@ -231,9 +245,17 @@ pub struct Flows {
     pub drain: f64,
 }
 
-/// The run's per-round flows. Rates are rough judgements of what each effect yields per round in a run
-/// like this one (its deck, its main hand), to be checked against the engine's own runs.
+/// The run's per-round flows when it plays `main` (every hand of that type).
 pub fn flows(run: &Run, main: HandType) -> Flows {
+    let mut shares = [0.0f64; 12];
+    shares[main as usize] = 1.0;
+    flows_for(run, &shares)
+}
+
+/// The run's per-round flows. Rates are rough judgements of what each effect yields per round in a run
+/// like this one (its deck, and the share of its hands of each type: `shares`), to be checked against the
+/// engine's own runs.
+pub fn flows_for(run: &Run, shares: &[f64; 12]) -> Flows {
     use JokerKind::*;
     let deck = run.playing_cards.len().max(1) as f64;
     let count = |pred: &dyn Fn(&crate::card::Card) -> bool| {
@@ -256,7 +278,8 @@ pub fn flows(run: &Run, main: HandType) -> Flows {
     let thrown = discards * 3.0;
     let held_at_end = (run.hand_size().max(0) as f64 / deck).min(1.0);
     let n_jokers = run.jokers.len() as f64;
-    let is = |h: &[HandType]| h.contains(&main);
+    // The share of hands of these types (a per-hand effect pays in proportion).
+    let share = |h: &[HandType]| h.iter().map(|&t| shares[t as usize]).sum::<f64>().min(1.0);
     let mut f = Flows::default();
     for j in &run.jokers {
         if j.debuffed {
@@ -269,28 +292,19 @@ pub fn flows(run: &Run, main: HandType) -> Flows {
             RideTheBus => f.mult += if faces < 0.12 { 2.0 } else { 0.4 },
             Supernova => f.mult += hands * 0.7,
             SquareJoker => {
-                f.chips += if is(&[HandType::TwoPair, HandType::FourOfAKind]) {
-                    4.0 * hands * 0.7
-                } else {
-                    4.0
-                }
+                let s = share(&[HandType::TwoPair, HandType::FourOfAKind]);
+                f.chips += 4.0 * (s * hands * 0.7 + (1.0 - s))
             }
             Runner => {
-                f.chips += if is(&[HandType::Straight]) {
-                    15.0 * hands * 0.7
-                } else {
-                    3.0
-                }
+                let s = share(&[HandType::Straight, HandType::StraightFlush]);
+                f.chips += 15.0 * s * hands * 0.7 + 3.0 * (1.0 - s)
             }
             WeeJoker => f.chips += 8.0 * scored * of_rank(Rank::Two) / deck,
             Hiker => f.chips += 5.0 * scored * 5.0 / deck,
             Castle => f.chips += 3.0 * thrown / 4.0,
             SpareTrousers => {
-                f.mult += if is(&[HandType::TwoPair, HandType::FullHouse]) {
-                    2.0 * hands * 0.7
-                } else {
-                    0.5
-                }
+                let s = share(&[HandType::TwoPair, HandType::FullHouse, HandType::FlushHouse]);
+                f.mult += 2.0 * s * hands * 0.7 + 0.5 * (1.0 - s)
             }
             FlashCard => f.mult += 1.0,
             RedCard => f.mult += 0.5,
@@ -343,7 +357,9 @@ pub fn flows(run: &Run, main: HandType) -> Flows {
             Hallucination => f.tarots += 0.3,
             EightBall => f.tarots += scored * of_rank(Rank::Eight) / deck / 4.0,
             Vagabond => f.tarots += 0.2,
-            Superposition => f.tarots += if is(&[HandType::Straight]) { 0.5 } else { 0.0 },
+            Superposition => {
+                f.tarots += 0.5 * share(&[HandType::Straight, HandType::StraightFlush])
+            }
             SixthSense => f.spectrals += 0.2,
             Seance => f.spectrals += 0.05,
             _ => {}
@@ -376,7 +392,13 @@ fn growth(f: &Flows, o: &Outlook, run: &Run, rounds: f64) -> f64 {
     if rounds <= 0.0 {
         return 0.0;
     }
-    let (_, _, level_chips, level_mult) = base_values(o.main);
+    // A level's chips and mult, for the hands the run plays (each type by its share).
+    let (mut level_chips, mut level_mult) = (0.0, 0.0);
+    for h in HandType::ALL {
+        let (_, _, lc, lm) = base_values(h);
+        level_chips += o.shares[h as usize] * lc;
+        level_mult += o.shares[h as usize] * lm;
+    }
     let x_now: f64 = run
         .jokers
         .iter()
@@ -446,6 +468,11 @@ fn blinds_ahead(run: &Run) -> Vec<(f64, f64, f64, bool)> {
         }
     }
     out
+}
+
+/// Shops still to come before the run's last blind (one after each blind but the winning boss).
+fn shops_left(run: &Run) -> f64 {
+    (rounds_left(run) - 1.0).max(0.0)
 }
 
 /// Rounds left in the run (to the winning boss).
@@ -523,15 +550,41 @@ fn tag_dollars(t: crate::tags::TagKind) -> f64 {
     }
 }
 
+/// A held consumable in dollars: what using it later is likely worth. Death and Cryptid always find a
+/// strong card to copy, seals are among the strongest things a card can carry, and some cards have a use
+/// the jokers pay for (Lovers' wilds with Ancient Joker, Devil's gold with Golden Ticket, Chariot's steel
+/// with Steel Joker, Mime or Baron, Magician's lucky cards with Lucky Cat...). Which cards they change, and
+/// whether a suit or a rank is worth building, is judged when they are used, by what the deck then deals.
+pub fn consumable_dollars(run: &Run, c: &crate::create::Consumable) -> f64 {
+    use crate::content::ConsumableKind::*;
+    let has = |k: JokerKind| run.count_jokers(k) > 0;
+    match c.kind {
+        Death => 6.0,
+        Cryptid => 7.0,
+        Lovers if has(JokerKind::AncientJoker) => 5.0,
+        Devil if has(JokerKind::GoldenTicket) => 6.0,
+        Chariot if has(JokerKind::SteelJoker) || has(JokerKind::Mime) || has(JokerKind::Baron) => {
+            6.0
+        }
+        Magician if has(JokerKind::LuckyCat) => 5.0,
+        Justice if has(JokerKind::GlassJoker) => 5.0,
+        Tower if has(JokerKind::StoneJoker) => 5.0,
+        HangedMan => 4.0,
+        DejaVu | Talisman | Trance => 8.0,
+        Medium => 6.0,
+        _ => match c.kind.set() {
+            ConsumableSet::Spectral => SPECTRAL,
+            _ => TAROT,
+        },
+    }
+}
+
 /// Money now, with held Tarots, Spectrals and tags counted as dollars.
 fn money_now(run: &Run) -> f64 {
     let held: f64 = run
         .consumables
         .iter()
-        .map(|c| match c.kind.set() {
-            ConsumableSet::Spectral => SPECTRAL,
-            _ => TAROT,
-        })
+        .map(|c| consumable_dollars(run, c))
         .sum();
     let tags: f64 = run.tags.iter().map(|t| tag_dollars(t.kind)).sum();
     run.money.max(0) as f64 + held + tags
@@ -631,7 +684,7 @@ pub fn breakdown(run: &Run, salt: u64) -> Option<Breakdown> {
 
 fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
     let o = outlook(run, salt, samples)?;
-    let f = flows(run, o.main);
+    let f = flows_for(run, &o.shares);
     let money = money_now(run);
     let per_round = income(run, &f);
     let mut blinds = Vec::new();
@@ -653,8 +706,17 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
         blinds.push((target, p, w));
     }
     let long = LONG_ROUNDS.min(rounds_left(run));
-    let shopping = bought(run, money + per_round * long);
-    let long_run = LONG_RUN * (mean(&o.next) + growth(&f, &o, run, long) + shopping);
+    // Money in the long run buys power only in the shops still to come: none once the winning boss is
+    // all that's left, so the last shop spends rather than dies rich.
+    let spend = (shops_left(run) / long).min(1.0);
+    let shopping = spend * bought(run, money + per_round * long);
+    let deals = if samples <= QUICK {
+        DECK_DEALS_QUICK
+    } else {
+        DECK_DEALS
+    };
+    let power = (1.0 - DECK_SHARE) * mean(&o.next) + DECK_SHARE * deck_power(run, salt, deals);
+    let long_run = LONG_RUN * (power + growth(&f, &o, run, long) + shopping);
     let mut sorted = o.next.clone();
     sorted.sort_by(f64::total_cmp);
     Some(Breakdown {
@@ -667,6 +729,364 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
         total: v + long_run,
         flows: f,
     })
+}
+
+/// What the held jokers pay for in a playing card (its rank, suit, enhancement), beyond the card's own
+/// worth: the build the jokers want. Kings with Baron, Queens with Shoot the Moon, face cards with Smiley
+/// Face or Photograph, a suit with its suit joker, Steel cards with Steel Joker or Mime, the Idol's card...
+pub fn joker_bonus(run: &Run, c: &crate::card::Card) -> f64 {
+    run.jokers
+        .iter()
+        .filter(|j| !j.debuffed)
+        .map(|j| one_joker_bonus(run, j.kind, c))
+        .sum()
+}
+
+/// What one joker pays for in a playing card (see `joker_bonus`).
+pub fn one_joker_bonus(run: &Run, kind: JokerKind, c: &crate::card::Card) -> f64 {
+    use JokerKind::*;
+    let r = c.rank.id();
+    let stone = c.enhancement == Enhancement::Stone;
+    let face = !stone && (c.rank.is_face() || run.count_jokers(Pareidolia) > 0);
+    let wild = c.enhancement == Enhancement::Wild;
+    let suit = |s: Suit| !stone && (c.suit == s || wild);
+    let ranked = |want: bool| !stone && want;
+    {
+        match kind {
+            Baron if ranked(r == 13) => 25.0,
+            ShootTheMoon if ranked(r == 12) => 15.0,
+            Triboulet if ranked(r == 12 || r == 13) => 20.0,
+            Scholar if ranked(r == 14) => 15.0,
+            WalkieTalkie if ranked(r == 10 || r == 4) => 10.0,
+            Fibonacci if ranked(matches!(r, 14 | 2 | 3 | 5 | 8)) => 8.0,
+            EvenSteven if ranked(r <= 10 && r.is_multiple_of(2)) => 6.0,
+            OddTodd if ranked(r == 14 || (r <= 9 && r % 2 == 1)) => 6.0,
+            Hack if ranked((2..=5).contains(&r)) => 10.0,
+            WeeJoker if ranked(r == 2) => 10.0,
+            EightBall if ranked(r == 8) => 4.0,
+            SixthSense if ranked(r == 6) => 4.0,
+            Cloud9 if ranked(r == 9) => 4.0,
+            Superposition if ranked(r == 14) => 3.0,
+            SmileyFace | ScaryFace | Photograph | SockAndBuskin | MidasMask | BusinessCard
+            | ReservedParking
+                if face =>
+            {
+                10.0
+            }
+            GreedyJoker | RoughGem if suit(Suit::Diamonds) => 8.0,
+            LustyJoker | Bloodstone if suit(Suit::Hearts) => 8.0,
+            WrathfulJoker | Arrowhead if suit(Suit::Spades) => 8.0,
+            GluttonousJoker | OnyxAgate if suit(Suit::Clubs) => 8.0,
+            Blackboard if suit(Suit::Spades) || suit(Suit::Clubs) => 6.0,
+            SeeingDouble if suit(Suit::Clubs) => 4.0,
+            AncientJoker if run.ancient_suit.is_some_and(suit) => 8.0,
+            TheIdol if !stone && (c.rank, c.suit) == run.idol => 15.0,
+            MailInRebate if ranked(c.rank == run.mail_rank) => 4.0,
+            Castle if suit(run.castle_suit) => 3.0,
+            StoneJoker if stone => 15.0,
+            SteelJoker if c.enhancement == Enhancement::Steel => 15.0,
+            Mime if c.enhancement == Enhancement::Steel => 10.0,
+            GoldenTicket if c.enhancement == Enhancement::Gold => 10.0,
+            GlassJoker if c.enhancement == Enhancement::Glass => 10.0,
+            LuckyCat if c.enhancement == Enhancement::Lucky => 10.0,
+            Vampire | DriversLicense if c.enhancement != Enhancement::None => 5.0,
+            _ => 0.0,
+        }
+    }
+}
+
+/// A playing card's worth to this run: its chips, what is on it (enhancement, edition, seal), and what the
+/// held jokers pay for in it. Says which cards are worth copying (Death, Cryptid, DNA), improving or
+/// keeping, and which worth losing.
+pub fn card_value(run: &Run, id: crate::state::CardId) -> f64 {
+    use crate::card::Edition;
+    let c = run.card(id);
+    let rank = match c.rank.id() {
+        14 => 11.0,
+        11..=13 => 10.0,
+        r => r as f64,
+    };
+    let enh = match c.enhancement {
+        Enhancement::Glass => 30.0,
+        Enhancement::Steel => 25.0,
+        Enhancement::Mult => 15.0,
+        Enhancement::Lucky => 12.0,
+        Enhancement::Bonus | Enhancement::Wild => 10.0,
+        Enhancement::Gold => 8.0,
+        Enhancement::Stone => 5.0,
+        Enhancement::None => 0.0,
+    };
+    let ed = match c.edition {
+        Edition::Polychrome => 30.0,
+        Edition::Holographic => 15.0,
+        Edition::Foil => 10.0,
+        _ => 0.0,
+    };
+    // Seals are among the strongest things a card can carry (a retrigger every time it scores, a Planet
+    // or a Tarot every round, money): sealed cards are the ones to copy and build a deck around.
+    let seal = match c.seal {
+        Seal::Red => 40.0,
+        Seal::Blue => 30.0,
+        Seal::Gold => 20.0,
+        Seal::Purple => 15.0,
+        Seal::None => 0.0,
+    };
+    rank + enh + ed + seal + c.perma_bonus as f64 + joker_bonus(run, c)
+}
+
+/// Hands dealt to measure the deck's power (fewer for a quick look: the first of the same deals), and the
+/// throws (discards) each may use to dig for its shape.
+pub const DECK_DEALS: u64 = 24;
+pub const DECK_DEALS_QUICK: u64 = 8;
+const DECK_THROWS: i32 = 2;
+/// The share of the long run's scoring power taken from the deck's power (the rest from the sample
+/// rounds: more deals and every card seen, against whole rounds played with all their hands).
+const DECK_SHARE: f64 = 0.5;
+
+/// The deck's power: the mean log score of the best hand in many hands dealt from the whole deck, with
+/// the run's jokers, hand levels, enhancements, editions and seals, on a plain blind. Each deal digs a
+/// little as a player would (up to two throws towards its most promising shape), and the deals take every
+/// place in a round in turn (first hand, later hands, the last), so jokers that pay later in a round
+/// count too.
+///
+/// No hand is favoured: how often the deck deals each hand, what that hand scores at its level, its
+/// retriggers and what the jokers pay for in its cards all come out of the deals. A deck of one suit deals
+/// flushes; copies of one card deal Flush Houses and Flush Fives (and The Idol pays for each copy); a
+/// rank missing breaks every straight through it; Red Seals retrigger; Steel Kings held with Baron
+/// multiply; five-card hands give retriggers and per-card jokers more to work on, a lone strong card
+/// suits high-card jokers. A few sample rounds see a changed card only now and then; these deals see the
+/// deck as built, so building it (Death, Strength, suit changes, seals, cards added or destroyed) counts as
+/// soon as it is done, by what it does to the hands dealt.
+pub fn deck_power(run: &Run, salt: u64, deals: u64) -> f64 {
+    let key = (deck_key(run) ^ deals, salt);
+    if let Some(v) = DECK_CACHE.with(|c| c.borrow().get(&key).copied()) {
+        return v;
+    }
+    let v = measure_deck(run, salt, deals);
+    DECK_CACHE.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.len() > 4096 {
+            c.clear();
+        }
+        c.insert(key, v);
+    });
+    v
+}
+
+/// A well-mixed 64-bit hash of three numbers (a deal's order of the cards).
+fn mix(a: u64, b: u64, c: u64) -> u64 {
+    let mut z = a ^ b.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ c.wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+fn measure_deck(run: &Run, salt: u64, deals: u64) -> f64 {
+    let mut sum = 0.0;
+    let n = each_deal(run, salt, deals, false, |score, _| {
+        sum += score.max(1.0).ln()
+    });
+    if n == 0 {
+        0.0
+    } else {
+        sum / n as f64
+    }
+}
+
+/// The best hand of each of `deals` hands dealt from the whole deck (as `deck_power` deals them): how often
+/// the deck deals each hand.
+pub fn dealt_hands(run: &Run, salt: u64, deals: u64) -> Vec<(HandType, f64)> {
+    let mut out = Vec::new();
+    each_deal(run, salt, deals, true, |score, kind| {
+        out.push((kind, score))
+    });
+    out
+}
+
+/// Deal `deals` hands from the whole deck on a scratch round and pass each one's best (score, hand type:
+/// worked out only when `types`) to `seen`. Returns the number of deals.
+fn each_deal(
+    run: &Run,
+    salt: u64,
+    deals: u64,
+    types: bool,
+    mut seen: impl FnMut(f64, HandType),
+) -> u64 {
+    use bm_rng::{SeedSampler, Streams};
+    let mut c = run.clone();
+    // Fresh random streams before anything is scored: the run's own are never looked at.
+    c.rng = Streams::new(&SeedSampler::new(salt ^ 0xDEC4).next_seed());
+    // The jokers in scoring order, as the teacher sets them before a hand (so where they stand now, set for
+    // a shop event or a throw, doesn't count here).
+    let order = crate::teacher::joker_order(&c);
+    c.jokers = order.iter().map(|&i| run.jokers[i].clone()).collect();
+    c.force_blind(BlindKind::Small);
+    take_target_away(&mut c);
+    c.phase = Phase::Round;
+    c.round_chips = 0.0;
+    c.discards_used_round = 0;
+    c.play.clear();
+    c.discard.clear();
+    let cards = c.playing_cards.clone();
+    for &id in &cards {
+        let k = c.card_mut(id);
+        k.face_down = false;
+        k.forced = false;
+    }
+    let size = (c.hand_size().max(1) as usize).min(cards.len());
+    if size == 0 {
+        return 0;
+    }
+    let hands = c.hands_per_round.max(1);
+    let throws = c.discards_per_round.clamp(0, DECK_THROWS);
+    let n = deals.max(1);
+    for k in 0..n {
+        // Each card's place in this deal comes from its own hash, so a deck with one card changed, added
+        // or removed deals the same hands except where that card comes in (common random numbers).
+        let mut order = cards.clone();
+        order.sort_by_cached_key(|&id| mix(salt, k, id as u64));
+        c.rng = Streams::new(&SeedSampler::new(mix(salt, k, 0x5EED)).next_seed());
+        // The deal's place in a round: hands played before it (Card Sharp, Acrobat on the last).
+        let before = (k as i32) % hands;
+        c.hands_left = hands - before;
+        c.hands_played_round = before;
+        for t in HandType::ALL {
+            c.hand_levels.get_mut(t).played_this_round = u32::from(before > 0);
+        }
+        let mut kind = HandType::HighCard;
+        let score = deal_best(&mut c, &order, size, throws, types.then_some(&mut kind));
+        seen(score, kind);
+    }
+    n
+}
+
+/// The best score from one deal: the hand dealt, then up to `throws` throws towards the most promising
+/// shape (the best hand seen along the way counts: a player who digs and misses still holds what it kept).
+fn deal_best(
+    c: &mut Run,
+    order: &[crate::state::CardId],
+    size: usize,
+    throws: i32,
+    mut kind: Option<&mut HandType>,
+) -> f64 {
+    use crate::planner::throw;
+    let mut next = size;
+    c.hand = order[..size].to_vec();
+    c.deck = order[next..].to_vec();
+    c.sort_hand();
+    let mut now = quick_best(c);
+    let mut best = now.0;
+    if let Some(k) = kind.as_deref_mut() {
+        *k = preview(c, now.1).hand;
+    }
+    for _ in 0..throws {
+        if next >= order.len() {
+            break;
+        }
+        let hand = seen(c);
+        let plan = Plan::options(&hand).first().copied().unwrap_or(Plan::Best);
+        let keep = match plan {
+            Plan::Best => now.1,
+            p => p.keep(&hand),
+        };
+        let formed = match plan {
+            Plan::Best => false,
+            Plan::Kind(_) => keep.count_ones() >= 4,
+            _ => keep.count_ones() >= 5,
+        };
+        let out = throw(c, &hand, keep);
+        if formed || out == 0 {
+            break;
+        }
+        let mut kept: Vec<_> = (0..c.hand.len())
+            .filter(|&i| out >> i & 1 == 0)
+            .map(|i| c.hand[i])
+            .collect();
+        let new = (size.saturating_sub(kept.len())).min(order.len() - next);
+        kept.extend_from_slice(&order[next..next + new]);
+        next += new;
+        c.hand = kept;
+        c.deck = order[next..].to_vec();
+        c.sort_hand();
+        now = quick_best(c);
+        if now.0 > best {
+            best = now.0;
+            if let Some(k) = kind.as_deref_mut() {
+                *k = preview(c, now.1).hand;
+            }
+        }
+    }
+    best
+}
+
+/// A key for everything the deck's power depends on: the cards, the jokers in order, hand levels, hand
+/// size and throws, this round's picks (The Idol's card, Ancient Joker's suit...), money for the jokers
+/// that count it, held Planets with Observatory.
+fn deck_key(run: &Run) -> u64 {
+    let mut h = DefaultHasher::new();
+    (
+        run.hands_per_round,
+        run.discards_per_round,
+        run.hand_size(),
+        run.joker_slots,
+        run.ante,
+    )
+        .hash(&mut h);
+    (
+        run.idol.0 as u8,
+        run.idol.1 as u8,
+        run.ancient_suit.map(|s| s as u8),
+        run.castle_suit as u8,
+        run.mail_rank as u8,
+    )
+        .hash(&mut h);
+    run.vouchers.hash(&mut h);
+    // The jokers as a set (they are dealt in scoring order, wherever they stand).
+    let mut jokers: Vec<_> = run
+        .jokers
+        .iter()
+        .map(|j| {
+            (
+                j.sort_id,
+                j.kind as u16,
+                j.edition as u8,
+                j.debuffed,
+                j.counter,
+                j.sell_cost,
+                j.mult.to_bits(),
+                j.x_mult.to_bits(),
+                j.chips.to_bits(),
+            )
+        })
+        .collect();
+    jokers.sort_unstable();
+    jokers.hash(&mut h);
+    if run.count_jokers(JokerKind::Bull) + run.count_jokers(JokerKind::Bootstraps) > 0 {
+        run.money.hash(&mut h);
+    }
+    if run.vouchers[crate::content::VoucherKind::Observatory.index()] {
+        for c in &run.consumables {
+            (c.kind as u16).hash(&mut h);
+        }
+    }
+    for &id in &run.playing_cards {
+        let c = run.card(id);
+        (
+            id,
+            c.rank as u8,
+            c.suit as u8,
+            c.enhancement as u8,
+            c.edition as u8,
+            c.seal as u8,
+            c.perma_bonus,
+        )
+            .hash(&mut h);
+    }
+    for t in HandType::ALL {
+        let i = run.hand_levels.get(t);
+        (i.level, i.played).hash(&mut h);
+    }
+    h.finish()
 }
 
 /// What cards and money gained between two positions are worth (Tarots or Spectrals made as the shop
@@ -756,6 +1176,7 @@ pub fn round_gain(start: &Run, end: &Run, reference: (f64, f64)) -> f64 {
 
 thread_local! {
     static CACHE: RefCell<HashMap<(u64, u64), f64>> = RefCell::new(HashMap::new());
+    static DECK_CACHE: RefCell<HashMap<(u64, u64), f64>> = RefCell::new(HashMap::new());
 }
 
 /// A key for everything `value` depends on (not the shop's or a pack's contents, which it never sees).
@@ -876,6 +1297,61 @@ mod tests {
         let mut lv = run.clone();
         lv.hand_levels.level_up(o.main, 3);
         assert!(value(&lv, 5) > base, "three levels of {:?}", o.main);
+    }
+
+    #[test]
+    fn the_deck_is_measured_by_the_hands_it_deals() {
+        let run = first_shop("VALUE5");
+        let base = deck_power(&run, 3, DECK_DEALS);
+        assert_eq!(
+            base,
+            deck_power(&run.clone(), 3, DECK_DEALS),
+            "the same deals each time"
+        );
+        // One suit deals flushes, with no joker asking for them.
+        let mut hearts = run.clone();
+        for id in hearts.playing_cards.clone() {
+            hearts.card_mut(id).suit = Suit::Hearts;
+        }
+        assert!(deck_power(&hearts, 3, DECK_DEALS) > base + 0.3, "one suit");
+        // Red Seals retrigger.
+        let mut red = run.clone();
+        for id in red.playing_cards.clone().into_iter().take(20) {
+            red.card_mut(id).seal = Seal::Red;
+        }
+        assert!(deck_power(&red, 3, DECK_DEALS) > base + 0.05, "Red Seals");
+        // With Baron, Kings held multiply: low cards made Kings are worth more than without him.
+        let mut baron = run.clone();
+        baron.add_joker(JokerKind::Baron);
+        let mut kings = baron.clone();
+        for id in kings.playing_cards.clone() {
+            if kings.card(id).rank.id() <= 4 {
+                kings.card_mut(id).rank = Rank::King;
+            }
+        }
+        let with_baron = deck_power(&kings, 3, DECK_DEALS) - deck_power(&baron, 3, DECK_DEALS);
+        let mut plain = run.clone();
+        for id in plain.playing_cards.clone() {
+            if plain.card(id).rank.id() <= 4 {
+                plain.card_mut(id).rank = Rank::King;
+            }
+        }
+        let without = deck_power(&plain, 3, DECK_DEALS) - base;
+        assert!(with_baron > without + 0.1, "{with_baron} vs {without}");
+        // The Idol pays for every copy of its card.
+        let mut idol = run.clone();
+        idol.add_joker(JokerKind::TheIdol);
+        let before = deck_power(&idol, 3, DECK_DEALS);
+        let (r, s) = idol.idol;
+        for id in idol.playing_cards.clone().into_iter().take(10) {
+            let c = idol.card_mut(id);
+            c.rank = r;
+            c.suit = s;
+        }
+        assert!(
+            deck_power(&idol, 3, DECK_DEALS) > before + 0.2,
+            "copies of The Idol's card"
+        );
     }
 
     #[test]
