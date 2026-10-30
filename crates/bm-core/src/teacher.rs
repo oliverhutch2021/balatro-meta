@@ -1492,7 +1492,7 @@ fn discard_order(run: &Run, mask: u64, salt: u64) -> Option<Vec<usize>> {
 /// The least gain in value worth a move (below it, estimates differ by noise).
 const MIN_GAIN: f64 = 0.01;
 /// Sample contents per pack estimate, and sample shops per reroll estimate.
-const LOOKS: u64 = 2;
+const LOOKS: u64 = 3;
 const REROLL_LOOKS: u64 = 3;
 
 /// The salt for value estimates: the same through a shop visit, so its options and its successive
@@ -1530,6 +1530,22 @@ fn buy_moves(run: &Run, i: usize) -> Vec<(MoveKind, u64)> {
         }
     }
     m
+}
+
+/// A consumable in the shop row that needs no targets, bought and used at once (judged beside buying it to
+/// hold): Hermit or Temperance for their money, Judgement or The Emperor for what they make...
+fn buy_and_use_moves(run: &Run, i: usize) -> Option<Vec<(MoveKind, u64)>> {
+    let c = match run.shop.as_ref()?.row.get(i).map(|r| &r.item)? {
+        RowItem::Consumable(c) => c,
+        _ => return None,
+    };
+    if c.kind.set() == ConsumableSet::Planet || c.kind.selection_limits().is_some() {
+        return None;
+    }
+    Some(vec![
+        (MoveKind::Buy, i as u64),
+        (MoveKind::UseConsumable, run.consumables.len() as u64),
+    ])
 }
 
 /// Held jokers that may go (not Eternal), weakest first by the fixed judgement.
@@ -1774,9 +1790,13 @@ fn target_sets(run: &Run, c: &Consumable) -> Vec<Vec<usize>> {
                 }
             }
         }
-        // Seals and copies: on the most valuable card, a main-rank card, a face card.
-        Talisman | DejaVu | Trance | Medium | Cryptid => {
-            let unsealed = |i: &usize| c.kind == Cryptid || card(*i).seal == Seal::None;
+        // Seals, editions and copies: on the most valuable card, a main-rank card, a face card.
+        Talisman | DejaVu | Trance | Medium | Cryptid | Aura => {
+            let unsealed = |i: &usize| match c.kind {
+                Cryptid => true,
+                Aura => card(*i).edition == Edition::None,
+                _ => card(*i).seal == Seal::None,
+            };
             add(first(
                 &high.iter().copied().filter(unsealed).collect::<Vec<_>>(),
                 1,
@@ -1858,7 +1878,7 @@ fn pack_options(run: &Run, quick: bool) -> Vec<Vec<(MoveKind, u64)>> {
             PackCard::Consumable(cons) => {
                 let mut sets = target_sets(run, cons);
                 if quick {
-                    sets.truncate(1);
+                    sets.truncate(2);
                 }
                 for t in sets {
                     let ids: Vec<u32> = t.iter().map(|&p| run.hand[p]).collect();
@@ -1908,12 +1928,18 @@ fn shop_buys(run: &Run, vs: u64) -> Vec<Vec<(MoveKind, u64)>> {
             RowItem::Consumable(c) => {
                 if consumable_room(run, c.edition) {
                     out.push(buy_moves(run, i));
+                    out.extend(buy_and_use_moves(run, i));
                 } else if !run.consumables.is_empty() {
                     // Full slots: sell a held one (the last) to make room.
                     let j = run.consumables.len() - 1;
                     let mut m = vec![(MoveKind::SellConsumable, j as u64)];
                     let mut after_sale = run.clone();
                     after_sale.consumables.pop();
+                    if let Some(u) = buy_and_use_moves(&after_sale, i) {
+                        let mut mu = m.clone();
+                        mu.extend(u);
+                        out.push(mu);
+                    }
                     m.extend(buy_moves(&after_sale, i));
                     out.push(m);
                 }
@@ -1929,6 +1955,9 @@ fn shop_buys(run: &Run, vs: u64) -> Vec<Vec<(MoveKind, u64)>> {
 enum Judge {
     Moves(Vec<(MoveKind, u64)>),
     Sampled(Vec<(Run, Vec<(MoveKind, u64)>)>),
+    /// A reroll: sample shops each with its best buy, and the option of rerolling again (`search`) while
+    /// the money lasts.
+    Rerolled(Vec<(Run, Vec<(MoveKind, u64)>)>, bool),
 }
 
 /// The best follow-up among `options` on a sample outcome, by the quick value: (its value, its moves; none
@@ -1948,6 +1977,46 @@ fn best_follow(
         }
     }
     best
+}
+
+/// A sample outcome's full value with its best follow-up taken (if that helps), and without it.
+fn sampled_value(c: &Run, follow: &[(MoveKind, u64)], vs: u64) -> (f64, f64) {
+    use crate::value::value;
+    let bare = value(c, vs);
+    let mut v = bare;
+    if !follow.is_empty() {
+        if let Some(d) = after(c, vs ^ 0x77, follow) {
+            v = v.max(value(&d, vs));
+        }
+    }
+    (v, bare)
+}
+
+fn here_full(run: &Run, vs: u64) -> f64 {
+    crate::value::value(run, vs)
+}
+
+/// What rerolling is worth when each sample shop either has something worth buying or is worth rerolling
+/// again (at `cost`, in value, each time), while the money lasts (`again`): the value V with
+/// V = mean over samples of max(that sample's value, V - cost). A search for something that changes the
+/// run is worth more than one look at a shop.
+fn search(best: &[f64], cost: f64, again: bool) -> f64 {
+    if best.is_empty() {
+        return f64::MIN;
+    }
+    let n = best.len() as f64;
+    let mut v = best.iter().sum::<f64>() / n;
+    if !again || cost <= 0.0 {
+        return v;
+    }
+    for _ in 0..500 {
+        let next = best.iter().map(|&b| b.max(v - cost)).sum::<f64>() / n;
+        if (next - v).abs() < 1e-12 {
+            break;
+        }
+        v = next;
+    }
+    v
 }
 
 /// Judge options in two passes: a quick value for each, then the full value for the three best that beat
@@ -1976,17 +2045,17 @@ fn choose(
                 let n = samples.len().max(1) as f64;
                 samples
                     .iter()
-                    .map(|(c, follow)| {
-                        let mut v = value(c, vs);
-                        if !follow.is_empty() {
-                            if let Some(d) = after(c, vs ^ 0x77, follow) {
-                                v = v.max(value(&d, vs));
-                            }
-                        }
-                        v
-                    })
+                    .map(|(c, follow)| sampled_value(c, follow, vs).0)
                     .sum::<f64>()
                     / n
+            }
+            Judge::Rerolled(samples, again) => {
+                let (best, bare): (Vec<f64>, Vec<f64>) = samples
+                    .iter()
+                    .map(|(c, follow)| sampled_value(c, follow, vs))
+                    .unzip();
+                let cost = here_full(run, vs) - bare.iter().sum::<f64>() / bare.len().max(1) as f64;
+                search(&best, cost, again)
             }
         };
         if v > best.0 {
@@ -2140,17 +2209,21 @@ fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     // A reroll, by sample shops and the best buy in each (when something could still be bought after it).
     if afford(run.reroll_cost) && run.spendable() - run.reroll_cost >= 3 {
         let mut samples = Vec::new();
-        let mut q = 0.0;
+        let (mut best, mut bare) = (Vec::new(), Vec::new());
         for s in 0..REROLL_LOOKS {
             if let Some(c) = after(run, vs ^ (0xA11 + s), &[(MoveKind::Reroll, 0)]) {
                 let (v, follow) = best_follow(&c, vs, shop_buys(&c, vs));
-                q += v;
+                best.push(v);
+                bare.push(crate::value::quick(&c, vs));
                 samples.push((c, follow));
             }
         }
         if !samples.is_empty() {
-            let n = samples.len() as f64;
-            options.push(((MoveKind::Reroll, 0), q / n, Judge::Sampled(samples)));
+            // Another reroll after this one, while the money allows it (its cost goes up by one).
+            let again = run.spendable() - 2 * run.reroll_cost > 3;
+            let cost = crate::value::quick(run, vs) - bare.iter().sum::<f64>() / bare.len() as f64;
+            let q = search(&best, cost, again);
+            options.push(((MoveKind::Reroll, 0), q, Judge::Rerolled(samples, again)));
         }
     }
     if let Some(m) = choose(run, vs, options) {
@@ -2377,6 +2450,17 @@ mod tests {
             before + 1,
             "DNA's copy joined the deck"
         );
+    }
+
+    #[test]
+    fn a_reroll_is_worth_its_search() {
+        // Two sample shops with nothing worth buying and one with a find: rerolling again after a miss
+        // (at 0.2 a time) makes the search worth 10.6, more than one look (10.33).
+        let best = [10.0, 10.0, 11.0];
+        assert!((search(&best, 0.2, false) - 31.0 / 3.0).abs() < 1e-9);
+        assert!((search(&best, 0.2, true) - 10.6).abs() < 1e-6);
+        // Too dear to search: no better than one look.
+        assert!((search(&best, 2.0, true) - 31.0 / 3.0).abs() < 1e-9);
     }
 
     #[test]

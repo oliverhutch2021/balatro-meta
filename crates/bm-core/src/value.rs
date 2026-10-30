@@ -561,6 +561,10 @@ fn tag_dollars(t: crate::tags::TagKind) -> f64 {
 pub fn consumable_dollars(run: &Run, c: &crate::create::Consumable) -> f64 {
     use crate::content::ConsumableKind::*;
     let has = |k: JokerKind| run.count_jokers(k) > 0;
+    // A card that pays money (Hermit, Temperance...): what the engine pays for it.
+    if let Some(d) = money_card_dollars(run, c) {
+        return d;
+    }
     match c.kind {
         Death => 6.0,
         Cryptid => 7.0,
@@ -582,6 +586,78 @@ pub fn consumable_dollars(run: &Run, c: &crate::create::Consumable) -> f64 {
     }
 }
 
+/// Dollars a round adds before the next shop, roughly (a blind's reward and a hand or two left).
+const NEXT_ROUND_DOLLARS: i64 = 5;
+
+/// A held card that needs no targets and pays money (Hermit, Temperance...), in dollars: what the engine
+/// pays for it used now, or after the next round (when Hermit has more money to double), whichever pays
+/// more, a little less for the wait. None for a card that pays nothing (or can't be used now).
+fn money_card_dollars(run: &Run, c: &crate::create::Consumable) -> Option<f64> {
+    if c.kind.selection_limits().is_some() {
+        return None;
+    }
+    // What a card pays depends on the money and the jokers' sell values (and on little else): remember it.
+    let key = {
+        let mut h = DefaultHasher::new();
+        (
+            c.kind as u16,
+            c.sort_id,
+            run.money,
+            run.phase as u8,
+            run.interest_cap,
+        )
+            .hash(&mut h);
+        for j in &run.jokers {
+            (j.sort_id, j.sell_cost, j.extra_value, j.edition as u8).hash(&mut h);
+        }
+        run.consumables.len().hash(&mut h);
+        h.finish()
+    };
+    if let Some(v) = MONEY_CARDS.with(|m| m.borrow().get(&key).copied()) {
+        return v;
+    }
+    let v = measure_money_card(run, c);
+    MONEY_CARDS.with(|m| {
+        let mut m = m.borrow_mut();
+        if m.len() > 1024 {
+            m.clear();
+        }
+        m.insert(key, v);
+    });
+    v
+}
+
+fn measure_money_card(run: &Run, c: &crate::create::Consumable) -> Option<f64> {
+    use crate::consumables::UseFrom;
+    let i = run
+        .consumables
+        .iter()
+        .position(|x| x.sort_id == c.sort_id)?;
+    let pays = |money: i64| -> Option<f64> {
+        let mut t = run.clone();
+        // Fresh streams: the run's own are never looked at.
+        t.rng = bm_rng::Streams::new("MONEYCARD");
+        t.money = money;
+        if !t.can_use_consumable(&t.consumables[i].clone(), &[], UseFrom::Slots) {
+            return None;
+        }
+        apply(&mut t, MoveKind::UseConsumable, i as u64).ok()?;
+        Some((t.money - money) as f64)
+    };
+    let now = pays(run.money)?;
+    if now <= 0.0 {
+        return None;
+    }
+    let interest = if run.interest_amount > 0 {
+        run.interest_amount * (run.money.max(0) / 5).min(run.interest_cap / 5)
+    } else {
+        0
+    };
+    let later = pays(run.money.max(0) + NEXT_ROUND_DOLLARS + interest).unwrap_or(now);
+    // Held, the money can't be spent or earn interest yet, and the card takes a slot.
+    Some((0.8 * now).max(0.75 * later))
+}
+
 /// Money now, with held Tarots, Spectrals and tags counted as dollars.
 fn money_now(run: &Run) -> f64 {
     let held: f64 = run
@@ -590,7 +666,21 @@ fn money_now(run: &Run) -> f64 {
         .map(|c| consumable_dollars(run, c))
         .sum();
     let tags: f64 = run.tags.iter().map(|t| tag_dollars(t.kind)).sum();
-    run.money.max(0) as f64 + held + tags
+    held + tags + cash(run)
+}
+
+/// What money held beyond the interest cap counts for, per dollar: it earns nothing while held, so it is
+/// worth less kept than spent on what may change the run (a pack, a reroll, a joker).
+const ABOVE_CAP: f64 = 0.5;
+
+/// Cash as the value counts it: in full up to the interest cap, each dollar beyond it at `ABOVE_CAP`.
+fn cash(run: &Run) -> f64 {
+    let m = run.money.max(0) as f64;
+    if run.interest_amount <= 0 {
+        return m;
+    }
+    let cap = run.interest_cap.max(0) as f64;
+    m.min(cap) + ABOVE_CAP * (m - cap).max(0.0)
 }
 
 /// Dollars coming in per round beyond what every round pays (blind rewards are the same whatever is
@@ -1232,6 +1322,7 @@ pub fn round_gain(start: &Run, end: &Run, reference: (f64, f64)) -> f64 {
 thread_local! {
     static CACHE: RefCell<HashMap<(u64, u64), f64>> = RefCell::new(HashMap::new());
     static DECK_CACHE: RefCell<HashMap<(u64, u64), f64>> = RefCell::new(HashMap::new());
+    static MONEY_CARDS: RefCell<HashMap<u64, Option<f64>>> = RefCell::new(HashMap::new());
 }
 
 /// A key for everything `value` depends on (not the shop's or a pack's contents, which it never sees).
@@ -1341,6 +1432,10 @@ mod tests {
         assert!(
             at(25) - at(24) > at(24) - at(23),
             "the $25 step pays $1 a round more"
+        );
+        assert!(
+            at(30) - at(25) < 0.75 * (at(25) - at(20)),
+            "money beyond the interest cap earns nothing held"
         );
     }
 
