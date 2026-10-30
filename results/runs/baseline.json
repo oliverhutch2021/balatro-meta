@@ -1,0 +1,28 @@
+{
+ "job": "baseline",
+ "commit": "4de84c0e4cd16a7957211d52c7db65173d3eef94",
+ "started": "2026-10-30T01:10:08+00:00",
+ "finished": "2026-10-30T01:30:00+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   17.7,
+   17.4,
+   12.8
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 7,
+  "greedy": 1185
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "greedy": "cargo run --release -q -p bm-core --example baseline -- --runs 1000000 --seed 1 --out results/baseline/greedy.json"
+ }
+}
