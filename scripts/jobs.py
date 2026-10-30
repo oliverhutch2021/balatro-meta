@@ -8,6 +8,9 @@ A job is a list of steps. Each finished step is recorded in .sync/state/<job>.js
 same command again skips it. A job refuses to resume on different code (another commit), because
 its checkpoints would mix two versions; pass --force to restart it on the new code.
 
+A step that measures a bot (its report goes to `--out`) adds a line to results/progress.jsonl: its numbers, the
+code it ran and its options. make watch charts these as the bot's progress.
+
 When every step has finished, the job
   1. writes a stamp to results/runs/<job>.json (commit, machine, Python, Rust, GPU, timings),
   2. commits everything under results/ on main,
@@ -35,6 +38,8 @@ SYNC = ROOT / ".sync"
 STATE = SYNC / "state"
 LOGS = SYNC / "logs"
 WATCH = SYNC / "watch"  # what the live viewer reads (make watch)
+# Every bot a job measures, one JSON line each, appended as its step finishes (make watch charts the progress).
+PROGRESS = ROOT / "results" / "progress.jsonl"
 # Big recordings live on the WSL disk, like the build: the repo's drive only holds code and results.
 DATA = Path(os.environ.get("BM_DATA", Path.home() / ".cache" / "balatro-meta" / "data"))
 PY = sys.executable
@@ -231,6 +236,49 @@ def step_command(argv: list[str]) -> list[str]:
     return [PY, "-u", *argv] if argv[0].endswith(".py") else list(argv)
 
 
+def code_of(commit: str) -> tuple[str, str]:
+    """The code a job ran: the newest commit at or before `commit` that isn't a results commit (short hash,
+    subject)."""
+    out = git("log", "-1", "--format=%h%x09%s", "--invert-grep", "--grep=^results(", commit, check=False)
+    code, _, title = out.partition("\t")
+    return code, title
+
+
+def progress_entry(job: str, step: str, argv: list[str], commit: str, root: Path = ROOT) -> dict | None:
+    """The line results/progress.jsonl gets for a step that measured a bot: what its report (`--out`) says,
+    with the code it ran and the options that matter (seeds, learned value). None for any other step."""
+    def arg(flag: str) -> str | None:
+        return argv[argv.index(flag) + 1] if flag in argv[:-1] else None
+
+    out = arg("--out")
+    if not out:
+        return None
+    try:
+        r = json.loads((root / out).read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(r, dict) or r.get("kind") != "baseline" or not r.get("runs"):
+        return None
+    code, title = code_of(commit)
+    net, weight = arg("--value-net"), arg("--value-weight")
+    w = float(weight) if weight else (1.0 if net else None)
+    bot = str(r.get("bot") or "bot")
+    name = (f"Learned value \u00d7{w:g}" if net else bot[:1].upper() + bot[1:].removesuffix(" bot"))
+    return {"time": now(), "name": name, "job": job, "step": step, "code": code, "title": title, "out": out,
+            "bot": r.get("bot"),
+            "seed": int(arg("--seed") or 1), "value_net": net, "value_weight": w,
+            "runs": r["runs"], "wins": r.get("wins"), "win_rate": r.get("win_rate"), "win_ci": r.get("win_ci"),
+            "mean_ante": r.get("mean_ante")}
+
+
+def record_progress(entry: dict | None, path: Path = PROGRESS) -> None:
+    if entry is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as fh:
+        fh.write(json.dumps(entry) + "\n")
+
+
 def run(job: str, force: bool, watch: bool = True) -> None:
     if job not in JOBS:
         raise SystemExit(f"Unknown job '{job}'. Jobs: {', '.join(JOBS)}")
@@ -296,6 +344,7 @@ def run(job: str, force: bool, watch: bool = True) -> None:
                              f"Rerun `make {job}` to resume from this step once it's fixed.")
         st["steps"][name] = {"done": True, "seconds": secs, "finished": now()}
         save_state(job, st)
+        record_progress(progress_entry(job, name, list(argv), st["commit"]))
         print(f"    done in {secs // 60} min {secs % 60} s", flush=True)
     watch_note(job, st, steps, "finished")
     finish(job, st)

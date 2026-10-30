@@ -207,6 +207,50 @@ def test_the_page_server(tmp_path):
         srv.shutdown()
 
 
+def write_report(path: Path, runs: int, wins: int, bot: str = "teacher bot", done: bool = True) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"kind": "baseline", "bot": bot, "done": done, "updated": 1793370000.0, "runs": runs,
+                                "wins": wins, "win_rate": wins / runs, "win_ci": [0.2, 0.3], "mean_ante": 6.4}))
+
+
+def test_progress_lists_every_measured_bot(tmp_path):
+    """The Progress panel's data: the job runner's log of measured bots, oldest first, plus any finished report it
+    doesn't list (a job run on code from before the log)."""
+    results = tmp_path / "results"
+    results.mkdir()
+    log = results / "progress.jsonl"
+    log.write_text(json.dumps({"time": "2026-10-30T03:06:11+00:00", "out": "results/baseline/teacher.json",
+                               "bot": "teacher bot", "runs": 500000, "wins": 8430, "win_rate": 0.01686}) + "\n"
+                   + "not json\n"
+                   + json.dumps({"time": "2026-10-30T01:30:01+00:00", "out": "results/baseline/greedy.json",
+                                 "bot": "greedy bot", "runs": 1000000, "wins": 713, "win_rate": 0.000713}) + "\n")
+    write_report(results / "baseline" / "greedy.json", 1000000, 713, bot="greedy bot")  # listed already
+    write_report(results / "value" / "record-1.json", 20000, 5200)  # not listed: added from the file
+    write_report(results / "value" / "half.json", 100, 20, done=False)  # still running: left out
+    (results / "runs").mkdir()
+    (results / "runs" / "teacher.json").write_text(json.dumps({"job": "teacher"}))  # a job stamp, not a report
+    got = viewer.read_progress(log, results)
+    assert [e["runs"] for e in got] == [1000000, 500000, 20000], "oldest first; the unlisted report last"
+    assert got[2]["out"] == "results/value/record-1.json" and got[2]["win_rate"] == 0.26
+    prog = viewer.Progress(log, results, every=0)
+    assert prog.get()["goal"] == 0.9 and len(prog.get()["entries"]) == 3
+    # Served to the page.
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), viewer.make_handler(viewer.Viewer("1"), jobs_at(tmp_path), None, None, prog))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        code, body = get(srv.server_address[1], "/api/progress")
+        assert code == 200 and [e["runs"] for e in body["entries"]] == [1000000, 500000, 20000]
+    finally:
+        srv.shutdown()
+
+
+def test_the_repo_s_progress_log_reads(tmp_path):
+    """results/progress.jsonl as committed: every line a measured bot, in order, with its code."""
+    lines = [json.loads(line) for line in (ROOT / "results" / "progress.jsonl").read_text().splitlines() if line.strip()]
+    assert len(lines) >= 5 and all(e["runs"] > 0 and 0 <= e["win_rate"] <= 1 and e["code"] for e in lines)
+    assert [e["time"] for e in lines] == sorted(e["time"] for e in lines)
+
+
 def test_projections_follow_the_run(tmp_path):
     v = viewer.Viewer("max")
     viewer.Replayer(v, jobs_at(tmp_path)).play(threading.Event(), "PROJECT2", None, "demo", "demo", "greedy bot")
@@ -289,6 +333,10 @@ def test_the_page_draws_the_run(tmp_path):
             page.wait_for_function("() => S.run && S.run.seed === 'PAGETYPI'", timeout=15000)
             page.click(".tp.best")
             page.wait_for_function("() => S.run && S.run.seed === 'PAGEBEST'", timeout=15000)
+            # Progress: every measured version, and the running job as a live point.
+            page.wait_for_function("() => document.querySelectorAll('#proglist .prow').length > 1", timeout=15000)
+            assert "Now:" in page.inner_text("#proglist") and "goal 90%" in page.inner_text("#progsub")
+            assert page.locator("#progchart circle.pulse").count() == 1
             assert not errors, errors
             browser.close()
     finally:

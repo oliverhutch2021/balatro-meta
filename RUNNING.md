@@ -145,6 +145,10 @@ Your browser opens the viewer, in the style of Monopoly Meta's:
 - **Your PC and the search so far**: runs played and runs a second (live), win rate with its 95% range,
   the average final ante, where runs end, what ends them, the jokers the bot takes and the ones in its
   wins, the hands it plays, the best runs so far (click one to watch it), and the job's latest output.
+- **Progress**: every version of the bot measured on this PC, oldest to newest, against the 90% goal: its win
+  rate with its 95% range, how far its runs got and what changed in it, with the running job's win rate so far
+  as a live point. Each job step that measures a bot adds a line to `results/progress.jsonl` as it finishes,
+  committed with the job's results.
 - **Run outlook**: for the run on screen, quick playouts by the greedy bot after every move (hidden cards
   reshuffled, fresh random streams) project where it ends and how likely it is to clear the current blind,
   and the teacher's own view of the position: its chance of beating each blind ahead, the hand it scores

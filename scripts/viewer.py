@@ -19,6 +19,9 @@ this PC only. Nothing of the game is stored anywhere or enters the repo. Without
 own cards.
 
 The viewer never touches a job: it only reads the job's files, at the lowest priority.
+
+Its Progress panel charts every bot measured on this PC (results/progress.jsonl, which the job runner adds to as
+each measuring step finishes) against the 90% goal, with the running job's win rate so far as a live point.
 """
 from __future__ import annotations
 
@@ -35,6 +38,9 @@ from watch import ROOT, WATCH, card_name, describe, fresh_seed
 
 PAGE = ROOT / "viewer" / "index.html"
 LOGS = ROOT / ".sync" / "logs"
+RESULTS = ROOT / "results"
+PROGRESS = RESULTS / "progress.jsonl"  # every bot a job measured (scripts/jobs.py appends to it)
+GOAL = 0.9  # the win rate the project is after (White Stake)
 DEFAULT_PORT = 8790
 # Seconds between replayed moves at each of the page's speeds (a played hand stays up a little longer).
 SPEEDS = {"1": 1.1, "2": 0.55, "4": 0.28, "max": 0.04}
@@ -294,6 +300,57 @@ class JobFiles:
         return None
 
 
+# ---------------------------------------------------------------------- progress
+def read_progress(path: Path = PROGRESS, results: Path = RESULTS) -> list[dict]:
+    """Every bot measured on this PC, oldest first: the lines of results/progress.jsonl (scripts/jobs.py adds one
+    as each measuring step finishes), plus any finished report in results/ that it doesn't list (a job that ran
+    on code from before the log existed)."""
+    entries: list[dict] = []
+    try:
+        for line in path.read_text().splitlines():
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(e, dict) and e.get("runs"):
+                entries.append(e)
+    except OSError:
+        pass
+    listed = {(e.get("out"), e.get("runs"), e.get("wins")) for e in entries}
+    for p in sorted(results.rglob("*.json")):
+        try:
+            r = json.loads(p.read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(r, dict) or r.get("kind") != "baseline" or not r.get("done") or not r.get("runs"):
+            continue
+        out = str(p.relative_to(results.parent)) if p.is_relative_to(results.parent) else str(p)
+        if (out, r.get("runs"), r.get("wins")) in listed:
+            continue
+        when = r.get("updated") or p.stat().st_mtime
+        entries.append({"time": time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime(float(when))), "job": None,
+                        "step": None, "code": None, "title": None, "out": out, "bot": r.get("bot"), "seed": None,
+                        "value_net": None, "value_weight": None, "runs": r.get("runs"), "wins": r.get("wins"),
+                        "win_rate": r.get("win_rate"), "win_ci": r.get("win_ci"), "mean_ante": r.get("mean_ante")})
+    entries.sort(key=lambda e: str(e.get("time") or ""))
+    return entries
+
+
+class Progress:
+    """read_progress(), read again at most every few seconds."""
+
+    def __init__(self, path: Path = PROGRESS, results: Path = RESULTS, every: float = 5.0) -> None:
+        self.path, self.results, self.every = path, results, every
+        self.lock = threading.Lock()
+        self.cache: tuple[float, list[dict]] = (0.0, [])
+
+    def get(self) -> dict:
+        with self.lock:
+            if time.time() - self.cache[0] >= self.every:
+                self.cache = (time.time(), read_progress(self.path, self.results))
+            return {"goal": GOAL, "entries": self.cache[1]}
+
+
 # ---------------------------------------------------------------------- the replay
 class Replayer:
     """Replays runs move by move at the page's speed: the newest run a job saved, or a demo run."""
@@ -460,9 +517,10 @@ class Analyst:
 LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
 
 
-def make_handler(viewer: Viewer, jobs: JobFiles, checks=None, art=None):
+def make_handler(viewer: Viewer, jobs: JobFiles, checks=None, art=None, progress: Progress | None = None):
     """`checks` is anything with a summary() (scripts/checker.py's Checker), or None; `art` is your game's
     pictures (scripts/art.py's GameArt), or None."""
+    progress = progress or Progress()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):  # keep the terminal quiet
@@ -517,6 +575,8 @@ def make_handler(viewer: Viewer, jobs: JobFiles, checks=None, art=None):
                     body["pc"] = jobs.status()
                     body["checks"] = checks.summary() if checks is not None else None
                     self.send(body)
+                elif url.path == "/api/progress":
+                    self.send(progress.get())
                 elif url.path == "/api/view":
                     run_id, n = q.get("run", [""])[0], int(q.get("n", ["0"])[0] or 0)
                     with viewer.lock:

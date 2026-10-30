@@ -51,7 +51,9 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
 - `crates/bm-py`: Python bindings (`VecEnv`, `Game`); `python/balatro_meta`.
 - Jobs (`scripts/jobs.py`, like monopoly-strategy's) leave live files in
   `.sync/watch/<job>/`: `progress.json` and `samples/` (runs to replay:
-  `best-*.json`, the job's 30 best so far, and `typical-*.json`).
+  `best-*.json`, the job's 30 best so far, and `typical-*.json`). Each step
+  that measures a bot appends a line to `results/progress.jsonl` (the
+  viewer's Progress panel; only the PC writes it after the first five).
   `make baseline` and `make teacher` are
   `crates/bm-core/examples/baseline.rs` (`--bot greedy|teacher` on all
   threads). `make teacher-data`, `make value-net` and `make
