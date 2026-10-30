@@ -9,8 +9,13 @@ says **Your turn** in the chat when a run is ready. This file holds the exact st
 - New code from Claude arrives as `.sync/claude.bundle`. `make sync` applies it, and every job runs it first.
 - The engine is Rust. Its build and the Python environment live on the WSL disk
   (`~/.cache/balatro-meta`, `~/.venvs/balatro-meta`), so the Windows drive only holds the code and results.
-- Every job can be stopped with Ctrl+C and resumed by running the same command again. Jobs run at low
-  priority, so the PC stays usable, just slower.
+- Every job can be stopped with Ctrl+C and resumed by running the same command again: the steps already done
+  are kept and the stopped step starts again, except the network's training (`make train`), which carries on
+  from its last save (every 10 minutes, and when you stop it). For a short pause, Ctrl+Z pauses the job where
+  it is and frees the PC; `fg` in the same window carries on (closing that window ends the job). Finish or
+  resume a stopped job before starting a different one: starting a job applies Claude's newest code, and a
+  job stopped on older code then has to start over (`make <job> FORCE=1`). Jobs run at low priority, so the
+  PC stays usable, just slower.
 - When a job finishes it commits its results, then writes `.sync/DONE-<job>.txt` and
   `.sync/from-pc.bundle`. Tell Claude in the chat; it reads both straight from the folder.
 - For long runs, stop the PC from sleeping: Settings > System > Power > Screen and sleep > "Never" while

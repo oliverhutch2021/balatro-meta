@@ -837,6 +837,8 @@ def ppo(a) -> dict:
             break
         model.eval()
         for t in range(T):
+            if stop["now"]:
+                break
             x = torch.from_numpy(x_np).to(device)
             legal = torch.from_numpy(guard.mask(env.legal_kinds())).to(device)
             with torch.no_grad(), autocast(torch, device):
@@ -875,6 +877,8 @@ def ppo(a) -> dict:
             buf_r[t] = torch.from_numpy(r.astype(np.float32)).to(device)
             buf_done[t] = torch.from_numpy(ended.astype(np.float32)).to(device)
             x_np = env.observe()
+        if stop["now"]:
+            break  # a part-played batch isn't learned from; the runs start afresh on the next start
         # Advantages (GAE) from the value of where the runs are now.
         with torch.no_grad(), autocast(torch, device):
             _, _, last_cls = model.encode(torch.from_numpy(x_np).to(device))

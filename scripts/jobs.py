@@ -353,11 +353,31 @@ def run(job: str, force: bool, watch: bool = True) -> None:
             proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                     text=True, bufsize=1, env={**os.environ, **live, **env})
             assert proc.stdout is not None
-            for line in proc.stdout:
-                sys.stdout.write("    " + line)
-                fh.write(line)
+            stopped = False
+            try:
+                for line in proc.stdout:
+                    sys.stdout.write("    " + line)
+                    fh.write(line)
+            except KeyboardInterrupt:
+                # Ctrl+C reached the step too: let it finish saving (the network's training saves its place), and
+                # show what it says as it stops. A second Ctrl+C stops it at once.
+                stopped = True
+                print("\n    Stopping: letting the step save its place...", flush=True)
+                try:
+                    for line in proc.stdout:
+                        sys.stdout.write("    " + line)
+                        fh.write(line)
+                    proc.wait(timeout=300)
+                except (KeyboardInterrupt, subprocess.TimeoutExpired):
+                    proc.kill()
             code = proc.wait()
         secs = round(time.time() - t0)
+        if stopped:
+            st["steps"][name] = {"done": False, "seconds": secs, "stopped": now()}
+            save_state(job, st)
+            watch_note(job, st, steps, "stopped", step=name)
+            raise SystemExit(f"Stopped during step '{name}'. Run `make {job}` to carry on: the steps already done are "
+                             "kept, and this one starts again (the network's training carries on from its last save).")
         if code != 0:
             st["steps"][name] = {"done": False, "seconds": secs, "exit_code": code}
             save_state(job, st)
