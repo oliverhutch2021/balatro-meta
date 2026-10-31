@@ -174,3 +174,12 @@ def test_without_a_rebuilt_engine_the_runs_are_still_recorded(tmp_path, monkeypa
     assert not any("couldn't follow" in s for s in said)
     r = replay_me.replay_states(replay_me.read_run(files[0])[1])
     assert r.ok, r.lost
+
+
+def test_selecting_cards_is_not_a_new_state():
+    plain = {"state": "SELECTING_HAND", "hand": {"cards": [{"id": 1, "key": "H_A", "state": []},
+                                                           {"id": 2, "key": "S_K", "state": {"debuff": True}}]}}
+    picked = json.loads(json.dumps(plain))
+    picked["hand"]["cards"][0]["state"] = {"highlight": True}
+    picked["hand"]["cards"][1]["state"] = {"debuff": True, "highlight": True}
+    assert record_me.without_highlights(picked) == record_me.without_highlights(plain)

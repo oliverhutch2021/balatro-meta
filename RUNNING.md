@@ -361,6 +361,16 @@ The best teacher (with "precise") plays the first 2,000 of the usual seeds with 
 (`scripts/jobs.py`: `TUNE`), each set run by run against its own runs from step 10:
 `results/tune/*-vs-*.json` hold the differences. A change that wins clearly goes into the formula.
 
+It found two winners: the planner's edge at 0.3 (52.05% against 49.4%, p = 0.02) and a softer turn of a
+blind's chance, sharpness 2.5 (51.6%, p = 0.07). After `make learned-3` (step 11), with no job running:
+
+```
+make teacher-tune-2
+```
+
+tries them together (and with the long run at 0.35), and each pushed further (`TUNE_2`), the same way (about 50
+minutes). What wins becomes the formula's numbers for round 4.
+
 ## Step 13: your own runs, recorded move by move (as many as you like to play)
 
 Where a good player and the bot disagree is where the bot has the most to learn. You play White Stake, Red Deck

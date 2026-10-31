@@ -194,6 +194,19 @@ def test_the_formulas_numbers_are_tuned_on_the_best_teacher_against_its_own_runs
     assert "teacher-tune" in jobs.JOBS
 
 
+def test_the_tunings_winners_are_tried_together_against_the_same_runs(tmp_path):
+    steps = jobs.tune_steps(tmp_path, jobs.TUNE_2)
+    plays = {name: argv for name, argv, *_ in steps}
+    both = jobs.TUNE_2[0]
+    assert "planner-edge=0.3" in both and "sharpness=2.5" in both
+    play = plays[both]
+    assert play[play.index("--teacher-options") + 1] == f"precise,{both}"
+    out = play[play.index("--out") + 1]
+    assert out == "results/tune/precise+planner-edge-0.3+sharpness-2.5-on-teacher-plain.json"
+    assert plays[f"compare {both}"][1:3] == ["results/value/precise-on-teacher-plain.json", out]
+    assert "teacher-tune-2" in jobs.JOBS
+
+
 def test_the_rounds_networks_together_are_tried_and_used_when_they_win_most(tmp_path):
     assert jobs.ensemble(2) == "models/value-1.bin,models/value-2.bin"
     assert jobs.ensemble(4) == ("models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,"

@@ -163,17 +163,22 @@ def ensemble_steps(n: int) -> list[tuple]:
 # with 0.42 more blinds beaten a run (not clear); the value's chance of beating the next blind is well matched to
 # what happens (60 runs: 94.3% predicted for bosses, 94.2% beaten).
 TUNE = ("above-cap=0.25", "money-scale=15", "planner-edge=0.3", "long-run=0.35", "sharpness=2.5", "sharpness=5")
+# make teacher-tune-2: on the PC (2,000 seeds against the precise teacher on rounds 1 and 2's networks, 49.4%) the
+# planner's edge at 0.3 won 52.05% (p = 0.02), sharpness 2.5 51.6% (p = 0.07), long run 0.35 50.7% (not clear), and
+# sharpness 5 lost (46.4%). Tried now: the two winners together, with the long run too, and each pushed further.
+TUNE_2 = ("planner-edge=0.3,sharpness=2.5", "planner-edge=0.3,sharpness=2.5,long-run=0.35", "planner-edge=0.2",
+          "sharpness=2")
 
 
 def file_safe(options: str) -> str:
     return options.replace(",", "+").replace("=", "-")
 
 
-def tune_steps(root: Path = ROOT) -> list[tuple]:
+def tune_steps(root: Path = ROOT, changes: tuple[str, ...] = TUNE) -> list[tuple]:
     """make teacher-tune: the best teacher there is, with the options recordings use (recording_options), tried with
-    each of the formula's numbers in TUNE changed, on the first 2,000 of the usual seeds, each set run by run against
-    the same teacher without the change. That teacher's own runs come from make teacher-precise when it has run (the
-    same seeds and options), else this job plays them first."""
+    each of the formula's numbers in TUNE changed (make teacher-tune-2: TUNE_2), on the first 2,000 of the usual
+    seeds, each set run by run against the same teacher without the change. That teacher's own runs come from make
+    teacher-precise when it has run (the same seeds and options), else this job plays them first."""
     best = best_learned(root)
     net_args, stem = (["--value-net", best[0], "--value-weight", best[1]], Path(best[2]).stem) if best else \
         ([], "teacher-plain")
@@ -187,7 +192,7 @@ def tune_steps(root: Path = ROOT) -> list[tuple]:
     if base_opts and not (root / control).exists():
         steps.append((base_opts, [*BASELINE, "--bot", "teacher", *net_args, "--teacher-options", base_opts,
                                   "--runs", "2000", "--seed", "1", "--out", control]))
-    for change in TUNE:
+    for change in changes:
         opts = f"{base_opts},{change}" if base_opts else change
         out = f"results/tune/{file_safe(opts)}-on-{stem}.json"
         steps.append((change, [*BASELINE, "--bot", "teacher", *net_args, "--teacher-options", opts, "--runs", "2000",
@@ -346,6 +351,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-precise": option_trial("precise"),
     # The value formula's numbers, each changed in turn on the best teacher there is (tune_steps, TUNE): about an hour.
     "teacher-tune": tune_steps(),
+    "teacher-tune-2": tune_steps(changes=TUNE_2),
 }
 
 

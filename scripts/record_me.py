@@ -61,13 +61,16 @@ def speed_value(s: str | None) -> float:
 
 
 def without_highlights(gs: dict) -> dict:
-    """The state with the cards' selected marks left out (selecting cards is not a move)."""
+    """The state with the cards' selected marks left out (selecting cards is not a move). A card's empty state
+    comes as [] from the game, so one left empty here is written the same way."""
     out = json.loads(json.dumps(gs))
     for name in ("hand", "jokers", "consumables", "pack"):
         a = out.get(name)
         for c in (a.get("cards") or []) if isinstance(a, dict) else []:
             if isinstance(c.get("state"), dict):
                 c["state"].pop("highlight", None)
+                if not c["state"]:
+                    c["state"] = []
     return out
 
 
