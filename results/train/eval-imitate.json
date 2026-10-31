@@ -1,0 +1,931 @@
+{
+ "kind": "baseline",
+ "bot": "network",
+ "deck": "Red Deck",
+ "stake": "White Stake",
+ "done": true,
+ "updated": 1793444599.9059935,
+ "elapsed": 31.286004066467285,
+ "threads": 0,
+ "target": 2000,
+ "runs": 2000,
+ "rate": 63.926348527954836,
+ "moves": 414262,
+ "wins": 182,
+ "win_rate": 0.091,
+ "win_ci": [
+  0.07916677708241403,
+  0.10440142511480556
+ ],
+ "mean_ante": 4.7735,
+ "ante_hist": [
+  180,
+  184,
+  217,
+  378,
+  355,
+  230,
+  149,
+  125,
+  182
+ ],
+ "per_run": {
+  "moves": 205.266,
+  "jokers_bought": 7.111,
+  "rerolls": 5.425,
+  "skips": 0.0,
+  "packs": 11.155,
+  "vouchers": 0.6755,
+  "money_at_end": 29.844,
+  "refused": 1.865
+ },
+ "history": [],
+ "model": "models/policy/imitate.pt",
+ "seed_base": 1,
+ "greedy": true,
+ "run_stages": "LGFBXKYEYOXOXEFODIQYDTOLOYEFHFJELFJJOCBCOYKFYKYLGXLUHMLDINLCOBULLLURIOQUSOLKRTQUPLNDFURTYXOXHNKXQFNLGSAIXRLOOUFKJLORXIAIMLOUXMBIHUXNULCDIFELNXOTYLYGYXSCXOYXGQBLYOIYOXXFUIOYDONLNXNLXOLCNLBIJBYOLOONNIYJNFYRHLRMLCOOIMKRNROCFXLLLOJOQHKYDXOLILLXCIYNYOPIRTTOLFOQKORSIOOGPIMIOLLHCOMOTLLHFLRFKHWQLLNBOXLUHFOKKLUYIOLYOILXFDYORTLFIXOIXOCULOYCOEOXRROIONXLXUNXYRXLLXQXLMRKLOYLULORQFBLLLFYIEXFYPMNYYCLQIILXOLCHTRQIOLXCNCOQALLIKRYOFYLOYBCIOOICOODLXUFLISFYCKYDXENIRRBUNHBRIHURDXRUOUONNNLOYKFLNKYOLYFRLGXOLULKTNKIHFYRROCRLURXRDYKBUOXFBURLCCLYLLRONXHOLFOYYYYXYYNIMNNYKKLYIOJAQGLJKKXLOMRGBYDNBOEBXRUXYITJMYYDYEOORMFLOOYOTLORIFKLHIFXOOPGORILREFCOLPEXBGKQYOIOXUPQYPRFCHILGYAUFGTIFDACYYCUUUPIKBUDPRXRFUSCLBFFQOUMIHXBORROXYRILYGUCLNLBKXLFRNJRMCYIRFWFKRYWYKLLYRQNXCYILRLKRUNIDIDSXLNUGSYRLLKXAIBEQRBKNXULOQJNYQLOULXYIYLFIIHULDLYLUFLSIBLMMIOXIYYXYRQOYNOXUYLLYAIYOJMEOALYFRPYPWRULNLDOILQNOLIIOOYIBREOGTQTGLODWUUFYOFUOQOYIKTTOPJCJJFRCRQCGKBXXABIFNCXSPTFRXRXNOCCEPYROECMXCFYDIBRIAVRLYRIUUOOEBSNJOIJBEQBUILNFQIGCYTUEONLMLIIKEKLROIRUGCORBMOKYYLHBAKOLLCROONRIQILOXLBKLNIYIQLCELOSJFCLXOOKOOQTJCIKARNMSGFINCFOLYEIFFFSDRXOOCUBEMBOOXQXOCINMLXIFELYRMCRYROFLLOFLELOOYLCOXKYNIOMIYORXOTXCIQFOUROUXJXYLCEYLLFUYKIQRUMOYBOXKQCLXKOVLRSQQKLCOQKYLLXBOTRIKKOYIDABFOHYLYTGKLRYOYLMCTYFUULKLCHYYYRROYOQQNALIYRRBOBOOSYCXRGCYIKLNEUYRIIIFNOBNBLLOORYKJXLILTOOUGLELOGYEDTUFLRPRYBCYJDXJIXYULLOFFLRIPIXKXFBYRYNKFRRJRFKRLULYFOOKOYLKILCLMOJWBOJLCUQRBYBIUQFYKDHUNXOULERRNURNITLMNOINQORHIXLTNJXXRYFNLMOKJUIBNLFIRRRCKJLXFITQYRKDRKQLXFYBYYULNRBIOXUCCLPKNOFKQCOFJKYLLMFRCUOOOOLAHYVLOLONERYKOODYIAJJOKRYYOEKBTGRJLRXFJFAOCRYCULYFPJYOCOHPEKLRHLCTHKTROLYLQLMKIRHNMOXGLYXUYBLBIYYLCQIRXLIHBLLFLEBNYHPLFYLOINIYUGJCDTILIOGPCNRCLGKISNEQIDLOYIFXOCXYHRYUYLUTIACOCRIRIYGXUQXJRUKKXIRTOURNKQFLIHKYERLFOYJLFIIHRCDGGUMNOYOYRTQXEMLNXPLLOYOCYYOFKBYKOLYLORNBOFIOLOJBOBQOULYRLCHJEYIBMCHRRICEYYNCUOOANXLPNYRKRFLORNDJKELOYDRYWBEHDYOCSLUGRNPKNUKUTYLXKRBHLYYLOJBOKQOIKREYGRADBQKHOLLGLLLOXBILIMRDIFULOOKONXKUQCRLXBGCLOYAOLFLFLDJUUFJLFAIOMROKNYKTCHRUXCYYKBBIFUOJNFLNFXILIYVWHIPHORLORERULYL",
+ "refused_moves": 3730,
+ "blinds_beaten_per_run": 12.635,
+ "lost_to": [
+  [
+   "Big Blind",
+   444
+  ],
+  [
+   "Small Blind",
+   231
+  ],
+  [
+   "The Mouth",
+   150
+  ],
+  [
+   "The Wall",
+   113
+  ],
+  [
+   "The Eye",
+   78
+  ],
+  [
+   "The Needle",
+   69
+  ],
+  [
+   "The Pillar",
+   57
+  ],
+  [
+   "The Fish",
+   52
+  ],
+  [
+   "The Mark",
+   47
+  ],
+  [
+   "The Goad",
+   46
+  ],
+  [
+   "The Flint",
+   42
+  ],
+  [
+   "Violet Vessel",
+   42
+  ]
+ ],
+ "hands_played": [
+  [
+   "High Card",
+   9264
+  ],
+  [
+   "Pair",
+   13110
+  ],
+  [
+   "Two Pair",
+   7472
+  ],
+  [
+   "Three of a Kind",
+   2539
+  ],
+  [
+   "Straight",
+   8544
+  ],
+  [
+   "Flush",
+   4445
+  ],
+  [
+   "Full House",
+   7270
+  ],
+  [
+   "Four of a Kind",
+   1180
+  ],
+  [
+   "Straight Flush",
+   208
+  ],
+  [
+   "Five of a Kind",
+   45
+  ],
+  [
+   "Flush House",
+   2
+  ]
+ ],
+ "jokers_bought": [
+  [
+   "Supernova",
+   512,
+   0.256
+  ],
+  [
+   "Runner",
+   457,
+   0.2285
+  ],
+  [
+   "Abstract Joker",
+   424,
+   0.212
+  ],
+  [
+   "Mail-In Rebate",
+   362,
+   0.181
+  ],
+  [
+   "Swashbuckler",
+   345,
+   0.1725
+  ],
+  [
+   "Square Joker",
+   329,
+   0.1645
+  ],
+  [
+   "Hanging Chad",
+   318,
+   0.159
+  ],
+  [
+   "Misprint",
+   318,
+   0.159
+  ],
+  [
+   "Green Joker",
+   311,
+   0.1555
+  ],
+  [
+   "Raised Fist",
+   293,
+   0.1465
+  ],
+  [
+   "Half Joker",
+   274,
+   0.137
+  ],
+  [
+   "Fortune Teller",
+   271,
+   0.1355
+  ],
+  [
+   "Golden Joker",
+   250,
+   0.125
+  ],
+  [
+   "Red Card",
+   244,
+   0.122
+  ],
+  [
+   "Smiley Face",
+   227,
+   0.1135
+  ],
+  [
+   "Card Sharp",
+   222,
+   0.111
+  ],
+  [
+   "Blue Joker",
+   221,
+   0.1105
+  ],
+  [
+   "Spare Trousers",
+   216,
+   0.108
+  ],
+  [
+   "Constellation",
+   213,
+   0.1065
+  ],
+  [
+   "Delayed Gratification",
+   213,
+   0.1065
+  ]
+ ],
+ "jokers_held_at_end": [
+  [
+   "Supernova",
+   443,
+   0.2215
+  ],
+  [
+   "Runner",
+   408,
+   0.204
+  ],
+  [
+   "Abstract Joker",
+   316,
+   0.158
+  ],
+  [
+   "Square Joker",
+   269,
+   0.1345
+  ],
+  [
+   "Green Joker",
+   255,
+   0.1275
+  ],
+  [
+   "Swashbuckler",
+   219,
+   0.1095
+  ],
+  [
+   "Hanging Chad",
+   213,
+   0.1065
+  ],
+  [
+   "Card Sharp",
+   205,
+   0.1025
+  ],
+  [
+   "Constellation",
+   204,
+   0.102
+  ],
+  [
+   "Half Joker",
+   197,
+   0.0985
+  ],
+  [
+   "Madness",
+   197,
+   0.0985
+  ],
+  [
+   "Spare Trousers",
+   196,
+   0.098
+  ],
+  [
+   "Hologram",
+   183,
+   0.0915
+  ],
+  [
+   "Red Card",
+   180,
+   0.09
+  ],
+  [
+   "Flash Card",
+   171,
+   0.0855
+  ],
+  [
+   "Fortune Teller",
+   163,
+   0.0815
+  ],
+  [
+   "Castle",
+   162,
+   0.081
+  ],
+  [
+   "Mail-In Rebate",
+   149,
+   0.0745
+  ],
+  [
+   "Vampire",
+   148,
+   0.074
+  ],
+  [
+   "Misprint",
+   146,
+   0.073
+  ]
+ ],
+ "jokers_in_wins": [
+  [
+   "Runner",
+   57,
+   0.313187
+  ],
+  [
+   "Supernova",
+   50,
+   0.274725
+  ],
+  [
+   "Constellation",
+   44,
+   0.241758
+  ],
+  [
+   "Hologram",
+   42,
+   0.230769
+  ],
+  [
+   "Card Sharp",
+   41,
+   0.225275
+  ],
+  [
+   "Abstract Joker",
+   39,
+   0.214286
+  ],
+  [
+   "Bootstraps",
+   35,
+   0.192308
+  ],
+  [
+   "Spare Trousers",
+   34,
+   0.186813
+  ],
+  [
+   "Stuntman",
+   33,
+   0.181319
+  ],
+  [
+   "Castle",
+   29,
+   0.159341
+  ],
+  [
+   "Baseball Card",
+   27,
+   0.148352
+  ],
+  [
+   "Red Card",
+   23,
+   0.126374
+  ],
+  [
+   "The Duo",
+   23,
+   0.126374
+  ],
+  [
+   "Swashbuckler",
+   22,
+   0.120879
+  ],
+  [
+   "Bull",
+   21,
+   0.115385
+  ],
+  [
+   "Blueprint",
+   20,
+   0.10989
+  ],
+  [
+   "Flash Card",
+   19,
+   0.104396
+  ],
+  [
+   "Seeing Double",
+   19,
+   0.104396
+  ],
+  [
+   "Vampire",
+   19,
+   0.104396
+  ],
+  [
+   "Brainstorm",
+   14,
+   0.076923
+  ]
+ ],
+ "now": {
+  "runs": 1000,
+  "wins": 182,
+  "win_rate": 0.182,
+  "win_ci": [
+   0.15931686315695637,
+   0.20711704434398803
+  ],
+  "mean_ante": 6.184,
+  "ante_hist": [
+   6,
+   27,
+   63,
+   141,
+   148,
+   163,
+   145,
+   125,
+   182
+  ],
+  "blinds_beaten_per_run": 16.738,
+  "lost_to": [
+   [
+    "Big Blind",
+    185
+   ],
+   [
+    "Small Blind",
+    79
+   ],
+   [
+    "The Wall",
+    65
+   ],
+   [
+    "The Mouth",
+    61
+   ],
+   [
+    "The Needle",
+    43
+   ],
+   [
+    "Violet Vessel",
+    42
+   ],
+   [
+    "The Eye",
+    32
+   ],
+   [
+    "Crimson Heart",
+    26
+   ],
+   [
+    "The Goad",
+    21
+   ],
+   [
+    "The Pillar",
+    21
+   ],
+   [
+    "The Fish",
+    20
+   ],
+   [
+    "Verdant Leaf",
+    20
+   ]
+  ],
+  "hands_played": [
+   [
+    "High Card",
+    6099
+   ],
+   [
+    "Pair",
+    8849
+   ],
+   [
+    "Two Pair",
+    4792
+   ],
+   [
+    "Three of a Kind",
+    1755
+   ],
+   [
+    "Straight",
+    5582
+   ],
+   [
+    "Flush",
+    2430
+   ],
+   [
+    "Full House",
+    4730
+   ],
+   [
+    "Four of a Kind",
+    829
+   ],
+   [
+    "Straight Flush",
+    105
+   ],
+   [
+    "Five of a Kind",
+    37
+   ],
+   [
+    "Flush House",
+    2
+   ]
+  ],
+  "jokers_bought": [
+   [
+    "Supernova",
+    309,
+    0.309
+   ],
+   [
+    "Runner",
+    285,
+    0.285
+   ],
+   [
+    "Abstract Joker",
+    283,
+    0.283
+   ],
+   [
+    "Mail-In Rebate",
+    221,
+    0.221
+   ],
+   [
+    "Swashbuckler",
+    213,
+    0.213
+   ],
+   [
+    "Misprint",
+    198,
+    0.198
+   ],
+   [
+    "Hanging Chad",
+    188,
+    0.188
+   ],
+   [
+    "Half Joker",
+    178,
+    0.178
+   ],
+   [
+    "Raised Fist",
+    172,
+    0.172
+   ],
+   [
+    "Card Sharp",
+    160,
+    0.16
+   ],
+   [
+    "Green Joker",
+    160,
+    0.16
+   ],
+   [
+    "Square Joker",
+    155,
+    0.155
+   ],
+   [
+    "Fortune Teller",
+    154,
+    0.154
+   ],
+   [
+    "Golden Joker",
+    154,
+    0.154
+   ],
+   [
+    "Spare Trousers",
+    149,
+    0.149
+   ],
+   [
+    "Red Card",
+    137,
+    0.137
+   ],
+   [
+    "Constellation",
+    132,
+    0.132
+   ],
+   [
+    "Hologram",
+    130,
+    0.13
+   ],
+   [
+    "Sly Joker",
+    130,
+    0.13
+   ],
+   [
+    "Blue Joker",
+    128,
+    0.128
+   ]
+  ],
+  "jokers_held_at_end": [
+   [
+    "Supernova",
+    253,
+    0.253
+   ],
+   [
+    "Runner",
+    247,
+    0.247
+   ],
+   [
+    "Abstract Joker",
+    200,
+    0.2
+   ],
+   [
+    "Card Sharp",
+    149,
+    0.149
+   ],
+   [
+    "Spare Trousers",
+    135,
+    0.135
+   ],
+   [
+    "Constellation",
+    127,
+    0.127
+   ],
+   [
+    "Hologram",
+    121,
+    0.121
+   ],
+   [
+    "Swashbuckler",
+    120,
+    0.12
+   ],
+   [
+    "Green Joker",
+    115,
+    0.115
+   ],
+   [
+    "Half Joker",
+    115,
+    0.115
+   ],
+   [
+    "Hanging Chad",
+    112,
+    0.112
+   ],
+   [
+    "Castle",
+    107,
+    0.107
+   ],
+   [
+    "Vampire",
+    107,
+    0.107
+   ],
+   [
+    "Square Joker",
+    106,
+    0.106
+   ],
+   [
+    "Bootstraps",
+    105,
+    0.105
+   ],
+   [
+    "Madness",
+    96,
+    0.096
+   ],
+   [
+    "Seeing Double",
+    95,
+    0.095
+   ],
+   [
+    "Red Card",
+    93,
+    0.093
+   ],
+   [
+    "Flash Card",
+    92,
+    0.092
+   ],
+   [
+    "Stuntman",
+    90,
+    0.09
+   ]
+  ],
+  "jokers_in_wins": [
+   [
+    "Runner",
+    57,
+    0.313187
+   ],
+   [
+    "Supernova",
+    50,
+    0.274725
+   ],
+   [
+    "Constellation",
+    44,
+    0.241758
+   ],
+   [
+    "Hologram",
+    42,
+    0.230769
+   ],
+   [
+    "Card Sharp",
+    41,
+    0.225275
+   ],
+   [
+    "Abstract Joker",
+    39,
+    0.214286
+   ],
+   [
+    "Bootstraps",
+    35,
+    0.192308
+   ],
+   [
+    "Spare Trousers",
+    34,
+    0.186813
+   ],
+   [
+    "Stuntman",
+    33,
+    0.181319
+   ],
+   [
+    "Castle",
+    29,
+    0.159341
+   ],
+   [
+    "Baseball Card",
+    27,
+    0.148352
+   ],
+   [
+    "Red Card",
+    23,
+    0.126374
+   ],
+   [
+    "The Duo",
+    23,
+    0.126374
+   ],
+   [
+    "Swashbuckler",
+    22,
+    0.120879
+   ],
+   [
+    "Bull",
+    21,
+    0.115385
+   ],
+   [
+    "Blueprint",
+    20,
+    0.10989
+   ],
+   [
+    "Flash Card",
+    19,
+    0.104396
+   ],
+   [
+    "Seeing Double",
+    19,
+    0.104396
+   ],
+   [
+    "Vampire",
+    19,
+    0.104396
+   ],
+   [
+    "Brainstorm",
+    14,
+    0.076923
+   ]
+  ],
+  "per_run": {
+   "moves": 279.645,
+   "jokers_bought": 8.492,
+   "rerolls": 8.086,
+   "skips": 0.0,
+   "packs": 15.186,
+   "vouchers": 0.987,
+   "money_at_end": 39.783,
+   "refused": 2.855
+  },
+  "label": "last 1,000 runs"
+ },
+ "block_fields": [
+  "end_runs",
+  "end_seconds",
+  "runs",
+  "wins",
+  "ante",
+  "moves",
+  "refused",
+  "jokers",
+  "packs",
+  "rerolls",
+  "money",
+  "cut"
+ ],
+ "block_runs": 1000,
+ "blocks": [
+  [
+   1000,
+   10.9,
+   1000,
+   0,
+   3363,
+   130887,
+   875,
+   5730,
+   7124,
+   2764,
+   19905,
+   0
+  ],
+  [
+   2000,
+   31.3,
+   1000,
+   182,
+   6184,
+   279645,
+   2855,
+   8492,
+   15186,
+   8086,
+   39783,
+   0
+  ]
+ ]
+}

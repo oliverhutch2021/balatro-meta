@@ -1,0 +1,969 @@
+{
+ "kind": "baseline",
+ "bot": "network",
+ "deck": "Red Deck",
+ "stake": "White Stake",
+ "done": true,
+ "updated": 1793453338.846782,
+ "elapsed": 67.02072405815125,
+ "threads": 0,
+ "target": 5000,
+ "runs": 5000,
+ "rate": 74.60378965261098,
+ "moves": 1100792,
+ "wins": 1142,
+ "win_rate": 0.2284,
+ "win_ci": [
+  0.2169748057851832,
+  0.24024222522555067
+ ],
+ "mean_ante": 6.2454,
+ "ante_hist": [
+  288,
+  142,
+  181,
+  405,
+  773,
+  748,
+  707,
+  614,
+  1142
+ ],
+ "per_run": {
+  "moves": 219.8584,
+  "jokers_bought": 9.3446,
+  "rerolls": 6.87,
+  "skips": 0.0,
+  "packs": 7.5152,
+  "vouchers": 1.1244,
+  "money_at_end": 67.5468,
+  "refused": 0.3
+ },
+ "history": [],
+ "model": "models/policy/best.pt",
+ "seed_base": 1,
+ "greedy": true,
+ "run_stages": "UOYLXYYRYUDUXFYYLXRYDYYIYYIQLYYYOBLUKYCRXCOYREYXFXXURLYYYROCYLILULXYXROLUULYRPOOUROQOAOUYXOOUUFXERRIVORUXOXOIYOUYOYUXXLRYRYYUXONFUYURXRYYXWYULYAXYRORYXRXUEXUYOYRRRYUXBIIYYUXROYURQLYYOUROBIYVRLOCXUYUXROUXYUWXORQOOOYLXLYTBRUYXLYRUPRMYRUUOOXFXRCYRXLUYYWBXLYUAUYRIIWAYXTRUYXRRURIMTYKCRLOXQYORYULXOYLTRULOLXOURCCRUAJLQOYNOCOOUXLLYBYUYRYOYBHOXOYUYOQOYUXRTYYYQYUXEUYMLRYRXYXORTIUMURYNEXRWRLOUUAYYYOXUAOQKRYXTXRRURYYXXOLYXYRMXYLOUXXOANXLYLDUYXOMOYBYLKYOYYOLYYROXOUMNXTILRYXKUSYUKLLXODLUYRLTRIYFUFOLULLURUXUASQUORGUUYYYXYLRUOQOCIOOXUUXUXUXYYYUYXOYYYFXQOYOXTORULYLIUQLQLXHYYXAYOPXUXHUURBTWXYAUOOYNYYXYUORAYYOUUYRXXOXRYFOLXOOOYLOYRCQYRLRYYRRORYLUYRXYUIXYYOULYUTROOROYLYIOYRXYFYULQRTQIUERYRXLUXBRUYUUAUYILMNDOXOXIYXXQOYFUUROLYNDLQBYOXROORXWYOUEYYLLYYPRYFNLOYRORRQRXUJURYYBOUYXOYXRYIVYRYROPARRUUXRYUYURLXYXOREEUYXYEFLRAUORYKYYYOORIOYOQSUJYXOUOYYYYLIYLYOLOYAIRCXYYURUYWCLIXLUYOOIUYYASUUULYLTYIXIUUIUIYYFXUYUYYUBAXXROTQVUSYYXIYOYQTXTLYXYLQCYRURURXUCXYYOXOOLYYYYROCYRYRUIYBXUIUIYRXYYOOYYXXFKLFOIRQYXYUUYLYLXUTIRYYIOOUNYUUURLRLUAYXAUORUYIORYRRRROLFOYYUUOYOYOOYYXUOFBMCOUUSOOXOUXYFYLRYOYYRRYYNYXXOUFFLYYOUUAYUXWLOXYORLYCXTRXBUUOLYYQUTXYYUBHORRRYRUUYNRYRAORRYRYRUXYYRPYRDYURQUYUIYCUYXIUUYYLXUCFLUYRIYOOCRXAYULRIUXLYOROORCOUOCYURLORYOUYROXLXYYUFUYXYYURLXYYUOURAYYYYUYXXOYROQQKOYURRURLYXYXOYYURRUOOIOBYCXYYGAOXUYLOORRYRRDULXTBSYUUOQRBXGYRYCRLTVYLXNORYOUXUYXLULUDXFYUXNCLXUOYULUUROURUYQXRXXRUORUYUAUUXRAKLLRLYYBRUYYYXYOYYOCRUKOXLYCUQYORUFUOAOYYYRXLOXXLUCLOXBWOYLRLORRNDOXYXLTYYUOOYYYUOOYYYUYRRYBIIYURUCICIYYULOXYARSRYSXBKLCYOXKXYBQYYOOYORYROIXLOMSYOOOOYRFOXYKOXFRYTUYUOROYRYYXROOYYUULYSOOYXLXOULKLYYXCTYRLYOXYUXOYUNRYOLRXOOYXULOORLYYTORLYBRYCXYYTLXYYXIXXLFNXRYYYOYXOYCILKYUMOCLUULXYRLUYULLXRUOYPLUCUOUQYXYROXRQYYQYOUYYROIUTOUYYEXYRRQRLFFERRUXYRXBOYRUATGROLYXXLRVBYYYUMOUUYOYXROLOOOLOYOXYCYULLYYUYPYUYKOJRNFSIYYRXYUULBBYXLYXIUOYXISYUFRYYRROYRROYRRRDXOTXRURSOOKROUYOUYOXOROIUQARIYRUBRXYLXKLYNCYLROIBXWXCJUOYGPYFYCLOYRLUYUYRYYLFROROUOTYSXRCORXUYYXRIXULOYRYLOXRWYYUYYUGAXRYXTORXYYWIUFBRXUNYBXRYLXYRYUIOOPUYRQUYYXUYUNRRRRYYYOYOFUXYXYOYLRUBORARRNTROYIOUXYUFIRYULHYOOYOYLRURXYYYYXOYYYXXYYOFFINNGXOXYYYXRUXXYUYLURYUBNCYLAXRXYNARXYRYYXKROXLMUUYURAOOURRYTORUNYCXOBYYXYUWXRRIXUUTLNUUYRXENOUONXYJIYFRRFYXLURCYXBYYYXFKYUBIYYYOCYYOXLYCTCRYXYBOYXYXXRXXYRRYYRRABCURSXINQOUURIOUOCXFOLIBUULORROYRYROUAYXXRLTTYYOYUOYOYTUUROXYLXOYWSNROXFUYUORYYXYYYCORYUXRXNUORYOUBSUFUDRUYUORFNQRYLYYAYJLRRURKYYQYIUUXIYUYNOROOXYUCYHRROBOOXUYURYRXTUXXYXXIUYMXYXYROYOOAYBOYYUYXRITUUYMLIROIYOLLCYOYLQRYYROIXUXUNBYOXLBYRROUQSRYRAORYIOXLXUUYORYPRCLIRUYHCYXROLOOYOYIYOQRRQUYULUYOXXBLYOOYQJJYXYQCOORQULYORMLXYUTYAUSOOUOFXORXUOFXQULUOYUYOUUOXOXLBCORYCYRYLXROOLYXLCYUQUISYYIXRQLYRRKROYCXYNCYYUDXXXXCYRXCYROLYQYXYLOOYXYYRROYQYOUOUAYLYOURCXFLYURLUAUOQOLXXORNOUTYJRYALXTYARPYYNOILYBUYKYXRLXIOYOCNXXEYUYYOYQLYXRUOOUYCXBYXUXUYYLXXBGFXUYYXLRRCXRLYYYYRLXUJOXYBUXIUXROBUYOREXYXOOLFRRYLUUURYNAOYUYYRXROXRUYLNOLRORLYTYYYYUUYLYBCYRYLCOTRIURYYNCORLWMQUXUNLYLLUROOOLRYRUXOAOXYBYRUYXLUYUUYUXXYNXYYUYYORFOXRRWRYYOYLRFXYBUYYOOYURYGCROXRUOAXXYOTFDIYRUBRYFMTYXRQYRCIRYEAQYTYXKXOYIOQULRYXYOYRRIUYYBYOXXRQCORYXYJOXLYXYYXUYUUSYYYYFLUUYYYDYYXXUOYYIROUYYULYSUOSRIORYUOXXORYOYYCLRQFOXAUILOILYRLORYHUXOUYOIQLYLYRYRYUYOUOOYROYYUYPUOLYLUNYUYRIYEURYYOYORULLRUORQXRLYRYUYFRRUREOYYXYYRRRKPXYOXPTCXNLUTYXYORLFYUCLYYYIRIRQXOYXYOYLRBYIRYIORDRULLYBFFXLXNBQYXUSXROURXXXYYLUFUEYUUBNYXCXRCUYCCKOFRLOQUIUYTRLTBOOGYYRXCXYAYUXRLLXLOTYYAXXYYURRYIQYFXXUYAUIXYXYNCLXXUOYICRYLKUFLIRLRXBNOAROCYOYLUOORJONLHYOITUOXUYOBRIURROYYFTYMYVOUXURQYNYYRUROXLATUULOYUROIYOLOOXAYUYXXYYYRHYYLIXCLYOOYECOLUOJIYUJYOXWYXRYYRLDOROIXOXXYOYOYRNYYUOYNXRXORUUUXYFONLOYOLYYURXIRUOOXRXQMXROOOLLYRROUUXYCCLYRPROYUUYLOLRIYXYRWUORORYRRYUQOUYHONRRUYYFYOOARXFYUYXUBYRYQXQOYYQURSYYROYYLOYIXRHORTUADYXYYRYQYYXOXQLUYRQXXBOOIYKYUXXIYRSLRXYXOLXQRRRYYXYUFURRCOOLRUYYOTYNRLRXMOOOYUOYOIOXYYYYXXYOROLOYMYXQYROOUXONARCKUAKUURXIYYYXYUILUYUYCYRYUXYYRUUBRUGBYYYURNOOTRNYRXXAYXXYLYXYFPYUYYYLLRRCXFXXORYQOYYIFIOIRYXORYQYCNYUKYTYOUORLRYRUYRSTYXXAUDXXROXLYQLYLOUNYOOURXOUOTYBYRRUQLDOTUNIKYXUUCLIDNYYYXUXYTOROXXOFWOQYUNXRMRYYUXXORYYXOXDOXRYXQRXOYYRYWYOROXLYORLYUXXXYRXLUXYYUXOXXYYYNYROXUNXNULYYFYOLUUYYYAFYUSUOLXRTUOKRXXNYXOUUYODOLORTNXYURLXYYRLYQOBYYOYWOJYXUYYWRRRXUUYYYUQOYQXYFOBRBURLYYRYUYLXXOOULOOYFIXJRUCFMUXUUYRYYLXBFRYYNBRXTOOOOXYURUORUYLYUBFOXOCBRLFYUYURLOIURIROOYWUKXORLXPCLXXYROXQYOAYYBYOQYOXQXYOYYYYULYLYNFYOYUAYYYYXRQILUXRRROYXRYQYYLRYTUONXBYNONYPXAYXRYRIXOYORYMRYYMOYXCOOXMQOXYFRUXYNIOUXXROLYAUYROYLINYOUYXYLYOULYLLROORXOLYTLXYOOXPOXYXXFYXOCROAYOULUYYSOYXYBRXROUARYBKLXJYIUXYLRQUXOXIOYYUOXFRXXYOYXRYBYRLYNRYOLIFKUHSIORYOUYXAJIYOYLIYUTAYRYUXXUYNYOIYLYQYLYFOLYYYYUQYUYYYRYQNQBTRXUORQULXUYXXUAKROUYYWOLYRKXROYUQYJXYYUYUUUYYXILRYOOOORLOYAYLXRORYYYQYOUYOGYYYXURUYLYTOYOGENALOOXYOYBIRDLYOXXEOULIIOXIRURLUYYORLYAINCORRYYKYOLLXYAXLYCOOBUUCXYYTLUYMLOXXYUTRYOUOORRYYBYUURXYOROXNYQRRXUSYRXNOXRIRNXUYOUYRBRUOROXBYHQYXYCYBTEORWUOXURCUNXUXUPAYUIYOOXUXXYXYXXDDYLYLBLOUYXOBTROOXOUQTYBRXULYOCNRCOTLOURCYYYROYLLODRUNYORUMRROYCLYYYYYYOYUXROYRMOIIRYUOCOOXYTYRYRRUURMUYARYOXRUOSRYLOXRCRYYYIRRXYDROIOIPYYJURYULRIYXRXNXBMYLODCUICRHXLXXRYXYXAXUXBUYORRNRUXYCDLYFXRYYOXUXUO",
+ "refused_moves": 1500,
+ "blinds_beaten_per_run": 17.6364,
+ "lost_to": [
+  [
+   "Big Blind",
+   599
+  ],
+  [
+   "The Eye",
+   328
+  ],
+  [
+   "The Mouth",
+   285
+  ],
+  [
+   "Small Blind",
+   280
+  ],
+  [
+   "Violet Vessel",
+   258
+  ],
+  [
+   "The Needle",
+   243
+  ],
+  [
+   "The Wall",
+   239
+  ],
+  [
+   "Crimson Heart",
+   127
+  ],
+  [
+   "Amber Acorn",
+   111
+  ],
+  [
+   "The Water",
+   110
+  ],
+  [
+   "The Pillar",
+   99
+  ],
+  [
+   "The Psychic",
+   97
+  ]
+ ],
+ "hands_played": [
+  [
+   "High Card",
+   13584
+  ],
+  [
+   "Pair",
+   74215
+  ],
+  [
+   "Two Pair",
+   31675
+  ],
+  [
+   "Three of a Kind",
+   9298
+  ],
+  [
+   "Straight",
+   9551
+  ],
+  [
+   "Flush",
+   7416
+  ],
+  [
+   "Full House",
+   30154
+  ],
+  [
+   "Four of a Kind",
+   6117
+  ],
+  [
+   "Straight Flush",
+   92
+  ],
+  [
+   "Five of a Kind",
+   77
+  ],
+  [
+   "Flush House",
+   1
+  ]
+ ],
+ "jokers_bought": [
+  [
+   "Abstract Joker",
+   1726,
+   0.3452
+  ],
+  [
+   "Swashbuckler",
+   1532,
+   0.3064
+  ],
+  [
+   "Supernova",
+   1500,
+   0.3
+  ],
+  [
+   "Sly Joker",
+   1496,
+   0.2992
+  ],
+  [
+   "Blue Joker",
+   1445,
+   0.289
+  ],
+  [
+   "Raised Fist",
+   1441,
+   0.2882
+  ],
+  [
+   "Half Joker",
+   1312,
+   0.2624
+  ],
+  [
+   "Banner",
+   1251,
+   0.2502
+  ],
+  [
+   "Shoot the Moon",
+   1237,
+   0.2474
+  ],
+  [
+   "Misprint",
+   1152,
+   0.2304
+  ],
+  [
+   "Mystic Summit",
+   1018,
+   0.2036
+  ],
+  [
+   "Jolly Joker",
+   1001,
+   0.2002
+  ],
+  [
+   "Green Joker",
+   994,
+   0.1988
+  ],
+  [
+   "Gros Michel",
+   973,
+   0.1946
+  ],
+  [
+   "Odd Todd",
+   971,
+   0.1942
+  ],
+  [
+   "Clever Joker",
+   924,
+   0.1848
+  ],
+  [
+   "Joker",
+   818,
+   0.1636
+  ],
+  [
+   "Bull",
+   781,
+   0.1562
+  ],
+  [
+   "Bootstraps",
+   774,
+   0.1548
+  ],
+  [
+   "Card Sharp",
+   726,
+   0.1452
+  ]
+ ],
+ "jokers_held_at_end": [
+  [
+   "Supernova",
+   1165,
+   0.233
+  ],
+  [
+   "Abstract Joker",
+   1004,
+   0.2008
+  ],
+  [
+   "Blue Joker",
+   959,
+   0.1918
+  ],
+  [
+   "Green Joker",
+   941,
+   0.1882
+  ],
+  [
+   "Swashbuckler",
+   849,
+   0.1698
+  ],
+  [
+   "Half Joker",
+   795,
+   0.159
+  ],
+  [
+   "Bootstraps",
+   772,
+   0.1544
+  ],
+  [
+   "Banner",
+   768,
+   0.1536
+  ],
+  [
+   "Bull",
+   767,
+   0.1534
+  ],
+  [
+   "Sly Joker",
+   759,
+   0.1518
+  ],
+  [
+   "Card Sharp",
+   715,
+   0.143
+  ],
+  [
+   "Hologram",
+   699,
+   0.1398
+  ],
+  [
+   "Seeing Double",
+   614,
+   0.1228
+  ],
+  [
+   "Spare Trousers",
+   614,
+   0.1228
+  ],
+  [
+   "Castle",
+   611,
+   0.1222
+  ],
+  [
+   "Constellation",
+   600,
+   0.12
+  ],
+  [
+   "Burglar",
+   576,
+   0.1152
+  ],
+  [
+   "Shoot the Moon",
+   570,
+   0.114
+  ],
+  [
+   "Acrobat",
+   564,
+   0.1128
+  ],
+  [
+   "Raised Fist",
+   442,
+   0.0884
+  ]
+ ],
+ "jokers_in_wins": [
+  [
+   "Supernova",
+   332,
+   0.290718
+  ],
+  [
+   "Bull",
+   331,
+   0.289842
+  ],
+  [
+   "Hologram",
+   326,
+   0.285464
+  ],
+  [
+   "Bootstraps",
+   300,
+   0.262697
+  ],
+  [
+   "Card Sharp",
+   218,
+   0.190893
+  ],
+  [
+   "Constellation",
+   214,
+   0.187391
+  ],
+  [
+   "Spare Trousers",
+   214,
+   0.187391
+  ],
+  [
+   "Green Joker",
+   213,
+   0.186515
+  ],
+  [
+   "Stuntman",
+   212,
+   0.185639
+  ],
+  [
+   "Burglar",
+   200,
+   0.175131
+  ],
+  [
+   "Castle",
+   200,
+   0.175131
+  ],
+  [
+   "Abstract Joker",
+   196,
+   0.171629
+  ],
+  [
+   "Swashbuckler",
+   184,
+   0.161121
+  ],
+  [
+   "Blue Joker",
+   172,
+   0.150613
+  ],
+  [
+   "Half Joker",
+   159,
+   0.139229
+  ],
+  [
+   "Seeing Double",
+   141,
+   0.123468
+  ],
+  [
+   "Baseball Card",
+   132,
+   0.115587
+  ],
+  [
+   "Banner",
+   130,
+   0.113835
+  ],
+  [
+   "Acrobat",
+   127,
+   0.111208
+  ],
+  [
+   "The Duo",
+   125,
+   0.109457
+  ]
+ ],
+ "now": {
+  "runs": 1000,
+  "wins": 274,
+  "win_rate": 0.274,
+  "win_ci": [
+   0.24726035064363416,
+   0.30246940751741447
+  ],
+  "mean_ante": 6.974,
+  "ante_hist": [
+   7,
+   5,
+   20,
+   51,
+   149,
+   154,
+   162,
+   178,
+   274
+  ],
+  "blinds_beaten_per_run": 19.934,
+  "lost_to": [
+   [
+    "Big Blind",
+    104
+   ],
+   [
+    "Violet Vessel",
+    78
+   ],
+   [
+    "The Eye",
+    61
+   ],
+   [
+    "The Wall",
+    54
+   ],
+   [
+    "Crimson Heart",
+    40
+   ],
+   [
+    "The Mouth",
+    39
+   ],
+   [
+    "The Needle",
+    37
+   ],
+   [
+    "Small Blind",
+    32
+   ],
+   [
+    "Amber Acorn",
+    30
+   ],
+   [
+    "The Fish",
+    20
+   ],
+   [
+    "The Flint",
+    19
+   ],
+   [
+    "The Club",
+    17
+   ]
+  ],
+  "hands_played": [
+   [
+    "High Card",
+    2990
+   ],
+   [
+    "Pair",
+    17433
+   ],
+   [
+    "Two Pair",
+    7279
+   ],
+   [
+    "Three of a Kind",
+    2122
+   ],
+   [
+    "Straight",
+    2152
+   ],
+   [
+    "Flush",
+    1547
+   ],
+   [
+    "Full House",
+    6865
+   ],
+   [
+    "Four of a Kind",
+    1387
+   ],
+   [
+    "Straight Flush",
+    18
+   ],
+   [
+    "Five of a Kind",
+    23
+   ]
+  ],
+  "jokers_bought": [
+   [
+    "Abstract Joker",
+    448,
+    0.448
+   ],
+   [
+    "Blue Joker",
+    344,
+    0.344
+   ],
+   [
+    "Sly Joker",
+    341,
+    0.341
+   ],
+   [
+    "Swashbuckler",
+    341,
+    0.341
+   ],
+   [
+    "Supernova",
+    331,
+    0.331
+   ],
+   [
+    "Raised Fist",
+    290,
+    0.29
+   ],
+   [
+    "Half Joker",
+    277,
+    0.277
+   ],
+   [
+    "Misprint",
+    272,
+    0.272
+   ],
+   [
+    "Banner",
+    265,
+    0.265
+   ],
+   [
+    "Shoot the Moon",
+    264,
+    0.264
+   ],
+   [
+    "Odd Todd",
+    234,
+    0.234
+   ],
+   [
+    "Jolly Joker",
+    228,
+    0.228
+   ],
+   [
+    "Green Joker",
+    222,
+    0.222
+   ],
+   [
+    "Mystic Summit",
+    210,
+    0.21
+   ],
+   [
+    "Gros Michel",
+    209,
+    0.209
+   ],
+   [
+    "Clever Joker",
+    208,
+    0.208
+   ],
+   [
+    "Bull",
+    189,
+    0.189
+   ],
+   [
+    "Hologram",
+    164,
+    0.164
+   ],
+   [
+    "Red Card",
+    162,
+    0.162
+   ],
+   [
+    "Joker",
+    157,
+    0.157
+   ]
+  ],
+  "jokers_held_at_end": [
+   [
+    "Abstract Joker",
+    254,
+    0.254
+   ],
+   [
+    "Supernova",
+    247,
+    0.247
+   ],
+   [
+    "Green Joker",
+    207,
+    0.207
+   ],
+   [
+    "Blue Joker",
+    206,
+    0.206
+   ],
+   [
+    "Swashbuckler",
+    186,
+    0.186
+   ],
+   [
+    "Bull",
+    184,
+    0.184
+   ],
+   [
+    "Sly Joker",
+    170,
+    0.17
+   ],
+   [
+    "Hologram",
+    163,
+    0.163
+   ],
+   [
+    "Half Joker",
+    159,
+    0.159
+   ],
+   [
+    "Card Sharp",
+    153,
+    0.153
+   ],
+   [
+    "Banner",
+    148,
+    0.148
+   ],
+   [
+    "Bootstraps",
+    148,
+    0.148
+   ],
+   [
+    "Castle",
+    138,
+    0.138
+   ],
+   [
+    "Constellation",
+    137,
+    0.137
+   ],
+   [
+    "Acrobat",
+    134,
+    0.134
+   ],
+   [
+    "Seeing Double",
+    128,
+    0.128
+   ],
+   [
+    "Spare Trousers",
+    128,
+    0.128
+   ],
+   [
+    "Stuntman",
+    109,
+    0.109
+   ],
+   [
+    "Burglar",
+    108,
+    0.108
+   ],
+   [
+    "Shoot the Moon",
+    108,
+    0.108
+   ]
+  ],
+  "jokers_in_wins": [
+   [
+    "Supernova",
+    86,
+    0.313869
+   ],
+   [
+    "Bull",
+    85,
+    0.310219
+   ],
+   [
+    "Hologram",
+    81,
+    0.29562
+   ],
+   [
+    "Bootstraps",
+    67,
+    0.244526
+   ],
+   [
+    "Green Joker",
+    66,
+    0.240876
+   ],
+   [
+    "Castle",
+    57,
+    0.208029
+   ],
+   [
+    "Constellation",
+    56,
+    0.20438
+   ],
+   [
+    "Abstract Joker",
+    53,
+    0.193431
+   ],
+   [
+    "Card Sharp",
+    53,
+    0.193431
+   ],
+   [
+    "Stuntman",
+    47,
+    0.171533
+   ],
+   [
+    "Spare Trousers",
+    46,
+    0.167883
+   ],
+   [
+    "Swashbuckler",
+    45,
+    0.164234
+   ],
+   [
+    "Burglar",
+    41,
+    0.149635
+   ],
+   [
+    "Blue Joker",
+    37,
+    0.135036
+   ],
+   [
+    "Half Joker",
+    34,
+    0.124088
+   ],
+   [
+    "Acrobat",
+    33,
+    0.120438
+   ],
+   [
+    "Baseball Card",
+    30,
+    0.109489
+   ],
+   [
+    "Banner",
+    29,
+    0.105839
+   ],
+   [
+    "Seeing Double",
+    28,
+    0.10219
+   ],
+   [
+    "Sly Joker",
+    25,
+    0.091241
+   ]
+  ],
+  "per_run": {
+   "moves": 266.088,
+   "jokers_bought": 10.349,
+   "rerolls": 7.993,
+   "skips": 0.0,
+   "packs": 8.847,
+   "vouchers": 1.318,
+   "money_at_end": 74.409,
+   "refused": 0.339
+  },
+  "label": "last 1,000 runs"
+ },
+ "block_fields": [
+  "end_runs",
+  "end_seconds",
+  "runs",
+  "wins",
+  "ante",
+  "moves",
+  "refused",
+  "jokers",
+  "packs",
+  "rerolls",
+  "money",
+  "cut"
+ ],
+ "block_runs": 1000,
+ "blocks": [
+  [
+   1000,
+   13.9,
+   1000,
+   193,
+   5618,
+   175838,
+   228,
+   8371,
+   6395,
+   5453,
+   64477,
+   0
+  ],
+  [
+   2000,
+   22.3,
+   1000,
+   213,
+   6079,
+   212164,
+   338,
+   9219,
+   7138,
+   7023,
+   64584,
+   0
+  ],
+  [
+   3000,
+   30.8,
+   1000,
+   234,
+   6234,
+   220943,
+   250,
+   9360,
+   7458,
+   6990,
+   65892,
+   0
+  ],
+  [
+   4000,
+   39.0,
+   1000,
+   228,
+   6322,
+   224259,
+   345,
+   9424,
+   7738,
+   6891,
+   68372,
+   0
+  ],
+  [
+   5000,
+   67.0,
+   1000,
+   274,
+   6974,
+   266088,
+   339,
+   10349,
+   8847,
+   7993,
+   74409,
+   0
+  ]
+ ]
+}

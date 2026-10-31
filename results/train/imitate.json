@@ -1,0 +1,47 @@
+{
+ "kind": "imitate",
+ "data": "~/.cache/balatro-meta/data/moves-1",
+ "moves": 3070375,
+ "train_moves": 2759698,
+ "judge_moves": 310677,
+ "weights": 2002391,
+ "cfg": {
+  "d": 192,
+  "layers": 4,
+  "heads": 4,
+  "ff": 576
+ },
+ "history": [
+  {
+   "epoch": 1,
+   "train_loss": 2.4198,
+   "judge_nll": 2.0072,
+   "same_move": 0.5185,
+   "same_kind": 0.7867
+  },
+  {
+   "epoch": 2,
+   "train_loss": 1.91906,
+   "judge_nll": 1.84315,
+   "same_move": 0.543,
+   "same_kind": 0.8018
+  },
+  {
+   "epoch": 3,
+   "train_loss": 1.75189,
+   "judge_nll": 1.76579,
+   "same_move": 0.5582,
+   "same_kind": 0.8087
+  },
+  {
+   "epoch": 4,
+   "train_loss": 1.64595,
+   "judge_nll": 1.76294,
+   "same_move": 0.5614,
+   "same_kind": 0.8106
+  }
+ ],
+ "device": "cuda",
+ "seconds": 1000.4,
+ "model": "models/policy/imitate.pt"
+}
