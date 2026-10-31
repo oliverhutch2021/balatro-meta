@@ -1,0 +1,50 @@
+{
+ "job": "teacher-tune",
+ "commit": "8c3c4b6c6316a2c6c39af1dbd31f8fcc1211d272",
+ "started": "2026-10-31T20:44:08+00:00",
+ "finished": "2026-10-31T21:52:18+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   16.0,
+   16.8,
+   16.9
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 1,
+  "above-cap=0.25": 670,
+  "compare above-cap=0.25": 0,
+  "money-scale=15": 667,
+  "compare money-scale=15": 0,
+  "planner-edge=0.3": 749,
+  "compare planner-edge=0.3": 0,
+  "long-run=0.35": 678,
+  "compare long-run=0.35": 0,
+  "sharpness=2.5": 694,
+  "compare sharpness=2.5": 0,
+  "sharpness=5": 629,
+  "compare sharpness=5": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "above-cap=0.25": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin --value-weight 1.5 --teacher-options precise,above-cap=0.25 --runs 2000 --seed 1 --out results/tune/precise+above-cap-0.25-on-ensemble2-w1.5.json",
+  "compare above-cap=0.25": "scripts/compare_runs.py results/value/precise-on-ensemble2-w1.5.json results/tune/precise+above-cap-0.25-on-ensemble2-w1.5.json --out results/tune/precise+above-cap-0.25-vs-precise-on-ensemble2-w1.5.json",
+  "money-scale=15": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin --value-weight 1.5 --teacher-options precise,money-scale=15 --runs 2000 --seed 1 --out results/tune/precise+money-scale-15-on-ensemble2-w1.5.json",
+  "compare money-scale=15": "scripts/compare_runs.py results/value/precise-on-ensemble2-w1.5.json results/tune/precise+money-scale-15-on-ensemble2-w1.5.json --out results/tune/precise+money-scale-15-vs-precise-on-ensemble2-w1.5.json",
+  "planner-edge=0.3": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin --value-weight 1.5 --teacher-options precise,planner-edge=0.3 --runs 2000 --seed 1 --out results/tune/precise+planner-edge-0.3-on-ensemble2-w1.5.json",
+  "compare planner-edge=0.3": "scripts/compare_runs.py results/value/precise-on-ensemble2-w1.5.json results/tune/precise+planner-edge-0.3-on-ensemble2-w1.5.json --out results/tune/precise+planner-edge-0.3-vs-precise-on-ensemble2-w1.5.json",
+  "long-run=0.35": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin --value-weight 1.5 --teacher-options precise,long-run=0.35 --runs 2000 --seed 1 --out results/tune/precise+long-run-0.35-on-ensemble2-w1.5.json",
+  "compare long-run=0.35": "scripts/compare_runs.py results/value/precise-on-ensemble2-w1.5.json results/tune/precise+long-run-0.35-on-ensemble2-w1.5.json --out results/tune/precise+long-run-0.35-vs-precise-on-ensemble2-w1.5.json",
+  "sharpness=2.5": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin --value-weight 1.5 --teacher-options precise,sharpness=2.5 --runs 2000 --seed 1 --out results/tune/precise+sharpness-2.5-on-ensemble2-w1.5.json",
+  "compare sharpness=2.5": "scripts/compare_runs.py results/value/precise-on-ensemble2-w1.5.json results/tune/precise+sharpness-2.5-on-ensemble2-w1.5.json --out results/tune/precise+sharpness-2.5-vs-precise-on-ensemble2-w1.5.json",
+  "sharpness=5": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin --value-weight 1.5 --teacher-options precise,sharpness=5 --runs 2000 --seed 1 --out results/tune/precise+sharpness-5-on-ensemble2-w1.5.json",
+  "compare sharpness=5": "scripts/compare_runs.py results/value/precise-on-ensemble2-w1.5.json results/tune/precise+sharpness-5-on-ensemble2-w1.5.json --out results/tune/precise+sharpness-5-vs-precise-on-ensemble2-w1.5.json"
+ }
+}
