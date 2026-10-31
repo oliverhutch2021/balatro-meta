@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-precise teacher-tune watch watch-mod
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune watch watch-mod
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -107,13 +107,16 @@ teacher-data-%:  ## Learned value round N (3 and later), 1/3: the best teacher, 
 value-net-%:  ## Learned value round N, 2/3: the round's value network, on its recording and the round before's (GPU; minutes)
 	$(PY) scripts/jobs.py run value-net-$* $(JOB_FLAGS)
 
-teacher-learned-%:  ## Learned value round N, 3/3: the teacher with the round's value at two weights, 5,000 runs each (about 30 minutes)
+teacher-learned-%:  ## Learned value round N, 3/3: the teacher with the round's value at two weights, and all rounds' together (about 45 minutes)
 	$(PY) scripts/jobs.py run teacher-learned-$* $(JOB_FLAGS)
 
-learned-%:  ## Round N of the learned value, the three jobs in a row: make learned-3, then learned-4... (about 2.5 hours)
+learned-%:  ## Round N of the learned value, the three jobs in a row: make learned-3, then learned-4... (about 2.75 hours)
 	@$(MAKE) --no-print-directory teacher-data-$*
 	@$(MAKE) --no-print-directory value-net-$*
 	@$(MAKE) --no-print-directory teacher-learned-$*
+
+teacher-ensemble:  ## The teacher with rounds 1 and 2's networks together on the usual 5,000 seeds (about 20 minutes)
+	$(PY) scripts/jobs.py run teacher-ensemble $(JOB_FLAGS)
 
 teacher-precise:  ## The best teacher with more samples where its decisions are noisiest, against its own runs (about 10 minutes)
 	$(PY) scripts/jobs.py run teacher-precise $(JOB_FLAGS)

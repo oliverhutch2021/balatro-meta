@@ -53,18 +53,29 @@ BASELINE = ["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "ba
 # usual 5,000 seeds (round 1: make teacher-learned; round 2: make teacher-learned-2).
 # Rounds 3 and later are all alike (learned_round), up to this one.
 LAST_ROUND = 9
+
+
+def ensemble(n: int) -> str:
+    """The networks of rounds 1 to n together (the learned value is then the mean of their chances of winning)."""
+    return ",".join(f"models/value-{k}.bin" for k in range(1, n + 1))
+
+
+# Each learned value tried on the usual seeds, with its reports (one per weight): each round's network, and from
+# round 2 on, the networks of all rounds so far together (an ensemble: on the cloud's 400 seeds, rounds 1 and 2
+# together with "precise" won 49.75% against 45.0% for round 1's alone).
 LEARNED_ROUNDS = (("models/value-1.bin", "results/value/teacher-w{w}.json"),
                   *((f"models/value-{n}.bin", f"results/value/teacher{n}-w{{w}}.json")
-                    for n in range(2, LAST_ROUND + 1)))
+                    for n in range(2, LAST_ROUND + 1)),
+                  *((ensemble(n), f"results/value/ensemble{n}-w{{w}}.json") for n in range(2, LAST_ROUND + 1)))
 
 
 def best_learned(root: Path = ROOT) -> tuple[str, str, str] | None:
-    """The round and weight of the learned value that won most often on the usual seeds (the reports LEARNED_ROUNDS
-    names; the earlier round and the lower weight on a tie): its network, its weight and that report. None before any
-    has been measured or without that round's network."""
+    """The learned value and weight that won most often on the usual seeds (the reports LEARNED_ROUNDS names; the
+    earlier entry and the lower weight on a tie): its network(s), its weight and that report. None before any has
+    been measured or without its networks."""
     best = None
     for net, report in LEARNED_ROUNDS:
-        if not (root / net).exists():
+        if not all((root / n).exists() for n in net.split(",")):
             continue
         for w in ("0.5", "1", "2"):
             try:
@@ -122,8 +133,15 @@ def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
                                "--value-weight", w, "--runs", "5000", "--seed", "1",
                                "--out", f"results/value/teacher{n}-w{w}.json"])
               for w in ("1", "2")],
+            ensemble_step(n),
         ],
     }
+
+
+def ensemble_step(n: int) -> tuple:
+    """The teacher with the networks of rounds 1 to n together, at weight 1, on the usual 5,000 seeds."""
+    return ("ensemble", [*BASELINE, "--bot", "teacher", "--value-net", ensemble(n), "--value-weight", "1",
+                         "--runs", "5000", "--seed", "1", "--out", f"results/value/ensemble{n}-w1.json"])
 
 
 # The value formula's numbers tried by make teacher-tune, each beside its usual value (crates/bm-core/src/value.rs:
@@ -303,6 +321,9 @@ JOBS: dict[str, list[tuple]] = {
     # The learned value, round 3 and later (learned_round): the best teacher records with "precise", the round's
     # network learns from its recording and the round before's, and the teacher plays the usual seeds with it.
     **{name: steps for n in range(3, LAST_ROUND + 1) for name, steps in learned_round(n).items()},
+    # Rounds 1 and 2's networks together (round 2 alone won no more than round 1): the usual 5,000 seeds, to set
+    # against each alone (teacher-w1.json, teacher2-w1.json). If it wins most, the jobs after it use it.
+    "teacher-ensemble": [("build", [*MAKE, "build"]), ensemble_step(2)],
     # The teacher's option "precise" (crates/bm-core/src/value.rs: `Scales`): twice the sample contents behind pack
     # and reroll decisions, its noisiest, and twice the tries behind each plan for a round, at about 1.45 times the
     # time. It is tried on the best teacher there is (option_trial). On 400 seeds in the cloud with round 1's value
@@ -461,7 +482,10 @@ def progress_entry(job: str, step: str, argv: list[str], commit: str, root: Path
     w = float(weight) if weight else (1.0 if net else None)
     bot = str(r.get("bot") or "bot")
     rnd = re.search(r"value-(\d+)\.bin$", net or "")
-    if net:
+    if net and "," in net:
+        rounds = re.findall(r"value-(\d+)\.bin", net)
+        name = f"Learned values {'+'.join(rounds)} \u00d7{w:g}"
+    elif net:
         name = f"Learned value{' ' + rnd[1] if rnd and rnd[1] != '1' else ''} \u00d7{w:g}"
     elif bot == "network":
         name = "Network, copying the teacher" if step == "eval-imitate" else "Network after PPO"

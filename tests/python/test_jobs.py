@@ -149,9 +149,11 @@ def test_round_three_records_with_precise_unless_its_trial_found_it_no_better(tm
         for name, argv, *_ in jobs.JOBS[f"teacher-learned-{n}"]:
             if name != "build":
                 assert "--teacher-options" not in argv, "tested on the same footing as the earlier rounds"
-                assert argv[argv.index("--out") + 1].startswith(f"results/value/teacher{n}-w")
+                want = f"results/value/ensemble{n}-w" if name == "ensemble" else f"results/value/teacher{n}-w"
+                assert argv[argv.index("--out") + 1].startswith(want)
         assert jobs.LEARNED_ROUNDS[n - 1] == (f"models/value-{n}.bin", f"results/value/teacher{n}-w{{w}}.json")
-    assert "teacher-data-10" not in jobs.JOBS and len(jobs.LEARNED_ROUNDS) == jobs.LAST_ROUND
+    assert "teacher-data-10" not in jobs.JOBS
+    assert len(jobs.LEARNED_ROUNDS) == 2 * jobs.LAST_ROUND - 1, "each round's network, and from round 2 all so far"
     # A round's recording uses the best network so far, whichever round it came from.
     (tmp_path / "models").mkdir()
     for n, rate in ((1, 0.393), (2, 0.43), (3, 0.41)):
@@ -187,6 +189,34 @@ def test_the_formulas_numbers_are_tuned_on_the_best_teacher_against_its_own_runs
     assert first[first.index("--teacher-options") + 1] == jobs.TUNE[0]
     assert steps[f"compare {jobs.TUNE[0]}"][1] == "results/value/teacher-plain.json"
     assert "teacher-tune" in jobs.JOBS
+
+
+def test_the_rounds_networks_together_are_tried_and_used_when_they_win_most(tmp_path):
+    assert jobs.ensemble(3) == "models/value-1.bin,models/value-2.bin,models/value-3.bin"
+    _, argv = jobs.JOBS["teacher-ensemble"][1]
+    assert argv[argv.index("--value-net") + 1] == "models/value-1.bin,models/value-2.bin"
+    assert argv[argv.index("--out") + 1] == "results/value/ensemble2-w1.json" and argv[argv.index("--seed") + 1] == "1"
+    steps = {n: a for n, a, *_ in jobs.JOBS["teacher-learned-4"]}
+    assert steps["ensemble"][steps["ensemble"].index("--value-net") + 1] == jobs.ensemble(4)
+    (tmp_path / "models").mkdir()
+    (tmp_path / "results" / "value").mkdir(parents=True)
+    for n in (1, 2):
+        (tmp_path / "models" / f"value-{n}.bin").write_bytes(b"BMVN")
+    for report, rate in (("teacher-w1.json", 0.393), ("teacher2-w1.json", 0.39), ("ensemble2-w1.json", 0.41)):
+        (tmp_path / "results" / "value" / report).write_text(json.dumps({"win_rate": rate}))
+    assert jobs.best_learned(tmp_path) == ("models/value-1.bin,models/value-2.bin", "1",
+                                           "results/value/ensemble2-w1.json")
+    play, = [a for n, a, *_ in jobs.option_trial("precise", tmp_path) if n == "precise"]
+    assert play[play.index("--value-net") + 1] == "models/value-1.bin,models/value-2.bin"
+    assert play[play.index("--out") + 1] == "results/value/precise-on-ensemble2-w1.json"
+    (tmp_path / "models" / "value-2.bin").unlink()
+    assert jobs.best_learned(tmp_path)[0] == "models/value-1.bin", "an ensemble needs all its networks"
+    out = tmp_path / "results" / "x.json"
+    out.write_text(json.dumps({"kind": "baseline", "bot": "teacher bot with a learned value", "runs": 10, "wins": 4,
+                               "win_rate": 0.4}))
+    e = jobs.progress_entry("teacher-ensemble", "ensemble", ["x", "--value-net", jobs.ensemble(2), "--value-weight",
+                                                             "1", "--out", "results/x.json"], "HEAD", root=tmp_path)
+    assert e["name"] == "Learned values 1+2 \u00d71"
 
 
 def test_a_step_with_teacher_options_is_named_with_them(tmp_path):
