@@ -2371,6 +2371,18 @@ fn value_blind_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     }
 }
 
+/// Start a run on this thread: forget what the last runs remembered (the decisions being carried out, the
+/// estimates). A remembered estimate's key leaves out a few things it hardly depends on (Fortune Teller's
+/// Tarots used, say), so a run must not meet another run's: each run then plays the same however many runs
+/// came before it on its thread, and a job's results don't depend on how its runs fell to its threads.
+pub fn new_run() {
+    CHOICES.with(|c| c.borrow_mut().clear());
+    HAND_ORDERS.with(|c| c.borrow_mut().clear());
+    WEAKEST.with(|c| c.borrow_mut().clear());
+    LEAVING.with(|c| c.borrow_mut().clear());
+    crate::value::clear_caches();
+}
+
 /// The teacher's move.
 pub fn teacher_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     let by_value = by_value();
@@ -2413,6 +2425,22 @@ mod tests {
             step += 1;
         }
         (run, kinds)
+    }
+
+    #[test]
+    fn a_new_run_starts_with_nothing_remembered() {
+        let (run, _) = play("NEWRUN01", teacher_move);
+        let _ = run;
+        let remembered = || {
+            crate::value::cached()
+                + CHOICES.with(|c| c.borrow().len())
+                + HAND_ORDERS.with(|c| c.borrow().len())
+                + WEAKEST.with(|c| c.borrow().len())
+                + LEAVING.with(|c| c.borrow().len())
+        };
+        assert!(remembered() > 0, "a run leaves estimates behind");
+        new_run();
+        assert_eq!(remembered(), 0);
     }
 
     #[test]

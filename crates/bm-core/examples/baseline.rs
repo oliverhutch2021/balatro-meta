@@ -183,6 +183,7 @@ fn detail_row(run: &Run, s: &RunSummary) -> String {
 }
 
 fn play(seed: String, salt: u64, keep: bool, bot: Bot) -> RunSummary {
+    bm_core::teacher::new_run();
     let mut run = Run::new(RunConfig::new(&seed));
     let mut s = RunSummary {
         record: keep.then(Vec::new),

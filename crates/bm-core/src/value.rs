@@ -1450,6 +1450,21 @@ thread_local! {
     static MONEY_CARDS: RefCell<HashMap<u64, Option<f64>>> = RefCell::new(HashMap::new());
 }
 
+/// Forget this thread's remembered estimates (`teacher::new_run`, at the start of each run).
+pub(crate) fn clear_caches() {
+    CACHE.with(|c| c.borrow_mut().clear());
+    DECK_CACHE.with(|c| c.borrow_mut().clear());
+    MONEY_CARDS.with(|c| c.borrow_mut().clear());
+}
+
+/// How many estimates this thread remembers (tests).
+#[cfg(test)]
+pub(crate) fn cached() -> usize {
+    CACHE.with(|c| c.borrow().len())
+        + DECK_CACHE.with(|c| c.borrow().len())
+        + MONEY_CARDS.with(|c| c.borrow().len())
+}
+
 /// A key for everything `value` depends on (not the shop's or a pack's contents, which it never sees).
 fn state_key(run: &Run) -> u64 {
     let mut h = DefaultHasher::new();
