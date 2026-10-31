@@ -366,63 +366,92 @@ class Line:
         return Line(game, follow, gs, self.moves + moves, steps)
 
 
-def explain(line: Line, gs: dict, highlight: list | None) -> tuple[list, list[str]]:
-    """The moves that take this line's engine to the game's state `gs`: [(checks failed, rank, engine, moves)],
-    best first (empty if none), and what came closest otherwise."""
-    game = line.game
-    if not compare(game, gs):
-        return [(0, 0, game.copy(), [])], []
-    before = line.before
-    # Jokers moved just before the move (too quickly for the game to settle in between) score in their new order.
-    base, pre = game, []
+def bases(line: Line, gs: dict) -> list[tuple]:
+    """The engine as it stands, and lined up with the game's state after the move: jokers moved just before the
+    move (too quickly for the game to settle in between) score in their new order, and cards moved just before a
+    Tarot was used on them show in that order afterwards. Moved after the move instead (jokers rearranged on the
+    cash-out screen), the engine as it stands is the right one: both are tried, as it stands first."""
+    game, before = line.game, line.before
+    out = [(game, [])]
+    lined, pre = game, []
     gj = game_view(gs)["jokers"]
-    if sorted(map(repr, map(joker_match_key, gj))) == sorted(map(repr, map(joker_match_key, game.view()["jokers"]))):
-        base = game.copy()
-        follow = dict(line.follow)
-        pre = line_up(base, {"state": None, "jokers": gs.get("jokers"), "hand": {"cards": []}}, follow)
-    # Cards moved just before a Tarot was used on them: the game's state after it shows them in that order.
+    ej = game.view()["jokers"]
+    if sorted(map(repr, map(joker_match_key, gj))) == sorted(map(repr, map(joker_match_key, ej))):
+        trial = game.copy()
+        moved = line_up(trial, {"state": None, "jokers": gs.get("jokers"), "hand": {"cards": []}}, dict(line.follow))
+        if moved:
+            lined, pre = trial, moved
     if set(ids(before, "hand")) == set(ids(gs, "hand")) and ids(before, "hand") != ids(gs, "hand"):
-        trial = base.copy()
+        trial = lined.copy()
         moved = align_hand_by_ids(trial, gs, line.follow)
         if moved:
-            base, pre = trial, [*pre, *moved]
+            lined, pre = trial, [*pre, *moved]
+    if pre:
+        out.append((lined, pre))
+    return out
+
+
+def explain(line: Line, gs: dict, highlight: list | None) -> tuple[list, list[str]]:
+    """The moves that take this line's engine to the game's state `gs`: [(checks failed, rank, engine, moves)],
+    best first (empty if none), and what came closest otherwise. "No move" fits only when nothing that a move
+    would change differs (a planet taken from a pack shows only in its hand's level)."""
+    game = line.game
+    before = line.before
     closest = compare(game, gs)  # no move at all, unless a move comes closer (a wrong state counts most)
-    tried, matches = [], []
-    for rank, (kind, arg) in enumerate(candidates(base, before, gs, highlight, line.follow)):
-        r = try_move(base, kind, arg, gs)
-        if r is None:
-            continue
-        c, diff = r
-        if not diff:
-            soft = len(soft_differences(c, gs))
-            matches.append((soft, rank, c, [*pre, (kind, arg)]))
-            # A Tarot taken from a pack to no visible effect looks like any other: look on for every take that
-            # fits, so the others are kept in reserve.
-            if soft == 0 and kind not in (18, 19):
-                break
-            continue
-        tried.append((kind, arg, c))
-        if weight(diff) < weight(closest):
-            closest = diff
-        if (kind in (6, 7) or (kind in (17, 18) and arg >> 8)) and all(
-                d.startswith(("round chips", "state", "hand")) for d in diff):
-            r2 = played_orders(base, arg, kind, gs)
-            if r2 is not None:
-                matches.append((len(soft_differences(r2[0], gs)), rank, r2[0], [*pre, *r2[1]]))
-                break
-    if not matches:
-        # Two moves the game played out with no settled state in between.
-        for rank, (kind, arg, c) in enumerate(tried):
-            if kind in (6, 7, 18) or (kind == 17 and arg >> 8):
+    matches = []
+    if not closest:
+        soft = len(soft_differences(game, gs))
+        if soft == 0:
+            return [(0, 0, game.copy(), [])], []
+        matches.append((soft, -1, game.copy(), []))
+    tried = []
+    rank = 0
+    for base, pre in bases(line, gs):
+        found = False
+        for kind, arg in candidates(base, before, gs, highlight, line.follow):
+            rank += 1
+            r = try_move(base, kind, arg, gs)
+            if r is None:
+                continue
+            c, diff = r
+            if not diff:
+                soft = len(soft_differences(c, gs))
+                matches.append((soft, rank, c, [*pre, (kind, arg)]))
+                # A Tarot taken from a pack to no visible effect looks like any other: look on for every take
+                # that fits, so the others are kept in reserve.
+                if soft == 0 and kind not in (18, 19):
+                    found = True
+                    break
+                continue
+            tried.append((kind, arg, c, pre))
+            if weight(diff) < weight(closest):
+                closest = diff
+            if (kind in (6, 7) or (kind in (17, 18) and arg >> 8)) and all(
+                    d.startswith(("round chips", "state", "hand")) for d in diff):
+                r2 = played_orders(base, arg, kind, gs)
+                if r2 is not None:
+                    matches.append((len(soft_differences(r2[0], gs)), rank, r2[0], [*pre, *r2[1]]))
+                    found = True
+                    break
+        if found or any(m[0] == 0 and m[3] for m in matches):
+            break
+    if not any(m[0] == 0 and m[3] for m in matches):
+        # Two moves the game played out with no settled state in between (a planet taken from a pack, then the
+        # rest of the pack skipped): when no single move fits every check.
+        for n, (kind, arg, c, pre) in enumerate(tried):
+            if kind in (17, 18) and arg >> 8:
+                continue
+            # A hand that ends the round, then Cash Out clicked before the cash-out screen settled.
+            if kind in (6, 7) and (kind == 7 or c.view()["state"] != "ROUND_EVAL"):
                 continue
             for k2, a2 in candidates(c, before, gs, highlight, line.follow, wide=False):
                 r = try_move(c, k2, a2, gs)
                 if r is not None and not r[1]:
                     soft = len(soft_differences(r[0], gs))
-                    matches.append((soft, 1000 + rank, r[0], [*pre, (kind, arg), (k2, a2)]))
+                    matches.append((soft, 100000 + n, r[0], [*pre, (kind, arg), (k2, a2)]))
                     if soft == 0:
                         break
-            if matches and matches[-1][0] == 0:
+            if matches and matches[-1][0] == 0 and matches[-1][3]:
                 break
     matches.sort(key=lambda m: (m[0], m[1]))
     return matches, closest
@@ -508,7 +537,13 @@ class Replay:
         if self.lost:
             return None
         n_before = len(self.line.moves)
-        new = self.advance(self.line, gs, highlight, self.index, self.reserves)
+        alternatives: list[tuple[int, Line]] = []
+        new = self.advance(self.line, gs, highlight, self.index, alternatives)
+        if new is not None and len(new.moves) > n_before:
+            # Kept back, tried last: this state as one caught while a move was still landing (a Tarot used,
+            # its cards not yet changed), with the next state explained from the one before it.
+            self.reserves.append((self.index, self.line))
+            self.reserves.extend(alternatives)
         if new is None:
             new = self.from_reserve()
         if new is None:
