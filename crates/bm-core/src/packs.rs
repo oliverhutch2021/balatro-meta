@@ -19,7 +19,7 @@ pub enum PackCard {
     Card(Card),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct OpenPack {
     pub booster: BoosterId,
     pub cards: Vec<PackCard>,
@@ -27,6 +27,13 @@ pub struct OpenPack {
     /// Where the game goes back to when the pack closes.
     pub return_to: Phase,
 }
+
+crate::state::clone_by_field!(OpenPack {
+    booster,
+    cards,
+    choices_left,
+    return_to
+});
 
 impl OpenPack {
     pub fn kind(&self) -> PackKind {

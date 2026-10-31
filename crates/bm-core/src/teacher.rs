@@ -74,8 +74,12 @@ pub const OPTIONS: &[&str] = &[
     "light",
     // Twice the sample contents behind pack and reroll decisions only, the noisiest ones: on 750 shop and
     // pack positions its decisions matched a teacher with four times everything more often than "steady"'s
-    // did (68.0% against 66.7%; the usual teacher's 62.9%), at about 1.5 times the usual time.
+    // did (68.0% against 66.7%; the usual teacher's 62.9%), at about 1.3 times the usual time; three or four
+    // times the contents matched no more often.
     "looks",
+    // Twice the tries on fair copies behind each plan for a round (planner.rs): on the same 400 test runs,
+    // 42.0% won against 38.5% (p = 0.23), at about 1.1 times the time.
+    "steady-rounds",
 ];
 
 static ON: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();

@@ -18,8 +18,12 @@ use crate::env::{apply, MoveKind};
 use crate::observe::fair_copy;
 use crate::state::{Phase, Run};
 
-/// Tries per plan. More is steadier and slower.
+/// Tries per plan. More is steadier and slower (`value::Scales::rounds`).
 pub const TRIES: u64 = 10;
+
+fn try_count(n: u64) -> u64 {
+    crate::value::scale(n as usize, crate::value::scales().rounds) as u64
+}
 /// Most plans tried in one decision (the best-looking ones first).
 const MAX_PLANS: usize = 8;
 
@@ -480,7 +484,7 @@ pub fn plan(run: &Run, best: (f64, u64), salt: u64) -> (MoveKind, u64) {
             continue; // the same move now as a better-scoring plan
         }
         let (mut beats, mut close, mut gain) = (0u64, 0.0, 0.0);
-        for t in 0..TRIES {
+        for t in 0..try_count(TRIES) {
             let (beat, c, g) = try_policy(
                 run,
                 Policy::Plan(p),
@@ -733,7 +737,7 @@ pub(crate) fn finish_choice(run: &Run, best: (f64, u64), salt: u64) -> ((MoveKin
         let tries = if matches!(f, Farm::Win { .. }) {
             1
         } else {
-            FARM_TRIES
+            try_count(FARM_TRIES)
         };
         let (mut all, mut gain) = (true, 0.0);
         for t in 0..tries {

@@ -138,7 +138,7 @@ pub struct HeldTag {
 }
 
 /// The cash-out screen's rows (`rules/round.md` section 9).
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct CashOut {
     pub blind: i64,
     pub hands: i64,
@@ -289,26 +289,37 @@ pub struct Run {
     pub(crate) vampired: Vec<CardId>,
 }
 
-/// Copies of a run are made by the million (each hand a search scores is played on one), so a copy can be
-/// made into a run kept for the purpose (`clone_from`), reusing its memory field by field. The field list is
-/// checked by the compiler: the patterns below name every field, so a new field must be added here.
-macro_rules! run_clone {
-    ($($f:ident),* $(,)?) => {
-        impl Clone for Run {
+/// Clone written out field by field, with a `clone_from` that reuses each field's memory: copies of a run are
+/// made by the million (each hand a search scores is played on one), so a copy can be made into a run kept for
+/// the purpose. The patterns name every field, so the compiler catches a field left out.
+macro_rules! clone_by_field {
+    ($t:ident { $($f:ident),* $(,)? }) => {
+        impl Clone for $t {
             fn clone(&self) -> Self {
-                let Run { $($f),* } = self;
-                Run { $($f: $f.clone()),* }
+                let $t { $($f),* } = self;
+                $t { $($f: $f.clone()),* }
             }
 
             fn clone_from(&mut self, source: &Self) {
-                let Run { $($f),* } = self;
+                let $t { $($f),* } = self;
                 $($f.clone_from(&source.$f);)*
             }
         }
     };
 }
+pub(crate) use clone_by_field;
 
-run_clone!(
+clone_by_field!(CashOut {
+    blind,
+    hands,
+    discards,
+    jokers,
+    tags,
+    interest,
+    total,
+});
+
+clone_by_field!(Run {
     cfg,
     rng,
     next_sort_id,
@@ -396,7 +407,7 @@ run_clone!(
     chicot_disables,
     acorn_shuffles_pending,
     vampired,
-);
+});
 
 impl Run {
     // ------------------------------------------------------------ identity

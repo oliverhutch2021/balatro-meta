@@ -44,13 +44,19 @@ pub struct BoosterSlot {
     pub couponed: bool,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Shop {
     pub row: Vec<RowSlot>,
     pub vouchers: Vec<VoucherSlot>,
     /// The two booster slots; None once opened.
     pub boosters: Vec<Option<BoosterSlot>>,
 }
+
+crate::state::clone_by_field!(Shop {
+    row,
+    vouchers,
+    boosters
+});
 
 fn refuse<T>(why: &str) -> Result<T, Refused> {
     Err(Refused(why.to_string()))

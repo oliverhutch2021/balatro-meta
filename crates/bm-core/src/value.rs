@@ -48,24 +48,30 @@ pub const SAMPLES: usize = 6;
 /// Deals for a quick first look (screening options before the full estimate).
 pub const QUICK: usize = 2;
 
-/// How many deals and sample contents back the teacher's decisions between rounds, as multiples of the
-/// usual: deals per full estimate (`value`), deals per quick look (`quick`), and sample contents per pack or
-/// reroll judged. More is less noisy and slower. The options set them: "steady" twice the usual (about three
-/// times the time), "looks" twice the sample contents only (about 1.5 times), "light" half (rounded up;
-/// twice as fast). Studies and tests can set them for a thread ([`with_scales`]).
+/// How many samples back the teacher's decisions, as multiples of the usual: between rounds, deals per full
+/// estimate (`value`), deals per quick look (`quick`), and sample contents per pack or reroll judged; in a
+/// round, tries per plan on fair copies (`planner`). More is less noisy and slower. The options set them:
+/// "steady" twice the usual between rounds (about three times the time), "looks" twice the sample contents
+/// only (about 1.3 times), "light" half between rounds (rounded up; twice as fast), "steady-rounds" twice
+/// the tries in rounds. Studies and tests can set them for a thread ([`with_scales`]).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Scales {
     pub full: f64,
     pub quick: f64,
     pub looks: f64,
+    pub rounds: f64,
 }
 
 impl Scales {
+    pub const USUAL: Scales = Scales::all(1.0);
+
+    /// Every count between rounds scaled by `x` (rounds as usual).
     pub const fn all(x: f64) -> Scales {
         Scales {
             full: x,
             quick: x,
             looks: x,
+            rounds: 1.0,
         }
     }
 }
@@ -83,21 +89,24 @@ pub fn with_scales<T>(s: Scales, f: impl FnOnce() -> T) -> T {
 }
 
 pub fn scales() -> Scales {
+    use crate::teacher::on;
     if let Some(s) = SCALES.with(|c| c.get()) {
-        s
-    } else if crate::teacher::on("steady") {
+        return s;
+    }
+    let mut s = if on("steady") {
         Scales::all(2.0)
-    } else if crate::teacher::on("looks") {
-        Scales {
-            full: 1.0,
-            quick: 1.0,
-            looks: 2.0,
-        }
-    } else if crate::teacher::on("light") {
+    } else if on("light") {
         Scales::all(0.5)
     } else {
-        Scales::all(1.0)
+        Scales::USUAL
+    };
+    if on("looks") {
+        s.looks = s.looks.max(2.0);
     }
+    if on("steady-rounds") {
+        s.rounds = 2.0;
+    }
+    s
 }
 
 /// A usual count scaled (rounded up; at least one).
@@ -1482,11 +1491,18 @@ mod tests {
         assert_eq!(with_options(&["steady"], counts), (12, 4, 6, 48));
         assert_eq!(with_options(&["looks"], counts), (6, 2, 6, 24));
         assert_eq!(with_options(&["light"], counts), (3, 1, 2, 12));
+        assert_eq!(
+            with_options(&["looks", "steady-rounds"], counts),
+            (6, 2, 6, 24)
+        );
+        assert_eq!(with_options(&["steady-rounds"], scales).rounds, 2.0);
+        assert_eq!(scales().rounds, 1.0);
         // A study's scales stand above the options, on its thread only.
         let s = Scales {
             full: 4.0,
             quick: 1.0,
             looks: 0.5,
+            rounds: 1.0,
         };
         assert_eq!(
             with_options(&["steady"], || with_scales(s, counts)),
