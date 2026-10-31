@@ -1,0 +1,30 @@
+{
+ "job": "teacher-ensemble",
+ "commit": "841c809f4f69bc08faadc2fae7ed7d4930917667",
+ "started": "2026-10-31T20:01:11+00:00",
+ "finished": "2026-10-31T20:33:00+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   16.5,
+   16.7,
+   14.7
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 15,
+  "ensemble-w1": 930,
+  "ensemble-w1.5": 964
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "ensemble-w1": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin --value-weight 1 --runs 5000 --seed 1 --out results/value/ensemble2-w1.json",
+  "ensemble-w1.5": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin --value-weight 1.5 --runs 5000 --seed 1 --out results/value/ensemble2-w1.5.json"
+ }
+}
