@@ -44,7 +44,8 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   the shops still to come; with a learned value loaded, plus the log of
   its chance of winning; `Scales`: how many deals and sample contents back
   each decision, set by the teacher's options "steady", "looks", "light",
-  "steady-rounds", "precise"),
+  "steady-rounds", "precise"; `PARAMS`: the formula's numbers an option
+  can change, `name=value`, as `make teacher-tune` tries them),
   `learned.rs` (the learned value: a network read
   from the screen alone, `observe::encode_value`, trained by
   `scripts/train_value.py` on positions `baseline --record` keeps, each

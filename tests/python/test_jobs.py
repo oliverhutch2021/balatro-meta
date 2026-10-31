@@ -162,6 +162,33 @@ def test_round_three_records_with_precise_unless_its_trial_found_it_no_better(tm
     assert rec[rec.index("--value-net") + 1] == "models/value-2.bin"
 
 
+def test_the_formulas_numbers_are_tuned_on_the_best_teacher_against_its_own_runs(tmp_path):
+    steps = jobs.tune_steps(tmp_path)
+    names = [name for name, *_ in steps]
+    assert names[:2] == ["build", "precise"], "the precise teacher's own runs first, when the trial hasn't made them"
+    plays = {name: argv for name, argv, *_ in steps}
+    control = plays["precise"][plays["precise"].index("--out") + 1]
+    assert control == "results/value/precise-on-teacher-plain.json"
+    for change in jobs.TUNE:
+        play = plays[change]
+        assert play[play.index("--teacher-options") + 1] == f"precise,{change}"
+        assert play[play.index("--runs") + 1] == "2000" and play[play.index("--seed") + 1] == "1"
+        out = play[play.index("--out") + 1]
+        assert out.startswith("results/tune/") and "=" not in out and "," not in out
+        assert plays[f"compare {change}"][1:3] == [control, out]
+    # With the trial's runs there, they are the control and aren't played again.
+    (tmp_path / "results" / "value").mkdir(parents=True)
+    (tmp_path / "results" / "value" / "precise-on-teacher-plain.json").write_text("{}")
+    assert [name for name, *_ in jobs.tune_steps(tmp_path)][1] == jobs.TUNE[0]
+    # Without precise (its trial found it no better), the teacher's own report is the control.
+    (tmp_path / "results" / "value" / "precise-vs-teacher-plain.json").write_text(json.dumps({"win_rate_diff": -0.01}))
+    steps = {name: argv for name, argv, *_ in jobs.tune_steps(tmp_path)}
+    first = steps[jobs.TUNE[0]]
+    assert first[first.index("--teacher-options") + 1] == jobs.TUNE[0]
+    assert steps[f"compare {jobs.TUNE[0]}"][1] == "results/value/teacher-plain.json"
+    assert "teacher-tune" in jobs.JOBS
+
+
 def test_a_step_with_teacher_options_is_named_with_them(tmp_path):
     out = tmp_path / "results" / "x.json"
     out.parent.mkdir(parents=True)

@@ -126,6 +126,44 @@ def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
     }
 
 
+# The value formula's numbers tried by make teacher-tune, each beside its usual value (crates/bm-core/src/value.rs:
+# PARAMS). In the cloud the long-run term at twice its weight won 2.75 points less, at half its weight 2.75 more
+# (400 seeds each; neither clear).
+TUNE = ("long-run=0.25", "long-run=0.35", "sharpness=2.5", "sharpness=5", "money-scale=40", "buying-power=0.045")
+
+
+def file_safe(options: str) -> str:
+    return options.replace(",", "+").replace("=", "-")
+
+
+def tune_steps(root: Path = ROOT) -> list[tuple]:
+    """make teacher-tune: the best teacher there is, with the options recordings use (recording_options), tried with
+    each of the formula's numbers in TUNE changed, on the first 2,000 of the usual seeds, each set run by run against
+    the same teacher without the change. That teacher's own runs come from make teacher-precise when it has run (the
+    same seeds and options), else this job plays them first."""
+    best = best_learned(root)
+    net_args, stem = (["--value-net", best[0], "--value-weight", best[1]], Path(best[2]).stem) if best else \
+        ([], "teacher-plain")
+    base = recording_options(root)[1:]
+    base_opts = base[0] if base else ""
+    if base_opts:
+        control = f"results/value/{file_safe(base_opts)}-on-{stem}.json"
+    else:
+        control = f"results/value/{stem}.json"
+    steps: list[tuple] = [("build", [*MAKE, "build"])]
+    if base_opts and not (root / control).exists():
+        steps.append((base_opts, [*BASELINE, "--bot", "teacher", *net_args, "--teacher-options", base_opts,
+                                  "--runs", "2000", "--seed", "1", "--out", control]))
+    for change in TUNE:
+        opts = f"{base_opts},{change}" if base_opts else change
+        out = f"results/tune/{file_safe(opts)}-on-{stem}.json"
+        steps.append((change, [*BASELINE, "--bot", "teacher", *net_args, "--teacher-options", opts, "--runs", "2000",
+                               "--seed", "1", "--out", out]))
+        steps.append((f"compare {change}", ["scripts/compare_runs.py", control, out, "--out",
+                                            f"results/tune/{file_safe(opts)}-vs-{Path(control).stem}.json"]))
+    return steps
+
+
 def option_trial(option: str, root: Path = ROOT) -> list[tuple]:
     """The steps that try a teacher option on the best teacher there is: the teacher with the learned value that won
     most (best_learned; the plain teacher before any) and the option plays the first 2,000 of the usual seeds, and
@@ -270,6 +308,8 @@ JOBS: dict[str, list[tuple]] = {
     # time. It is tried on the best teacher there is (option_trial). On 400 seeds in the cloud with round 1's value
     # it won 45.0% against 38.5% (p = 0.03); 2,000 seeds on the PC tell more.
     "teacher-precise": option_trial("precise"),
+    # The value formula's numbers, each changed in turn on the best teacher there is (tune_steps, TUNE): about an hour.
+    "teacher-tune": tune_steps(),
 }
 
 

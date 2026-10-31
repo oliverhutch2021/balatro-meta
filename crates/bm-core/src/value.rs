@@ -124,6 +124,22 @@ pub fn quick_samples() -> usize {
     scale(QUICK, scales().quick)
 }
 
+/// The formula's numbers that a test can set (`--teacher-options name=value`), with their usual values.
+pub const PARAMS: &[(&str, f64)] = &[
+    ("sharpness", SHARPNESS),
+    ("planner-edge", PLANNER_EDGE),
+    ("long-run", LONG_RUN),
+    ("long-rounds", LONG_ROUNDS),
+    ("buying-power", BUYING_POWER),
+    ("money-scale", MONEY_SCALE),
+    ("deck-share", DECK_SHARE),
+];
+
+/// A number of the formula: as an option set it, else its usual value.
+fn p(name: &str, usual: f64) -> f64 {
+    crate::teacher::param(name).unwrap_or(usual)
+}
+
 /// How sharply a blind's chance turns with the log margin of a round's total over its target, and the
 /// teacher's planner's edge over the simple players here (a log factor): fitted to the teacher's own
 /// rounds (120 shop positions, 6 rounds each).
@@ -509,9 +525,10 @@ fn chance(samples: &[f64], shift: f64, target: f64) -> f64 {
         return 0.5;
     }
     let t = target.max(1.0).ln();
+    let (sharpness, edge) = (p("sharpness", SHARPNESS), p("planner-edge", PLANNER_EDGE));
     samples
         .iter()
-        .map(|&s| sigmoid(SHARPNESS * (s + shift + PLANNER_EDGE - t)))
+        .map(|&s| sigmoid(sharpness * (s + shift + edge - t)))
         .sum::<f64>()
         / samples.len() as f64
 }
@@ -595,12 +612,13 @@ pub fn buying_power(run: &Run) -> f64 {
     }
     // (Joker slots don't change it: a full row made all money worth a third less, so filling the last slot
     // looked like a loss and selling a joker like a gain. A joker's own power decides that.)
-    BUYING_POWER * (1.0 - 0.08 * (run.ante.clamp(1, 8) - 1) as f64) * shops
+    p("buying-power", BUYING_POWER) * (1.0 - 0.08 * (run.ante.clamp(1, 8) - 1) as f64) * shops
 }
 
 /// Scoring power that `dollars` will buy (each further dollar buying less).
 fn bought(run: &Run, dollars: f64) -> f64 {
-    buying_power(run) * MONEY_SCALE * (1.0 + dollars.max(0.0) / MONEY_SCALE).ln()
+    let scale = p("money-scale", MONEY_SCALE);
+    buying_power(run) * scale * (1.0 + dollars.max(0.0) / scale).ln()
 }
 
 /// A held tag in dollars: what it will give (a free joker in the next shop, money after the boss...).
@@ -885,13 +903,15 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
         v += w * p.max(1e-6).ln();
         blinds.push((target, p, w));
     }
-    let long = LONG_ROUNDS.min(rounds_left(run));
+    let long = p("long-rounds", LONG_ROUNDS).min(rounds_left(run));
     // Money in the long run buys power only in the shops still to come: none once the winning boss is
     // all that's left, so the last shop spends rather than dies rich.
     let spend = (shops_left(run) / long).min(1.0);
     let shopping = spend * bought(run, money + per_round * long);
-    let power = (1.0 - DECK_SHARE) * mean(&o.next) + DECK_SHARE * deck_power(run, salt, deals);
-    let long_run = LONG_RUN * (power + growth(&f, &o, run, long) + shopping);
+    let deck_share = p("deck-share", DECK_SHARE);
+    let power = (1.0 - deck_share) * mean(&o.next) + deck_share * deck_power(run, salt, deals);
+    let long_weight = p("long-run", LONG_RUN);
+    let long_run = long_weight * (power + growth(&f, &o, run, long) + shopping);
     let mut sorted = o.next.clone();
     sorted.sort_by(f64::total_cmp);
     Some(Breakdown {
@@ -899,7 +919,7 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
         next_total: sorted[sorted.len() / 2].exp(),
         main: o.main,
         long_run,
-        money: LONG_RUN * shopping,
+        money: long_weight * shopping,
         assets: 0.0,
         total: v + long_run,
         flows: f,
@@ -1322,9 +1342,10 @@ fn deck_key(run: &Run) -> u64 {
 /// What cards and money gained between two positions are worth (Tarots or Spectrals made as the shop
 /// closes or the blind starts...), in the value's units.
 pub fn holdings_gain(start: &Run, end: &Run) -> f64 {
-    let scale = buying_power(start) * MONEY_SCALE;
+    let money_scale = p("money-scale", MONEY_SCALE);
+    let scale = buying_power(start) * money_scale;
     scale
-        * ((1.0 + money_now(end) / MONEY_SCALE).ln() - (1.0 + money_now(start) / MONEY_SCALE).ln())
+        * ((1.0 + money_now(end) / money_scale).ln() - (1.0 + money_now(start) / money_scale).ln())
 }
 
 /// Weight of growth a round adds (it lasts the rest of the run), against the value's other terms.
@@ -1336,9 +1357,10 @@ const GROWTH_WEIGHT: f64 = 1.0;
 /// from, `end` the same run after the round (cashed out if it was won); `reference` is the chips and mult
 /// of a typical hand now, to weigh added chips and mult against.
 pub fn round_gain(start: &Run, end: &Run, reference: (f64, f64)) -> f64 {
-    let scale = buying_power(start) * MONEY_SCALE;
+    let money_scale = p("money-scale", MONEY_SCALE);
+    let scale = buying_power(start) * money_scale;
     let money = scale
-        * ((1.0 + money_now(end) / MONEY_SCALE).ln() - (1.0 + money_now(start) / MONEY_SCALE).ln());
+        * ((1.0 + money_now(end) / money_scale).ln() - (1.0 + money_now(start) / money_scale).ln());
     let x_now: f64 = start
         .jokers
         .iter()
@@ -1515,6 +1537,30 @@ mod tests {
             (24, 2, 2, 96)
         );
         assert_eq!(counts(), (6, 2, 3, 24), "and are gone after it");
+    }
+
+    #[test]
+    fn the_options_set_the_formulas_numbers() {
+        use crate::teacher::with_options;
+        let run = first_shop("NUMBERS1");
+        let total = |opts: &[&str]| with_options(opts, || breakdown(&run, 9).unwrap().total);
+        let usual = total(&[]);
+        assert_eq!(
+            total(&["sharpness=3.5", "long-run=0.5"]),
+            usual,
+            "the usual numbers"
+        );
+        assert_ne!(total(&["long-run=0.25"]), usual);
+        assert_ne!(total(&["sharpness=2"]), usual);
+        assert_ne!(total(&["money-scale=40", "precise"]), usual);
+        // The last value given counts.
+        assert_eq!(total(&["long-run=0.25", "long-run=0.5"]), usual);
+        for bad in ["long-run=x", "long-run=", "nonsense=1", "long-run=inf"] {
+            let names = vec![bad.to_string()];
+            let err = std::panic::catch_unwind(|| with_options(&[bad], || ()));
+            assert!(err.is_err(), "{bad} is refused");
+            assert!(crate::teacher::check_options(&names).is_err());
+        }
     }
 
     #[test]

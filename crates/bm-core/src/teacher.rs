@@ -85,26 +85,58 @@ pub const OPTIONS: &[&str] = &[
     "precise",
 ];
 
-static ON: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
-
-thread_local! {
-    static LOCAL: std::cell::RefCell<Option<Vec<&'static str>>> = const { std::cell::RefCell::new(None) };
+/// The options in force: the switches on, and the value formula's numbers set (`name=value`, the names in
+/// `value::PARAMS`).
+#[derive(Clone, Debug, Default)]
+struct Set {
+    on: Vec<&'static str>,
+    params: Vec<(&'static str, f64)>,
 }
 
-fn known(names: &[String]) -> Result<Vec<&'static str>, String> {
-    let mut on = Vec::new();
+static ON: std::sync::OnceLock<Set> = std::sync::OnceLock::new();
+
+thread_local! {
+    static LOCAL: std::cell::RefCell<Option<Set>> = const { std::cell::RefCell::new(None) };
+}
+
+fn known(names: &[String]) -> Result<Set, String> {
+    let mut set = Set::default();
     for n in names {
+        if let Some((name, value)) = n.split_once('=') {
+            let Some(&(k, _)) = crate::value::PARAMS.iter().find(|(k, _)| *k == name) else {
+                let names: Vec<&str> = crate::value::PARAMS.iter().map(|(k, _)| *k).collect();
+                return Err(format!(
+                    "unknown number {name:?} in teacher option {n:?}; known: {}",
+                    names.join(", ")
+                ));
+            };
+            match value.parse::<f64>() {
+                Ok(v) if v.is_finite() => set.params.push((k, v)),
+                _ => return Err(format!("teacher option {n:?} needs a number after '='")),
+            }
+            continue;
+        }
         match OPTIONS.iter().find(|&&k| k == n) {
-            Some(&k) => on.push(k),
+            Some(&k) => set.on.push(k),
             None => {
                 return Err(format!(
-                    "unknown teacher option {n:?}; known: {}",
-                    OPTIONS.join(", ")
+                    "unknown teacher option {n:?}; known: {}, or name=number for {}",
+                    OPTIONS.join(", "),
+                    crate::value::PARAMS
+                        .iter()
+                        .map(|(k, _)| *k)
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ))
             }
         }
     }
-    Ok(on)
+    Ok(set)
+}
+
+/// Check options without switching them on (an unknown name, or a number that isn't one, is an error).
+pub fn check_options(names: &[String]) -> Result<(), String> {
+    known(names).map(|_| ())
 }
 
 /// Switch options on for the whole program (once, before any run).
@@ -113,27 +145,47 @@ pub fn set_options(names: &[String]) -> Result<(), String> {
         .map_err(|_| "the teacher's options are already set".to_string())
 }
 
-/// The options switched on for the whole program.
-pub fn options() -> Vec<&'static str> {
-    ON.get().cloned().unwrap_or_default()
+/// The options in force for the whole program, as given (switches, then `name=value` numbers).
+pub fn options() -> Vec<String> {
+    ON.get().map_or_else(Vec::new, |s| {
+        s.on.iter()
+            .map(|o| o.to_string())
+            .chain(s.params.iter().map(|(k, v)| format!("{k}={v}")))
+            .collect()
+    })
 }
 
 /// Run `f` with these options on this thread only (tests).
 pub fn with_options<T>(names: &[&str], f: impl FnOnce() -> T) -> T {
     let names: Vec<String> = names.iter().map(|s| s.to_string()).collect();
-    let on = known(&names).expect("known options");
-    let before = LOCAL.with(|l| l.replace(Some(on)));
+    let set = known(&names).expect("known options");
+    let before = LOCAL.with(|l| l.replace(Some(set)));
     let out = f();
     LOCAL.with(|l| *l.borrow_mut() = before);
     out
 }
 
+/// A number of the value formula as an option set it (`name=value`), if one did.
+pub(crate) fn param(name: &str) -> Option<f64> {
+    let find = |s: &Set| {
+        s.params
+            .iter()
+            .rev()
+            .find(|(k, _)| *k == name)
+            .map(|(_, v)| *v)
+    };
+    if let Some(v) = LOCAL.with(|l| l.borrow().as_ref().map(&find)) {
+        return v;
+    }
+    ON.get().and_then(find)
+}
+
 /// Whether an option is switched on.
 pub(crate) fn on(name: &str) -> bool {
-    if let Some(v) = LOCAL.with(|l| l.borrow().clone()) {
-        return v.contains(&name);
+    if let Some(v) = LOCAL.with(|l| l.borrow().as_ref().map(|s| s.on.contains(&name))) {
+        return v;
     }
-    ON.get().is_some_and(|v| v.contains(&name))
+    ON.get().is_some_and(|s| s.on.contains(&name))
 }
 
 /// Whether the teacher decides by the value model (everything but the "classic" option).

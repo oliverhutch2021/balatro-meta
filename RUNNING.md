@@ -329,6 +329,21 @@ make learned-3
 Each later round is the same three jobs: `make learned-4`, then `make learned-5`, and so on (up to 9), each
 recording with the best teacher there is so far.
 
+## Step 11: tuning the value's formula (about 1 hour)
+
+Round 2 of the learned value won no more than round 1, so the hand-made part of the value is the next lever:
+how sharply a blind's chance turns with the margin, how much the long run counts, how money is weighed. Each is
+a number in `crates/bm-core/src/value.rs` (`PARAMS`) that a teacher option can change (`long-run=0.25`). After
+step 9:
+
+```
+make teacher-tune
+```
+
+The best teacher (with "precise") plays the first 2,000 of the usual seeds with each number changed in turn
+(`scripts/jobs.py`: `TUNE`), each set run by run against its own runs from step 9:
+`results/tune/*-vs-*.json` hold the differences. A change that wins clearly goes into the formula.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a
