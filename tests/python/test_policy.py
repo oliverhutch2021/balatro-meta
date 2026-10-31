@@ -164,6 +164,11 @@ def test_a_minibatch_in_pieces_gives_the_same_gradients():
     assert len(g1) == len(g2) > 0
     assert all(torch.allclose(x, y, atol=1e-6, rtol=1e-4) for x, y in zip(g1, g2, strict=True))
     assert all(abs(whole[k] - parts[k]) < 1e-5 for k in whole)
+    assert abs(whole["kl"]) < 1e-4, "the network that played and the one learning are the same so far"
+    # The value head alone: everything else keeps no gradient, so the optimizer leaves it as it is.
+    tp.value_only(model)
+    heads = {id(q) for q in model.value_head.parameters()}
+    assert all((q.grad is not None) == (id(q) in heads) for q in model.parameters())
 
 
 def ending(won=False, ante=2, lost_to="Big Blind", bought=(), held=(), hands=None, **counts) -> dict:
@@ -245,6 +250,13 @@ def test_imitate_ppo_and_eval_end_to_end(moves, tmp_path):
         for k, a in s["moves"]:
             assert g.step(k, a)
         assert g.over and (9 if g.view()["won"] else g.view()["ante"]) == s["ante"]
+    # While the copied network's value warms up, how it plays doesn't change at all: only the value head learns.
+    run("ppo", "--init", str(tmp_path / "imitate.pt"), "--dir", str(tmp_path / "warm"), "--max-updates", "2",
+        "--envs", "16", "--steps", "8", "--minibatch", "64", "--value-warmup", "5")
+    before = torch.load(tmp_path / "imitate.pt", weights_only=False)["model"]
+    after = torch.load(tmp_path / "warm" / "latest.pt", weights_only=False)["model"]
+    changed = {k for k in before if not torch.equal(before[k], after[k])}
+    assert changed and all(k.startswith("value_head.") for k in changed), changed
     run("eval", "--model", str(tmp_path / "ppo" / "latest.pt"), "--runs", "10", "--envs", "4", "--seed", "1",
         "--out", str(tmp_path / "eval.json"))
     ev = json.loads((tmp_path / "eval.json").read_text())

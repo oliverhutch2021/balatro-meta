@@ -879,10 +879,11 @@ def ppo_grads(torch, pp, batch, mb, micro: int, device, clip: float, value_coef:
               warm: bool) -> dict:
     """Adds PPO's loss gradients on minibatch `mb` (indices into `batch`) to the network's, worked out `micro`
     positions at a time so a big minibatch fits in the GPU's memory: the same gradients as the whole minibatch at
-    once. Returns the minibatch's mean policy, value and entropy losses and clipped share. (Past the GPU's memory,
-    Windows spills into the PC's RAM and training crawls rather than failing.)"""
+    once. Returns the minibatch's mean policy, value and entropy losses, clipped share and approximate KL divergence
+    from the policy that played (before this step). (Past the GPU's memory, Windows spills into the PC's RAM and
+    training crawls rather than failing.)"""
     fx, fl, fk, fs, ft, fc, flp, fadv, fret = batch
-    out = dict.fromkeys(("policy", "value", "entropy", "clip"), 0.0)
+    out = dict.fromkeys(("policy", "value", "entropy", "clip", "kl"), 0.0)
     n = len(mb)
     for c in range(0, n, micro):
         sub = mb[c:c + micro]
@@ -899,7 +900,17 @@ def ppo_grads(torch, pp, batch, mb, micro: int, device, clip: float, value_coef:
         out["value"] += float(vl.detach()) * w
         out["entropy"] += float(el.detach()) * w
         out["clip"] += float(((ratio - 1).abs() > clip).float().mean().detach()) * w
+        out["kl"] += float((flp[sub] - lp).mean().detach()) * w
     return out
+
+
+def value_only(model) -> None:
+    """Keep only the value head's gradients: the optimizer then leaves everything else as it is. (The value head
+    shares the network's layers with the move choices; training it through them would change how it plays.)"""
+    keep = {id(q) for q in model.value_head.parameters()}
+    for q in model.parameters():
+        if id(q) not in keep:
+            q.grad = None
 
 
 def ppo(a) -> dict:
@@ -1080,24 +1091,35 @@ def ppo(a) -> dict:
                                   flat(buf_cards))
         flp, fadv, fret = flat(buf_logp), flat(adv), flat(ret)
         fadv = (fadv - fadv.mean()) / (fadv.std() + 1e-8)
-        losses = {"policy": 0.0, "value": 0.0, "entropy": 0.0, "clip": 0.0}
+        losses = {"policy": 0.0, "value": 0.0, "entropy": 0.0, "clip": 0.0, "kl": 0.0}
         nb = 0
-        # The first updates from a copied network train its value only: its policy stays the teacher's until the
-        # value knows the network's own runs.
+        # The first updates from a copied network train its value head only, on the network's own runs: how it
+        # plays stays exactly the copy until the value can judge its moves.
         warm = state["updates"] < state.setdefault("warm_until", a.value_warmup if a.init else 0)
         batch = (fx, fl, fk, fs, ft, fc, flp, fadv, fret)
+        braked = False
         for _ in range(a.epochs):
             perm = torch.randperm(T * N, device=device)
             for k in range(0, T * N, a.minibatch):
                 opt.zero_grad(set_to_none=True)
                 got = ppo_grads(torch, pp, batch, perm[k:k + a.minibatch], a.micro, device, a.clip, a.value_coef,
                                 a.ent_coef, warm)
+                if not warm and a.target_kl and got["kl"] > 1.5 * a.target_kl:
+                    # The brake: this update has already moved the play as far as one update should.
+                    opt.zero_grad(set_to_none=True)
+                    braked = True
+                    break
+                if warm:
+                    value_only(model)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), a.max_grad)
                 opt.step()
                 for key in losses:
                     losses[key] += got[key]
                 nb += 1
+            if braked:
+                break
         state["updates"] += 1
+        state["braked"] = state.get("braked", 0) + int(braked)
         if first:
             # How long an update takes, and how close it came to the GPU's memory.
             first = False
@@ -1122,10 +1144,11 @@ def ppo(a) -> dict:
         last_losses = {k: round(v / max(nb, 1), 5) for k, v in losses.items()}
         watch.report(stats, extra=live)
         if state["updates"] % a.print_every == 0:
-            print(f"update {state['updates']}: {stats['runs']:,} runs, last {len(last):,}: won {win_recent:.2%}, "
-                  f"mean final ante {ante_recent:.2f}; policy {losses['policy'] / max(nb, 1):.4f}, "
-                  f"value {losses['value'] / max(nb, 1):.4f}, entropy {losses['entropy'] / max(nb, 1):.3f}",
-                  flush=True)
+            print(f"update {state['updates']}{' (value only)' if warm else ''}: {stats['runs']:,} runs, last "
+                  f"{len(last):,}: won {win_recent:.2%}, mean final ante {ante_recent:.2f}; policy "
+                  f"{losses['policy'] / max(nb, 1):.4f}, value {losses['value'] / max(nb, 1):.4f}, entropy "
+                  f"{losses['entropy'] / max(nb, 1):.3f}, kl {losses['kl'] / max(nb, 1):.4f}, braked "
+                  f"{state['braked']} so far", flush=True)
         if time.time() - last_save >= a.save_minutes * 60:
             save_all()
             last_save = time.time()
@@ -1195,6 +1218,8 @@ def main() -> None:
     p.add_argument("--max-grad", type=float, default=0.5)
     p.add_argument("--save-minutes", type=float, default=10.0)
     p.add_argument("--value-warmup", type=int, default=20, help="updates that train only the value, from --init")
+    p.add_argument("--target-kl", type=float, default=0.02,
+                   help="an update stops once its play has moved this far from the play it learns from (0: never)")
     p.add_argument("--print-every", type=int, default=5)
     p.add_argument("--block-runs", type=int, default=BLOCK_RUNS, help="runs per point of the training's progress")
     v = sub.add_parser("eval", parents=[net])
