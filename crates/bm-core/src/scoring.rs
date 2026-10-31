@@ -940,17 +940,20 @@ pub fn evaluate_play(run: &mut Run) -> HandScore {
     }
     run.last_hand = Some(hand);
     let scoring: Vec<CardId> = det.scoring.iter().map(|&i| full[i]).collect();
+    // The hand as the jokers are asked about it (its card lists are the ones returned at the end).
     let ph = PlayedHand {
-        full: full.clone(),
-        scoring: scoring.clone(),
+        full,
+        scoring,
         hand: Some(hand),
         contains: det.contains,
     };
+    // One list for the jokers' effects on each card, emptied as they are added in.
+    let mut joker_fx = Vec::new();
 
     let mut chips;
     let mut mult;
     let mut destroyed = Vec::new();
-    let not_allowed = boss_hand_check(run, full.len(), hand);
+    let not_allowed = boss_hand_check(run, ph.full.len(), hand);
     if !not_allowed {
         // 'Before' effects (Space Joker levels the hand up here).
         for i in 0..run.jokers.len() {
@@ -976,7 +979,7 @@ pub fn evaluate_play(run: &mut Run) -> HandScore {
         }
 
         // Played cards, in play order.
-        for &c in &scoring {
+        for &c in &ph.scoring {
             if run.card(c).debuffed {
                 if let Some(b) = run.blind.as_mut() {
                     b.triggered = true;
@@ -994,7 +997,7 @@ pub fn evaluate_play(run: &mut Run) -> HandScore {
             }
             for _ in 0..reps {
                 let own = own_play_effect(run, c);
-                let mut joker_fx = Vec::new();
+                joker_fx.clear();
                 for k in 0..run.jokers.len() {
                     if let Some(e) = calculate_joker(run, k, Ctx::PlayCard(c), &ph, 0) {
                         joker_fx.push(e);
@@ -1012,7 +1015,7 @@ pub fn evaluate_play(run: &mut Run) -> HandScore {
                     mult += em;
                     mult *= ex;
                 }
-                for e in joker_fx {
+                for e in joker_fx.drain(..) {
                     chips += e.chips;
                     mult += e.mult;
                     if let Some(x) = e.x_mult {
@@ -1029,7 +1032,7 @@ pub fn evaluate_play(run: &mut Run) -> HandScore {
             let mut pass = 0usize;
             while pass < reps {
                 let own = own_held_effect(run, c);
-                let mut joker_fx = Vec::new();
+                joker_fx.clear();
                 for k in 0..run.jokers.len() {
                     if let Some(e) = calculate_joker(run, k, Ctx::HeldCard(c), &ph, 0) {
                         joker_fx.push(e);
@@ -1052,7 +1055,7 @@ pub fn evaluate_play(run: &mut Run) -> HandScore {
                 if let Some(x) = own {
                     mult *= x;
                 }
-                for e in joker_fx {
+                for e in joker_fx.drain(..) {
                     mult += e.h_mult;
                     if let Some(x) = e.x_mult {
                         mult *= x;
@@ -1104,7 +1107,7 @@ pub fn evaluate_play(run: &mut Run) -> HandScore {
         // Sense; the first yes ends the asking), then a Glass card rolls to
         // shatter. Glass cards destroyed either way count as shattered.
         let mut shattered = Vec::new();
-        for &c in &scoring {
+        for &c in &ph.scoring {
             let mut gone = false;
             for k in 0..run.jokers.len() {
                 if calculate_joker(run, k, Ctx::DestroyingCard(c), &ph, 0)
@@ -1151,7 +1154,7 @@ pub fn evaluate_play(run: &mut Run) -> HandScore {
 
     HandScore {
         hand,
-        scoring,
+        scoring: ph.scoring,
         chips,
         mult,
         score,
