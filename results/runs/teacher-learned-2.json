@@ -1,0 +1,30 @@
+{
+ "job": "teacher-learned-2",
+ "commit": "f548d3265ac8fcfdd141c36998ae1c1b814a0c9e",
+ "started": "2026-10-31T16:09:40+00:00",
+ "finished": "2026-10-31T16:43:32+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   16.0,
+   16.6,
+   16.5
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 1,
+  "weight-1": 1038,
+  "weight-2": 992
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "weight-1": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-2.bin --value-weight 1 --runs 5000 --seed 1 --out results/value/teacher2-w1.json",
+  "weight-2": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-2.bin --value-weight 2 --runs 5000 --seed 1 --out results/value/teacher2-w2.json"
+ }
+}
