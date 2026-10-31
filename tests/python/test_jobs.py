@@ -137,17 +137,29 @@ def test_round_three_records_with_precise_unless_its_trial_found_it_no_better(tm
     assert jobs.recording_options(tmp_path) == ["--teacher-options", "precise"]
     trial.write_text(json.dumps({"kind": "comparison", "win_rate_diff": -0.004}))
     assert jobs.recording_options(tmp_path) == []
-    steps = {name: argv for name, argv, *_ in jobs.JOBS["teacher-data-3"]}
-    rec = steps["record"]
-    assert rec[rec.index("--seed") + 1] == "404" and rec[rec.index("--runs") + 1] == "25000"
-    train = dict(jobs.JOBS["value-net-3"])["train"]
-    datas = [train[i + 1] for i, a in enumerate(train) if a == "--data"]
-    assert [Path(d).name for d in datas] == ["value-2", "value-3"], "round 2's recording too, the newest last"
-    for name, argv, *_ in jobs.JOBS["teacher-learned-3"]:
-        if name != "build":
-            assert "--teacher-options" not in argv, "tested on the same footing as rounds 1 and 2"
-            assert argv[argv.index("--out") + 1].startswith("results/value/teacher3-w")
-    assert jobs.LEARNED_ROUNDS[2] == ("models/value-3.bin", "results/value/teacher3-w{w}.json")
+    for n, seed in ((3, "404"), (4, "505"), (9, "1010")):
+        steps = {name: argv for name, argv, *_ in jobs.JOBS[f"teacher-data-{n}"]}
+        rec = steps["record"]
+        assert rec[rec.index("--seed") + 1] == seed and rec[rec.index("--runs") + 1] == "25000"
+        assert Path(rec[rec.index("--record") + 1]).name == f"value-{n}"
+        train = dict(jobs.JOBS[f"value-net-{n}"])["train"]
+        datas = [train[i + 1] for i, a in enumerate(train) if a == "--data"]
+        assert [Path(d).name for d in datas] == [f"value-{n - 1}", f"value-{n}"], "the round before's too, newest last"
+        assert train[train.index("--out") + 1] == f"models/value-{n}.bin"
+        for name, argv, *_ in jobs.JOBS[f"teacher-learned-{n}"]:
+            if name != "build":
+                assert "--teacher-options" not in argv, "tested on the same footing as the earlier rounds"
+                assert argv[argv.index("--out") + 1].startswith(f"results/value/teacher{n}-w")
+        assert jobs.LEARNED_ROUNDS[n - 1] == (f"models/value-{n}.bin", f"results/value/teacher{n}-w{{w}}.json")
+    assert "teacher-data-10" not in jobs.JOBS and len(jobs.LEARNED_ROUNDS) == jobs.LAST_ROUND
+    # A round's recording uses the best network so far, whichever round it came from.
+    (tmp_path / "models").mkdir()
+    for n, rate in ((1, 0.393), (2, 0.43), (3, 0.41)):
+        (tmp_path / "models" / f"value-{n}.bin").write_bytes(b"BMVN")
+        name = "teacher-w1.json" if n == 1 else f"teacher{n}-w1.json"
+        (tmp_path / "results" / "value" / name).write_text(json.dumps({"win_rate": rate}))
+    rec = dict(jobs.learned_round(4, tmp_path)["teacher-data-4"])["record"]
+    assert rec[rec.index("--value-net") + 1] == "models/value-2.bin"
 
 
 def test_a_step_with_teacher_options_is_named_with_them(tmp_path):

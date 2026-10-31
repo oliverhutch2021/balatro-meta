@@ -72,7 +72,9 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   threads). `make teacher-data`, `make value-net` and `make
   teacher-learned` are the learned value's round: record (to
   `~/.cache/balatro-meta/data/`), train on the GPU (`models/`, not in git),
-  play with it. `make teacher-moves` and `make train` are the network that
+  play with it; `make learned-2`, then `learned-3`, `learned-4`... are the
+  next rounds (expert iteration: `jobs.learned_round`, each recording with
+  the best teacher so far). `make teacher-moves` and `make train` are the network that
   learns to play (`scripts/train_policy.py`: a transformer over the screen's
   objects, kind/slot/target/card heads with illegal moves masked, a value
   head; imitation of the teacher's recorded moves, then PPO on `VecEnv`,

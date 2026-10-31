@@ -51,9 +51,11 @@ BASELINE = ["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "ba
 
 # Each round of the learned value: its network, and the reports of the teacher playing with it at each weight on the
 # usual 5,000 seeds (round 1: make teacher-learned; round 2: make teacher-learned-2).
+# Rounds 3 and later are all alike (learned_round), up to this one.
+LAST_ROUND = 9
 LEARNED_ROUNDS = (("models/value-1.bin", "results/value/teacher-w{w}.json"),
-                  ("models/value-2.bin", "results/value/teacher2-w{w}.json"),
-                  ("models/value-3.bin", "results/value/teacher3-w{w}.json"))
+                  *((f"models/value-{n}.bin", f"results/value/teacher{n}-w{{w}}.json")
+                    for n in range(2, LAST_ROUND + 1)))
 
 
 def best_learned(root: Path = ROOT) -> tuple[str, str, str] | None:
@@ -92,6 +94,36 @@ def recording_options(root: Path = ROOT) -> list[str]:
         if isinstance(diff, (int, float)) and diff <= 0:
             return []
     return ["--teacher-options", "precise"]
+
+
+def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
+    """Round n (3 or later) of the learned value, three jobs. teacher-data-n: the best teacher there is (the round and
+    weight that won most, with "precise" unless its trial found it no better: recording_options) plays 25,000 new
+    runs (seed base 101 (n + 1): 404, 505, ...) and records every position it values. value-net-n: the round's
+    network learns from them and from the round before's recording (more positions; only round n's runs judge and
+    measure it). teacher-learned-n: the teacher plays the usual 5,000 seeds with it at weights 1 and 2, without
+    options, to set against the earlier rounds on the same footing."""
+    data = DATA / f"value-{n}"
+    return {
+        f"teacher-data-{n}": [
+            ("build", [*MAKE, "build"]),
+            ("record", [*BASELINE, "--bot", "teacher", *learned_value_args(root), *recording_options(root),
+                        "--runs", "25000", "--seed", str(101 * (n + 1)), "--record", str(data),
+                        "--out", f"results/value/record-{n}.json"]),
+        ],
+        f"value-net-{n}": [
+            ("setup-gpu", [*MAKE, "setup-gpu"]),
+            ("train", ["scripts/train_value.py", "--data", str(DATA / f"value-{n - 1}"), "--data", str(data),
+                       "--out", f"models/value-{n}.bin", "--report", f"results/value/value-{n}.json"]),
+        ],
+        f"teacher-learned-{n}": [
+            ("build", [*MAKE, "build"]),
+            *[(f"weight-{w}", [*BASELINE, "--bot", "teacher", "--value-net", f"models/value-{n}.bin",
+                               "--value-weight", w, "--runs", "5000", "--seed", "1",
+                               "--out", f"results/value/teacher{n}-w{w}.json"])
+              for w in ("1", "2")],
+        ],
+    }
 
 
 def option_trial(option: str, root: Path = ROOT) -> list[tuple]:
@@ -230,27 +262,9 @@ JOBS: dict[str, list[tuple]] = {
                            "--runs", "5000", "--seed", "1", "--out", f"results/value/teacher2-w{w}.json"])
           for w in ("1", "2")],
     ],
-    # The learned value, round 3: the best teacher there is (the round and weight that won most, with "precise" unless
-    # its trial found it no better: recording_options) plays 25,000 new runs (seed base 404) and records every
-    # position it values; the round-3 network learns from them and from round 2's recording (more positions; only
-    # round 3's runs judge and measure it); then the teacher plays the usual 5,000 seeds with it, without options, to
-    # set against rounds 1 and 2 on the same footing.
-    "teacher-data-3": [
-        ("build", [*MAKE, "build"]),
-        ("record", [*BASELINE, "--bot", "teacher", *learned_value_args(), *recording_options(), "--runs", "25000",
-                    "--seed", "404", "--record", str(DATA / "value-3"), "--out", "results/value/record-3.json"]),
-    ],
-    "value-net-3": [
-        ("setup-gpu", [*MAKE, "setup-gpu"]),
-        ("train", ["scripts/train_value.py", "--data", str(DATA / "value-2"), "--data", str(DATA / "value-3"),
-                   "--out", "models/value-3.bin", "--report", "results/value/value-3.json"]),
-    ],
-    "teacher-learned-3": [
-        ("build", [*MAKE, "build"]),
-        *[(f"weight-{w}", [*BASELINE, "--bot", "teacher", "--value-net", "models/value-3.bin", "--value-weight", w,
-                           "--runs", "5000", "--seed", "1", "--out", f"results/value/teacher3-w{w}.json"])
-          for w in ("1", "2")],
-    ],
+    # The learned value, round 3 and later (learned_round): the best teacher records with "precise", the round's
+    # network learns from its recording and the round before's, and the teacher plays the usual seeds with it.
+    **{name: steps for n in range(3, LAST_ROUND + 1) for name, steps in learned_round(n).items()},
     # The teacher's option "precise" (crates/bm-core/src/value.rs: `Scales`): twice the sample contents behind pack
     # and reroll decisions, its noisiest, and twice the tries behind each plan for a round, at about 1.45 times the
     # time. It is tried on the best teacher there is (option_trial). On 400 seeds in the cloud with round 1's value

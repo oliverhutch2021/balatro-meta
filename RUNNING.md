@@ -326,6 +326,9 @@ make learned-3
 - `make teacher-learned-3` (about 30 minutes): the teacher with it at weights 1 and 2 on the usual 5,000 seeds
   (`results/value/teacher3-w*.json`), without options, to set against rounds 1 and 2 on the same footing.
 
+Each later round is the same three jobs: `make learned-4`, then `make learned-5`, and so on (up to 9), each
+recording with the best teacher there is so far.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a
