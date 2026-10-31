@@ -98,7 +98,12 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   each settled state, without the game's text (`replay_me.scrub`), in
   `.sync/me/runs/` (local only). `scripts/replay_me.py` finds the engine's
   moves between those states (cards and jokers followed by the game's ids and
-  lined up before each move; moves that fit equally well kept in reserve). The page's
+  lined up before each move; moves that fit equally well kept in reserve).
+  `make compare-me` (`scripts/compare_me.py`, `examples/judge.rs`) replays
+  them and asks the teacher, at each decision, for its own move and what each
+  is worth (`teacher::judge_option`: a round's move by the chance of beating
+  the blind, a shop's or pack's by the value once the teacher has played on to
+  the end of the shop). The page's
   art comes from the user's own Balatro.exe at runtime (`scripts/art.py`
   parses the game's definitions for sheet cells then; served from memory to
   loopback clients only). No art, positions or text from the game are ever

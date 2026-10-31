@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune watch watch-mod record-me
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune watch watch-mod record-me compare-me
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -135,6 +135,9 @@ watch-mod:  ## (Re)install the companion mod into your Balatro Mods folder (make
 
 record-me: build  ## Record your own White Stake, Red Deck runs as you play them (SPEED=fast: 10x; RUNNING.md, step 13)
 	$(PY) scripts/record_me.py --speed $(if $(filter command line environment,$(origin SPEED)),$(SPEED),4)
+
+compare-me: build  ## Set each decision of your recorded runs against the best teacher's (report in .sync/me/)
+	$(PY) scripts/compare_me.py
 
 rng-game:  ## (dev) Only the game-runtime part of rng-check, outside the job runner
 	$(PY) scripts/rng_game.py --scale 200

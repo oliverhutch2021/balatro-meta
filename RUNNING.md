@@ -388,6 +388,18 @@ achievements or streaks come from them. While you play, the engine follows each 
 the end is still kept whole, and a fix replays it later. Even 5 to 10 runs help: a run is a couple of hundred
 decisions.
 
+Then, with no job running (it uses all threads for a few minutes):
+
+```
+make compare-me
+```
+
+Each of your decisions is set against the best teacher's: what it would have done, and what it thinks each choice
+is worth (in a round, the chance of beating the blind after it; in a shop or pack, the value of the position once
+it has played on to the end of the shop). `.sync/me/report.txt` lists how often you agree by kind of decision, the
+swaps you make most, and the decisions with the largest gaps either way. Claude reads it from there, and turns the
+patterns that recur into changes to try on thousands of seeds.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

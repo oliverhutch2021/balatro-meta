@@ -518,10 +518,15 @@ pub fn plan(run: &Run, best: (f64, u64), salt: u64) -> (MoveKind, u64) {
 /// How often the best-hand plan beats the blind from here, on fair copies (a quick read of a round's
 /// difficulty).
 pub fn beat_rate(run: &Run, salt: u64) -> f64 {
+    beat_rate_with(run, salt, 6)
+}
+
+/// `beat_rate` from `n` tries (more for a steadier estimate).
+pub fn beat_rate_with(run: &Run, salt: u64, n: u64) -> f64 {
     let fair = fair_copy(run, salt ^ 0xBEA7);
     let best = quick_best(&fair);
     let first = plan_move(&fair, Plan::Best, best);
-    let n = 6u64;
+    let n = n.max(1);
     let beats = (0..n)
         .filter(|&t| {
             try_policy(

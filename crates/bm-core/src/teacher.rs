@@ -2371,6 +2371,97 @@ fn value_blind_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     }
 }
 
+/// Moves that only put cards or jokers in another order.
+pub fn reorders(kind: MoveKind) -> bool {
+    matches!(
+        kind,
+        MoveKind::MoveCard | MoveKind::MoveJoker | MoveKind::SortRank | MoveKind::SortSuit
+    )
+}
+
+/// How the teacher measures a decision (`judge_option`): a round's moves by the chance of beating the blind,
+/// the rest by the value of the position.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Measure {
+    BeatChance,
+    Value,
+}
+
+/// Tries behind the chance of beating the blind after a round's move (`judge_option`).
+const JUDGE_TRIES: u64 = 40;
+/// Fair copies behind the value of a shop or pack move (`judge_option`).
+const JUDGE_COPIES: u64 = 4;
+
+/// What the teacher thinks one move is worth here (to set a player's move against its own,
+/// `examples/judge.rs`). In a round: the chance of beating the blind after it. At the blind choice: playing
+/// against skipping, as the teacher weighs them. In a shop or a pack: the value of the position the run
+/// reaches when, after this move, the teacher plays on until the shop is left (a move is often the first of a
+/// plan: selling a joker to buy another), on fair copies of what is hidden, averaged. Nothing hidden is used.
+pub fn judge_option(run: &Run, salt: u64, first: (MoveKind, u64)) -> (Measure, f64) {
+    use crate::value::value;
+    let vs = value_salt(run, salt);
+    match run.phase {
+        Phase::Round => {
+            let p = match after(run, vs ^ 0x5EED, &[first]) {
+                None => f64::NAN,
+                Some(c) => match c.phase {
+                    Phase::Round => crate::planner::beat_rate_with(&c, salt, JUDGE_TRIES),
+                    Phase::GameOver => 0.0,
+                    _ => 1.0,
+                },
+            };
+            (Measure::BeatChance, p)
+        }
+        Phase::BlindSelect if first.0 == MoveKind::SelectBlind => {
+            // Playing the blind pays its reward and the unused hands (about $5), as `value_blind_move` counts.
+            let mut played = run.clone();
+            played.money += 5;
+            (Measure::Value, value(&played, vs))
+        }
+        Phase::BlindSelect | Phase::Shop | Phase::Pack => {
+            let mut total = 0.0;
+            let mut seen = 0.0;
+            for k in 0..JUDGE_COPIES {
+                let Some(mut c) = after(run, vs ^ (0xC0FE + k), &[first]) else {
+                    continue;
+                };
+                // The teacher plays on to the end of the shop (or of a pack a skip's tag opened).
+                let mut steps = 0;
+                while matches!(c.phase, Phase::Shop | Phase::Pack) && steps < 60 {
+                    let m = teacher_move(&c, salt + 1 + steps);
+                    if crate::env::apply(&mut c, m.0, m.1).is_err() {
+                        break;
+                    }
+                    steps += 1;
+                }
+                total += value(&c, vs);
+                seen += 1.0;
+            }
+            (
+                Measure::Value,
+                if seen > 0.0 { total / seen } else { f64::NAN },
+            )
+        }
+        Phase::RoundEval | Phase::GameOver => (Measure::Value, value(run, vs)),
+    }
+}
+
+/// The teacher's own decision here: its reorders made (on a copy), then the first move that isn't one. Returns
+/// the run with its reorders made, the reorders, and that move.
+pub fn decision(run: &Run, salt: u64) -> (Run, Vec<(MoveKind, u64)>, (MoveKind, u64)) {
+    let mut c = run.clone();
+    let mut pre = Vec::new();
+    for i in 0..40u64 {
+        let m = teacher_move(&c, salt + i);
+        if !reorders(m.0) || crate::env::apply(&mut c, m.0, m.1).is_err() {
+            return (c, pre, m);
+        }
+        pre.push(m);
+    }
+    let m = teacher_move(&c, salt + 40);
+    (c, pre, m)
+}
+
 /// Start a run on this thread: forget what the last runs remembered (the decisions being carried out, the
 /// estimates). A remembered estimate's key leaves out a few things it hardly depends on (Fortune Teller's
 /// Tarots used, say), so a run must not meet another run's: each run then plays the same however many runs
@@ -2441,6 +2532,42 @@ mod tests {
         assert!(remembered() > 0, "a run leaves estimates behind");
         new_run();
         assert_eq!(remembered(), 0);
+    }
+
+    #[test]
+    fn the_teacher_judges_any_move_and_names_its_own_decision() {
+        // Along a run: at each decision its own move (after any reorders) is legal and not a reorder, and every
+        // move it is asked about gets a finite worth of the right kind; leaving a shop is worth the shop as
+        // it stands.
+        let mut run = Run::new(RunConfig::new("JUDGE001"));
+        let mut step = 0u64;
+        let mut judged = 0;
+        while run.phase != Phase::GameOver && !run.won && step < 400 {
+            new_run();
+            let (mine, _, m) = decision(&run, step);
+            assert!(!reorders(m.0), "a decision is not a reorder");
+            assert!(apply(&mut mine.clone(), m.0, m.1).is_ok(), "its decision is legal");
+            if step % 7 == 0 && run.phase != Phase::RoundEval {
+                new_run();
+                let (measure, v) = judge_option(&mine, step, m);
+                assert!(v.is_finite(), "{:?} {m:?}", run.phase);
+                let round = run.phase == Phase::Round;
+                assert_eq!(measure == Measure::BeatChance, round);
+                if round {
+                    assert!((0.0..=1.0).contains(&v));
+                }
+                judged += 1;
+            }
+            if run.phase == Phase::Shop {
+                new_run();
+                let here = crate::value::value(&run, value_salt(&run, step));
+                assert_eq!(judge_option(&run, step, (MoveKind::LeaveShop, 0)).1, here);
+            }
+            let (k, a) = teacher_move(&run, step);
+            assert!(apply(&mut run, k, a).is_ok());
+            step += 1;
+        }
+        assert!(judged > 10);
     }
 
     #[test]
