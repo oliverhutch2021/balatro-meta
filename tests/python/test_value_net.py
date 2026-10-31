@@ -136,6 +136,38 @@ def test_training_writes_a_network_the_engine_reads(recording, tmp_path):
     assert inputs == VALUE_LEN and [w.shape[0] for w, _, _ in layers] == [16, 8, 1 + tv.STAGES]
 
 
+def test_older_recordings_are_trained_on_and_the_newest_alone_measured(recording, tmp_path):
+    older = tmp_path / "older"
+    baseline("--runs", "120", "--threads", "2", "--seed", "6", "--record", str(older))
+    data = tv.load_data([older, recording])
+    one = tv.load_data(recording)
+    old_alone = tv.load_data(older)
+    assert data.rows == one.rows + old_alone.rows
+    assert (data.source[:old_alone.rows] == 0).all() and (data.source[old_alone.rows:] == 1).all()
+    # The newest keeps its run numbers (and so its split); the older one's are moved clear of them.
+    assert (data.lab[data.source == 1] == one.lab).all()
+    assert (data.lab[data.source == 0, tv.RUN] == old_alone.lab[:, tv.RUN] + tv.RUN_OFFSET).all()
+    row = old_alone.rows + 7
+    assert (data.dense(np.array([row])) == one.dense(np.array([7]))).all()
+    assert (data.dense(np.array([3])) == old_alone.dense(np.array([3]))).all()
+    short = tv.load_data([older, recording], max_runs=50)
+    assert len(np.unique(short.lab[:, tv.RUN])) == 100 and short.source[-1] == 1
+    assert (short.dense(np.arange(short.rows)[-3:]) == one.dense(np.arange(3) + int((one.lab[:, tv.RUN] < 50).sum()) - 3)).all()
+
+    pytest.importorskip("torch")
+    out, report = tmp_path / "value.bin", tmp_path / "value.json"
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "train_value.py"), "--data", str(older),
+                        "--data", str(recording), "--out", str(out), "--report", str(report), "--epochs", "1",
+                        "--configs", "16/0.1/1e-4", "--scale-rows", "2000", "--cpu"],
+                       cwd=ROOT, capture_output=True, text=True, check=False, timeout=900)
+    assert r.returncode == 0, r.stdout + r.stderr
+    rep = json.loads(report.read_text())
+    assert rep["recording"]["runs"] == 300 and rep["data"] == str(recording)
+    assert [o["runs"] for o in rep["older_recordings"]] == [120]
+    assert rep["runs"]["train"] == 120 + (300 - rep["runs"]["judge"] - rep["runs"]["measure"])
+    assert rep["measured"]["runs"] == rep["runs"]["measure"]
+
+
 def test_the_teacher_plays_with_a_network(tmp_path):
     net = tmp_path / "net.bin"
     tv.export_bmvn(net, random_net(np.random.default_rng(5), [8, 1 + tv.STAGES]), VALUE_INPUT_VERSION)

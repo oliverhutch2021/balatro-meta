@@ -58,7 +58,8 @@ pub const OPTIONS: &[&str] = &[
     // the planner judging rounds by beating the blind only (no value model).
     "classic",
     // Skip blinds for their tags when the value says so (off: on 400 test runs skipping about 2.6 blinds a
-    // run reached a lower mean final ante, 6.03 against 6.33 without).
+    // run reached a lower mean final ante, 6.03 against 6.33 without; again with round 1's learned value, 1.4
+    // skips a run won 35.75% against 38.5% on the same 400 seeds).
     "skips",
     // Jokers to sell picked by the fixed judgement, not by what the run would lose without each.
     "static-sells",

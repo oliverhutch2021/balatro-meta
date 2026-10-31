@@ -86,11 +86,11 @@ def describe(c: dict, name_a: str, name_b: str) -> str:
         f"{c['seeds']:,} seeds played by both.",
         f"  {name_a}: {100 * c['a']['win_rate']:.2f}% won, {c['a']['blinds_beaten']:.2f} blinds beaten a run",
         f"  {name_b}: {100 * c['b']['win_rate']:.2f}% won, {c['b']['blinds_beaten']:.2f} blinds beaten a run",
-        f"Difference ({name_b} less {name_a}): {100 * c['win_rate_diff']:+.2f} points of win rate "
-        f"(95% interval {100 * lo:+.2f} to {100 * hi:+.2f}), {c['blinds_beaten_diff']:+.3f} blinds "
-        f"({blo:+.3f} to {bhi:+.3f}).",
-        f"Seeds only one won: {name_a} {c['only_a_won']}, {name_b} {c['only_b_won']} "
-        f"(p = {c['p_value']:.3g} that this split is chance).",
+        (f"Difference ({name_b} less {name_a}): {100 * c['win_rate_diff']:+.2f} points of win rate "
+         f"(95% interval {100 * lo:+.2f} to {100 * hi:+.2f}), {c['blinds_beaten_diff']:+.3f} blinds "
+         f"({blo:+.3f} to {bhi:+.3f})."),
+        (f"Seeds only one won: {name_a} {c['only_a_won']}, {name_b} {c['only_b_won']} "
+         f"(p = {c['p_value']:.3g} that this split is chance)."),
     ])
 
 

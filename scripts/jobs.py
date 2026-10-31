@@ -52,7 +52,8 @@ BASELINE = ["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "ba
 # Each round of the learned value: its network, and the reports of the teacher playing with it at each weight on the
 # usual 5,000 seeds (round 1: make teacher-learned; round 2: make teacher-learned-2).
 LEARNED_ROUNDS = (("models/value-1.bin", "results/value/teacher-w{w}.json"),
-                  ("models/value-2.bin", "results/value/teacher2-w{w}.json"))
+                  ("models/value-2.bin", "results/value/teacher2-w{w}.json"),
+                  ("models/value-3.bin", "results/value/teacher3-w{w}.json"))
 
 
 def best_learned(root: Path = ROOT) -> tuple[str, str, str] | None:
@@ -77,6 +78,19 @@ def learned_value_args(root: Path = ROOT) -> list[str]:
     """The teacher's learned-value options for the round and weight that won most often (best_learned), or none."""
     best = best_learned(root)
     return [] if best is None else ["--value-net", best[0], "--value-weight", best[1]]
+
+
+def recording_options(root: Path = ROOT) -> list[str]:
+    """The teacher options a recording uses: "looks" (twice the sample contents behind pack and reroll decisions),
+    which won more in the cloud tests, unless a trial of it on the PC (make teacher-looks) found it no better."""
+    for f in sorted((root / "results" / "value").glob("looks-vs-*.json")):
+        try:
+            diff = json.loads(f.read_text()).get("win_rate_diff")
+        except (OSError, ValueError, AttributeError):
+            continue
+        if isinstance(diff, (int, float)) and diff <= 0:
+            return []
+    return ["--teacher-options", "looks"]
 
 
 def option_trial(option: str, root: Path = ROOT) -> list[tuple]:
@@ -213,6 +227,27 @@ JOBS: dict[str, list[tuple]] = {
         ("build", [*MAKE, "build"]),
         *[(f"weight-{w}", [*BASELINE, "--bot", "teacher", "--value-net", "models/value-2.bin", "--value-weight", w,
                            "--runs", "5000", "--seed", "1", "--out", f"results/value/teacher2-w{w}.json"])
+          for w in ("1", "2")],
+    ],
+    # The learned value, round 3: the best teacher there is (the round and weight that won most, with "looks" unless
+    # its trial found it no better: recording_options) plays 25,000 new runs (seed base 404) and records every
+    # position it values; the round-3 network learns from them and from round 2's recording (more positions; only
+    # round 3's runs judge and measure it); then the teacher plays the usual 5,000 seeds with it, without options, to
+    # set against rounds 1 and 2 on the same footing.
+    "teacher-data-3": [
+        ("build", [*MAKE, "build"]),
+        ("record", [*BASELINE, "--bot", "teacher", *learned_value_args(), *recording_options(), "--runs", "25000",
+                    "--seed", "404", "--record", str(DATA / "value-3"), "--out", "results/value/record-3.json"]),
+    ],
+    "value-net-3": [
+        ("setup-gpu", [*MAKE, "setup-gpu"]),
+        ("train", ["scripts/train_value.py", "--data", str(DATA / "value-2"), "--data", str(DATA / "value-3"),
+                   "--out", "models/value-3.bin", "--report", "results/value/value-3.json"]),
+    ],
+    "teacher-learned-3": [
+        ("build", [*MAKE, "build"]),
+        *[(f"weight-{w}", [*BASELINE, "--bot", "teacher", "--value-net", "models/value-3.bin", "--value-weight", w,
+                           "--runs", "5000", "--seed", "1", "--out", f"results/value/teacher3-w{w}.json"])
           for w in ("1", "2")],
     ],
     # The teacher's options for how many deals and sample contents back its decisions between rounds

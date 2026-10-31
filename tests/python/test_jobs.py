@@ -129,6 +129,27 @@ def test_the_teacher_s_options_are_tried_on_the_best_teacher_against_its_own_run
     assert {"teacher-looks", "teacher-steady"} <= set(jobs.JOBS)
 
 
+def test_round_three_records_with_looks_unless_its_trial_found_it_no_better(tmp_path):
+    assert jobs.recording_options(tmp_path) == ["--teacher-options", "looks"], "the cloud tests' finding"
+    (tmp_path / "results" / "value").mkdir(parents=True)
+    trial = tmp_path / "results" / "value" / "looks-vs-teacher2-w1.json"
+    trial.write_text(json.dumps({"kind": "comparison", "win_rate_diff": 0.031}))
+    assert jobs.recording_options(tmp_path) == ["--teacher-options", "looks"]
+    trial.write_text(json.dumps({"kind": "comparison", "win_rate_diff": -0.004}))
+    assert jobs.recording_options(tmp_path) == []
+    steps = {name: argv for name, argv, *_ in jobs.JOBS["teacher-data-3"]}
+    rec = steps["record"]
+    assert rec[rec.index("--seed") + 1] == "404" and rec[rec.index("--runs") + 1] == "25000"
+    train = dict(jobs.JOBS["value-net-3"])["train"]
+    datas = [train[i + 1] for i, a in enumerate(train) if a == "--data"]
+    assert [Path(d).name for d in datas] == ["value-2", "value-3"], "round 2's recording too, the newest last"
+    for name, argv, *_ in jobs.JOBS["teacher-learned-3"]:
+        if name != "build":
+            assert "--teacher-options" not in argv, "tested on the same footing as rounds 1 and 2"
+            assert argv[argv.index("--out") + 1].startswith("results/value/teacher3-w")
+    assert jobs.LEARNED_ROUNDS[2] == ("models/value-3.bin", "results/value/teacher3-w{w}.json")
+
+
 def test_a_step_with_teacher_options_is_named_with_them(tmp_path):
     out = tmp_path / "results" / "x.json"
     out.parent.mkdir(parents=True)

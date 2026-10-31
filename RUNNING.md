@@ -302,8 +302,21 @@ make teacher-looks
 
 The best teacher there is (the learned value and weight that won most) with "looks" plays the first 2,000 of the
 usual seeds, and `scripts/compare_runs.py` sets it run by run against that teacher's own runs on those seeds:
-`results/value/looks-vs-*.json` holds the difference with its 95% interval. If it wins clearly more, the next
-recordings use it. `make teacher-steady` (about 25 minutes) tries "steady" the same way.
+`results/value/looks-vs-*.json` holds the difference with its 95% interval. The next recordings use "looks"
+unless this trial finds it no better. `make teacher-steady` (about 25 minutes) tries "steady" the same way.
+
+## Step 10: round 3 of the learned value (about 3 hours)
+
+```
+make learned-3
+```
+
+- `make teacher-data-3` (about 2 hours): the best teacher there is (the round and weight that won most, with
+  "looks" unless step 9 found it no better) plays 25,000 new runs, recorded in `~/.cache/balatro-meta/data/value-3`.
+- `make value-net-3` (about 30 minutes): the round-3 network, `models/value-3.bin`, trained on round 3's
+  recording and round 2's (more positions to learn from); only round 3's runs judge and measure it.
+- `make teacher-learned-3` (about 40 minutes): the teacher with it at weights 1 and 2 on the usual 5,000 seeds
+  (`results/value/teacher3-w*.json`), without options, to set against rounds 1 and 2 on the same footing.
 
 ## Later steps
 

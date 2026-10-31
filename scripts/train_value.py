@@ -44,10 +44,15 @@ RUN, STEP, PHASE, ANTE, STAGE, WON, END_STAGE, END_ANTE = range(8)
 # ---- Data ----
 
 class Data:
-    """Recorded positions, sparse: row r's nonzero inputs are idx/val[ptr[r]:ptr[r+1]]; lab[r] its labels."""
+    """Recorded positions, sparse: row r's nonzero inputs are idx/val[ptr[r]:ptr[r+1]]; lab[r] its labels. With
+    several recordings, source[r] is the recording row r came from (the last is the newest), and the manifest is the
+    newest one's."""
 
-    def __init__(self, idx: np.ndarray, val: np.ndarray, ptr: np.ndarray, lab: np.ndarray, manifest: dict):
+    def __init__(self, idx: np.ndarray, val: np.ndarray, ptr: np.ndarray, lab: np.ndarray, manifest: dict,
+                 source: np.ndarray | None = None, manifests: list[dict] | None = None):
         self.idx, self.val, self.ptr, self.lab, self.manifest = idx, val, ptr, lab, manifest
+        self.source = np.zeros(len(lab), np.int8) if source is None else source
+        self.manifests = [manifest] if manifests is None else manifests
 
     @property
     def rows(self) -> int:
@@ -65,50 +70,72 @@ class Data:
         return x
 
 
-def load_data(folder: Path, max_runs: int | None = None) -> Data:
-    """Every chunk of a recording, in run order (the recorder writes chunks of whole runs, sorted)."""
-    man_path = folder / "manifest.json"
-    if not man_path.exists():
-        raise SystemExit(f"{folder} has no manifest.json: the recording is missing or didn't finish "
-                         f"(make teacher-data).")
-    manifest = json.loads(man_path.read_text())
-    chunks = sorted(p.name[: -len("-ptr.npy")] for p in folder.glob("chunk-*-ptr.npy"))
-    if len(chunks) != manifest["chunks"]:
-        raise SystemExit(f"{folder}: the manifest lists {manifest['chunks']} chunks, {len(chunks)} are there.")
-    # Sizes first, so the arrays are filled in place (no second copy of the data in memory).
-    sizes = []
-    for c in chunks:
-        ptr = np.load(folder / f"{c}-ptr.npy", mmap_mode="r")
-        lab = np.load(folder / f"{c}-lab.npy", mmap_mode="r")
-        sizes.append((len(lab), int(ptr[-1])))
-    if max_runs is not None:
-        keep = max(1, math.ceil(max_runs / manifest["runs_per_chunk"]))
-        chunks, sizes = chunks[:keep], sizes[:keep]
-    n_rows = sum(r for r, _ in sizes)
-    n_nz = sum(z for _, z in sizes)
+# Run numbers of an older recording are moved up by this much per recording back (the newest keeps its own), so
+# runs from different recordings never share a number. Labels are float32, exact to 16,777,216.
+RUN_OFFSET = 1_000_000
+
+
+def load_data(folders: Path | list[Path], max_runs: int | None = None) -> Data:
+    """Every chunk of one or more recordings, each in run order (the recorder writes chunks of whole runs, sorted),
+    the newest last."""
+    folders = [folders] if isinstance(folders, (str, Path)) else list(folders)
+    parts = []
+    for folder in folders:
+        man_path = folder / "manifest.json"
+        if not man_path.exists():
+            raise SystemExit(f"{folder} has no manifest.json: the recording is missing or didn't finish "
+                             f"(make teacher-data).")
+        manifest = json.loads(man_path.read_text())
+        chunks = sorted(p.name[: -len("-ptr.npy")] for p in folder.glob("chunk-*-ptr.npy"))
+        if len(chunks) != manifest["chunks"]:
+            raise SystemExit(f"{folder}: the manifest lists {manifest['chunks']} chunks, {len(chunks)} are there.")
+        # Sizes first, so the arrays are filled in place (no second copy of the data in memory).
+        sizes = []
+        for c in chunks:
+            ptr = np.load(folder / f"{c}-ptr.npy", mmap_mode="r")
+            lab = np.load(folder / f"{c}-lab.npy", mmap_mode="r")
+            sizes.append((len(lab), int(ptr[-1])))
+        if max_runs is not None:
+            keep = max(1, math.ceil(max_runs / manifest["runs_per_chunk"]))
+            chunks, sizes = chunks[:keep], sizes[:keep]
+        parts.append((folder, manifest, chunks, sizes))
+    first = parts[-1][1]
+    for folder, manifest, _, _ in parts:
+        for key in ("inputs", "input_version", "labels"):
+            if manifest.get(key) != first.get(key):
+                raise SystemExit(f"{folder}: its {key} differ from the newest recording's, so they can't be mixed.")
+    if len(parts) > 9:
+        raise SystemExit("At most 9 recordings at once.")
+    n_rows = sum(r for _, _, _, sizes in parts for r, _ in sizes)
+    n_nz = sum(z for _, _, _, sizes in parts for _, z in sizes)
     idx = np.empty(n_nz, np.int16)  # the inputs number fewer than 32,768
     val = np.empty(n_nz, np.float16)
     ptr = np.empty(n_rows + 1, np.int64)
-    lab = np.empty((n_rows, len(manifest["labels"])), np.float32)
+    lab = np.empty((n_rows, len(first["labels"])), np.float32)
+    source = np.empty(n_rows, np.int8)
     ptr[0] = 0
     r0 = z0 = 0
-    for c, (nr, nz) in zip(chunks, sizes):
-        cp = np.load(folder / f"{c}-ptr.npy")
-        if len(cp) != nr + 1 or cp[0] != 0 or cp[-1] != nz:
-            raise SystemExit(f"{folder}/{c}: its row pointers don't match its rows.")
-        idx[z0:z0 + nz] = np.load(folder / f"{c}-idx.npy").view(np.int16)
-        val[z0:z0 + nz] = np.load(folder / f"{c}-val.npy")
-        ptr[r0 + 1:r0 + nr + 1] = cp[1:] + z0
-        lab[r0:r0 + nr] = np.load(folder / f"{c}-lab.npy")
-        r0, z0 = r0 + nr, z0 + nz
-    if max_runs is not None:
-        keep_rows = lab[:, RUN] < lab[0, RUN] + max_runs if n_rows else np.zeros(0, bool)
-        n = int(keep_rows.sum())  # rows are in run order, so the first runs are a prefix
-        lab, ptr = lab[:n], ptr[:n + 1]
-        idx, val = idx[:ptr[-1]], val[:ptr[-1]]
-    if n_rows and (idx.min() < 0 or idx.max() >= manifest["inputs"]):
-        raise SystemExit(f"{folder}: an input index is out of range.")
-    return Data(idx, val, ptr, lab, manifest)
+    for k, (folder, manifest, chunks, sizes) in enumerate(parts):
+        start = r0
+        for c, (nr, nz) in zip(chunks, sizes):
+            cp = np.load(folder / f"{c}-ptr.npy")
+            if len(cp) != nr + 1 or cp[0] != 0 or cp[-1] != nz:
+                raise SystemExit(f"{folder}/{c}: its row pointers don't match its rows.")
+            idx[z0:z0 + nz] = np.load(folder / f"{c}-idx.npy").view(np.int16)
+            val[z0:z0 + nz] = np.load(folder / f"{c}-val.npy")
+            ptr[r0 + 1:r0 + nr + 1] = cp[1:] + z0
+            lab[r0:r0 + nr] = np.load(folder / f"{c}-lab.npy")
+            r0, z0 = r0 + nr, z0 + nz
+        if max_runs is not None and r0 > start:
+            # Rows are in run order, so the first runs are a prefix; the next recording is written after it.
+            r0 = start + int((lab[start:r0, RUN] < lab[start, RUN] + max_runs).sum())
+            z0 = int(ptr[r0])
+        source[start:r0] = k
+        lab[start:r0, RUN] += RUN_OFFSET * (len(parts) - 1 - k)
+    idx, val, ptr, lab, source = idx[:z0], val[:z0], ptr[:r0 + 1], lab[:r0], source[:r0]
+    if len(lab) and (idx.min() < 0 or idx.max() >= first["inputs"]):
+        raise SystemExit(f"{parts[-1][0]}: an input index is out of range.")
+    return Data(idx, val, ptr, lab, first, source, [m for _, m, _, _ in parts])
 
 
 def split(runs: np.ndarray, parts: int = SPLIT) -> np.ndarray:
@@ -409,18 +436,25 @@ def train(a) -> dict:
     torch = need_torch()
     t0 = time.time()
     rng = np.random.default_rng(a.seed)
-    data = load_data(Path(a.data).expanduser(), a.max_runs)
+    folders = [Path(d).expanduser() for d in a.data]
+    data = load_data(folders, a.max_runs)
     man = data.manifest
     if data.rows == 0:
         raise SystemExit("The recording has no positions.")
-    part = split(data.lab[:, RUN], a.split)
+    # The newest recording's runs are split to train on, judge training and measure; older recordings' runs are
+    # all trained on (more positions to learn from), so the measures are the newest teacher's alone.
+    newest = data.source == len(folders) - 1
+    part = np.where(newest, split(data.lab[:, RUN], a.split), 0)
     train_rows, judge_rows, test_rows = (np.flatnonzero(part == k) for k in range(3))
     if min(len(train_rows), len(judge_rows), len(test_rows)) == 0:
         raise SystemExit("Too few runs to keep some apart.")
     runs = [len(np.unique(data.lab[r, RUN])) for r in (train_rows, judge_rows, test_rows)]
     device = torch.device("cuda" if torch.cuda.is_available() and not a.cpu else "cpu")
     dev_name = torch.cuda.get_device_name(0) if device.type == "cuda" else "cpu"
-    print(f"{data.rows:,} positions from {man['runs']:,} runs ({runs[0]:,} to train on, {runs[1]:,} to judge "
+    total_runs = sum(int(m["runs"]) for m in data.manifests)
+    older = f" (with {len(folders) - 1} older recording{'s' if len(folders) > 2 else ''} trained on)" \
+        if len(folders) > 1 else ""
+    print(f"{data.rows:,} positions from {total_runs:,} runs{older} ({runs[0]:,} to train on, {runs[1]:,} to judge "
           f"training, {runs[2]:,} to measure); {data.inputs} inputs; {dev_name}", flush=True)
     b = Batches(torch, data, device)
     sample = torch.from_numpy(rng.permutation(train_rows)[:a.scale_rows]).to(device)
@@ -465,8 +499,11 @@ def train(a) -> dict:
             raise SystemExit(f"The engine reads the network differently (by {engine_diff}).")
     secs = time.time() - t0
     report = {
-        "kind": "value-net", "data": str(a.data), "recording": {k: man.get(k) for k in (
+        "kind": "value-net", "data": str(a.data[-1]), "recording": {k: man.get(k) for k in (
             "bot", "seed_base", "runs", "rows", "wins", "value_net", "value_weight", "teacher_options")},
+        "older_recordings": [{"data": str(d), **{k: m.get(k) for k in ("bot", "seed_base", "runs", "rows", "wins",
+                                                                       "value_net", "value_weight")}}
+                             for d, m in zip(a.data[:-1], data.manifests[:-1])],
         "inputs": data.inputs, "input_version": version, "chosen": cfg, "tried": tried,
         "judging_bce_by_stage_alone": round(judge_base, 5),
         "input_dropout": a.input_dropout, "aux_weight": a.aux, "lr": a.lr, "batch": a.batch, "seed": a.seed,
@@ -494,7 +531,9 @@ def train(a) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", required=True, help="a recording (baseline --record DIR)")
+    ap.add_argument("--data", required=True, action="append",
+                    help="a recording (baseline --record DIR); give it more than once to train on older recordings "
+                         "too, the newest last (it alone is judged and measured on)")
     ap.add_argument("--out", required=True, help="where to write the network (BMVN)")
     ap.add_argument("--report", help="where to write the training report (JSON)")
     ap.add_argument("--configs", default=CONFIGS,
