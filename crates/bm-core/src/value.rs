@@ -53,7 +53,8 @@ pub const QUICK: usize = 2;
 /// round, tries per plan on fair copies (`planner`). More is less noisy and slower. The options set them:
 /// "steady" twice the usual between rounds (about three times the time), "looks" twice the sample contents
 /// only (about 1.3 times), "light" half between rounds (rounded up; twice as fast), "steady-rounds" twice
-/// the tries in rounds. Studies and tests can set them for a thread ([`with_scales`]).
+/// the tries in rounds, "precise" both "looks" and "steady-rounds". Studies and tests can set them for a
+/// thread ([`with_scales`]).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Scales {
     pub full: f64,
@@ -100,10 +101,10 @@ pub fn scales() -> Scales {
     } else {
         Scales::USUAL
     };
-    if on("looks") {
+    if on("looks") || on("precise") {
         s.looks = s.looks.max(2.0);
     }
-    if on("steady-rounds") {
+    if on("steady-rounds") || on("precise") {
         s.rounds = 2.0;
     }
     s
@@ -1496,6 +1497,11 @@ mod tests {
             (6, 2, 6, 24)
         );
         assert_eq!(with_options(&["steady-rounds"], scales).rounds, 2.0);
+        let precise = with_options(&["precise"], scales);
+        assert_eq!(
+            (precise.full, precise.quick, precise.looks, precise.rounds),
+            (1.0, 1.0, 2.0, 2.0)
+        );
         assert_eq!(scales().rounds, 1.0);
         // A study's scales stand above the options, on its thread only.
         let s = Scales {

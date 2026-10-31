@@ -80,6 +80,9 @@ pub const OPTIONS: &[&str] = &[
     // Twice the tries on fair copies behind each plan for a round (planner.rs): on the same 400 test runs,
     // 42.0% won against 38.5% (p = 0.23), at about 1.1 times the time.
     "steady-rounds",
+    // "looks" and "steady-rounds" together: on the same 400 test runs, 45.0% won against 38.5% (p = 0.03), at
+    // about 1.45 times the time. The teacher the recordings use (scripts/jobs.py: recording_options).
+    "precise",
 ];
 
 static ON: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();

@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-data-3 value-net-3 teacher-learned-3 learned-3 teacher-looks teacher-steady watch watch-mod
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-data-3 value-net-3 teacher-learned-3 learned-3 teacher-precise watch watch-mod
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | expand -t 19
@@ -101,7 +101,7 @@ learned-2:  ## Round 2 of the learned value: the three jobs in a row (about 2.75
 	@$(MAKE) --no-print-directory value-net-2
 	@$(MAKE) --no-print-directory teacher-learned-2
 
-teacher-data-3:  ## Learned value round 3, 1/3: the best teacher (with looks) records 25,000 new runs (about 2 hours)
+teacher-data-3:  ## Learned value round 3, 1/3: the best teacher, precise, records 25,000 new runs (about 2 hours)
 	$(PY) scripts/jobs.py run teacher-data-3 $(JOB_FLAGS)
 
 value-net-3:  ## Learned value round 3, 2/3: train the round-3 value network on rounds 2 and 3 (GPU; about 30 minutes)
@@ -115,11 +115,8 @@ learned-3:  ## Round 3 of the learned value: the three jobs in a row (about 3 ho
 	@$(MAKE) --no-print-directory value-net-3
 	@$(MAKE) --no-print-directory teacher-learned-3
 
-teacher-looks:  ## The best teacher judging packs and rerolls on twice the samples, against its own runs (about 15 minutes)
-	$(PY) scripts/jobs.py run teacher-looks $(JOB_FLAGS)
-
-teacher-steady:  ## The best teacher with twice the samples behind every shop decision, against its own runs (about 25 minutes)
-	$(PY) scripts/jobs.py run teacher-steady $(JOB_FLAGS)
+teacher-precise:  ## The best teacher with more samples where its decisions are noisiest, against its own runs (about 20 minutes)
+	$(PY) scripts/jobs.py run teacher-precise $(JOB_FLAGS)
 
 SPEED ?= 1
 PORT ?= 8790

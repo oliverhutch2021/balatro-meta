@@ -81,16 +81,17 @@ def learned_value_args(root: Path = ROOT) -> list[str]:
 
 
 def recording_options(root: Path = ROOT) -> list[str]:
-    """The teacher options a recording uses: "looks" (twice the sample contents behind pack and reroll decisions),
-    which won more in the cloud tests, unless a trial of it on the PC (make teacher-looks) found it no better."""
-    for f in sorted((root / "results" / "value").glob("looks-vs-*.json")):
+    """The teacher options a recording uses: "precise" (twice the sample contents behind pack and reroll decisions,
+    twice the tries behind each plan for a round), which won more in the cloud tests, unless a trial of it on the
+    PC (make teacher-precise) found it no better."""
+    for f in sorted((root / "results" / "value").glob("precise-vs-*.json")):
         try:
             diff = json.loads(f.read_text()).get("win_rate_diff")
         except (OSError, ValueError, AttributeError):
             continue
         if isinstance(diff, (int, float)) and diff <= 0:
             return []
-    return ["--teacher-options", "looks"]
+    return ["--teacher-options", "precise"]
 
 
 def option_trial(option: str, root: Path = ROOT) -> list[tuple]:
@@ -229,7 +230,7 @@ JOBS: dict[str, list[tuple]] = {
                            "--runs", "5000", "--seed", "1", "--out", f"results/value/teacher2-w{w}.json"])
           for w in ("1", "2")],
     ],
-    # The learned value, round 3: the best teacher there is (the round and weight that won most, with "looks" unless
+    # The learned value, round 3: the best teacher there is (the round and weight that won most, with "precise" unless
     # its trial found it no better: recording_options) plays 25,000 new runs (seed base 404) and records every
     # position it values; the round-3 network learns from them and from round 2's recording (more positions; only
     # round 3's runs judge and measure it); then the teacher plays the usual 5,000 seeds with it, without options, to
@@ -250,13 +251,11 @@ JOBS: dict[str, list[tuple]] = {
                            "--runs", "5000", "--seed", "1", "--out", f"results/value/teacher3-w{w}.json"])
           for w in ("1", "2")],
     ],
-    # The teacher's options for how many deals and sample contents back its decisions between rounds
-    # (crates/bm-core/src/value.rs: `Scales`), each tried on the best teacher there is (option_trial): "looks", twice
-    # the sample contents behind pack and reroll decisions (about 1.3 times the time), and "steady", twice everything
-    # (about three times). On 400 seeds in the cloud with round 1's value they won 5.3 and 4.5 points more than the
-    # teacher without them (p = 0.09 and 0.12); 2,000 seeds tell more.
-    "teacher-looks": option_trial("looks"),
-    "teacher-steady": option_trial("steady"),
+    # The teacher's option "precise" (crates/bm-core/src/value.rs: `Scales`): twice the sample contents behind pack
+    # and reroll decisions, its noisiest, and twice the tries behind each plan for a round, at about 1.45 times the
+    # time. It is tried on the best teacher there is (option_trial). On 400 seeds in the cloud with round 1's value
+    # it won 45.0% against 38.5% (p = 0.03); 2,000 seeds on the PC tell more.
+    "teacher-precise": option_trial("precise"),
 }
 
 

@@ -43,7 +43,8 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   many dealt hands, no hand type favoured; growth; money as scoring power for
   the shops still to come; with a learned value loaded, plus the log of
   its chance of winning; `Scales`: how many deals and sample contents back
-  each decision, set by the teacher's options "steady", "looks", "light"),
+  each decision, set by the teacher's options "steady", "looks", "light",
+  "steady-rounds", "precise"),
   `learned.rs` (the learned value: a network read
   from the screen alone, `observe::encode_value`, trained by
   `scripts/train_value.py` on positions `baseline --record` keeps, each
@@ -63,8 +64,9 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   viewer's Progress panel; only the PC writes it after the first five).
   Reports name their seed base, value network and teacher options, and keep
   each run's ending in seed order (`run_stages`), so `scripts/compare_runs.py`
-  sets two of them against each other run by run (`make teacher-looks`:
-  `jobs.option_trial` tries an option on the best teacher there is).
+  sets two of them against each other run by run (`make teacher-precise`:
+  `jobs.option_trial` tries an option on the best teacher there is;
+  recordings use "precise" unless its trial found it no better).
   `make baseline` and `make teacher` are
   `crates/bm-core/examples/baseline.rs` (`--bot greedy|teacher` on all
   threads). `make teacher-data`, `make value-net` and `make

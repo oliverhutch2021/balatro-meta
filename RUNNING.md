@@ -287,23 +287,30 @@ make learned-2
 
 Whichever round and weight wins most is what later jobs use (`make teacher-moves` records that teacher).
 
-## Step 9: a steadier teacher (about 15 minutes)
+## Step 9: a more precise teacher (about 20 minutes)
 
 The teacher judges each shop and pack decision on a handful of dealt rounds and sample contents (what a pack
-might hold, what a reroll might bring), so the same position can get a different decision on different
-samples. In cloud tests on 400 runs with round 1's value: half the samples won 3 points less; twice the samples
-for everything ("steady") won 4.5 points more at three times the time; twice the sample contents for packs and
-rerolls only ("looks"), the noisiest decisions, won 5.3 points more at 1.3 times the time. 400 runs can't yet
-tell these from luck, so on your PC, after round 2:
+might hold, what a reroll might bring), and each plan for a round on a few tries, so the same position can get
+a different decision on different samples. Cloud tests, 400 runs each with round 1's value, against 38.5%:
+
+| Samples | Won | Time |
+| --- | --- | --- |
+| half of everything between rounds | 35.5% | 0.4x |
+| twice everything between rounds ("steady") | 43.0% | 3x |
+| twice the pack and reroll samples ("looks") | 43.75% | 1.3x |
+| twice the tries per plan in a round ("steady-rounds") | 42.0% | 1.1x |
+| "looks" and "steady-rounds" together ("precise") | 45.0% | 1.45x |
+
+400 runs can only just tell "precise" from luck (p = 0.03), so on your PC, once round 2 has finished:
 
 ```
-make teacher-looks
+make teacher-precise
 ```
 
-The best teacher there is (the learned value and weight that won most) with "looks" plays the first 2,000 of the
-usual seeds, and `scripts/compare_runs.py` sets it run by run against that teacher's own runs on those seeds:
-`results/value/looks-vs-*.json` holds the difference with its 95% interval. The next recordings use "looks"
-unless this trial finds it no better. `make teacher-steady` (about 25 minutes) tries "steady" the same way.
+The best teacher there is (the learned value and weight that won most) with "precise" plays the first 2,000 of
+the usual seeds, and `scripts/compare_runs.py` sets it run by run against that teacher's own runs on those
+seeds: `results/value/precise-vs-*.json` holds the difference with its 95% interval. The next recordings use
+"precise" unless this trial finds it no better.
 
 ## Step 10: round 3 of the learned value (about 3 hours)
 
@@ -312,7 +319,8 @@ make learned-3
 ```
 
 - `make teacher-data-3` (about 2 hours): the best teacher there is (the round and weight that won most, with
-  "looks" unless step 9 found it no better) plays 25,000 new runs, recorded in `~/.cache/balatro-meta/data/value-3`.
+  "precise" unless step 9 found it no better) plays 25,000 new runs, recorded in
+  `~/.cache/balatro-meta/data/value-3`.
 - `make value-net-3` (about 30 minutes): the round-3 network, `models/value-3.bin`, trained on round 3's
   recording and round 2's (more positions to learn from); only round 3's runs judge and measure it.
 - `make teacher-learned-3` (about 40 minutes): the teacher with it at weights 1 and 2 on the usual 5,000 seeds
