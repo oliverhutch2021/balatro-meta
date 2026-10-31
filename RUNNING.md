@@ -268,6 +268,25 @@ make train
   4. **eval**: its best network plays 5,000 of the usual seeds, the same ones as the teacher's in
      `results/value/teacher-plain.json` and `teacher-w1.json`, and the Progress panel adds it to the chart.
 
+## Step 8: round 2 of the learned value
+
+The teacher is still the strongest player (39.3% with the round-1 value), so it gets better first. If `make train`
+has been stopped early, `make eval-net` tests its best network the way `make train` would have (5,000 of the usual
+seeds, its likeliest moves) and adds it to the Progress panel. Then:
+
+```
+make learned-2
+```
+
+- `make teacher-data-2` (about 1.75 hours): the teacher with the round-1 value at its best weight plays 25,000 new
+  runs, and every position it values is recorded with how its run ended, in `~/.cache/balatro-meta/data/value-2`.
+  These are a better player's positions, so the next value learns what wins when playing that well.
+- `make value-net-2` (about 15 minutes): the round-2 value network, `models/value-2.bin`.
+- `make teacher-learned-2` (about 45 minutes): the teacher with the round-2 value at weights 1 and 2 on the usual
+  5,000 seeds (`results/value/teacher2-w*.json`), to set against round 1's 39.3% on the same seeds.
+
+Whichever round and weight wins most is what later jobs use (`make teacher-moves` records that teacher).
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

@@ -17,10 +17,10 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train watch watch-mod
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 watch watch-mod
 
 help:  ## List the commands
-	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | expand -t 17
+	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | expand -t 19
 
 setup:  ## Create or update the Python environment and build the engine (Python 3.12, on the WSL disk)
 	@command -v uv >/dev/null || { echo "uv is missing: run bash bootstrap.sh"; exit 1; }
@@ -83,6 +83,23 @@ learned:  ## The three learned-value jobs in a row (about 3.5 hours)
 	@$(MAKE) --no-print-directory teacher-data
 	@$(MAKE) --no-print-directory value-net
 	@$(MAKE) --no-print-directory teacher-learned
+
+eval-net:  ## The trained network's best version plays the usual 5,000 seeds with its likeliest moves (about 5 minutes)
+	$(PY) scripts/jobs.py run eval-net $(JOB_FLAGS)
+
+teacher-data-2:  ## Learned value round 2, 1/3: the teacher with round 1's value plays 25,000 new runs, recorded (about 1.75 hours)
+	$(PY) scripts/jobs.py run teacher-data-2 $(JOB_FLAGS)
+
+value-net-2:  ## Learned value round 2, 2/3: train the round-2 value network on the GPU (about 15 minutes)
+	$(PY) scripts/jobs.py run value-net-2 $(JOB_FLAGS)
+
+teacher-learned-2:  ## Learned value round 2, 3/3: the teacher with the round-2 value at two weights, 5,000 runs each (about 45 minutes)
+	$(PY) scripts/jobs.py run teacher-learned-2 $(JOB_FLAGS)
+
+learned-2:  ## Round 2 of the learned value: the three jobs in a row (about 2.75 hours)
+	@$(MAKE) --no-print-directory teacher-data-2
+	@$(MAKE) --no-print-directory value-net-2
+	@$(MAKE) --no-print-directory teacher-learned-2
 
 SPEED ?= 1
 PORT ?= 8790

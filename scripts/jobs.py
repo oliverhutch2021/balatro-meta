@@ -24,6 +24,7 @@ import argparse
 import json
 import os
 import platform
+import re
 import shlex
 import shutil
 import socket
@@ -48,21 +49,30 @@ MAKE = ["make", "--no-print-directory"]
 BASELINE = ["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "baseline", "--"]
 
 
+# Each round of the learned value: its network, and the reports of the teacher playing with it at each weight on the
+# usual 5,000 seeds (round 1: make teacher-learned; round 2: make teacher-learned-2).
+LEARNED_ROUNDS = (("models/value-1.bin", "results/value/teacher-w{w}.json"),
+                  ("models/value-2.bin", "results/value/teacher2-w{w}.json"))
+
+
 def learned_value_args(root: Path = ROOT) -> list[str]:
-    """The teacher's learned-value options at the weight that won most often in `make teacher-learned` (its
-    reports, results/value/teacher-w*.json; the lower weight on a tie), or none before that job has measured any
-    or without the network."""
+    """The teacher's learned-value options for the round and weight that won most often on the usual seeds (the
+    reports LEARNED_ROUNDS names; the earlier round and the lower weight on a tie), or none before any has been
+    measured or without that round's network."""
     best = None
-    for w in ("0.5", "1", "2"):
-        try:
-            rate = json.loads((root / "results" / "value" / f"teacher-w{w}.json").read_text()).get("win_rate")
-        except (OSError, ValueError, AttributeError):
+    for net, report in LEARNED_ROUNDS:
+        if not (root / net).exists():
             continue
-        if isinstance(rate, (int, float)) and (best is None or rate > best[0]):
-            best = (rate, w)
-    if best is None or not (root / "models" / "value-1.bin").exists():
+        for w in ("0.5", "1", "2"):
+            try:
+                rate = json.loads((root / report.format(w=w)).read_text()).get("win_rate")
+            except (OSError, ValueError, AttributeError):
+                continue
+            if isinstance(rate, (int, float)) and (best is None or rate > best[0]):
+                best = (rate, net, w)
+    if best is None:
         return []
-    return ["--value-net", "models/value-1.bin", "--value-weight", best[1]]
+    return ["--value-net", best[1], "--value-weight", best[2]]
 
 
 # A step is (name, argv) or (name, argv, env). argv starting with a .py file runs with this Python;
@@ -155,6 +165,34 @@ JOBS: dict[str, list[tuple]] = {
         *[(f"weight-{w}", [*BASELINE, "--bot", "teacher", "--value-net", "models/value-1.bin", "--value-weight", w,
                            "--runs", "5000", "--seed", "1", "--out", f"results/value/teacher-w{w}.json"])
           for w in ("0.5", "1", "2")],
+    ],
+    # The trained network's best version (models/policy/best.pt, kept by make train) with its likeliest moves on the
+    # usual 5,000 seeds: the number to set against the teacher's, when its training is stopped early.
+    "eval-net": [
+        ("build", [*MAKE, "build"]),
+        ("setup-gpu", [*MAKE, "setup-gpu"]),
+        ("eval", ["scripts/train_policy.py", "eval", "--model", "models/policy/best.pt", "--runs", "5000",
+                  "--seed", "1", "--out", "results/train/eval.json"]),
+    ],
+    # The learned value, round 2 (expert iteration): the teacher with round 1's value at its best weight, a better
+    # player, plays 25,000 new runs (seed base 202: none played before) and records every position it values with
+    # how its run ended; a new value network learns from that; then the teacher plays the usual 5,000 seeds with it,
+    # to set against round 1's (results/value/teacher-w1.json: 39.3%).
+    "teacher-data-2": [
+        ("build", [*MAKE, "build"]),
+        ("record", [*BASELINE, "--bot", "teacher", *learned_value_args(), "--runs", "25000", "--seed", "202",
+                    "--record", str(DATA / "value-2"), "--out", "results/value/record-2.json"]),
+    ],
+    "value-net-2": [
+        ("setup-gpu", [*MAKE, "setup-gpu"]),
+        ("train", ["scripts/train_value.py", "--data", str(DATA / "value-2"), "--out", "models/value-2.bin",
+                   "--report", "results/value/value-2.json"]),
+    ],
+    "teacher-learned-2": [
+        ("build", [*MAKE, "build"]),
+        *[(f"weight-{w}", [*BASELINE, "--bot", "teacher", "--value-net", "models/value-2.bin", "--value-weight", w,
+                           "--runs", "5000", "--seed", "1", "--out", f"results/value/teacher2-w{w}.json"])
+          for w in ("1", "2")],
     ],
 }
 
@@ -306,7 +344,13 @@ def progress_entry(job: str, step: str, argv: list[str], commit: str, root: Path
     net, weight = arg("--value-net"), arg("--value-weight")
     w = float(weight) if weight else (1.0 if net else None)
     bot = str(r.get("bot") or "bot")
-    name = (f"Learned value \u00d7{w:g}" if net else bot[:1].upper() + bot[1:].removesuffix(" bot"))
+    rnd = re.search(r"value-(\d+)\.bin$", net or "")
+    if net:
+        name = f"Learned value{' ' + rnd[1] if rnd and rnd[1] != '1' else ''} \u00d7{w:g}"
+    elif bot == "network":
+        name = "Network, copying the teacher" if step == "eval-imitate" else "Network after PPO"
+    else:
+        name = bot[:1].upper() + bot[1:].removesuffix(" bot")
     return {"time": now(), "name": name, "job": job, "step": step, "code": code, "title": title, "out": out,
             "bot": r.get("bot"),
             "seed": int(arg("--seed") or 1), "value_net": net, "value_weight": w,

@@ -64,6 +64,43 @@ def test_the_teacher_s_moves_are_recorded_with_its_best_learned_value(tmp_path):
     assert "--record-moves" in record and record[record.index("--bot") + 1] == "teacher"
 
 
+def test_the_best_learned_value_wins_across_rounds(tmp_path):
+    folder = tmp_path / "results" / "value"
+    folder.mkdir(parents=True)
+    (tmp_path / "models").mkdir()
+    for name, rate in (("teacher-w0.5", 0.37), ("teacher-w1", 0.393), ("teacher-w2", 0.367)):
+        (folder / f"{name}.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": rate}))
+    (tmp_path / "models" / "value-1.bin").write_bytes(b"BMVN")
+    assert jobs.learned_value_args(tmp_path) == ["--value-net", "models/value-1.bin", "--value-weight", "1"]
+    (folder / "teacher2-w1.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": 0.42}))
+    assert jobs.learned_value_args(tmp_path)[1] == "models/value-1.bin", "round 2 counts once its network is there"
+    (tmp_path / "models" / "value-2.bin").write_bytes(b"BMVN")
+    assert jobs.learned_value_args(tmp_path) == ["--value-net", "models/value-2.bin", "--value-weight", "1"]
+    (folder / "teacher2-w1.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": 0.38}))
+    assert jobs.learned_value_args(tmp_path)[1] == "models/value-1.bin", "a worse round 2 doesn't replace round 1"
+
+
+def test_round_two_and_the_network_s_test_are_named_in_the_progress_log(tmp_path):
+    out = tmp_path / "results" / "x.json"
+    out.parent.mkdir(parents=True)
+    out.write_text(json.dumps({"kind": "baseline", "bot": "teacher bot with a learned value", "runs": 10, "wins": 4,
+                               "win_rate": 0.4}))
+    e = jobs.progress_entry("teacher-learned-2", "weight-1", ["x", "--value-net", "models/value-2.bin",
+                                                             "--value-weight", "1", "--out", "results/x.json"],
+                            "HEAD", root=tmp_path)
+    assert e["name"] == "Learned value 2 \u00d71"
+    out.write_text(json.dumps({"kind": "baseline", "bot": "network", "runs": 10, "wins": 1, "win_rate": 0.1}))
+    assert jobs.progress_entry("eval-net", "eval", ["x", "--out", "results/x.json"], "HEAD",
+                               root=tmp_path)["name"] == "Network after PPO"
+    assert jobs.progress_entry("train", "eval-imitate", ["x", "--out", "results/x.json"], "HEAD",
+                               root=tmp_path)["name"] == "Network, copying the teacher"
+    for job in ("eval-net", "teacher-data-2", "value-net-2", "teacher-learned-2"):
+        for name, argv, *_ in jobs.JOBS[job]:
+            if name not in ("build", "setup-gpu"):
+                outs = [argv[argv.index(f) + 1] for f in ("--out", "--report") if f in argv]
+                assert outs and all(o.startswith(("results/", "models/")) for o in outs), (job, name)
+
+
 def test_every_learned_value_step_reports_where_the_log_finds_it():
     for job in ("teacher-data", "teacher-learned"):
         for name, argv, *_ in jobs.JOBS[job]:
