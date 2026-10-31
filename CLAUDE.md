@@ -92,7 +92,13 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   `scripts/watch.py`'s BalatroBot link and comparison). The companion mod
   `mods/balatro_meta_watch` (idle signal, run-setup deck for `start`,
   optional lock and speed) keeps its files in
-  `balatro_meta/<BalatroBot port>/` in the game's save folder. The page's
+  `balatro_meta/<BalatroBot port>/` in the game's save folder. `make record-me`
+  (`scripts/record_me.py`) records the user's own White Stake runs from a game
+  in a window (BalatroBot's launcher, port 12351; the checks pause meanwhile):
+  each settled state, without the game's text (`replay_me.scrub`), in
+  `.sync/me/runs/` (local only). `scripts/replay_me.py` finds the engine's
+  moves between those states (cards and jokers followed by the game's ids and
+  lined up before each move; moves that fit equally well kept in reserve). The page's
   art comes from the user's own Balatro.exe at runtime (`scripts/art.py`
   parses the game's definitions for sheet cells then; served from memory to
   loopback clients only). No art, positions or text from the game are ever

@@ -361,6 +361,33 @@ The best teacher (with "precise") plays the first 2,000 of the usual seeds with 
 (`scripts/jobs.py`: `TUNE`), each set run by run against its own runs from step 10:
 `results/tune/*-vs-*.json` hold the differences. A change that wins clearly goes into the formula.
 
+## Step 13: your own runs, recorded move by move (as many as you like to play)
+
+Where a good player and the bot disagree is where the bot has the most to learn. You play White Stake, Red Deck
+runs as you normally would; every move is recorded, and the engine later sets each of your decisions against
+the bot's.
+
+1. Stop `make watch` if it is running (Ctrl+C in its window): its hidden copy of Balatro shares your save
+   profile with the game you'll play. The jobs can keep running.
+2. In Ubuntu: `make sync`, then
+
+   ```
+   make record-me
+   ```
+
+   Balatro opens (at 4x speed; `make record-me SPEED=fast` for 10x) with BalatroBot and the companion mod, and a
+   White Stake, Red Deck run starts by itself with a fresh random seed.
+3. Play. The recorder only watches: it never clicks or changes anything. When a run ends, win or lose, choose
+   Main Menu (after a win: Main Menu, not Endless; beating ante 8 is the win we count) and the next run starts by
+   itself a few seconds later. You can change the game speed in the game's own options as usual.
+4. Ctrl+C in the Ubuntu window stops recording and closes the game. Every run is kept as you go, in
+   `.sync/me/runs/` on this PC only (never in git): the states the game showed, without any of the game's text.
+
+The game counts these runs as seeded (that is what lets the engine replay them exactly): no unlocks,
+achievements or streaks come from them. While you play, the engine follows each move; a run it couldn't follow to
+the end is still kept whole, and a fix replays it later. Even 5 to 10 runs help: a run is a couple of hundred
+decisions.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

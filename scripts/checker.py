@@ -38,6 +38,7 @@ from watch import (
 )
 
 CHECK_PORT = 12350
+RECORD_PORT = 12351  # make record-me's game (scripts/record_me.py): the checks wait while it is up
 MOD_VERSION = "0.4.0"
 # Overnight: Balatro's memory grows over a long session and can run out, so the hidden game gets a fresh
 # start every hour, or sooner when it gets big, and at once when it stops answering.
@@ -400,6 +401,17 @@ class Checker:
         keeper = threading.Thread(target=self.keep_control, args=(stop,), daemon=True)
         keeper.start()
         while not stop.is_set():
+            if self.someone_recording():
+                if self.state["state"] != "paused":
+                    self.note(state="paused", message="Paused while you record your own runs (make record-me): "
+                              "its game shares your save profile")
+                    if self.launch_allowed and self.started_at:
+                        self.game.stop()
+                        self.api = None
+                        self.game.launched_at = 0.0
+                        self.started_at = 0.0
+                stop.wait(5)
+                continue
             if not self.connect():
                 stop.wait(3)
                 continue
@@ -438,6 +450,16 @@ class Checker:
             self.add("runs")
             self.note(last={"seed": seed, "label": label, "ok": ok, "result": msg, "time": time.time()}, current=None)
             self.say(f"[checks] {label} {seed}: {msg}")
+
+    def someone_recording(self) -> bool:
+        """`make record-me`'s game is up (its companion mod wrote its report in the last few seconds)."""
+        if self.files.dir is None:
+            return False
+        p = self.files.dir.parent / str(RECORD_PORT) / "state.txt"
+        try:
+            return time.time() - p.stat().st_mtime < 8
+        except OSError:
+            return False
 
     def keep_control(self, stop: threading.Event) -> None:
         while not stop.is_set():

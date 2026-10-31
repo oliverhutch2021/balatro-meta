@@ -484,6 +484,19 @@ impl Game {
         self.run.phase == Phase::GameOver || self.run.won
     }
 
+    /// An independent copy (the run and its moves so far), for trying moves out.
+    fn copy(&self) -> Game {
+        Game {
+            run: self.run.clone(),
+            moves: self.moves.clone(),
+        }
+    }
+
+    /// Which move kinds the game allows now (`MOVE_KINDS` order; arguments still have to be valid).
+    fn legal_kinds(&self) -> Vec<bool> {
+        legal_kinds(&self.run).to_vec()
+    }
+
     /// Apply a move; False if the game refuses it (nothing changes).
     fn step(&mut self, kind: i64, arg: u64) -> bool {
         let Some(k) = MoveKind::from_index(kind) else {
@@ -582,6 +595,8 @@ impl Game {
         for &id in &r.hand {
             let c = r.card(id);
             let h = PyDict::new(py);
+            // The engine's own id for this card in this run (the real game's ids are its own).
+            h.set_item("id", id)?;
             h.set_item("key", c.key())?;
             h.set_item("enhancement", enh_name(c.enhancement))?;
             h.set_item("edition", edition_name(c.edition))?;
@@ -596,6 +611,7 @@ impl Game {
         let shown = bm_core::observe::screen(r);
         for (j, v) in r.jokers.iter().zip(shown.jokers.iter()) {
             let h = PyDict::new(py);
+            h.set_item("id", j.sort_id)?;
             h.set_item("key", j.kind.key())?;
             h.set_item("name", j.kind.name())?;
             h.set_item("rarity", j.kind.rarity())?;
@@ -724,6 +740,7 @@ impl Game {
         let consumables = pyo3::types::PyList::empty(py);
         for c in &r.consumables {
             let h = consumable_item(py, c)?;
+            h.set_item("id", c.sort_id)?;
             h.set_item("cost", c.cost)?;
             h.set_item("sell", c.sell_cost)?;
             consumables.append(h)?;
