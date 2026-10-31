@@ -378,6 +378,7 @@ def run(job: str, force: bool, watch: bool = True) -> None:
                 for line in proc.stdout:
                     sys.stdout.write("    " + line)
                     fh.write(line)
+                    fh.flush()  # the log is readable while the step runs
             except KeyboardInterrupt:
                 # Ctrl+C reached the step too: let it finish saving (the network's training saves its place), and
                 # show what it says as it stops. A second Ctrl+C stops it at once.

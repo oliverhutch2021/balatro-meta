@@ -875,6 +875,33 @@ def eval_policy(a) -> dict:
     return report
 
 
+def ppo_grads(torch, pp, batch, mb, micro: int, device, clip: float, value_coef: float, ent_coef: float,
+              warm: bool) -> dict:
+    """Adds PPO's loss gradients on minibatch `mb` (indices into `batch`) to the network's, worked out `micro`
+    positions at a time so a big minibatch fits in the GPU's memory: the same gradients as the whole minibatch at
+    once. Returns the minibatch's mean policy, value and entropy losses and clipped share. (Past the GPU's memory,
+    Windows spills into the PC's RAM and training crawls rather than failing.)"""
+    fx, fl, fk, fs, ft, fc, flp, fadv, fret = batch
+    out = dict.fromkeys(("policy", "value", "entropy", "clip"), 0.0)
+    n = len(mb)
+    for c in range(0, n, micro):
+        sub = mb[c:c + micro]
+        w = len(sub) / n
+        with autocast(torch, device):
+            lp, ent, v = pp.evaluate(fx[sub].float(), fl[sub], fk[sub], fs[sub], ft[sub], fc[sub])
+        ratio = torch.exp(lp - flp[sub])
+        pg = -torch.min(ratio * fadv[sub], ratio.clamp(1 - clip, 1 + clip) * fadv[sub]).mean()
+        vl = ((v - fret[sub]) ** 2).mean()
+        el = ent.mean()
+        loss = value_coef * vl if warm else pg + value_coef * vl - ent_coef * el
+        (loss * w).backward()
+        out["policy"] += float(pg.detach()) * w
+        out["value"] += float(vl.detach()) * w
+        out["entropy"] += float(el.detach()) * w
+        out["clip"] += float(((ratio - 1).abs() > clip).float().mean().detach()) * w
+    return out
+
+
 def ppo(a) -> dict:
     torch = need_torch()
     from balatro_meta.env import VecEnv
@@ -959,13 +986,27 @@ def ppo(a) -> dict:
         save(torch, latest, model, {"opt": opt.state_dict(), "state": state})
 
     guard = Guard(N)
+    last_losses: dict = {}
+
+    def live() -> dict:
+        """progress.json's numbers: the runs broken down (RunBook), and the latest 2,000 runs as the headline."""
+        last = recent[-2000:]
+        won = sum(w for w, _ in last)
+        mean = sum(an for _, an in last) / max(len(last), 1)
+        lo, hi = wilson(won, len(last))
+        return {**book.fields(), "updates": state["updates"], "steps": state["steps"], "recent_runs": len(last),
+                "recent_win_rate": won / max(len(last), 1), "recent_mean_ante": mean, "losses": last_losses,
+                "win_rate": won / max(len(last), 1), "win_ci": [lo, hi], "mean_ante": mean}
+
     x_np = env.observe()
+    first = True
     while not stop["now"]:
         if seconds0 + time.time() - t_start >= a.hours * 3600:
             break
         if a.max_updates is not None and state["updates"] >= a.max_updates:
             break
         model.eval()
+        t_play = time.time()
         for t in range(T):
             if stop["now"]:
                 break
@@ -1012,6 +1053,10 @@ def ppo(a) -> dict:
             buf_r[t] = torch.from_numpy(r.astype(np.float32)).to(device)
             buf_done[t] = torch.from_numpy(ended.astype(np.float32)).to(device)
             x_np = env.observe()
+            if ended.any():
+                stats["elapsed"] = seconds
+                stats["rate"] = stats["runs"] / max(seconds, 1e-9)
+                watch.report(stats, extra=live)  # at most once a second
         if stop["now"]:
             break  # a part-played batch isn't learned from; the runs start afresh on the next start
         # Advantages (GAE) from the value of where the runs are now.
@@ -1028,6 +1073,7 @@ def ppo(a) -> dict:
             adv[t] = gae
         ret = adv + buf_v
         # The update.
+        t_learn = time.time()
         model.train()
         flat = lambda z: z.reshape(T * N, *z.shape[2:])
         fx, fl, fk, fs, ft, fc = (flat(buf_x), flat(buf_legal), flat(buf_kind), flat(buf_slot), flat(buf_to),
@@ -1036,30 +1082,34 @@ def ppo(a) -> dict:
         fadv = (fadv - fadv.mean()) / (fadv.std() + 1e-8)
         losses = {"policy": 0.0, "value": 0.0, "entropy": 0.0, "clip": 0.0}
         nb = 0
+        # The first updates from a copied network train its value only: its policy stays the teacher's until the
+        # value knows the network's own runs.
+        warm = state["updates"] < state.setdefault("warm_until", a.value_warmup if a.init else 0)
+        batch = (fx, fl, fk, fs, ft, fc, flp, fadv, fret)
         for _ in range(a.epochs):
             perm = torch.randperm(T * N, device=device)
             for k in range(0, T * N, a.minibatch):
-                mb = perm[k:k + a.minibatch]
-                with autocast(torch, device):
-                    lp, ent, v = pp.evaluate(fx[mb].float(), fl[mb], fk[mb], fs[mb], ft[mb], fc[mb])
-                ratio = torch.exp(lp - flp[mb])
-                pg = -torch.min(ratio * fadv[mb], ratio.clamp(1 - a.clip, 1 + a.clip) * fadv[mb]).mean()
-                vl = ((v - fret[mb]) ** 2).mean()
-                el = ent.mean()
-                # The first updates from a copied network train its value only: its policy stays the teacher's
-                # until the value knows the network's own runs.
-                warm = state["updates"] < state.setdefault("warm_until", a.value_warmup if a.init else 0)
-                loss = a.value_coef * vl if warm else pg + a.value_coef * vl - a.ent_coef * el
                 opt.zero_grad(set_to_none=True)
-                loss.backward()
+                got = ppo_grads(torch, pp, batch, perm[k:k + a.minibatch], a.micro, device, a.clip, a.value_coef,
+                                a.ent_coef, warm)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), a.max_grad)
                 opt.step()
-                losses["policy"] += float(pg.detach())
-                losses["value"] += float(vl.detach())
-                losses["entropy"] += float(el.detach())
-                losses["clip"] += float(((ratio - 1).abs() > a.clip).float().mean().detach())
+                for key in losses:
+                    losses[key] += got[key]
                 nb += 1
         state["updates"] += 1
+        if first:
+            # How long an update takes, and how close it came to the GPU's memory.
+            first = False
+            mem = ""
+            if device.type == "cuda":
+                peak = torch.cuda.max_memory_allocated(device) / 2 ** 30
+                total = torch.cuda.get_device_properties(device).total_memory / 2 ** 30
+                mem = f"; GPU memory peak {peak:.1f} of {total:.1f} GB"
+                if peak > 0.9 * total:
+                    mem += " (close to full: if updates crawl, rerun with a smaller --micro)"
+            print(f"update {state['updates']} took {time.time() - t_play:.0f} s: playing {t_learn - t_play:.0f} s, "
+                  f"learning {time.time() - t_learn:.0f} s{mem}", flush=True)
         state["steps"] += T * N
         el_s = seconds0 + time.time() - t_start
         stats["elapsed"] = el_s
@@ -1069,12 +1119,8 @@ def ppo(a) -> dict:
         ante_recent = sum(an for _, an in last) / max(len(last), 1)
         if not watch.history or el_s - watch.history[-1][0] >= 60:
             watch.history.append([round(el_s, 1), stats["runs"], round(ante_recent, 4), round(win_recent, 5)])
-        extra = {"updates": state["updates"], "steps": state["steps"], "recent_runs": len(last),
-                 "recent_win_rate": win_recent, "recent_mean_ante": ante_recent,
-                 "losses": {k: round(v / max(nb, 1), 5) for k, v in losses.items()}}
-        lo, hi = wilson(int(win_recent * len(last)), len(last))
-        head = {**extra, "win_rate": win_recent, "win_ci": [lo, hi], "mean_ante": ante_recent}
-        watch.report(stats, extra=lambda head=head: {**book.fields(), **head})
+        last_losses = {k: round(v / max(nb, 1), 5) for k, v in losses.items()}
+        watch.report(stats, extra=live)
         if state["updates"] % a.print_every == 0:
             print(f"update {state['updates']}: {stats['runs']:,} runs, last {len(last):,}: won {win_recent:.2%}, "
                   f"mean final ante {ante_recent:.2f}; policy {losses['policy'] / max(nb, 1):.4f}, "
@@ -1138,6 +1184,8 @@ def main() -> None:
     p.add_argument("--steps", type=int, default=64)
     p.add_argument("--epochs", type=int, default=3)
     p.add_argument("--minibatch", type=int, default=8192)
+    p.add_argument("--micro", type=int, default=1024,
+                   help="positions worked out at once within a minibatch (GPU memory; the result is the same)")
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--gamma", type=float, default=0.999)
     p.add_argument("--lam", type=float, default=0.95)

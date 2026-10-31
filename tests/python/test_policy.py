@@ -131,6 +131,41 @@ def test_the_guard_breaks_loops():
     assert not m[0, tp.MOVE_JOKER] and m[1, tp.MOVE_JOKER] and m[0, tp.LEAVE_SHOP]
 
 
+def test_a_minibatch_in_pieces_gives_the_same_gradients():
+    """PPO works a big minibatch out a few positions at a time to fit in the GPU's memory; the gradients must be the
+    ones the whole minibatch gives at once."""
+    from balatro_meta.env import VecEnv
+
+    torch.manual_seed(1)
+    model = tp.build_model(torch, 32, 1, 2, 64)
+    pp = tp.Parts(torch, model)
+    env, guard = VecEnv(16, seed=4), tp.Guard(16)
+    rows = []
+    for _ in range(3):
+        x = torch.from_numpy(env.observe().copy())
+        legal = torch.from_numpy(guard.mask(env.legal_kinds()))
+        with torch.no_grad():
+            kind, slot, to, cards, logp, _ = pp.act(x, legal)
+        rows.append((x, legal, kind, slot, to, cards, logp.float()))
+        k = kind.numpy()
+        env.step(k, tp.to_moves(k, slot.numpy(), to.numpy(), cards.numpy()))
+    cols = [torch.cat(c) for c in zip(*rows, strict=True)]
+    n = cols[0].shape[0]
+    batch = (*cols, torch.randn(n), torch.randn(n))
+    mb = torch.randperm(n)[:40]
+
+    def grads(micro):
+        model.zero_grad(set_to_none=True)
+        got = tp.ppo_grads(torch, pp, batch, mb, micro, torch.device("cpu"), 0.2, 0.5, 0.003, warm=False)
+        return got, [q.grad.clone() for q in model.parameters() if q.grad is not None]
+
+    whole, g1 = grads(40)
+    parts, g2 = grads(7)
+    assert len(g1) == len(g2) > 0
+    assert all(torch.allclose(x, y, atol=1e-6, rtol=1e-4) for x, y in zip(g1, g2, strict=True))
+    assert all(abs(whole[k] - parts[k]) < 1e-5 for k in whole)
+
+
 def ending(won=False, ante=2, lost_to="Big Blind", bought=(), held=(), hands=None, **counts) -> dict:
     """A finished run as the engine's VecEnv.take_endings gives it."""
     end = {"won": won, "ante": 9 if won else ante, "lost_to": "" if won else lost_to, "money": 10, "held": list(held),
