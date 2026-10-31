@@ -156,8 +156,10 @@ def ensemble_steps(n: int) -> list[tuple]:
 
 # The value formula's numbers tried by make teacher-tune, each beside its usual value (crates/bm-core/src/value.rs:
 # PARAMS). In the cloud the long-run term at twice its weight won 2.75 points less, at half its weight 2.75 more
-# (400 seeds each; neither clear).
-TUNE = ("long-run=0.25", "long-run=0.35", "sharpness=2.5", "sharpness=5", "money-scale=40", "buying-power=0.045")
+# (400 seeds each; neither clear). A quarter of the precise teacher's losses there came with $25 or more unspent,
+# so the money numbers are tried towards spending: money past the interest cap counted at a quarter (52.25% against
+# 49.75% with rounds 1 and 2's networks and "precise"; not clear), less buying power, faster-falling money.
+TUNE = ("above-cap=0.25", "buying-power=0.02", "money-scale=15", "long-run=0.35", "sharpness=2.5", "sharpness=5")
 
 
 def file_safe(options: str) -> str:
