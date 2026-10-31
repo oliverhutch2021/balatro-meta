@@ -101,21 +101,21 @@ learned-2:  ## Round 2 of the learned value: the three jobs in a row (about 2.75
 	@$(MAKE) --no-print-directory value-net-2
 	@$(MAKE) --no-print-directory teacher-learned-2
 
-teacher-data-3:  ## Learned value round 3, 1/3: the best teacher, precise, records 25,000 new runs (about 2 hours)
+teacher-data-3:  ## Learned value round 3, 1/3: the best teacher, precise, records 25,000 new runs (about 1.75 hours)
 	$(PY) scripts/jobs.py run teacher-data-3 $(JOB_FLAGS)
 
-value-net-3:  ## Learned value round 3, 2/3: train the round-3 value network on rounds 2 and 3 (GPU; about 30 minutes)
+value-net-3:  ## Learned value round 3, 2/3: train the round-3 value network on rounds 2 and 3 (GPU; a few minutes)
 	$(PY) scripts/jobs.py run value-net-3 $(JOB_FLAGS)
 
-teacher-learned-3:  ## Learned value round 3, 3/3: the teacher with the round-3 value at two weights, 5,000 runs each (about 40 minutes)
+teacher-learned-3:  ## Learned value round 3, 3/3: the teacher with the round-3 value at two weights, 5,000 runs each (about 30 minutes)
 	$(PY) scripts/jobs.py run teacher-learned-3 $(JOB_FLAGS)
 
-learned-3:  ## Round 3 of the learned value: the three jobs in a row (about 3 hours)
+learned-3:  ## Round 3 of the learned value: the three jobs in a row (about 2.5 hours)
 	@$(MAKE) --no-print-directory teacher-data-3
 	@$(MAKE) --no-print-directory value-net-3
 	@$(MAKE) --no-print-directory teacher-learned-3
 
-teacher-precise:  ## The best teacher with more samples where its decisions are noisiest, against its own runs (about 20 minutes)
+teacher-precise:  ## The best teacher with more samples where its decisions are noisiest, against its own runs (about 10 minutes)
 	$(PY) scripts/jobs.py run teacher-precise $(JOB_FLAGS)
 
 SPEED ?= 1

@@ -287,7 +287,7 @@ make learned-2
 
 Whichever round and weight wins most is what later jobs use (`make teacher-moves` records that teacher).
 
-## Step 9: a more precise teacher (about 20 minutes)
+## Step 9: a more precise teacher (about 10 minutes)
 
 The teacher judges each shop and pack decision on a handful of dealt rounds and sample contents (what a pack
 might hold, what a reroll might bring), and each plan for a round on a few tries, so the same position can get
@@ -312,18 +312,18 @@ the usual seeds, and `scripts/compare_runs.py` sets it run by run against that t
 seeds: `results/value/precise-vs-*.json` holds the difference with its 95% interval. The next recordings use
 "precise" unless this trial finds it no better.
 
-## Step 10: round 3 of the learned value (about 3 hours)
+## Step 10: round 3 of the learned value (about 2.5 hours)
 
 ```
 make learned-3
 ```
 
-- `make teacher-data-3` (about 2 hours): the best teacher there is (the round and weight that won most, with
+- `make teacher-data-3` (about 1.75 hours): the best teacher there is (the round and weight that won most, with
   "precise" unless step 9 found it no better) plays 25,000 new runs, recorded in
   `~/.cache/balatro-meta/data/value-3`.
-- `make value-net-3` (about 30 minutes): the round-3 network, `models/value-3.bin`, trained on round 3's
+- `make value-net-3` (a few minutes): the round-3 network, `models/value-3.bin`, trained on round 3's
   recording and round 2's (more positions to learn from); only round 3's runs judge and measure it.
-- `make teacher-learned-3` (about 40 minutes): the teacher with it at weights 1 and 2 on the usual 5,000 seeds
+- `make teacher-learned-3` (about 30 minutes): the teacher with it at weights 1 and 2 on the usual 5,000 seeds
   (`results/value/teacher3-w*.json`), without options, to set against rounds 1 and 2 on the same footing.
 
 ## Later steps
