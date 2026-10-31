@@ -341,8 +341,10 @@ def sample_cards(torch, logits, here, lo, hi, greedy: bool, gen=None):
 class Parts:
     """What one batch of positions and moves need from the network: log-probabilities, entropy, value."""
 
-    def __init__(self, torch, model):
-        self.t, self.m = torch, model
+    def __init__(self, torch, model, value_detached: bool = False):
+        # value_detached: the value head learns on the network's features without changing them, so learning the
+        # value can't change how it plays (PPO; with them shared, a value going wrong drags the play down with it).
+        self.t, self.m, self.value_detached = torch, model, value_detached
 
     def lo_hi(self, kind):
         torch = self.t
@@ -371,13 +373,15 @@ class Parts:
         kl = m.kind_logits(cls, legal)
         logp = cat_logp(torch, kl, kind)
         ent = cat_entropy(torch, kl)
-        has_slot = torch.isin(kind, torch.tensor(list(SLOT_GROUP), device=x.device))
-        sl, _ = m.slot_logits(h, present, cls, kind)
+        sl, sok = m.slot_logits(h, present, cls, kind)
+        # A slot (and a target) only when there is one to pick, exactly as act() decides: otherwise the move was
+        # judged with a term it was never played with.
+        has_slot = torch.isin(kind, torch.tensor(list(SLOT_GROUP), device=x.device)) & sok.any(1)
         slot_tok = self.slot_token(kind, slot)
         logp = logp + torch.where(has_slot, cat_logp(torch, sl, slot_tok), torch.zeros_like(logp))
         ent = ent + torch.where(has_slot, cat_entropy(torch, sl), torch.zeros_like(ent))
-        has_to = torch.isin(kind, torch.tensor(HAS_TO, device=x.device))
-        tl, _ = m.to_logits(h, present, cls, kind, slot_tok)
+        tl, tok = m.to_logits(h, present, cls, kind, slot_tok)
+        has_to = torch.isin(kind, torch.tensor(HAS_TO, device=x.device)) & tok.any(1)
         to_tok = self.slot_token(kind, to)
         logp = logp + torch.where(has_to, cat_logp(torch, tl, to_tok), torch.zeros_like(logp))
         ent = ent + torch.where(has_to, cat_entropy(torch, tl), torch.zeros_like(ent))
@@ -386,7 +390,7 @@ class Parts:
         lo, hi = self.lo_hi(kind)
         logp = logp + torch.where(has_cards, cards_logp(torch, cl, here, cards, lo, hi), torch.zeros_like(logp))
         ent = ent + torch.where(has_cards, cards_entropy(torch, cl, here), torch.zeros_like(ent))
-        return logp, ent, m.value(cls)
+        return logp, ent, m.value(cls.detach() if self.value_detached else cls)
 
     def act(self, x, legal, greedy: bool = False):
         """Moves for a batch of positions (as parts), with their log-probabilities and the value."""
@@ -983,7 +987,7 @@ def ppo(a) -> dict:
     opt = torch.optim.Adam(model.parameters(), lr=a.lr, eps=1e-5)
     if ck and "opt" in ck:
         opt.load_state_dict(ck["opt"])
-    pp = Parts(torch, model)
+    pp = Parts(torch, model, value_detached=True)
     N, T = a.envs, a.steps
     env = VecEnv(N, seed=a.seed * 1_000_003 + state["updates"], threads=a.threads)
     if a.compile:

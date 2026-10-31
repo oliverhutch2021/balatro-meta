@@ -171,6 +171,50 @@ def test_a_minibatch_in_pieces_gives_the_same_gradients():
     assert all((q.grad is not None) == (id(q) in heads) for q in model.parameters())
 
 
+def test_a_move_with_nothing_to_point_at_is_judged_as_it_was_played():
+    """A buy when no shop card shows as present, or moving the only joker: act() picks no slot or no target, and
+    evaluate() must leave out the same terms, or the training sees a move it never made."""
+    from balatro_meta.env import VecEnv
+
+    torch.manual_seed(3)
+    model = tp.build_model(torch, 32, 1, 2, 64)
+    model.eval()
+    pp = tp.Parts(torch, model)
+    x = torch.from_numpy(VecEnv(32, seed=5).observe().copy())
+    lay = model.lay
+    for kind, group, keep in ((tp.BUY, "shop_row", 0), (tp.MOVE_JOKER, "jokers", 1)):
+        xx = x.clone()
+        s0, n, w = lay[group]
+        g = xx[:, s0:s0 + n * w].reshape(len(xx), n, w)
+        g[:, keep:, :3] = 0.0  # no shop card present; or a single joker
+        if keep:
+            g[:, 0, 0] = 1.0
+        legal = torch.zeros(len(xx), tp.N_KINDS, dtype=torch.bool)
+        legal[:, kind] = True
+        with torch.no_grad():
+            k, slot, to, cards, logp, _ = pp.act(xx, legal)
+            lp, _, _ = pp.evaluate(xx, legal, k, slot, to, cards)
+        assert (k == kind).all()
+        assert torch.allclose(lp, logp, atol=1e-5), (kind, (lp - logp).abs().max())
+
+
+def test_in_ppo_the_value_cannot_change_how_it_plays():
+    from balatro_meta.env import VecEnv
+
+    model = tp.build_model(torch, 32, 1, 2, 64)
+    x = torch.from_numpy(VecEnv(8, seed=2).observe().copy())
+    legal = torch.ones(8, tp.N_KINDS, dtype=torch.bool)
+    for detached in (False, True):
+        pp = tp.Parts(torch, model, value_detached=detached)
+        with torch.no_grad():
+            k, slot, to, cards, _, _ = pp.act(x, legal)
+        model.zero_grad(set_to_none=True)
+        _, _, v = pp.evaluate(x, legal, k, slot, to, cards)
+        (v ** 2).mean().backward()
+        moved = {n for n, q in model.named_parameters() if q.grad is not None and q.grad.abs().sum() > 0}
+        assert moved and all(n.startswith("value_head.") for n in moved) == detached, moved
+
+
 def test_the_training_keeps_its_best_network_and_spots_a_collapse():
     judge = tp.judge_progress
     assert judge(None, 0.01, 3.0, 1999, 2000, 1.0) == "", "too few runs to judge"
