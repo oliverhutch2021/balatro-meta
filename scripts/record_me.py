@@ -406,9 +406,17 @@ def main(argv: list[str] | None = None) -> int:
         print("Balatro's save folder (%APPDATA%\\Balatro) wasn't found. Run the game once first.")
         return 1
     if checks_running(folder):
-        print("make watch is running its hidden copy of Balatro, which shares your save profile with the game you'd "
-              "play. Stop make watch first (Ctrl+C in its window), then run make record-me again.")
-        return 1
+        # Often left over after make watch was closed (or its window shut before it could close the game).
+        print("make watch's hidden copy of Balatro is still running (it shares your save profile): closing it...")
+        checker.HiddenGame(CHECKS_PORT, folder).stop()
+        for _ in range(20):
+            time.sleep(1)
+            if not checks_running(folder):
+                break
+        else:
+            print("It's still running. If make watch is open, stop it (Ctrl+C in its window), then run this again.")
+            return 1
+        print("Closed it.")
     msg = watch.install_mod(folder)
     if msg:
         print("Installed the companion mod.")
