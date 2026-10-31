@@ -287,7 +287,7 @@ make learned-2
 
 Whichever round and weight wins most is what later jobs use (`make teacher-moves` records that teacher).
 
-## Step 9: rounds 1 and 2 together (about 20 minutes)
+## Step 9: rounds 1 and 2 together (about 40 minutes)
 
 Round 2's network alone won no more than round 1's, but the two together (the chance of winning taken as the
 mean of theirs) did better in the cloud: with "precise" on, 49.75% of 400 seeds against 45.0% with round 1's
@@ -297,9 +297,10 @@ alone. On your PC:
 make sync && make teacher-ensemble
 ```
 
-The teacher with both networks plays the usual 5,000 seeds (`results/value/ensemble2-w1.json`), to set against
-each alone (39.3% and 39.0%). If it wins most, every job after it (steps 10 to 12) uses it. From round 3 on,
-each round also tries the networks of all its rounds together.
+The teacher with both networks plays the usual 5,000 seeds at weights 1 and 1.5
+(`results/value/ensemble2-w*.json`; in the cloud, 1.5 did a little better), to set against each alone (39.3% and
+39.0%). If one wins most, every job after it (steps 10 to 12) uses it. From round 3 on, each round also tries
+the networks of all its rounds together.
 
 ## Step 10: a more precise teacher (about 10 minutes)
 
@@ -326,7 +327,7 @@ the usual seeds, and `scripts/compare_runs.py` sets it run by run against that t
 seeds: `results/value/precise-vs-*.json` holds the difference with its 95% interval. The next recordings use
 "precise" unless this trial finds it no better.
 
-## Step 11: round 3 of the learned value (about 2.5 hours)
+## Step 11: round 3 of the learned value (about 3 hours)
 
 ```
 make learned-3
@@ -337,9 +338,9 @@ make learned-3
   `~/.cache/balatro-meta/data/value-3`.
 - `make value-net-3` (a few minutes): the round-3 network, `models/value-3.bin`, trained on round 3's
   recording and round 2's (more positions to learn from); only round 3's runs judge and measure it.
-- `make teacher-learned-3` (about 45 minutes): the teacher with it at weights 1 and 2 on the usual 5,000 seeds
-  (`results/value/teacher3-w*.json`), and with the networks of rounds 1 to 3 together at weight 1
-  (`results/value/ensemble3-w1.json`), without options, to set against rounds 1 and 2 on the same footing.
+- `make teacher-learned-3` (about 1 hour): the teacher with it at weight 1 on the usual 5,000 seeds
+  (`results/value/teacher3-w1.json`), and with the networks of rounds 1 to 3 together at weights 1 and 1.5
+  (`results/value/ensemble3-w*.json`), without options, to set against rounds 1 and 2 on the same footing.
 
 Each later round is the same three jobs: `make learned-4`, then `make learned-5`, and so on (up to 9), each
 recording with the best teacher there is so far.

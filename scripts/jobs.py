@@ -69,6 +69,10 @@ LEARNED_ROUNDS = (("models/value-1.bin", "results/value/teacher-w{w}.json"),
                   *((ensemble(n), f"results/value/ensemble{n}-w{{w}}.json") for n in range(2, LAST_ROUND + 1)))
 
 
+# The weights a learned value is tried at, in the order a tie goes to.
+WEIGHTS = ("0.5", "1", "1.5", "2")
+
+
 def best_learned(root: Path = ROOT) -> tuple[str, str, str] | None:
     """The learned value and weight that won most often on the usual seeds (the reports LEARNED_ROUNDS names; the
     earlier entry and the lower weight on a tie): its network(s), its weight and that report. None before any has
@@ -77,7 +81,7 @@ def best_learned(root: Path = ROOT) -> tuple[str, str, str] | None:
     for net, report in LEARNED_ROUNDS:
         if not all((root / n).exists() for n in net.split(",")):
             continue
-        for w in ("0.5", "1", "2"):
+        for w in WEIGHTS:
             try:
                 rate = json.loads((root / report.format(w=w)).read_text()).get("win_rate")
             except (OSError, ValueError, AttributeError):
@@ -129,19 +133,20 @@ def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
         ],
         f"teacher-learned-{n}": [
             ("build", [*MAKE, "build"]),
-            *[(f"weight-{w}", [*BASELINE, "--bot", "teacher", "--value-net", f"models/value-{n}.bin",
-                               "--value-weight", w, "--runs", "5000", "--seed", "1",
-                               "--out", f"results/value/teacher{n}-w{w}.json"])
-              for w in ("1", "2")],
-            ensemble_step(n),
+            ("weight-1", [*BASELINE, "--bot", "teacher", "--value-net", f"models/value-{n}.bin", "--value-weight", "1",
+                          "--runs", "5000", "--seed", "1", "--out", f"results/value/teacher{n}-w1.json"]),
+            *ensemble_steps(n),
         ],
     }
 
 
-def ensemble_step(n: int) -> tuple:
-    """The teacher with the networks of rounds 1 to n together, at weight 1, on the usual 5,000 seeds."""
-    return ("ensemble", [*BASELINE, "--bot", "teacher", "--value-net", ensemble(n), "--value-weight", "1",
-                         "--runs", "5000", "--seed", "1", "--out", f"results/value/ensemble{n}-w1.json"])
+def ensemble_steps(n: int) -> list[tuple]:
+    """The teacher with the networks of rounds 1 to n together, at weights 1 and 1.5 (a better value can take
+    more weight: in the cloud, rounds 1 and 2 together with "precise" won 53.25% at 1.5 against 49.75% at 1), on
+    the usual 5,000 seeds."""
+    return [(f"ensemble-w{w}", [*BASELINE, "--bot", "teacher", "--value-net", ensemble(n), "--value-weight", w,
+                                "--runs", "5000", "--seed", "1", "--out", f"results/value/ensemble{n}-w{w}.json"])
+            for w in ("1", "1.5")]
 
 
 # The value formula's numbers tried by make teacher-tune, each beside its usual value (crates/bm-core/src/value.rs:
@@ -323,7 +328,7 @@ JOBS: dict[str, list[tuple]] = {
     **{name: steps for n in range(3, LAST_ROUND + 1) for name, steps in learned_round(n).items()},
     # Rounds 1 and 2's networks together (round 2 alone won no more than round 1): the usual 5,000 seeds, to set
     # against each alone (teacher-w1.json, teacher2-w1.json). If it wins most, the jobs after it use it.
-    "teacher-ensemble": [("build", [*MAKE, "build"]), ensemble_step(2)],
+    "teacher-ensemble": [("build", [*MAKE, "build"]), *ensemble_steps(2)],
     # The teacher's option "precise" (crates/bm-core/src/value.rs: `Scales`): twice the sample contents behind pack
     # and reroll decisions, its noisiest, and twice the tries behind each plan for a round, at about 1.45 times the
     # time. It is tried on the best teacher there is (option_trial). On 400 seeds in the cloud with round 1's value

@@ -107,15 +107,15 @@ teacher-data-%:  ## Learned value round N (3 and later), 1/3: the best teacher, 
 value-net-%:  ## Learned value round N, 2/3: the round's value network, on its recording and the round before's (GPU; minutes)
 	$(PY) scripts/jobs.py run value-net-$* $(JOB_FLAGS)
 
-teacher-learned-%:  ## Learned value round N, 3/3: the teacher with the round's value at two weights, and all rounds' together (about 45 minutes)
+teacher-learned-%:  ## Learned value round N, 3/3: the teacher with the round's value, and all rounds' together at two weights (about 1 hour)
 	$(PY) scripts/jobs.py run teacher-learned-$* $(JOB_FLAGS)
 
-learned-%:  ## Round N of the learned value, the three jobs in a row: make learned-3, then learned-4... (about 2.75 hours)
+learned-%:  ## Round N of the learned value, the three jobs in a row: make learned-3, then learned-4... (about 3 hours)
 	@$(MAKE) --no-print-directory teacher-data-$*
 	@$(MAKE) --no-print-directory value-net-$*
 	@$(MAKE) --no-print-directory teacher-learned-$*
 
-teacher-ensemble:  ## The teacher with rounds 1 and 2's networks together on the usual 5,000 seeds (about 20 minutes)
+teacher-ensemble:  ## The teacher with rounds 1 and 2's networks together, at weights 1 and 1.5, on the usual 5,000 seeds (about 40 minutes)
 	$(PY) scripts/jobs.py run teacher-ensemble $(JOB_FLAGS)
 
 teacher-precise:  ## The best teacher with more samples where its decisions are noisiest, against its own runs (about 10 minutes)

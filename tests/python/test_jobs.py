@@ -149,7 +149,7 @@ def test_round_three_records_with_precise_unless_its_trial_found_it_no_better(tm
         for name, argv, *_ in jobs.JOBS[f"teacher-learned-{n}"]:
             if name != "build":
                 assert "--teacher-options" not in argv, "tested on the same footing as the earlier rounds"
-                want = f"results/value/ensemble{n}-w" if name == "ensemble" else f"results/value/teacher{n}-w"
+                want = f"results/value/ensemble{n}-w" if name.startswith("ensemble") else f"results/value/teacher{n}-w"
                 assert argv[argv.index("--out") + 1].startswith(want)
         assert jobs.LEARNED_ROUNDS[n - 1] == (f"models/value-{n}.bin", f"results/value/teacher{n}-w{{w}}.json")
     assert "teacher-data-10" not in jobs.JOBS
@@ -193,16 +193,21 @@ def test_the_formulas_numbers_are_tuned_on_the_best_teacher_against_its_own_runs
 
 def test_the_rounds_networks_together_are_tried_and_used_when_they_win_most(tmp_path):
     assert jobs.ensemble(3) == "models/value-1.bin,models/value-2.bin,models/value-3.bin"
-    _, argv = jobs.JOBS["teacher-ensemble"][1]
-    assert argv[argv.index("--value-net") + 1] == "models/value-1.bin,models/value-2.bin"
-    assert argv[argv.index("--out") + 1] == "results/value/ensemble2-w1.json" and argv[argv.index("--seed") + 1] == "1"
+    steps = {n: a for n, a, *_ in jobs.JOBS["teacher-ensemble"]}
+    for w in ("1", "1.5"):
+        argv = steps[f"ensemble-w{w}"]
+        assert argv[argv.index("--value-net") + 1] == "models/value-1.bin,models/value-2.bin"
+        assert argv[argv.index("--value-weight") + 1] == w and argv[argv.index("--seed") + 1] == "1"
+        assert argv[argv.index("--out") + 1] == f"results/value/ensemble2-w{w}.json"
     steps = {n: a for n, a, *_ in jobs.JOBS["teacher-learned-4"]}
-    assert steps["ensemble"][steps["ensemble"].index("--value-net") + 1] == jobs.ensemble(4)
+    assert list(steps) == ["build", "weight-1", "ensemble-w1", "ensemble-w1.5"]
+    assert steps["ensemble-w1"][steps["ensemble-w1"].index("--value-net") + 1] == jobs.ensemble(4)
     (tmp_path / "models").mkdir()
     (tmp_path / "results" / "value").mkdir(parents=True)
     for n in (1, 2):
         (tmp_path / "models" / f"value-{n}.bin").write_bytes(b"BMVN")
-    for report, rate in (("teacher-w1.json", 0.393), ("teacher2-w1.json", 0.39), ("ensemble2-w1.json", 0.41)):
+    for report, rate in (("teacher-w1.json", 0.393), ("teacher2-w1.json", 0.39), ("ensemble2-w1.json", 0.41),
+                         ("ensemble2-w1.5.json", 0.405)):
         (tmp_path / "results" / "value" / report).write_text(json.dumps({"win_rate": rate}))
     assert jobs.best_learned(tmp_path) == ("models/value-1.bin,models/value-2.bin", "1",
                                            "results/value/ensemble2-w1.json")

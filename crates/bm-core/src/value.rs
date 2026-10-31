@@ -144,6 +144,7 @@ pub const PARAMS: &[(&str, f64)] = &[
     ("buying-power", BUYING_POWER),
     ("money-scale", MONEY_SCALE),
     ("deck-share", DECK_SHARE),
+    ("above-cap", ABOVE_CAP),
     // The scales of `Scales`, as multiples of the usual samples.
     ("deals-x", 1.0),
     ("quick-x", 1.0),
@@ -788,7 +789,7 @@ fn cash(run: &Run) -> f64 {
         return m;
     }
     let cap = run.interest_cap.max(0) as f64;
-    m.min(cap) + ABOVE_CAP * (m - cap).max(0.0)
+    m.min(cap) + p("above-cap", ABOVE_CAP) * (m - cap).max(0.0)
 }
 
 /// Dollars coming in per round beyond what every round pays (blind rewards are the same whatever is
