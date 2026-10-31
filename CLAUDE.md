@@ -37,7 +37,9 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   `observe.rs` (the fair-play wall: the only place the bot's input is
   built), `env.rs` (moves as kind + argument), `bots.rs` (greedy bot,
   projections), `teacher.rs` (the teacher bot, the network's warm start:
-  every decision by value; each hand's joker order measured), `value.rs`
+  every decision by value; each hand's joker order measured; what it
+  remembers on a thread is forgotten at each run's start, `new_run`, so a
+  run plays the same on any thread), `value.rs`
   (the value of a position: scoring power measured by playing the coming
   rounds out on fair copies, against the blinds ahead; the deck's power from
   many dealt hands, no hand type favoured; growth; money as scoring power for
