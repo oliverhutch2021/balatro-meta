@@ -101,7 +101,9 @@ def compare(game, gs: dict) -> list[str]:
         e["chips"] = gc
     out = differences(e, g)
     # The jokers in every state (the checks compare them only where a move of theirs can change them).
-    held = sorted(map(repr, map(joker_match_key, e["jokers"]))), sorted(map(repr, map(joker_match_key, g["jokers"])))
+    # (Without face-down marks: the game turns jokers face up again a moment after the cash-out screen opens.)
+    held = (sorted(repr((j.get("key"), j.get("edition"))) for j in e["jokers"]),
+            sorted(repr((j.get("key"), j.get("edition"))) for j in g["jokers"]))
     if not out and e["state"] not in ("SELECTING_HAND", "SHOP", "SMODS_BOOSTER_OPENED") and held[0] != held[1]:
         out.append(f"jokers: engine {[j['key'] for j in e['jokers']]}, game {[j['key'] for j in g['jokers']]}")
     return out
@@ -391,7 +393,28 @@ def bases(line: Line, gs: dict) -> list[tuple]:
     return out
 
 
-def explain(line: Line, gs: dict, highlight: list | None) -> tuple[list, list[str]]:
+def pack_evidence(line: Line, moves: list, passed: list[dict]) -> int:
+    """How far a move list goes against what states passed over since the last one showed of an open pack: a
+    card already gone from it there was taken (a Wheel of Fortune that missed leaves no other trace), so a skip,
+    or taking another card, fits less."""
+    shown = [p for p in passed if p.get("state") == "SMODS_BOOSTER_OPENED" and isinstance(p.get("pack"), dict)]
+    if not shown or line.game.view()["state"] != "SMODS_BOOSTER_OPENED":
+        return 0
+    before = [c["key"] for c in line.game.view()["pack"]]
+    left = [c.get("key") for c in shown[-1]["pack"].get("cards") or []]
+    gone = list(before)
+    for k in left:
+        if k in gone:
+            gone.remove(k)
+    if not gone or len(left) >= len(before):
+        return 0
+    taken = [before[a & 0xFF] for k, a in moves if k == 18 and (a & 0xFF) < len(before)]
+    if not taken:
+        return 1
+    return 0 if taken[0] in gone else 1
+
+
+def explain(line: Line, gs: dict, highlight: list | None, passed: list[dict] | None = None) -> tuple[list, list[str]]:
     """The moves that take this line's engine to the game's state `gs`: [(checks failed, rank, engine, moves)],
     best first (empty if none), and what came closest otherwise. "No move" fits only when nothing that a move
     would change differs (a planet taken from a pack shows only in its hand's level)."""
@@ -453,6 +476,8 @@ def explain(line: Line, gs: dict, highlight: list | None) -> tuple[list, list[st
                         break
             if matches and matches[-1][0] == 0 and matches[-1][3]:
                 break
+    if passed:
+        matches = [(m[0] + pack_evidence(line, m[3], passed), *m[1:]) for m in matches]
     matches.sort(key=lambda m: (m[0], m[1]))
     return matches, closest
 
@@ -465,7 +490,7 @@ class Replay:
     # States in a row that no move explains before the replay counts as lost: a state can be caught while an
     # effect is still landing (a Tarot from Hallucination, say), and the next one then explains both.
     MAX_SKIPPED = 3
-    MAX_RESERVES = 8
+    MAX_RESERVES = 16
 
     def __init__(self, first: dict) -> None:
         from balatro_meta._engine import Game
@@ -508,8 +533,9 @@ class Replay:
     def before(self) -> dict:
         return self.line.before
 
-    def advance(self, line: Line, gs: dict, highlight, index: int, reserves: list | None) -> Line | None:
-        matches, closest = explain(line, gs, highlight)
+    def advance(self, line: Line, gs: dict, highlight, index: int, reserves: list | None,
+                passed: list[dict] | None = None) -> Line | None:
+        matches, closest = explain(line, gs, highlight, passed)
         if not matches:
             where = f"{line.before.get('state')} -> {gs.get('state')}, ante {gs.get('ante_num')}"
             self.why = f"state {index} ({where}): no move explains it ({'; '.join(closest[:3])})"
@@ -538,7 +564,8 @@ class Replay:
             return None
         n_before = len(self.line.moves)
         alternatives: list[tuple[int, Line]] = []
-        new = self.advance(self.line, gs, highlight, self.index, alternatives)
+        passed = [self.history[j][0] for j in range(self.index - self.skipped, self.index)]
+        new = self.advance(self.line, gs, highlight, self.index, alternatives, passed)
         if new is not None and len(new.moves) > n_before:
             # Kept back, tried last: this state as one caught while a move was still landing (a Tarot used,
             # its cards not yet changed), with the next state explained from the one before it.
