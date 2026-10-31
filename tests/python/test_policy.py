@@ -171,6 +171,29 @@ def test_a_minibatch_in_pieces_gives_the_same_gradients():
     assert all((q.grad is not None) == (id(q) in heads) for q in model.parameters())
 
 
+def test_a_network_that_cannot_compile_trains_as_before():
+    """If PyTorch can't compile the network on this machine, its encode stays plain PyTorch and says why."""
+    from balatro_meta.env import VecEnv
+
+    class NoCompiler:
+        def __getattr__(self, name):
+            return getattr(torch, name)
+
+        @staticmethod
+        def compile(*_a, **_k):
+            raise RuntimeError("no C compiler here")
+
+    model = tp.build_model(torch, 32, 1, 2, 64)
+    x = torch.from_numpy(VecEnv(4, seed=1).observe().copy())
+    with torch.no_grad():
+        want = model.encode(x)[2]
+    how = tp.compile_encode(NoCompiler(), model, torch.device("cpu"), x, 2)
+    assert how.startswith("not compiled (RuntimeError: no C compiler here)")
+    with torch.no_grad():
+        assert torch.equal(model.encode(x)[2], want)
+    assert all(q.grad is None for q in model.parameters())
+
+
 def ending(won=False, ante=2, lost_to="Big Blind", bought=(), held=(), hands=None, **counts) -> dict:
     """A finished run as the engine's VecEnv.take_endings gives it."""
     end = {"won": won, "ante": 9 if won else ante, "lost_to": "" if won else lost_to, "money": 10, "held": list(held),
@@ -228,6 +251,7 @@ def test_imitate_ppo_and_eval_end_to_end(moves, tmp_path):
               "--envs", "16", "--steps", "8", "--minibatch", "64", "--save-minutes", "0", "--value-warmup", "1",
               "--block-runs", "2", env={"BM_WATCH_DIR": str(watch)})
     assert "Done:" in out and (tmp_path / "ppo" / "latest.pt").exists()
+    assert "The network: compiled" in out or "The network: not compiled" in out, out
     first = torch.load(tmp_path / "ppo" / "latest.pt", weights_only=False)["state"]
     prog = json.loads((watch / "progress.json").read_text())
     assert prog["runs"] == first["stats"]["runs"] > 0 and prog["bot"] == "network (PPO)"
@@ -238,7 +262,7 @@ def test_imitate_ppo_and_eval_end_to_end(moves, tmp_path):
     assert prog["now"]["runs"] == min(prog["runs"], tp.NOW_RUNS) and prog["now"]["label"].startswith("last ")
     assert len(prog["blocks"]) == prog["runs"] // 2 and prog["block_fields"] == list(tp.BLOCK_FIELDS)
     out = run("ppo", "--dir", str(tmp_path / "ppo"), "--max-updates", "7", "--envs", "16", "--steps", "8",
-              "--minibatch", "64", "--block-runs", "2")
+              "--minibatch", "64", "--block-runs", "2", "--no-compile")
     assert "Resuming" in out
     second = torch.load(tmp_path / "ppo" / "latest.pt", weights_only=False)["state"]
     assert first["updates"] == 4 and second["updates"] == 7 and second["stats"]["runs"] > first["stats"]["runs"]
@@ -252,7 +276,7 @@ def test_imitate_ppo_and_eval_end_to_end(moves, tmp_path):
         assert g.over and (9 if g.view()["won"] else g.view()["ante"]) == s["ante"]
     # While the copied network's value warms up, how it plays doesn't change at all: only the value head learns.
     run("ppo", "--init", str(tmp_path / "imitate.pt"), "--dir", str(tmp_path / "warm"), "--max-updates", "2",
-        "--envs", "16", "--steps", "8", "--minibatch", "64", "--value-warmup", "5")
+        "--envs", "16", "--steps", "8", "--minibatch", "64", "--value-warmup", "5", "--no-compile")
     before = torch.load(tmp_path / "imitate.pt", weights_only=False)["model"]
     after = torch.load(tmp_path / "warm" / "latest.pt", weights_only=False)["model"]
     changed = {k for k in before if not torch.equal(before[k], after[k])}

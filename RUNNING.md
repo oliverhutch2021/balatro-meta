@@ -254,7 +254,9 @@ make train
   2. **eval-imitate** (a few minutes): it plays 2,000 of the usual seeds with its likeliest moves
      (`results/train/eval-imitate.json`), to compare with the teacher on the same seeds.
   3. **ppo** (8 hours): thousands of runs at once on all 16 threads, the network on the GPU, rewarded for
-     every blind beaten and for winning. Its first 20 updates (about 10 minutes) train only its judgement of
+     every blind beaten and for winning. It starts by having PyTorch compile the network for your GPU (a minute
+     or two; if that fails it says so and trains without it), and its first update says how long it took and how
+     much GPU memory it used. Its first 20 updates (about 10 minutes) train only its judgement of
      positions, so how it plays stays exactly the copy's; after that, an update stops early once it has changed
      the play as far as one update should. `make watch` shows it live: runs played, the win rate of its last
      2,000 runs, how it plays now against all its runs so far, how it changes block by block, and its runs

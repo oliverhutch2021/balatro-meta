@@ -904,6 +904,34 @@ def ppo_grads(torch, pp, batch, mb, micro: int, device, clip: float, value_coef:
     return out
 
 
+def compile_encode(torch, model, device, x, micro: int) -> str:
+    """Has PyTorch compile the network's main part (`encode`: the objects into tokens and the transformer), which
+    fuses its many small steps into fewer GPU kernels. It is tried first on real positions, as training uses it
+    (learning on `micro` positions; playing on all of `x` without gradients); if compiling or those first calls fail
+    (a missing compiler or header on this machine, say), `encode` stays plain PyTorch. Says which."""
+    eager = model.encode
+    was = model.training
+    try:
+        fn = torch.compile(eager, dynamic=False)
+        model.train()
+        with autocast(torch, device):
+            h, _, cls = fn(x[:micro])
+            (h.float().mean() + cls.float().mean()).backward()
+        model.zero_grad(set_to_none=True)
+        model.eval()
+        with torch.no_grad(), autocast(torch, device):
+            fn(x)
+    except Exception as exc:  # noqa: BLE001 - any failure: train as before
+        model.encode = eager
+        model.zero_grad(set_to_none=True)
+        model.train(was)
+        first = (str(exc).strip().splitlines() or [""])[0][:200]
+        return f"not compiled ({type(exc).__name__}: {first}); training without it"
+    model.encode = fn
+    model.train(was)
+    return "compiled"
+
+
 def value_only(model) -> None:
     """Keep only the value head's gradients: the optimizer then leaves everything else as it is. (The value head
     shares the network's layers with the move choices; training it through them would change how it plays.)"""
@@ -942,6 +970,11 @@ def ppo(a) -> dict:
     pp = Parts(torch, model)
     N, T = a.envs, a.steps
     env = VecEnv(N, seed=a.seed * 1_000_003 + state["updates"], threads=a.threads)
+    if a.compile:
+        t0 = time.time()
+        how = compile_encode(torch, model, device, torch.from_numpy(env.observe().copy()).to(device),
+                             min(a.micro, a.minibatch))
+        print(f"The network: {how} ({time.time() - t0:.0f} s).", flush=True)
     lay = layout()
     obs_len = e.OBS_LEN
     buf_x = torch.zeros(T, N, obs_len, dtype=torch.float16, device=device)
@@ -1207,8 +1240,10 @@ def main() -> None:
     p.add_argument("--steps", type=int, default=64)
     p.add_argument("--epochs", type=int, default=3)
     p.add_argument("--minibatch", type=int, default=8192)
-    p.add_argument("--micro", type=int, default=1024,
+    p.add_argument("--micro", type=int, default=2048,
                    help="positions worked out at once within a minibatch (GPU memory; the result is the same)")
+    p.add_argument("--no-compile", dest="compile", action="store_false",
+                   help="don't have PyTorch compile the network (it falls back by itself if compiling fails)")
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--gamma", type=float, default=0.999)
     p.add_argument("--lam", type=float, default=0.95)
