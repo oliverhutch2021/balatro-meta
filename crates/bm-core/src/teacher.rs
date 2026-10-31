@@ -2546,7 +2546,10 @@ mod tests {
             new_run();
             let (mine, _, m) = decision(&run, step);
             assert!(!reorders(m.0), "a decision is not a reorder");
-            assert!(apply(&mut mine.clone(), m.0, m.1).is_ok(), "its decision is legal");
+            assert!(
+                apply(&mut mine.clone(), m.0, m.1).is_ok(),
+                "its decision is legal"
+            );
             if step % 7 == 0 && run.phase != Phase::RoundEval {
                 new_run();
                 let (measure, v) = judge_option(&mine, step, m);
