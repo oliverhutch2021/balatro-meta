@@ -338,7 +338,9 @@ footer { color: #93aeb3; font-size: 11.5px; padding: 0 18px 14px; line-height: 1
     </div>
     <div class="card">
       <h2>Progress <small id="progsub"></small></h2>
-      <svg id="progchart" viewBox="0 0 300 150" role="img" aria-label="Win rate of every version measured on this PC, against the 90% goal"></svg>
+      <div id="progview"></div>
+      <svg id="progchart" viewBox="0 0 300 150" role="img" aria-label="Win rate: this run as it goes, or every version measured on this PC"></svg>
+      <div class="sub" id="progcap"></div>
       <div class="plist" id="proglist"><div class="empty">Each measured version appears here when its job step finishes.</div></div>
     </div>
     <div class="card">
@@ -1188,38 +1190,22 @@ function renderProgress() {
   const goal = (PROG && PROG.goal) || 0.9;
   const pc = (S.state && S.state.pc) || {}, p = pc.progress, job = pc.job;
   const live = p && job && job.state === 'running' && !p.done && p.runs ? p : null;
-  const pts = entries.map(e => ({ y: e.win_rate || 0, ci: e.win_ci, live: false }));
-  if (live) pts.push({ y: live.win_rate || 0, ci: live.win_ci, live: true });
-  const W = 300, H = 150, L = 30, R = 12, T = 14, B = 10;
-  const X = i => L + (W - L - R) * (pts.length <= 1 ? 0.5 : i / (pts.length - 1));
-  const Y = v => T + (H - T - B) * (1 - Math.max(0, Math.min(1, v)));
-  let g = '';
-  [0, 0.25, 0.5, 0.75, 1].forEach(t => {
-    g += `<line x1="${L}" x2="${W - R}" y1="${Y(t)}" y2="${Y(t)}" stroke="#ece6d6"/>` +
-      `<text x="${L - 5}" y="${Y(t) + 3}" font-size="9" text-anchor="end" fill="#6d665a">${Math.round(t * 100)}%</text>`;
-  });
-  g += `<line x1="${L}" x2="${W - R}" y1="${Y(goal)}" y2="${Y(goal)}" stroke="#2c8a57" stroke-width="1.5" stroke-dasharray="5 4"/>` +
-    `<text x="${W - R}" y="${Y(goal) - 4}" font-size="9.5" text-anchor="end" fill="#2c8a57">goal ${Math.round(goal * 100)}%</text>`;
-  const done = pts.filter(q => !q.live);
-  if (done.length > 1) {
-    g += `<polyline points="${done.map((q, i) => `${X(i).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' ')}" fill="none" ` +
-      `stroke="#2b7fd6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  const best = entries.reduce((a, e) => (e.win_rate != null && (!a || e.win_rate > a.win_rate) ? e : a), null);
+  // This run as it goes (its win rate block by block), or every version measured so far.
+  const series = p ? sessionSeries(p) : null;
+  const view = series && (S.progView === 'run' || (!S.progView && live)) ? 'run' : 'all';
+  setHTML($('progview'), series ? `<div class="seg" role="group" aria-label="What the chart shows">` +
+    `<button data-pv="run" class="${view === 'run' ? 'on' : ''}">This run</button>` +
+    `<button data-pv="all" class="${view === 'all' ? 'on' : ''}">All versions</button></div>` : '');
+  if (view === 'run') {
+    setHTML($('progchart'), sessionChart(series, live, best, goal));
+    $('progcap').textContent = (series.kind === 'blocks'
+      ? `This run's win rate: dots each ${num(p.block_runs || 1000)} games, the line smoothed`
+      : `This run's win rate as it went`) + (best ? `. Dashed: the best version so far (${progName(best)}).` : '.');
+  } else {
+    setHTML($('progchart'), versionsChart(entries, goal));
+    $('progcap').textContent = entries.length ? 'Every version measured on this PC, oldest to newest, with its 95% range.' : '';
   }
-  pts.forEach((q, i) => {
-    const x = X(i).toFixed(1), y = Y(q.y).toFixed(1), c = q.live ? '#2c8a57' : '#2b7fd6';
-    if (q.ci && q.ci.length === 2) g += `<line x1="${x}" x2="${x}" y1="${Y(q.ci[0]).toFixed(1)}" y2="${Y(q.ci[1]).toFixed(1)}" stroke="${c}" stroke-width="2" stroke-linecap="round"/>`;
-    g += q.live ? `<circle class="pulse" cx="${x}" cy="${y}" r="4.5" fill="#fff" stroke="${c}" stroke-width="2"/>`
-      : `<circle cx="${x}" cy="${y}" r="3.5" fill="${c}" stroke="#fbf8ef" stroke-width="1"/>`;
-  });
-  // Value labels: the latest measurement and the live point (the others are in the list below).
-  const lab = (i, text, c) => {
-    const x = X(i), end = x > W - R - 30, start = x < L + 30;
-    return `<text x="${(end ? x + 5 : start ? x - 5 : x).toFixed(1)}" y="${(Y(pts[i].y) - 8).toFixed(1)}" font-size="10" ` +
-      `font-weight="700" text-anchor="${end ? 'end' : start ? 'start' : 'middle'}" fill="${c}">${text}</text>`;
-  };
-  if (done.length) g += lab(done.length - 1, rate(done[done.length - 1].y), '#1f1b15');
-  if (live) g += lab(pts.length - 1, 'now ' + rate(live.win_rate), '#2c8a57');
-  setHTML($('progchart'), g);
   let h = '';
   if (live) {
     h += `<div class="prow live"><b>Now: ${esc(progName(live))} <small>${esc(job.name)}${job.step ? ' / ' + esc(job.step) : ''}</small></b>` +
@@ -1235,8 +1221,98 @@ function renderProgress() {
       `</span></div>`;
   });
   setHTML($('proglist'), h || '<div class="empty">Each measured version appears here when its job step finishes.</div>');
-  const best = entries.reduce((a, e) => (e.win_rate != null && (!a || e.win_rate > a.win_rate) ? e : a), null);
   $('progsub').textContent = best ? `best ${rate(best.win_rate)}, goal ${Math.round(goal * 100)}%` : `goal ${Math.round(goal * 100)}%`;
+}
+
+function sessionSeries(p) {
+  // The running job's win rate as it went: block by block of runs while the network trains (RunBook), with a line
+  // over the last k blocks; otherwise the job's own history of its win rate so far.
+  const f = p.block_fields || [], raw = p.blocks || [];
+  if (raw.length >= 2 && f.length) {
+    const i = Object.fromEntries(f.map((k, n) => [k, n]));
+    const pts = raw.filter(r => r[i.runs] > 0).map(r => ({ t: r[i.end_seconds] || 0, runs: r[i.runs], wins: r[i.wins] }));
+    const k = Math.max(3, Math.round(pts.length / 12));
+    pts.forEach((q, j) => {
+      let w = 0, n = 0;
+      for (let m = Math.max(0, j - k + 1); m <= j; m++) { w += pts[m].wins; n += pts[m].runs; }
+      q.y = q.wins / q.runs;
+      q.line = w / Math.max(n, 1);
+    });
+    if (pts.length >= 2) return { kind: 'blocks', pts, k };
+  }
+  const h = (p.history || []).filter(r => r.length >= 4 && r[3] !== null && r[3] !== undefined);
+  if (h.length >= 2) return { kind: 'history', pts: h.map(r => ({ t: r[0] || 0, y: r[3], line: r[3] })), k: 1 };
+  return null;
+}
+
+function sessionChart(s, live, best, goal) {
+  const W = 300, H = 150, L = 30, R = 12, T = 12, B = 18;
+  const t1 = Math.max(1, ...s.pts.map(q => q.t));
+  const hi = Math.max(...s.pts.map(q => Math.max(q.y, q.line)), live ? live.win_rate || 0 : 0);
+  let top = Math.max(hi * 1.15, best ? best.win_rate * 1.12 : 0, 0.05);
+  if (top >= goal * 0.85) top = 1;
+  const step = [0.01, 0.02, 0.05, 0.1, 0.2, 0.25].find(d => top / d <= 5) || 0.25;
+  top = Math.ceil(top / step - 1e-9) * step;
+  const X = t => L + (W - L - R) * (t / t1);
+  const Y = v => T + (H - T - B) * (1 - Math.max(0, Math.min(1, v / top)));
+  let g = '';
+  for (let v = 0; v <= top + 1e-9; v += step) {
+    g += `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="#ece6d6"/>` +
+      `<text x="${L - 5}" y="${(Y(v) + 3).toFixed(1)}" font-size="9" text-anchor="end" fill="#6d665a">${Math.round(v * 100)}%</text>`;
+  }
+  const hours = t => (t1 < 3600 ? `${Math.round(t / 60)} min` : `${(t / 3600).toFixed(1)} h`);
+  g += `<text x="${L}" y="${H - 4}" font-size="9" fill="#6d665a">0</text>` +
+    `<text x="${W - R}" y="${H - 4}" font-size="9" text-anchor="end" fill="#6d665a">${hours(t1)}</text>`;
+  if (goal <= top) {
+    g += `<line x1="${L}" x2="${W - R}" y1="${Y(goal)}" y2="${Y(goal)}" stroke="#2c8a57" stroke-width="1.2" stroke-dasharray="5 4"/>` +
+      `<text x="${W - R}" y="${Y(goal) - 4}" font-size="9" text-anchor="end" fill="#2c8a57">goal ${Math.round(goal * 100)}%</text>`;
+  }
+  if (best) {
+    const y = Y(best.win_rate).toFixed(1);
+    g += `<line class="bestline" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="#8a8273" stroke-width="1.3" stroke-dasharray="4 3">` +
+      `<title>Best version so far: ${esc(progName(best))}, ${rate(best.win_rate)}</title></line>` +
+      `<text x="${L + 4}" y="${(+y - 4).toFixed(1)}" font-size="9" fill="#6d665a">best so far ${rate(best.win_rate)}</text>`;
+  }
+  if (s.kind === 'blocks' && s.pts.length <= 300) {
+    g += s.pts.map(q => `<circle cx="${X(q.t).toFixed(1)}" cy="${Y(q.y).toFixed(1)}" r="1.5" fill="#2b7fd6" opacity=".35"/>`).join('');
+  }
+  g += `<polyline points="${s.pts.map(q => `${X(q.t).toFixed(1)},${Y(q.line).toFixed(1)}`).join(' ')}" fill="none" ` +
+    `stroke="#2b7fd6" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  const last = s.pts[s.pts.length - 1], x = X(last.t), y = Y(last.line);
+  const now = live && live.win_rate !== undefined ? live.win_rate : last.line;
+  g += `<circle class="${live ? 'pulse' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="#fff" stroke="#2c8a57" stroke-width="2"/>` +
+    `<text x="${(x - 6).toFixed(1)}" y="${(y - 8).toFixed(1)}" font-size="10" font-weight="700" text-anchor="end" fill="#2c8a57">` +
+    `${live ? 'now ' : ''}${rate(now)}</text>`;
+  return g;
+}
+
+function versionsChart(entries, goal) {
+  // Every version measured on this PC, oldest to newest, with its 95% range.
+  const pts = entries.map(e => ({ y: e.win_rate || 0, ci: e.win_ci }));
+  const W = 300, H = 150, L = 30, R = 12, T = 14, B = 10;
+  const X = i => L + (W - L - R) * (pts.length <= 1 ? 0.5 : i / (pts.length - 1));
+  const Y = v => T + (H - T - B) * (1 - Math.max(0, Math.min(1, v)));
+  let g = '';
+  [0, 0.25, 0.5, 0.75, 1].forEach(t => {
+    g += `<line x1="${L}" x2="${W - R}" y1="${Y(t)}" y2="${Y(t)}" stroke="#ece6d6"/>` +
+      `<text x="${L - 5}" y="${Y(t) + 3}" font-size="9" text-anchor="end" fill="#6d665a">${Math.round(t * 100)}%</text>`;
+  });
+  g += `<line x1="${L}" x2="${W - R}" y1="${Y(goal)}" y2="${Y(goal)}" stroke="#2c8a57" stroke-width="1.5" stroke-dasharray="5 4"/>` +
+    `<text x="${W - R}" y="${Y(goal) - 4}" font-size="9.5" text-anchor="end" fill="#2c8a57">goal ${Math.round(goal * 100)}%</text>`;
+  if (pts.length > 1) {
+    g += `<polyline points="${pts.map((q, i) => `${X(i).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' ')}" fill="none" ` +
+      `stroke="#2b7fd6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }
+  pts.forEach((q, i) => {
+    const x = X(i).toFixed(1), y = Y(q.y).toFixed(1);
+    if (q.ci && q.ci.length === 2) g += `<line x1="${x}" x2="${x}" y1="${Y(q.ci[0]).toFixed(1)}" y2="${Y(q.ci[1]).toFixed(1)}" stroke="#2b7fd6" stroke-width="2" stroke-linecap="round"/>`;
+    g += `<circle cx="${x}" cy="${y}" r="3.5" fill="#2b7fd6" stroke="#fbf8ef" stroke-width="1"/>`;
+  });
+  if (pts.length) {
+    const i = pts.length - 1, x = X(i);
+    g += `<text x="${(x + 5).toFixed(1)}" y="${(Y(pts[i].y) - 8).toFixed(1)}" font-size="10" font-weight="700" text-anchor="end" fill="#1f1b15">${rate(pts[i].y)}</text>`;
+  }
+  return g;
 }
 
 // ------------------------------------------------------------------ controls
@@ -1244,6 +1320,9 @@ $('search').addEventListener('click', e => {
   const sv = e.target.closest('[data-sv]');
   if (sv) { S.searchView = sv.dataset.sv; if (S.state) renderSearch(S.state); return; }
   const b = e.target.closest('.tp.best'); if (b) post({ play: b.dataset.file });
+});
+$('progview').addEventListener('click', e => {
+  const b = e.target.closest('[data-pv]'); if (b) { S.progView = b.dataset.pv; renderProgress(); }
 });
 $('tps').addEventListener('click', e => { const b = e.target.closest('.tp'); if (b) select(+b.dataset.k); });
 $('events').addEventListener('click', e => { const li = e.target.closest('li[data-k]'); if (li) select(+li.dataset.k); });

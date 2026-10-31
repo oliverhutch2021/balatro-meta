@@ -419,6 +419,14 @@ def test_the_page_draws_the_run(tmp_path):
             page.wait_for_function("() => document.querySelectorAll('#proglist .prow').length > 1", timeout=15000)
             assert "Now:" in page.inner_text("#proglist") and "goal 90%" in page.inner_text("#progsub")
             assert page.locator("#progchart circle.pulse").count() == 1
+            # The chart follows this run (the live job) against a dashed line at the best version so far; the
+            # switch shows every version instead, without the live run.
+            assert page.locator("#progview [data-pv='run'].on").count() == 1
+            assert page.locator("#progchart line.bestline").count() == 1 and "best so far" in page.text_content("#progchart")
+            page.click("#progview [data-pv='all']")
+            page.wait_for_function("() => document.querySelector('#progview [data-pv=all]').classList.contains('on')")
+            assert page.locator("#progchart circle.pulse").count() == 0 and page.locator("#progchart polyline").count() == 1
+            page.click("#progview [data-pv='run']")
             # The run in detail under the counters: every card in the deck by suit and rank (the whole deck, in a
             # blind too: cards held or played still count), the deck's upgrades, the vouchers and the hands levelled
             # (here without the game's pictures).
