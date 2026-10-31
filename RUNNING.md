@@ -336,8 +336,9 @@ make learned-3
 - `make teacher-data-3` (about 1.75 hours): the best teacher there is (the round and weight that won most, with
   "precise" unless step 10 found it no better) plays 25,000 new runs, recorded in
   `~/.cache/balatro-meta/data/value-3`.
-- `make value-net-3` (a few minutes): the round-3 network, `models/value-3.bin`, trained on round 3's
-  recording and round 2's (more positions to learn from); only round 3's runs judge and measure it.
+- `make value-net-3` (a few minutes): two round-3 networks, `models/value-3.bin` and `value-3b.bin` (another
+  seed), trained on round 3's recording and round 2's (more positions to learn from); only round 3's runs judge
+  and measure them. Networks that learned apart do better together than alone.
 - `make teacher-learned-3` (about 1 hour): the teacher with it at weight 1 on the usual 5,000 seeds
   (`results/value/teacher3-w1.json`), and with the networks of rounds 1 to 3 together at weights 1 and 1.5
   (`results/value/ensemble3-w*.json`), without options, to set against rounds 1 and 2 on the same footing.

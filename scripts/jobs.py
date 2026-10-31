@@ -56,8 +56,11 @@ LAST_ROUND = 9
 
 
 def ensemble(n: int) -> str:
-    """The networks of rounds 1 to n together (the learned value is then the mean of their chances of winning)."""
-    return ",".join(f"models/value-{k}.bin" for k in range(1, n + 1))
+    """The networks of rounds 1 to n together (the learned value is then the mean of their chances of winning): each
+    round's, and from round 3 on the second network each round trains (value-Nb, another seed on the same runs)."""
+    nets = [f"models/value-{k}.bin" for k in range(1, n + 1)]
+    nets += [f"models/value-{k}b.bin" for k in range(3, n + 1)]
+    return ",".join(nets)
 
 
 # Each learned value tried on the usual seeds, with its reports (one per weight): each round's network, and from
@@ -128,8 +131,10 @@ def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
         ],
         f"value-net-{n}": [
             ("setup-gpu", [*MAKE, "setup-gpu"]),
-            ("train", ["scripts/train_value.py", "--data", str(DATA / f"value-{n - 1}"), "--data", str(data),
-                       "--out", f"models/value-{n}.bin", "--report", f"results/value/value-{n}.json"]),
+            *[(f"train{suffix}", ["scripts/train_value.py", "--data", str(DATA / f"value-{n - 1}"), "--data", str(data),
+                                  "--seed", seed, "--out", f"models/value-{n}{suffix}.bin",
+                                  "--report", f"results/value/value-{n}{suffix}.json"])
+              for suffix, seed in (("", "1"), ("b", "2"))],
         ],
         f"teacher-learned-{n}": [
             ("build", [*MAKE, "build"]),

@@ -142,10 +142,13 @@ def test_round_three_records_with_precise_unless_its_trial_found_it_no_better(tm
         rec = steps["record"]
         assert rec[rec.index("--seed") + 1] == seed and rec[rec.index("--runs") + 1] == "25000"
         assert Path(rec[rec.index("--record") + 1]).name == f"value-{n}"
-        train = dict(jobs.JOBS[f"value-net-{n}"])["train"]
-        datas = [train[i + 1] for i, a in enumerate(train) if a == "--data"]
-        assert [Path(d).name for d in datas] == [f"value-{n - 1}", f"value-{n}"], "the round before's too, newest last"
-        assert train[train.index("--out") + 1] == f"models/value-{n}.bin"
+        trains = dict(jobs.JOBS[f"value-net-{n}"])
+        for name, suffix, seed in (("train", "", "1"), ("trainb", "b", "2")):
+            train = trains[name]
+            datas = [train[i + 1] for i, a in enumerate(train) if a == "--data"]
+            assert [Path(d).name for d in datas] == [f"value-{n - 1}", f"value-{n}"], "the round before's, newest last"
+            assert train[train.index("--out") + 1] == f"models/value-{n}{suffix}.bin"
+            assert train[train.index("--seed") + 1] == seed
         for name, argv, *_ in jobs.JOBS[f"teacher-learned-{n}"]:
             if name != "build":
                 assert "--teacher-options" not in argv, "tested on the same footing as the earlier rounds"
@@ -192,7 +195,9 @@ def test_the_formulas_numbers_are_tuned_on_the_best_teacher_against_its_own_runs
 
 
 def test_the_rounds_networks_together_are_tried_and_used_when_they_win_most(tmp_path):
-    assert jobs.ensemble(3) == "models/value-1.bin,models/value-2.bin,models/value-3.bin"
+    assert jobs.ensemble(2) == "models/value-1.bin,models/value-2.bin"
+    assert jobs.ensemble(4) == ("models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,"
+                                "models/value-3b.bin,models/value-4b.bin"), "two networks a round from round 3"
     steps = {n: a for n, a, *_ in jobs.JOBS["teacher-ensemble"]}
     for w in ("1", "1.5"):
         argv = steps[f"ensemble-w{w}"]
