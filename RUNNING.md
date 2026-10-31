@@ -258,11 +258,14 @@ make train
      or two; if that fails it says so and trains without it), and its first update says how long it took and how
      much GPU memory it used. Its first 20 updates (about 10 minutes) train only its judgement of
      positions, so how it plays stays exactly the copy's; after that, an update stops early once it has changed
-     the play as far as one update should. `make watch` shows it live: runs played, the win rate of its last
+     the play as far as one update should, and the learning rate falls to a tenth over the 8 hours. It keeps its
+     best network so far in `models/policy/best.pt` (judged on its last 2,000 runs); if its play collapses (final
+     ante a whole ante below the best, or under half the best win rate), it goes back to that network and learns
+     at half the rate, and after six collapses it stops. `make watch` shows it live: runs played, the win rate of its last
      2,000 runs, how it plays now against all its runs so far, how it changes block by block, and its runs
      to replay. Ctrl+C stops it after saving; `make train` again carries on where
      it stopped. The network is saved in `models/policy/` (not committed).
-  4. **eval**: it plays 5,000 of the usual seeds, the same ones as the teacher's in
+  4. **eval**: its best network plays 5,000 of the usual seeds, the same ones as the teacher's in
      `results/value/teacher-plain.json` and `teacher-w1.json`, and the Progress panel adds it to the chart.
 
 ## Later steps

@@ -890,7 +890,8 @@ def ppo_grads(torch, pp, batch, mb, micro: int, device, clip: float, value_coef:
         w = len(sub) / n
         with autocast(torch, device):
             lp, ent, v = pp.evaluate(fx[sub].float(), fl[sub], fk[sub], fs[sub], ft[sub], fc[sub])
-        ratio = torch.exp(lp - flp[sub])
+        log_ratio = (lp - flp[sub]).clamp(-20.0, 20.0)
+        ratio = torch.exp(log_ratio)
         pg = -torch.min(ratio * fadv[sub], ratio.clamp(1 - clip, 1 + clip) * fadv[sub]).mean()
         vl = ((v - fret[sub]) ** 2).mean()
         el = ent.mean()
@@ -900,8 +901,22 @@ def ppo_grads(torch, pp, batch, mb, micro: int, device, clip: float, value_coef:
         out["value"] += float(vl.detach()) * w
         out["entropy"] += float(el.detach()) * w
         out["clip"] += float(((ratio - 1).abs() > clip).float().mean().detach()) * w
-        out["kl"] += float((flp[sub] - lp).mean().detach()) * w
+        # (ratio - 1) - log(ratio): never below zero, so a big move towards the moves it already made shows too.
+        out["kl"] += float(((ratio - 1) - log_ratio).mean().detach()) * w
     return out
+
+
+def judge_progress(best: dict | None, win: float, ante: float, runs: int, judge_runs: int, drop: float) -> str:
+    """What the latest `runs` runs say about the training: "best" (a new best win rate: keep this network),
+    "collapse" (play has fallen far below the best: final ante `drop` lower, or under half its win rate), or "".
+    Nothing is judged on fewer than `judge_runs` runs."""
+    if runs < judge_runs:
+        return ""
+    if best is None or win > best["win"]:
+        return "best"
+    if ante < best["ante"] - drop or (best["win"] >= 0.05 and win < 0.5 * best["win"]):
+        return "collapse"
+    return ""
 
 
 def compile_encode(torch, model, device, x, micro: int) -> str:
@@ -949,6 +964,7 @@ def ppo(a) -> dict:
     device = device_of(torch, a.cpu)
     folder = Path(a.dir)
     latest = folder / "latest.pt"
+    best_path = folder / "best.pt"
     rng = random.Random(a.seed)
     if latest.exists():
         model, ck = load_model(torch, latest, device)
@@ -1126,6 +1142,10 @@ def ppo(a) -> dict:
         fadv = (fadv - fadv.mean()) / (fadv.std() + 1e-8)
         losses = {"policy": 0.0, "value": 0.0, "entropy": 0.0, "clip": 0.0, "kl": 0.0}
         nb = 0
+        # The learning rate falls to a tenth over the run (and halves at each fall back to the best network).
+        done_frac = min(1.0, (seconds0 + time.time() - t_start) / max(a.hours * 3600, 1.0))
+        for group in opt.param_groups:
+            group["lr"] = a.lr * state.get("lr_scale", 1.0) * (1.0 - 0.9 * done_frac)
         # The first updates from a copied network train its value head only, on the network's own runs: how it
         # plays stays exactly the copy until the value can judge its moves.
         warm = state["updates"] < state.setdefault("warm_until", a.value_warmup if a.init else 0)
@@ -1175,17 +1195,45 @@ def ppo(a) -> dict:
         if not watch.history or el_s - watch.history[-1][0] >= 60:
             watch.history.append([round(el_s, 1), stats["runs"], round(ante_recent, 4), round(win_recent, 5)])
         last_losses = {k: round(v / max(nb, 1), 5) for k, v in losses.items()}
+        # Keep the best network so far; if play collapses, go back to it and learn more slowly.
+        judged = recent[-a.judge_runs:]
+        verdict = judge_progress(state.get("best"), sum(w for w, _ in judged) / max(len(judged), 1),
+                                 sum(an for _, an in judged) / max(len(judged), 1), len(judged), a.judge_runs,
+                                 a.rollback_drop)
+        if verdict == "best":
+            state["best"] = {"win": sum(w for w, _ in judged) / len(judged),
+                             "ante": sum(an for _, an in judged) / len(judged), "update": state["updates"],
+                             "runs": stats["runs"]}
+            save(torch, best_path, model, {"best": state["best"]})
+        elif verdict == "collapse":
+            b = state["best"]
+            state["rollbacks"] = state.get("rollbacks", 0) + 1
+            state["lr_scale"] = state.get("lr_scale", 1.0) * 0.5
+            print(f"Play collapsed at update {state['updates']}: won {win_recent:.2%} of its last {len(last):,} runs, "
+                  f"final ante {ante_recent:.2f} (best {b['win']:.2%} and {b['ante']:.2f} at update {b['update']}). "
+                  f"Back to that network; learning rate now x{state['lr_scale']:g}.", flush=True)
+            model.load_state_dict(torch.load(best_path, map_location=device, weights_only=False)["model"])
+            opt = torch.optim.Adam(model.parameters(), lr=a.lr * state["lr_scale"], eps=1e-5)
+            recent.clear()
+            if state["rollbacks"] > a.max_rollbacks:
+                print(f"It collapsed {state['rollbacks']} times; stopping here, with its best network kept.", flush=True)
+                watch.report(stats, extra=live)
+                break
         watch.report(stats, extra=live)
         if state["updates"] % a.print_every == 0:
+            b = state.get("best")
             print(f"update {state['updates']}{' (value only)' if warm else ''}: {stats['runs']:,} runs, last "
                   f"{len(last):,}: won {win_recent:.2%}, mean final ante {ante_recent:.2f}; policy "
                   f"{losses['policy'] / max(nb, 1):.4f}, value {losses['value'] / max(nb, 1):.4f}, entropy "
                   f"{losses['entropy'] / max(nb, 1):.3f}, kl {losses['kl'] / max(nb, 1):.4f}, braked "
-                  f"{state['braked']} so far", flush=True)
+                  f"{state['braked']} so far" + (f"; best {b['win']:.2%} (update {b['update']})" if b else ""),
+                  flush=True)
         if time.time() - last_save >= a.save_minutes * 60:
             save_all()
             last_save = time.time()
     save_all()
+    if not best_path.exists():
+        save(torch, best_path, model, {"best": None})
     last = recent[-2000:]
     win_recent = sum(w for w, _ in last) / max(len(last), 1)
     lo, hi = wilson(sum(w for w, _ in last), len(last))
@@ -1197,7 +1245,8 @@ def ppo(a) -> dict:
               "seconds": round(seconds0 + time.time() - t_start, 1), "recent_runs": len(last),
               "recent_win_rate": sum(w for w, _ in last) / max(len(last), 1),
               "recent_mean_ante": sum(an for _, an in last) / max(len(last), 1), "history": watch.history,
-              "device": str(device), "envs": N, "steps_per_update": T, "model": str(latest), **fields}
+              "device": str(device), "envs": N, "steps_per_update": T, "model": str(latest), "best_model": str(best_path),
+              "best": state.get("best"), "rollbacks": state.get("rollbacks", 0), **fields}
     if a.report:
         write_json(Path(a.report), report)
     if stop["now"] and seconds0 + time.time() - t_start < a.hours * 3600:
@@ -1253,6 +1302,10 @@ def main() -> None:
     p.add_argument("--max-grad", type=float, default=0.5)
     p.add_argument("--save-minutes", type=float, default=10.0)
     p.add_argument("--value-warmup", type=int, default=20, help="updates that train only the value, from --init")
+    p.add_argument("--judge-runs", type=int, default=2000, help="runs the best network and collapses are judged on")
+    p.add_argument("--rollback-drop", type=float, default=1.0,
+                   help="a fall in final ante below the best that counts as a collapse (back to the best network)")
+    p.add_argument("--max-rollbacks", type=int, default=6, help="collapses after which the run stops")
     p.add_argument("--target-kl", type=float, default=0.02,
                    help="an update stops once its play has moved this far from the play it learns from (0: never)")
     p.add_argument("--print-every", type=int, default=5)

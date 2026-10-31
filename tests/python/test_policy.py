@@ -171,6 +171,18 @@ def test_a_minibatch_in_pieces_gives_the_same_gradients():
     assert all((q.grad is not None) == (id(q) in heads) for q in model.parameters())
 
 
+def test_the_training_keeps_its_best_network_and_spots_a_collapse():
+    judge = tp.judge_progress
+    assert judge(None, 0.01, 3.0, 1999, 2000, 1.0) == "", "too few runs to judge"
+    assert judge(None, 0.01, 3.0, 2000, 2000, 1.0) == "best"
+    best = {"win": 0.27, "ante": 6.36, "update": 100}
+    assert judge(best, 0.28, 6.2, 2000, 2000, 1.0) == "best"
+    assert judge(best, 0.24, 6.1, 2000, 2000, 1.0) == "", "a bit worse is noise, not a collapse"
+    assert judge(best, 0.193, 5.34, 2000, 2000, 1.0) == "collapse", "final ante a whole ante lower (update 110 on the PC)"
+    assert judge(best, 0.12, 5.9, 2000, 2000, 1.0) == "collapse", "under half the best win rate"
+    assert judge({"win": 0.03, "ante": 3.0, "update": 5}, 0.0, 2.5, 2000, 2000, 1.0) == "", "too low to halve"
+
+
 def test_a_network_that_cannot_compile_trains_as_before():
     """If PyTorch can't compile the network on this machine, its encode stays plain PyTorch and says why."""
     from balatro_meta.env import VecEnv
@@ -250,7 +262,7 @@ def test_imitate_ppo_and_eval_end_to_end(moves, tmp_path):
     out = run("ppo", "--init", str(tmp_path / "imitate.pt"), "--dir", str(tmp_path / "ppo"), "--max-updates", "4",
               "--envs", "16", "--steps", "8", "--minibatch", "64", "--save-minutes", "0", "--value-warmup", "1",
               "--block-runs", "2", env={"BM_WATCH_DIR": str(watch)})
-    assert "Done:" in out and (tmp_path / "ppo" / "latest.pt").exists()
+    assert "Done:" in out and (tmp_path / "ppo" / "latest.pt").exists() and (tmp_path / "ppo" / "best.pt").exists()
     assert "The network: compiled" in out or "The network: not compiled" in out, out
     first = torch.load(tmp_path / "ppo" / "latest.pt", weights_only=False)["state"]
     prog = json.loads((watch / "progress.json").read_text())
@@ -281,7 +293,16 @@ def test_imitate_ppo_and_eval_end_to_end(moves, tmp_path):
     after = torch.load(tmp_path / "warm" / "latest.pt", weights_only=False)["model"]
     changed = {k for k in before if not torch.equal(before[k], after[k])}
     assert changed and all(k.startswith("value_head.") for k in changed), changed
-    run("eval", "--model", str(tmp_path / "ppo" / "latest.pt"), "--runs", "10", "--envs", "4", "--seed", "1",
+    # A collapse (here: any fall at all counts) takes it back to its best network, learning more slowly, and after
+    # too many it stops with the best network kept.
+    out = run("ppo", "--init", str(tmp_path / "imitate.pt"), "--dir", str(tmp_path / "roll"), "--max-updates", "30",
+              "--envs", "16", "--steps", "8", "--minibatch", "64", "--value-warmup", "0", "--judge-runs", "2",
+              "--rollback-drop", "-100", "--max-rollbacks", "1", "--no-compile")
+    assert "Back to that network; learning rate now x0.5." in out, out
+    assert "stopping here, with its best network kept" in out and (tmp_path / "roll" / "best.pt").exists()
+    rolled = torch.load(tmp_path / "roll" / "latest.pt", weights_only=False)["state"]
+    assert rolled["rollbacks"] == 2 and rolled["lr_scale"] == 0.25
+    run("eval", "--model", str(tmp_path / "ppo" / "best.pt"), "--runs", "10", "--envs", "4", "--seed", "1",
         "--out", str(tmp_path / "eval.json"))
     ev = json.loads((tmp_path / "eval.json").read_text())
     assert ev["kind"] == "baseline" and ev["done"] and ev["runs"] == 10 and len(ev["run_stages"]) == 10

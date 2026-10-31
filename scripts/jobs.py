@@ -131,8 +131,9 @@ JOBS: dict[str, list[tuple]] = {
                     "--record-moves", str(DATA / "moves-1"), "--out", "results/train/teacher-moves.json"]),
     ],
     # Then the network: it copies the teacher (imitate), plays 2,000 of the usual seeds to show where that leaves it,
-    # learns by PPO on the GPU for 8 hours (resumable: Ctrl+C, then make train again), and plays 5,000 of the usual
-    # seeds (the teacher's own on the same seeds: results/value/teacher-plain.json and teacher-w*.json).
+    # learns by PPO on the GPU for 8 hours (resumable: Ctrl+C, then make train again; it keeps its best network and
+    # falls back to it if its play collapses), and plays 5,000 of the usual seeds with that best network (the
+    # teacher's own on the same seeds: results/value/teacher-plain.json and teacher-w*.json).
     "train": [
         ("build", [*MAKE, "build"]),
         ("setup-gpu", [*MAKE, "setup-gpu"]),
@@ -142,7 +143,7 @@ JOBS: dict[str, list[tuple]] = {
                           "--seed", "1", "--out", "results/train/eval-imitate.json"]),
         ("ppo", ["scripts/train_policy.py", "ppo", "--init", "models/policy/imitate.pt", "--dir", "models/policy",
                  "--hours", "8", "--report", "results/train/ppo.json"]),
-        ("eval", ["scripts/train_policy.py", "eval", "--model", "models/policy/latest.pt", "--runs", "5000",
+        ("eval", ["scripts/train_policy.py", "eval", "--model", "models/policy/best.pt", "--runs", "5000",
                   "--seed", "1", "--out", "results/train/eval.json"]),
     ],
     # The teacher without the network and with it at three weights, on the same 5,000 seeds (the first of
