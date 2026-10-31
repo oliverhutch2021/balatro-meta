@@ -107,6 +107,17 @@ pub fn scales() -> Scales {
     if on("steady-rounds") || on("precise") {
         s.rounds = 2.0;
     }
+    // Each scale set outright by a number (`looks-x=3`), over the switches.
+    for (name, field) in [
+        ("deals-x", &mut s.full),
+        ("quick-x", &mut s.quick),
+        ("looks-x", &mut s.looks),
+        ("tries-x", &mut s.rounds),
+    ] {
+        if let Some(x) = crate::teacher::param(name) {
+            *field = x.max(0.01);
+        }
+    }
     s
 }
 
@@ -133,6 +144,13 @@ pub const PARAMS: &[(&str, f64)] = &[
     ("buying-power", BUYING_POWER),
     ("money-scale", MONEY_SCALE),
     ("deck-share", DECK_SHARE),
+    // The scales of `Scales`, as multiples of the usual samples.
+    ("deals-x", 1.0),
+    ("quick-x", 1.0),
+    ("looks-x", 1.0),
+    ("tries-x", 1.0),
+    // Options the teacher judges in full after the quick look (teacher.rs).
+    ("finalists", 3.0),
 ];
 
 /// A number of the formula: as an option set it, else its usual value.
@@ -1519,6 +1537,11 @@ mod tests {
             (6, 2, 6, 24)
         );
         assert_eq!(with_options(&["steady-rounds"], scales).rounds, 2.0);
+        let set = with_options(&["precise", "tries-x=4", "deals-x=1.5"], scales);
+        assert_eq!(
+            (set.full, set.quick, set.looks, set.rounds),
+            (1.5, 1.0, 2.0, 4.0)
+        );
         let precise = with_options(&["precise"], scales);
         assert_eq!(
             (precise.full, precise.quick, precise.looks, precise.rounds),

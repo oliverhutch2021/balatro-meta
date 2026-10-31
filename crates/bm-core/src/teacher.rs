@@ -862,7 +862,7 @@ fn value_consumable_in_round(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
     }
     options.retain(|o| o.2 > MIN_GAIN);
     options.sort_by(|a, b| b.2.total_cmp(&a.2));
-    options.truncate(3);
+    options.truncate(finalists());
     let mut best = (MIN_GAIN, None);
     let mut base_full = std::collections::HashMap::new();
     for (moves, i, _) in options {
@@ -1569,6 +1569,12 @@ fn discard_order(run: &Run, mask: u64, salt: u64) -> Option<Vec<usize>> {
 
 /// The least gain in value worth a move (below it, estimates differ by noise).
 const MIN_GAIN: f64 = 0.01;
+/// Options judged in full after the quick look (the best-looking ones; `finalists=N` sets another number).
+const FINALISTS: usize = 3;
+
+fn finalists() -> usize {
+    param("finalists").map_or(FINALISTS, |x| x.round().max(1.0) as usize)
+}
 /// Sample contents per pack estimate, and sample shops per reroll estimate (as the options "steady" and
 /// "light" scale them: `value::Scales`).
 const LOOKS: usize = 3;
@@ -2121,7 +2127,7 @@ fn choose(
         return None;
     }
     options.sort_by(|a, b| b.1.total_cmp(&a.1));
-    options.truncate(3);
+    options.truncate(finalists());
     let mut best = (value(run, vs) + MIN_GAIN, None);
     for (first, _, judge) in options {
         let v = match judge {

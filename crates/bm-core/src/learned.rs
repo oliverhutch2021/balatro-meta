@@ -138,13 +138,20 @@ impl Net {
     }
 }
 
-static NET: OnceLock<Net> = OnceLock::new();
+static NET: OnceLock<Vec<Net>> = OnceLock::new();
 
-/// Load the value network for this process (the teacher uses it from then on).
+/// Load the value network for this process (the teacher uses it from then on). Several paths joined by commas
+/// load an ensemble: the chance of winning is then the mean of the networks' chances.
 pub fn load(path: &str) -> Result<(), String> {
-    let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
-    let net = Net::from_bytes(&bytes).map_err(|e| format!("{path}: {e}"))?;
-    NET.set(net)
+    let mut nets = Vec::new();
+    for p in path.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        let bytes = std::fs::read(p).map_err(|e| format!("{p}: {e}"))?;
+        nets.push(Net::from_bytes(&bytes).map_err(|e| format!("{p}: {e}"))?);
+    }
+    if nets.is_empty() {
+        return Err(format!("no value network in {path:?}"));
+    }
+    NET.set(nets)
         .map_err(|_| "a value network is already loaded".to_string())
 }
 
@@ -195,7 +202,7 @@ fn input_key(x: &[f32]) -> u64 {
 
 /// The chance of winning the run from this position, by the loaded network (None if none is loaded).
 pub fn win_chance(run: &Run) -> Option<f64> {
-    let net = NET.get()?;
+    let nets = NET.get()?;
     Some(INPUT.with(|x| {
         let mut x = x.borrow_mut();
         encode_value(&screen(run), &mut x);
@@ -203,7 +210,7 @@ pub fn win_chance(run: &Run) -> Option<f64> {
         if let Some(p) = SEEN.with(|s| s.borrow().get(&key).copied()) {
             return p;
         }
-        let p = chance_of(net, &x);
+        let p = mean_chance(nets, &x);
         SEEN.with(|s| {
             let mut s = s.borrow_mut();
             if s.len() > 8192 {
@@ -218,6 +225,11 @@ pub fn win_chance(run: &Run) -> Option<f64> {
 fn chance_of(net: &Net, x: &[f32]) -> f64 {
     let y = net.forward(x);
     1.0 / (1.0 + (-(y[0] as f64)).exp())
+}
+
+/// An ensemble's chance: the mean of its networks' chances.
+fn mean_chance(nets: &[Net], x: &[f32]) -> f64 {
+    nets.iter().map(|n| chance_of(n, x)).sum::<f64>() / nets.len().max(1) as f64
 }
 
 /// The chance of winning by a given network.
@@ -444,6 +456,19 @@ mod tests {
             (3, 1, false, vec![0.0; 3], vec![0.0])
         ]))
         .is_err());
+    }
+
+    #[test]
+    fn an_ensemble_gives_the_mean_of_its_networks_chances() {
+        let n = VALUE_LEN;
+        let bias =
+            |b: f32| Net::from_bytes(&file(&[(n, 1, false, vec![0.0; n], vec![b])])).unwrap();
+        let x = vec![0.0f32; n];
+        let (a, b) = (bias(0.0), bias(2.0f32.ln()));
+        // Chances 1/2 and 2/3.
+        assert!((mean_chance(&[a.clone(), b.clone()], &x) - (0.5 + 2.0 / 3.0) / 2.0).abs() < 1e-6);
+        assert!((mean_chance(&[b], &x) - 2.0 / 3.0).abs() < 1e-6);
+        assert!((mean_chance(&[a], &x) - 0.5).abs() < 1e-12);
     }
 
     #[test]
