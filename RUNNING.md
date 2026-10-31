@@ -287,6 +287,24 @@ make learned-2
 
 Whichever round and weight wins most is what later jobs use (`make teacher-moves` records that teacher).
 
+## Step 9: a steadier teacher (about 15 minutes)
+
+The teacher judges each shop and pack decision on a handful of dealt rounds and sample contents (what a pack
+might hold, what a reroll might bring), so the same position can get a different decision on different
+samples. In cloud tests on 400 runs with round 1's value: half the samples won 3 points less; twice the samples
+for everything ("steady") won 4.5 points more at three times the time; twice the sample contents for packs and
+rerolls only ("looks"), the noisiest decisions, won 5.3 points more at 1.3 times the time. 400 runs can't yet
+tell these from luck, so on your PC, after round 2:
+
+```
+make teacher-looks
+```
+
+The best teacher there is (the learned value and weight that won most) with "looks" plays the first 2,000 of the
+usual seeds, and `scripts/compare_runs.py` sets it run by run against that teacher's own runs on those seeds:
+`results/value/looks-vs-*.json` holds the difference with its 95% interval. If it wins clearly more, the next
+recordings use it. `make teacher-steady` (about 25 minutes) tries "steady" the same way.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

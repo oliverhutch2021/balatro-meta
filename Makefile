@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 watch watch-mod
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-looks teacher-steady watch watch-mod
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | expand -t 19
@@ -100,6 +100,12 @@ learned-2:  ## Round 2 of the learned value: the three jobs in a row (about 2.75
 	@$(MAKE) --no-print-directory teacher-data-2
 	@$(MAKE) --no-print-directory value-net-2
 	@$(MAKE) --no-print-directory teacher-learned-2
+
+teacher-looks:  ## The best teacher judging packs and rerolls on twice the samples, against its own runs (about 15 minutes)
+	$(PY) scripts/jobs.py run teacher-looks $(JOB_FLAGS)
+
+teacher-steady:  ## The best teacher with twice the samples behind every shop decision, against its own runs (about 25 minutes)
+	$(PY) scripts/jobs.py run teacher-steady $(JOB_FLAGS)
 
 SPEED ?= 1
 PORT ?= 8790

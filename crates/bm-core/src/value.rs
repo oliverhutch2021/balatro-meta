@@ -47,6 +47,73 @@ use crate::state::{Phase, Run};
 pub const SAMPLES: usize = 6;
 /// Deals for a quick first look (screening options before the full estimate).
 pub const QUICK: usize = 2;
+
+/// How many deals and sample contents back the teacher's decisions between rounds, as multiples of the
+/// usual: deals per full estimate (`value`), deals per quick look (`quick`), and sample contents per pack or
+/// reroll judged. More is less noisy and slower. The options set them: "steady" twice the usual (about three
+/// times the time), "looks" twice the sample contents only (about 1.5 times), "light" half (rounded up;
+/// twice as fast). Studies and tests can set them for a thread ([`with_scales`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Scales {
+    pub full: f64,
+    pub quick: f64,
+    pub looks: f64,
+}
+
+impl Scales {
+    pub const fn all(x: f64) -> Scales {
+        Scales {
+            full: x,
+            quick: x,
+            looks: x,
+        }
+    }
+}
+
+thread_local! {
+    static SCALES: std::cell::Cell<Option<Scales>> = const { std::cell::Cell::new(None) };
+}
+
+/// Run `f` with these scales on this thread (studies, tests).
+pub fn with_scales<T>(s: Scales, f: impl FnOnce() -> T) -> T {
+    let before = SCALES.with(|c| c.replace(Some(s)));
+    let out = f();
+    SCALES.with(|c| c.set(before));
+    out
+}
+
+pub fn scales() -> Scales {
+    if let Some(s) = SCALES.with(|c| c.get()) {
+        s
+    } else if crate::teacher::on("steady") {
+        Scales::all(2.0)
+    } else if crate::teacher::on("looks") {
+        Scales {
+            full: 1.0,
+            quick: 1.0,
+            looks: 2.0,
+        }
+    } else if crate::teacher::on("light") {
+        Scales::all(0.5)
+    } else {
+        Scales::all(1.0)
+    }
+}
+
+/// A usual count scaled (rounded up; at least one).
+pub fn scale(n: usize, by: f64) -> usize {
+    ((n as f64 * by).ceil() as usize).max(1)
+}
+
+/// Deals per full estimate (`value`), and per quick look (`quick`).
+pub fn samples() -> usize {
+    scale(SAMPLES, scales().full)
+}
+
+pub fn quick_samples() -> usize {
+    scale(QUICK, scales().quick)
+}
+
 /// How sharply a blind's chance turns with the log margin of a round's total over its target, and the
 /// teacher's planner's edge over the simple players here (a log factor): fitted to the teacher's own
 /// rounds (120 shop positions, 6 rounds each).
@@ -699,12 +766,12 @@ fn mean(v: &[f64]) -> f64 {
 
 /// The value of a position between rounds (shop, pack, blind choice, cash-out). Higher is better.
 pub fn value(run: &Run, salt: u64) -> f64 {
-    value_with(run, salt, SAMPLES)
+    value_with(run, salt, samples())
 }
 
 /// A quicker, rougher value (fewer deals; the same first deals as `value`), for screening options.
 pub fn quick(run: &Run, salt: u64) -> f64 {
-    value_with(run, salt, QUICK)
+    value_with(run, salt, quick_samples())
 }
 
 /// The value of a position in a round, judged as if the round began again with the same deck, jokers and
@@ -785,11 +852,7 @@ pub fn breakdown(run: &Run, salt: u64) -> Option<Breakdown> {
 
 fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
     let o = outlook(run, salt, samples)?;
-    let deals = if samples <= QUICK {
-        DECK_DEALS_QUICK
-    } else {
-        DECK_DEALS
-    };
+    let deals = DECK_DEALS_PER_SAMPLE * samples as u64;
     let mut f = flows_for(run, &o.shares);
     f.deck = deck_growth(run, salt, deals);
     let money = money_now(run);
@@ -937,9 +1000,10 @@ pub fn card_value(run: &Run, id: crate::state::CardId) -> f64 {
 }
 
 /// Hands dealt to measure the deck's power (fewer for a quick look: the first of the same deals), and the
-/// throws (discards) each may use to dig for its shape.
-pub const DECK_DEALS: u64 = 24;
-pub const DECK_DEALS_QUICK: u64 = 8;
+/// throws (discards) each may use to dig for its shape. An estimate on `n` sample rounds deals `4 n` hands.
+pub const DECK_DEALS: u64 = DECK_DEALS_PER_SAMPLE * SAMPLES as u64;
+pub const DECK_DEALS_QUICK: u64 = DECK_DEALS_PER_SAMPLE * QUICK as u64;
+const DECK_DEALS_PER_SAMPLE: u64 = 4;
 const DECK_THROWS: i32 = 2;
 /// The share of the long run's scoring power taken from the deck's power (the rest from the sample
 /// rounds: more deals and every card seen, against whole rounds played with all their hands).
@@ -1401,6 +1465,44 @@ fn state_key(run: &Run) -> u64 {
 mod tests {
     use super::*;
     use crate::{Run, RunConfig};
+
+    #[test]
+    fn the_options_set_how_many_samples_back_a_decision() {
+        use crate::teacher::with_options;
+        let counts = || {
+            (
+                samples(),
+                quick_samples(),
+                scale(3, scales().looks),
+                DECK_DEALS_PER_SAMPLE * samples() as u64,
+            )
+        };
+        assert_eq!(counts(), (6, 2, 3, 24), "the usual");
+        assert_eq!((DECK_DEALS, DECK_DEALS_QUICK), (24, 8));
+        assert_eq!(with_options(&["steady"], counts), (12, 4, 6, 48));
+        assert_eq!(with_options(&["looks"], counts), (6, 2, 6, 24));
+        assert_eq!(with_options(&["light"], counts), (3, 1, 2, 12));
+        // A study's scales stand above the options, on its thread only.
+        let s = Scales {
+            full: 4.0,
+            quick: 1.0,
+            looks: 0.5,
+        };
+        assert_eq!(
+            with_options(&["steady"], || with_scales(s, counts)),
+            (24, 2, 2, 96)
+        );
+        assert_eq!(counts(), (6, 2, 3, 24), "and are gone after it");
+    }
+
+    #[test]
+    fn more_samples_add_deals_after_the_usual_ones() {
+        // The usual estimate's deals are the first of the steadier one's, so the two agree more than chance.
+        let run = first_shop("SAMPLES1");
+        let a = outlook(&run, 5, SAMPLES).unwrap();
+        let b = outlook(&run, 5, 2 * SAMPLES).unwrap();
+        assert_eq!(a.next[..], b.next[..SAMPLES]);
+    }
 
     /// A run at its first shop (the teacher played the first blind).
     fn first_shop(seed: &str) -> Run {

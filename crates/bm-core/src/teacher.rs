@@ -64,6 +64,17 @@ pub const OPTIONS: &[&str] = &[
     "static-sells",
     // No joker or card moves for events (leaving the shop, throws, the order of played cards).
     "no-juggle",
+    // Twice the deals and sample contents behind each decision between rounds (value.rs `Scales`): less
+    // noise, at about three times the time (on 400 test runs with the round-1 learned value: 43.0% won
+    // against 38.5%, p = 0.12).
+    "steady",
+    // Half the deals and sample contents (rounded up): about 2.3 times as fast, and weaker (on the same 400
+    // runs: 35.5% won, and 0.86 fewer blinds beaten a run).
+    "light",
+    // Twice the sample contents behind pack and reroll decisions only, the noisiest ones: on 750 shop and
+    // pack positions its decisions matched a teacher with four times everything more often than "steady"'s
+    // did (68.0% against 66.7%; the usual teacher's 62.9%), at about 1.5 times the usual time.
+    "looks",
 ];
 
 static ON: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
@@ -766,16 +777,16 @@ fn value_consumable_in_round(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
     // A held card's worth stands for using it well later. It is used now when that realises at least half
     // of that worth: the run after using it beats the halfway mark between the card gone unused and the
     // card kept.
-    let with_quick = value_in_round(run, vs, crate::value::QUICK);
+    let with_quick = value_in_round(run, vs, crate::value::quick_samples());
     let with_full = std::cell::OnceCell::new();
     let without = |i: usize, samples: usize| {
         let mut c = run.clone();
         c.consumables.remove(i);
         let gone = value_in_round(&c, vs, samples);
-        let kept = if samples == crate::value::QUICK {
+        let kept = if samples == crate::value::quick_samples() {
             with_quick
         } else {
-            *with_full.get_or_init(|| value_in_round(run, vs, crate::value::SAMPLES))
+            *with_full.get_or_init(|| value_in_round(run, vs, crate::value::samples()))
         };
         gone + 0.5 * (kept - gone).max(0.0)
     };
@@ -783,9 +794,10 @@ fn value_consumable_in_round(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
     for o in &mut options {
         let b = *base_quick
             .entry(o.1)
-            .or_insert_with(|| without(o.1, crate::value::QUICK));
-        let v = after(run, vs ^ 0x5EED, &o.0)
-            .map_or(f64::MIN, |c| value_in_round(&c, vs, crate::value::QUICK));
+            .or_insert_with(|| without(o.1, crate::value::quick_samples()));
+        let v = after(run, vs ^ 0x5EED, &o.0).map_or(f64::MIN, |c| {
+            value_in_round(&c, vs, crate::value::quick_samples())
+        });
         o.2 = v - b;
     }
     options.retain(|o| o.2 > MIN_GAIN);
@@ -796,9 +808,10 @@ fn value_consumable_in_round(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
     for (moves, i, _) in options {
         let b = *base_full
             .entry(i)
-            .or_insert_with(|| without(i, crate::value::SAMPLES));
-        let v = after(run, vs ^ 0x5EED, &moves)
-            .map_or(f64::MIN, |c| value_in_round(&c, vs, crate::value::SAMPLES));
+            .or_insert_with(|| without(i, crate::value::samples()));
+        let v = after(run, vs ^ 0x5EED, &moves).map_or(f64::MIN, |c| {
+            value_in_round(&c, vs, crate::value::samples())
+        });
         if v - b > best.0 {
             best = (v - b, Some(moves[0]));
         }
@@ -1496,9 +1509,14 @@ fn discard_order(run: &Run, mask: u64, salt: u64) -> Option<Vec<usize>> {
 
 /// The least gain in value worth a move (below it, estimates differ by noise).
 const MIN_GAIN: f64 = 0.01;
-/// Sample contents per pack estimate, and sample shops per reroll estimate.
-const LOOKS: u64 = 3;
-const REROLL_LOOKS: u64 = 3;
+/// Sample contents per pack estimate, and sample shops per reroll estimate (as the options "steady" and
+/// "light" scale them: `value::Scales`).
+const LOOKS: usize = 3;
+const REROLL_LOOKS: usize = 3;
+
+fn looks(n: usize) -> u64 {
+    crate::value::scale(n, crate::value::scales().looks) as u64
+}
 
 /// The salt for value estimates: the same through a shop visit, so its options and its successive
 /// decisions see the same deals and agree with each other.
@@ -1602,7 +1620,7 @@ fn weakest_jokers(run: &Run, vs: u64, n: usize) -> Vec<usize> {
                 // Full estimates: a sale rests on this order, and quick ones are noisy enough to put
                 // a strong joker last.
                 let without = if run.phase == Phase::Round {
-                    crate::value::value_in_round(&c, vs, crate::value::SAMPLES)
+                    crate::value::value_in_round(&c, vs, crate::value::samples())
                 } else {
                     crate::value::value(&c, vs)
                 };
@@ -2189,7 +2207,7 @@ fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
         }
         let mut samples = Vec::new();
         let mut q = 0.0;
-        for s in 0..LOOKS {
+        for s in 0..looks(LOOKS) {
             if let Some(c) = after(
                 run,
                 vs ^ (0xB00 + 16 * b as u64 + s),
@@ -2217,7 +2235,7 @@ fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     if afford(run.reroll_cost) && run.spendable() - run.reroll_cost >= 3 {
         let mut samples = Vec::new();
         let (mut best, mut bare) = (Vec::new(), Vec::new());
-        for s in 0..REROLL_LOOKS {
+        for s in 0..looks(REROLL_LOOKS) {
             if let Some(c) = after(run, vs ^ (0xA11 + s), &[(MoveKind::Reroll, 0)]) {
                 let (v, follow) = best_follow(&c, vs, shop_buys(&c, vs));
                 best.push(v);

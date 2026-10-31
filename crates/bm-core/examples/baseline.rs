@@ -1214,11 +1214,25 @@ fn main() {
         done: true,
     };
     let mut text = report_json(&r);
+    // What the runs were played with, so two reports can be checked to pair seed by seed
+    // (scripts/compare_runs.py), and each run's ending in seed order.
+    let opts = bm_core::teacher::options();
+    let mut tail = format!(
+        ",\n \"seed_base\": {base},\n \"value_net\": {},\n \"value_weight\": {},\n \"teacher_options\": [{}]",
+        value_net.as_deref().map_or("null".into(), esc),
+        if value_net.is_some() {
+            num(learned::weight())
+        } else {
+            "null".into()
+        },
+        opts.iter().map(|o| esc(o)).collect::<Vec<_>>().join(", ")
+    );
     if let Some(st) = stages {
         let st = String::from_utf8(st.into_inner().unwrap()).expect("letters");
-        let end = text.rfind("\n}").expect("the report ends with its brace");
-        text.replace_range(end.., &format!(",\n \"run_stages\": {}\n}}\n", esc(&st)));
+        tail += &format!(",\n \"run_stages\": {}", esc(&st));
     }
+    let end = text.rfind("\n}").expect("the report ends with its brace");
+    text.replace_range(end.., &format!("{tail}\n}}\n"));
     if let Some(p) = out {
         let p = Path::new(&p);
         if let Some(dir) = p.parent() {

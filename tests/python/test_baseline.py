@@ -46,6 +46,12 @@ def test_the_job_reports_its_numbers(job):
     assert prog["hands_played"] and prog["jokers_bought"] and prog["per_run"]["moves"] > 10
     assert len(final["best_runs"]) == 30 and [r[0] for r in final["best_runs"]] == list(range(1, 31))
     assert "400 runs" in stdout
+    # What the runs were played with, and each run's ending in seed order (scripts/compare_runs.py pairs them).
+    assert final["seed_base"] == 7 and final["value_net"] is None and final["value_weight"] is None
+    assert final["teacher_options"] == []
+    stages = final["run_stages"]
+    assert len(stages) == 400 and set(stages) <= set("ABCDEFGHIJKLMNOPQRSTUVWXY")
+    assert stages.count("Y") == final["wins"]
 
 
 def test_the_best_runs_are_kept_in_order(job):

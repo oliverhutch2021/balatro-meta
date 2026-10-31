@@ -55,10 +55,10 @@ LEARNED_ROUNDS = (("models/value-1.bin", "results/value/teacher-w{w}.json"),
                   ("models/value-2.bin", "results/value/teacher2-w{w}.json"))
 
 
-def learned_value_args(root: Path = ROOT) -> list[str]:
-    """The teacher's learned-value options for the round and weight that won most often on the usual seeds (the
-    reports LEARNED_ROUNDS names; the earlier round and the lower weight on a tie), or none before any has been
-    measured or without that round's network."""
+def best_learned(root: Path = ROOT) -> tuple[str, str, str] | None:
+    """The round and weight of the learned value that won most often on the usual seeds (the reports LEARNED_ROUNDS
+    names; the earlier round and the lower weight on a tie): its network, its weight and that report. None before any
+    has been measured or without that round's network."""
     best = None
     for net, report in LEARNED_ROUNDS:
         if not (root / net).exists():
@@ -69,10 +69,31 @@ def learned_value_args(root: Path = ROOT) -> list[str]:
             except (OSError, ValueError, AttributeError):
                 continue
             if isinstance(rate, (int, float)) and (best is None or rate > best[0]):
-                best = (rate, net, w)
-    if best is None:
-        return []
-    return ["--value-net", best[1], "--value-weight", best[2]]
+                best = (rate, net, w, report.format(w=w))
+    return None if best is None else best[1:]
+
+
+def learned_value_args(root: Path = ROOT) -> list[str]:
+    """The teacher's learned-value options for the round and weight that won most often (best_learned), or none."""
+    best = best_learned(root)
+    return [] if best is None else ["--value-net", best[0], "--value-weight", best[1]]
+
+
+def option_trial(option: str, root: Path = ROOT) -> list[tuple]:
+    """The steps that try a teacher option on the best teacher there is: the teacher with the learned value that won
+    most (best_learned; the plain teacher before any) and the option plays the first 2,000 of the usual seeds, and
+    scripts/compare_runs.py sets it run by run against that teacher's own report on the same seeds."""
+    best = best_learned(root)
+    net_args, control = (["--value-net", best[0], "--value-weight", best[1]], best[2]) if best else \
+        ([], "results/value/teacher-plain.json")
+    stem = Path(control).stem
+    out = f"results/value/{option}-on-{stem}.json"
+    return [
+        ("build", [*MAKE, "build"]),
+        (option, [*BASELINE, "--bot", "teacher", *net_args, "--teacher-options", option, "--runs", "2000",
+                  "--seed", "1", "--out", out]),
+        ("compare", ["scripts/compare_runs.py", control, out, "--out", f"results/value/{option}-vs-{stem}.json"]),
+    ]
 
 
 # A step is (name, argv) or (name, argv, env). argv starting with a .py file runs with this Python;
@@ -194,6 +215,13 @@ JOBS: dict[str, list[tuple]] = {
                            "--runs", "5000", "--seed", "1", "--out", f"results/value/teacher2-w{w}.json"])
           for w in ("1", "2")],
     ],
+    # The teacher's options for how many deals and sample contents back its decisions between rounds
+    # (crates/bm-core/src/value.rs: `Scales`), each tried on the best teacher there is (option_trial): "looks", twice
+    # the sample contents behind pack and reroll decisions (about 1.3 times the time), and "steady", twice everything
+    # (about three times). On 400 seeds in the cloud with round 1's value they won 5.3 and 4.5 points more than the
+    # teacher without them (p = 0.09 and 0.12); 2,000 seeds tell more.
+    "teacher-looks": option_trial("looks"),
+    "teacher-steady": option_trial("steady"),
 }
 
 
@@ -351,9 +379,12 @@ def progress_entry(job: str, step: str, argv: list[str], commit: str, root: Path
         name = "Network, copying the teacher" if step == "eval-imitate" else "Network after PPO"
     else:
         name = bot[:1].upper() + bot[1:].removesuffix(" bot")
+    options = arg("--teacher-options")
+    if options:
+        name += ", " + options.replace(",", ", ")
     return {"time": now(), "name": name, "job": job, "step": step, "code": code, "title": title, "out": out,
             "bot": r.get("bot"),
-            "seed": int(arg("--seed") or 1), "value_net": net, "value_weight": w,
+            "seed": int(arg("--seed") or 1), "value_net": net, "value_weight": w, "teacher_options": options,
             "runs": r["runs"], "wins": r.get("wins"), "win_rate": r.get("win_rate"), "win_ci": r.get("win_ci"),
             "mean_ante": r.get("mean_ante")}
 

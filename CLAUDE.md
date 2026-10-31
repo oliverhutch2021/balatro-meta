@@ -26,7 +26,9 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
 
 - `crates/bm-rng`: the game's RNG, bit for bit (seed hash, named streams,
   LuaJIT's generator, shuffles and picks).
-- `crates/bm-core`: the engine. `state.rs`/`run.rs` (the run and its flow),
+- `crates/bm-core`: the engine. `state.rs`/`run.rs` (the run and its flow; a
+  run is copied by the million in searches, so `Run::clone_from` reuses a kept
+  copy's memory, as `bots::preview` does, and the streams share their names),
   `scoring.rs` (the evaluation and the joker routine's scoring contexts),
   `joker_events.rs` (blind start, discards, sales, shop and pack events),
   `blinds.rs`, `tags.rs`, `joker_data.rs` (all 150 jokers' numbers),
@@ -40,7 +42,9 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   rounds out on fair copies, against the blinds ahead; the deck's power from
   many dealt hands, no hand type favoured; growth; money as scoring power for
   the shops still to come; with a learned value loaded, plus the log of
-  its chance of winning), `learned.rs` (the learned value: a network read
+  its chance of winning; `Scales`: how many deals and sample contents back
+  each decision, set by the teacher's options "steady", "looks", "light"),
+  `learned.rs` (the learned value: a network read
   from the screen alone, `observe::encode_value`, trained by
   `scripts/train_value.py` on positions `baseline --record` keeps, each
   labelled with how its run ended), `explain.rs` (the teacher's plan in
@@ -57,6 +61,10 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   `best-*.json`, the job's 30 best so far, and `typical-*.json`). Each step
   that measures a bot appends a line to `results/progress.jsonl` (the
   viewer's Progress panel; only the PC writes it after the first five).
+  Reports name their seed base, value network and teacher options, and keep
+  each run's ending in seed order (`run_stages`), so `scripts/compare_runs.py`
+  sets two of them against each other run by run (`make teacher-looks`:
+  `jobs.option_trial` tries an option on the best teacher there is).
   `make baseline` and `make teacher` are
   `crates/bm-core/examples/baseline.rs` (`--bot greedy|teacher` on all
   threads). `make teacher-data`, `make value-net` and `make
