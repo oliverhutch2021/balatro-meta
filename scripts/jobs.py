@@ -158,8 +158,11 @@ def ensemble_steps(n: int) -> list[tuple]:
 # PARAMS). In the cloud the long-run term at twice its weight won 2.75 points less, at half its weight 2.75 more
 # (400 seeds each; neither clear). A quarter of the precise teacher's losses there came with $25 or more unspent,
 # so the money numbers are tried towards spending: money past the interest cap counted at a quarter (52.25% against
-# 49.75% with rounds 1 and 2's networks and "precise"; not clear), less buying power, faster-falling money.
-TUNE = ("above-cap=0.25", "buying-power=0.02", "money-scale=15", "long-run=0.35", "sharpness=2.5", "sharpness=5")
+# 49.75% with rounds 1 and 2's networks and "precise"; not clear), and faster-falling money (less buying power won
+# no more there: 48.75%). The planner's edge over the value's simple players at 0.3 instead of 0.5 won 51.5% there,
+# with 0.42 more blinds beaten a run (not clear); the value's chance of beating the next blind is well matched to
+# what happens (60 runs: 94.3% predicted for bosses, 94.2% beaten).
+TUNE = ("above-cap=0.25", "money-scale=15", "planner-edge=0.3", "long-run=0.35", "sharpness=2.5", "sharpness=5")
 
 
 def file_safe(options: str) -> str:
