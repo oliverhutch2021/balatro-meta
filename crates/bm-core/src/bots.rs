@@ -34,19 +34,34 @@ pub fn preview_score(fair: &Run, mask: u64) -> f64 {
     preview(fair, mask).score
 }
 
+thread_local! {
+    /// The copy each preview plays its hand on, kept so that copying into it reuses its memory.
+    static PREVIEW: std::cell::RefCell<Option<Run>> = const { std::cell::RefCell::new(None) };
+}
+
 /// The whole evaluation of playing these hand positions now (hand type, chips, mult, score), on a copy.
 pub fn preview(fair: &Run, mask: u64) -> crate::scoring::HandScore {
-    let mut sim = fair.clone();
-    let mut chosen = Vec::new();
-    for (i, &id) in fair.hand.iter().enumerate() {
-        if mask & (1 << i) != 0 {
-            chosen.push(id);
+    PREVIEW.with(|cell| {
+        let mut kept = cell.borrow_mut();
+        let sim = match kept.as_mut() {
+            Some(sim) => {
+                sim.clone_from(fair);
+                sim
+            }
+            None => kept.insert(fair.clone()),
+        };
+        sim.play.clear();
+        sim.hand.clear();
+        for (i, &id) in fair.hand.iter().enumerate() {
+            if mask & (1 << i) != 0 {
+                sim.play.push(id);
+            } else {
+                sim.hand.push(id);
+            }
         }
-    }
-    sim.hand.retain(|id| !chosen.contains(id));
-    sim.play = chosen;
-    sim.hands_left -= 1;
-    evaluate_play(&mut sim)
+        sim.hands_left -= 1;
+        evaluate_play(sim)
+    })
 }
 
 fn joker_room(run: &Run, e: Edition) -> bool {
@@ -283,6 +298,74 @@ mod tests {
             cleared >= 30,
             "greedy cleared both ante-1 blinds in only {cleared} of 40 runs"
         );
+    }
+
+    /// The old way of previewing: a fresh copy of the run for each hand.
+    fn preview_on_a_fresh_copy(fair: &Run, mask: u64) -> crate::scoring::HandScore {
+        let mut sim = fair.clone();
+        let chosen: Vec<_> = (0..fair.hand.len())
+            .filter(|i| mask & (1 << i) != 0)
+            .map(|i| fair.hand[i])
+            .collect();
+        sim.hand.retain(|id| !chosen.contains(id));
+        sim.play = chosen;
+        sim.hands_left -= 1;
+        evaluate_play(&mut sim)
+    }
+
+    /// Positions from greedy runs that get on (jokers, levels, changed cards): in rounds, or in every phase.
+    fn positions(n: usize, rounds_only: bool) -> Vec<Run> {
+        let mut seeds = bm_rng::SeedSampler::new(41);
+        let mut out = Vec::new();
+        for i in 0..6 {
+            let mut run = Run::new(RunConfig::new(&seeds.next_seed()));
+            for step in 0..3000 {
+                if run.phase == Phase::GameOver || run.won || out.len() >= n * (i + 1) / 6 {
+                    break;
+                }
+                if (run.phase == Phase::Round || !rounds_only) && step % 3 == 0 {
+                    out.push(run.clone());
+                }
+                let (k, a) = greedy_move(&run, i as u64 * 10_000 + step);
+                apply(&mut run, k, a).unwrap();
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_preview_on_the_kept_copy_scores_as_on_a_fresh_one() {
+        let runs = positions(60, true);
+        assert!(runs.len() >= 40 && runs.iter().any(|r| r.jokers.len() >= 3));
+        // Each position's hands in turn, and positions interleaved, so nothing carries over between them.
+        for (i, run) in runs.iter().enumerate() {
+            let other = &runs[(i * 7 + 3) % runs.len()];
+            for mask in candidate_masks(run.hand.len(), None).into_iter().step_by(7) {
+                assert_eq!(
+                    preview(run, mask),
+                    preview_on_a_fresh_copy(run, mask),
+                    "position {i}, mask {mask:b}"
+                );
+                let m = mask & ((1 << other.hand.len()) - 1);
+                if m != 0 && m.count_ones() <= 5 {
+                    assert_eq!(preview(other, m), preview_on_a_fresh_copy(other, m));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn copying_into_a_kept_run_gives_the_same_run_as_a_fresh_copy() {
+        let runs = positions(90, false);
+        for phase in [Phase::Round, Phase::Shop, Phase::Pack, Phase::BlindSelect] {
+            assert!(runs.iter().any(|r| r.phase == phase), "{phase:?}");
+        }
+        let mut kept = Run::new(RunConfig::new("KEPTRUN1"));
+        for run in runs.iter().chain(runs.iter().rev()) {
+            kept.clone_from(run);
+            assert_eq!(format!("{kept:?}"), format!("{run:?}"));
+            assert_eq!(format!("{:?}", run.clone()), format!("{run:?}"));
+        }
     }
 
     #[test]

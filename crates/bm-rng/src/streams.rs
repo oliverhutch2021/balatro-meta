@@ -11,6 +11,7 @@
 use crate::luajit::LuaRandom;
 use std::collections::HashMap;
 use std::f64::consts::PI;
+use std::sync::Arc;
 
 /// Lua's `x % 1` on doubles: `x - floor(x)`.
 #[inline(always)]
@@ -99,11 +100,30 @@ pub fn advance_stream(v: f64) -> f64 {
 }
 
 /// All of a run's named random streams.
-#[derive(Clone, Debug)]
+///
+/// Copies of a run are made by the million (every hand a search scores is played on one), so copying the
+/// streams allocates nothing per stream: the names are shared, and `clone_from` reuses the table.
+#[derive(Debug)]
 pub struct Streams {
     seed: String,
     hashed_seed: f64,
-    state: HashMap<String, f64>,
+    state: HashMap<Arc<str>, f64>,
+}
+
+impl Clone for Streams {
+    fn clone(&self) -> Self {
+        Streams {
+            seed: self.seed.clone(),
+            hashed_seed: self.hashed_seed,
+            state: self.state.clone(),
+        }
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        self.seed.clone_from(&source.seed);
+        self.hashed_seed = source.hashed_seed;
+        self.state.clone_from(&source.state);
+    }
 }
 
 impl Streams {
@@ -133,7 +153,11 @@ impl Streams {
 
     /// Every stream used so far and its current value, sorted by key.
     pub fn snapshot(&self) -> Vec<(String, f64)> {
-        let mut v: Vec<_> = self.state.iter().map(|(k, x)| (k.clone(), *x)).collect();
+        let mut v: Vec<_> = self
+            .state
+            .iter()
+            .map(|(k, x)| (k.to_string(), *x))
+            .collect();
         v.sort_by(|a, b| a.0.cmp(&b.0));
         v
     }
@@ -145,7 +169,7 @@ impl Streams {
             Some(v) => v,
             None => {
                 let init = pseudohash(&format!("{key}{}", self.seed));
-                self.state.entry(key.to_string()).or_insert(init)
+                self.state.entry(Arc::from(key)).or_insert(init)
             }
         };
         *v = advance_stream(*v);

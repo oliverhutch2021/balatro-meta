@@ -151,7 +151,7 @@ pub struct CashOut {
 }
 
 /// One run of Balatro.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Run {
     pub cfg: RunConfig,
     pub rng: Streams,
@@ -288,6 +288,115 @@ pub struct Run {
     /// skips them).
     pub(crate) vampired: Vec<CardId>,
 }
+
+/// Copies of a run are made by the million (each hand a search scores is played on one), so a copy can be
+/// made into a run kept for the purpose (`clone_from`), reusing its memory field by field. The field list is
+/// checked by the compiler: the patterns below name every field, so a new field must be added here.
+macro_rules! run_clone {
+    ($($f:ident),* $(,)?) => {
+        impl Clone for Run {
+            fn clone(&self) -> Self {
+                let Run { $($f),* } = self;
+                Run { $($f: $f.clone()),* }
+            }
+
+            fn clone_from(&mut self, source: &Self) {
+                let Run { $($f),* } = self;
+                $($f.clone_from(&source.$f);)*
+            }
+        }
+    };
+}
+
+run_clone!(
+    cfg,
+    rng,
+    next_sort_id,
+    cards,
+    playing_cards,
+    deck,
+    hand,
+    play,
+    discard,
+    jokers,
+    joker_slots,
+    consumable_slots,
+    money,
+    bankrupt_at,
+    ante,
+    round,
+    win_ante,
+    won,
+    phase,
+    hands_per_round,
+    discards_per_round,
+    hands_left,
+    discards_left,
+    hands_played_round,
+    discards_used_round,
+    hand_size_real,
+    temp_handsize,
+    hand_levels,
+    last_hand,
+    most_played,
+    hands_played_run,
+    skips,
+    unused_discards,
+    probability,
+    slots,
+    boss,
+    tags_offered,
+    bosses,
+    boss_rerolled,
+    orbital,
+    blind,
+    last_blind_boss,
+    round_chips,
+    tags,
+    tags_banned,
+    idol,
+    mail_rank,
+    ancient_suit,
+    castle_suit,
+    sort_mode,
+    cash_out,
+    gros_michel_extinct,
+    pending_money,
+    consumables,
+    vouchers,
+    present,
+    banned_jokers,
+    shop,
+    pack,
+    shop_voucher,
+    joker_max,
+    shop_rates,
+    discount_percent,
+    inflation,
+    edition_rate,
+    interest_cap,
+    interest_amount,
+    reroll_base,
+    reroll_temp,
+    reroll_increase,
+    reroll_cost,
+    free_rerolls,
+    d6_this_shop,
+    first_shop_buffoon,
+    usage,
+    usage_total,
+    last_tarot_planet,
+    ecto_minus,
+    jokers_purchased_round,
+    boss_rerolls_allowed,
+    joker_buffer,
+    consumable_buffer,
+    blueprint_card,
+    riffraff_pending,
+    chicot_disables,
+    acorn_shuffles_pending,
+    vampired,
+);
 
 impl Run {
     // ------------------------------------------------------------ identity
