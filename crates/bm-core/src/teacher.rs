@@ -94,6 +94,16 @@ pub const OPTIONS: &[&str] = &[
     // (Death, DNA, Cryptid) make: without it a deck of copies is judged by its Four of a Kind. From a player's
     // winning run built on Five of a Kind (played nine times).
     "five-kind",
+    // A held Tarot or Spectral that changes cards (Death, Cryptid, The Hanged Man, the enhancements, seals,
+    // suits, Strength) priced by what it would do to the deck used on the cards the build wants (value.rs
+    // `fix_dollars`: the deck's mean card worth gained), never below its usual flat price. From a player's runs,
+    // which fix the deck towards its strongest cards (47 to 69 Tarots used a run; Death copying the best card,
+    // The Hanged Man clipping the worst), where the bot prices a held Death at $6 whatever the deck.
+    "deck-fix",
+    // A card's x mult (Glass x2, Polychrome x1.5) counted by the times it scores, retriggers included
+    // (value.rs `card_triggers`), in what a card is worth: the cards Death copies, the throws keep, the
+    // enhancements go on. A player's view: Glass is the strongest enhancement late, a free win with a retrigger.
+    "glass",
 ];
 
 /// The options in force: the switches on, and the value formula's numbers set (`name=value`, the names in

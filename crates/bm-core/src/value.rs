@@ -155,6 +155,9 @@ pub const PARAMS: &[(&str, f64)] = &[
     // much more, each one more this much less (`thin_bonus`). The teacher's decks grow (52 to 55 cards by ante 8);
     // the player's shrink (to 46).
     ("thin", 0.0),
+    // With "deck-fix": dollars per point a held card-changing Tarot or Spectral would add to the deck's mean card
+    // worth (times 52) used on the cards the build wants (`fix_dollars`).
+    ("fix-dollars", FIX_DOLLARS),
     // The scales of `Scales`, as multiples of the usual samples.
     ("deals-x", 1.0),
     ("quick-x", 1.0),
@@ -738,12 +741,21 @@ fn tag_dollars(t: crate::tags::TagKind) -> f64 {
 /// with Steel Joker, Mime or Baron, Magician's lucky cards with Lucky Cat...). Which cards they change, and
 /// whether a suit or a rank is worth building, is judged when they are used, by what the deck then deals.
 pub fn consumable_dollars(run: &Run, c: &crate::create::Consumable) -> f64 {
-    use crate::content::ConsumableKind::*;
-    let has = |k: JokerKind| run.count_jokers(k) > 0;
     // A card that pays money (Hermit, Temperance...): what the engine pays for it.
     if let Some(d) = money_card_dollars(run, c) {
         return d;
     }
+    let flat = flat_dollars(run, c);
+    if crate::teacher::on("deck-fix") && fixes_cards(c.kind) {
+        return flat.max(fix_dollars(run, c.kind));
+    }
+    flat
+}
+
+/// A held consumable's flat worth in dollars (`consumable_dollars`, before "deck-fix").
+fn flat_dollars(run: &Run, c: &crate::create::Consumable) -> f64 {
+    use crate::content::ConsumableKind::*;
+    let has = |k: JokerKind| run.count_jokers(k) > 0;
     match c.kind {
         Death => 6.0,
         Cryptid => 7.0,
@@ -762,6 +774,208 @@ pub fn consumable_dollars(run: &Run, c: &crate::create::Consumable) -> f64 {
             ConsumableSet::Spectral => SPECTRAL,
             _ => TAROT,
         },
+    }
+}
+
+/// "deck-fix": a held card-changing Tarot or Spectral priced by what it would do to the deck, used on the cards the
+/// build wants, the whole deck's (a player waits for those cards to be in hand together): Death copies the deck's
+/// most valuable card over its least valuable, Cryptid adds two copies of the most valuable, The Hanged Man takes
+/// the two least valuable away while the deck is large, the enhancements and seals go on the cards they make worth
+/// most (`card_worth`, the jokers' wishes included), the suit changes turn the least valuable off-suit cards to
+/// the deck's main suit, and Strength lifts cards to its commonest rank. The price: dollars ("fix-dollars") per
+/// point the deck's mean card worth gains, times 52. At the usual 0.6, Death copying an Ace over a Two is about the
+/// flat $6 a held Death counts for without the option; copying a Lucky Red-sealed Jack with Photograph held, about
+/// $40. Smooth where the value's sampled rounds are not: on a player's recorded shop, the sampled value of a deck
+/// changed so swung by half a point from one set of deals to the next.
+pub(crate) fn fix_dollars(run: &Run, kind: crate::content::ConsumableKind) -> f64 {
+    let n = run.playing_cards.len();
+    if n < 2 {
+        return 0.0;
+    }
+    let mean = |r: &Run| {
+        let m = r.playing_cards.len().max(1) as f64;
+        r.playing_cards
+            .iter()
+            .map(|&id| card_value(r, id))
+            .sum::<f64>()
+            / m
+    };
+    let before = mean(run);
+    let mut r = run.clone();
+    imagine_use(&mut r, kind);
+    (p("fix-dollars", FIX_DOLLARS) * 52.0 * (mean(&r) - before)).max(0.0)
+}
+
+/// Dollars per point of the deck's mean card worth (times 52) a held card-changing card adds ("deck-fix").
+const FIX_DOLLARS: f64 = 0.6;
+
+/// A held card priced by `fix_dollars`.
+fn fixes_cards(kind: crate::content::ConsumableKind) -> bool {
+    use crate::content::ConsumableKind::*;
+    matches!(
+        kind,
+        Death
+            | Cryptid
+            | HangedMan
+            | Magician
+            | Empress
+            | Hierophant
+            | Lovers
+            | Chariot
+            | Justice
+            | Devil
+            | Star
+            | Moon
+            | Sun
+            | World
+            | Strength
+            | Talisman
+            | DejaVu
+            | Trance
+            | Medium
+    )
+}
+
+/// The smallest deck The Hanged Man is imagined to clip (a player clips to about 40; the bot's own use stops
+/// at 36).
+const CLIP_TO: usize = 36;
+
+/// One held card used in thought on the whole deck (see `fix_dollars`).
+fn imagine_use(r: &mut Run, kind: crate::content::ConsumableKind) {
+    use crate::content::ConsumableKind::*;
+    use crate::state::CardId;
+    let ids: Vec<CardId> = r.playing_cards.clone();
+    if ids.len() < 2 {
+        return;
+    }
+    let worth = |r: &Run, id: CardId| card_value(r, id);
+    let by_worth = |r: &Run| {
+        let mut v: Vec<(f64, CardId)> = r
+            .playing_cards
+            .iter()
+            .map(|&id| (worth(r, id), id))
+            .collect();
+        v.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        v
+    };
+    // The cards a change adds to, the most valuable once changed first (an enhancement or a seal goes on the
+    // cards the build plays most: high ranks, the jokers' ranks and suits).
+    let gains = |r: &Run, change: &dyn Fn(&mut crate::card::Card) -> bool| {
+        let mut v: Vec<(f64, CardId)> = r
+            .playing_cards
+            .iter()
+            .filter_map(|&id| {
+                let mut c = r.card(id).clone();
+                if !change(&mut c) {
+                    return None;
+                }
+                let after = card_worth(r, &c);
+                (after > worth(r, id)).then_some((after, id))
+            })
+            .collect();
+        v.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+        v
+    };
+    let limit = kind.selection_limits().map_or(1, |(_, hi)| hi);
+    match kind {
+        Death => {
+            let v = by_worth(r);
+            let (lo, hi) = (v[0], v[v.len() - 1]);
+            if hi.0 > lo.0 {
+                let keep = r.card(lo.1).clone();
+                let mut copy = r.card(hi.1).clone();
+                copy.sort_id = keep.sort_id;
+                copy.original_suit = keep.original_suit;
+                copy.face_down = keep.face_down;
+                *r.card_mut(lo.1) = copy;
+            }
+        }
+        Cryptid => {
+            let best = by_worth(r)[ids.len() - 1].1;
+            let mut made = Vec::new();
+            for _ in 0..2 {
+                let id = r.copy_playing_card(best);
+                r.playing_cards.push(id);
+                r.deck.push(id);
+                made.push(id);
+            }
+            r.playing_card_added(&made);
+        }
+        HangedMan => {
+            let n = ids.len().saturating_sub(CLIP_TO).min(limit);
+            let gone: Vec<CardId> = by_worth(r).iter().take(n).map(|x| x.1).collect();
+            r.destroy_cards(&gone);
+        }
+        Talisman | DejaVu | Trance | Medium => {
+            let Some(seal) = kind.spectral_seal() else {
+                return;
+            };
+            let v = gains(r, &|c| {
+                let fresh = c.seal == Seal::None;
+                c.seal = seal;
+                fresh
+            });
+            if let Some(&(_, id)) = v.first() {
+                r.card_mut(id).seal = seal;
+            }
+        }
+        Star | Moon | Sun | World => {
+            let Some(to) = kind.tarot_suit() else {
+                return;
+            };
+            let mut n = [0usize; 4];
+            for &id in &ids {
+                n[r.card(id).suit as usize] += 1;
+            }
+            let main = Suit::ALL
+                .iter()
+                .copied()
+                .max_by_key(|&s| (n[s as usize], s as usize))
+                .unwrap_or(to);
+            if to != main {
+                return;
+            }
+            let off: Vec<CardId> = by_worth(r)
+                .iter()
+                .map(|x| x.1)
+                .filter(|&id| r.card(id).suit != to && r.card(id).enhancement != Enhancement::Wild)
+                .take(limit)
+                .collect();
+            for id in off {
+                r.card_mut(id).suit = to;
+            }
+        }
+        Strength => {
+            let mut n = [0usize; 15];
+            for &id in &ids {
+                n[r.card(id).rank.id() as usize] += 1;
+            }
+            let main = (2..15).max_by_key(|&k| (n[k], k)).unwrap_or(14);
+            let up: Vec<CardId> = by_worth(r)
+                .iter()
+                .map(|x| x.1)
+                .filter(|&id| r.card(id).rank.id() as usize + 1 == main)
+                .take(limit)
+                .collect();
+            for id in up {
+                if let Some(rank) = Rank::from_id(main as u8) {
+                    r.card_mut(id).rank = rank;
+                }
+            }
+        }
+        k => {
+            let Some(e) = k.tarot_enhancement() else {
+                return;
+            };
+            let v = gains(r, &|c| {
+                let plain = c.enhancement == Enhancement::None;
+                c.enhancement = e;
+                plain
+            });
+            for &(_, id) in v.iter().take(limit) {
+                r.set_enhancement(id, e);
+            }
+        }
     }
 }
 
@@ -1113,14 +1327,22 @@ pub fn one_joker_bonus(run: &Run, kind: JokerKind, c: &crate::card::Card) -> f64
 /// held jokers pay for in it. Says which cards are worth copying (Death, Cryptid, DNA), improving or
 /// keeping, and which worth losing.
 pub fn card_value(run: &Run, id: crate::state::CardId) -> f64 {
+    card_worth(run, run.card(id))
+}
+
+/// `card_value` of a card as given (one changed in thought: what a Tarot would make of it).
+pub fn card_worth(run: &Run, c: &crate::card::Card) -> f64 {
     use crate::card::Edition;
-    let c = run.card(id);
     let rank = match c.rank.id() {
         14 => 11.0,
         11..=13 => 10.0,
         r => r as f64,
     };
+    // "glass": x mult on the card counted by the times it scores (a retrigger doubles a Glass card's x2 again).
+    let glass = crate::teacher::on("glass");
+    let triggers = if glass { card_triggers(run, c) } else { 1.0 };
     let enh = match c.enhancement {
+        Enhancement::Glass if glass => GLASS_PER_TRIGGER * triggers,
         Enhancement::Glass => 30.0,
         Enhancement::Steel => 25.0,
         Enhancement::Mult => 15.0,
@@ -1131,7 +1353,7 @@ pub fn card_value(run: &Run, id: crate::state::CardId) -> f64 {
         Enhancement::None => 0.0,
     };
     let ed = match c.edition {
-        Edition::Polychrome => 30.0,
+        Edition::Polychrome => 30.0 * triggers,
         Edition::Holographic => 15.0,
         Edition::Foil => 10.0,
         _ => 0.0,
@@ -1146,6 +1368,32 @@ pub fn card_value(run: &Run, id: crate::state::CardId) -> f64 {
         Seal::None => 0.0,
     };
     rank + enh + ed + seal + c.perma_bonus as f64 + joker_bonus(run, c)
+}
+
+/// "glass": what a Glass card's x2 is worth per time it scores (a Polychrome card's x1.5: 30). A player's view:
+/// late in a run Glass is the strongest enhancement, and with any retrigger "a free win".
+const GLASS_PER_TRIGGER: f64 = 45.0;
+
+/// The times a card scores when played, roughly: once, again for a Red Seal, Hack's low ranks, Sock and Buskin's
+/// face cards and Seltzer, and half again for Hanging Chad (the first card scored) and Dusk (the final hand).
+fn card_triggers(run: &Run, c: &crate::card::Card) -> f64 {
+    use JokerKind::*;
+    if c.enhancement == Enhancement::Stone {
+        return 1.0;
+    }
+    let n = |k: JokerKind| run.count_jokers(k) as f64;
+    let face = c.rank.is_face() || n(Pareidolia) > 0.0;
+    let mut t = 1.0;
+    if c.seal == Seal::Red {
+        t += 1.0;
+    }
+    if (2..=5).contains(&c.rank.id()) {
+        t += n(Hack);
+    }
+    if face {
+        t += n(SockAndBuskin);
+    }
+    t + n(Seltzer) + 0.5 * (2.0 * n(HangingChad) + n(Dusk))
 }
 
 /// Hands dealt to measure the deck's power (fewer for a quick look: the first of the same deals), and the
@@ -1737,6 +1985,134 @@ mod tests {
         run.deck.retain(|id| !gone.contains(id));
         let gain = total(&run, &["thin=0.1"]) - total(&run, &[]);
         assert!((gain - 0.2).abs() < 1e-9, "{gain}");
+    }
+
+    #[test]
+    fn held_cards_that_change_the_deck_are_priced_by_what_they_would_do_to_it() {
+        use crate::card::Edition;
+        use crate::content::ConsumableKind as C;
+        use crate::teacher::with_options;
+        let mut run = first_shop("DECKFIX1");
+        run.consumables.clear();
+        let price = |r: &Run, kind: C, opts: &[&str]| {
+            let mut t = r.clone();
+            let i = t.give_consumable(kind);
+            let c = t.consumables[i].clone();
+            with_options(opts, || consumable_dollars(&t, &c))
+        };
+        // Off: the flat prices. On, a plain deck: about the same (never less).
+        assert_eq!(price(&run, C::Death, &[]), 6.0);
+        let plain = price(&run, C::Death, &["deck-fix"]);
+        assert!((6.0..9.0).contains(&plain), "{plain}");
+        assert_eq!(
+            price(&run, C::Hermit, &["deck-fix"]),
+            price(&run, C::Hermit, &[]),
+            "not a card-changer"
+        );
+        // A Lucky, Red-sealed, Polychrome King of Hearts to copy: Death is worth much more.
+        let king = *run
+            .playing_cards
+            .iter()
+            .find(|&&id| run.card(id).rank == Rank::King && run.card(id).suit == Suit::Hearts)
+            .unwrap();
+        run.card_mut(king).enhancement = Enhancement::Lucky;
+        run.card_mut(king).seal = Seal::Red;
+        run.card_mut(king).edition = Edition::Polychrome;
+        let strong = price(&run, C::Death, &["deck-fix"]);
+        assert!(strong > 3.0 * plain, "{strong} against {plain}");
+        assert!(
+            price(&run, C::Cryptid, &["deck-fix"]) > strong,
+            "two copies"
+        );
+        // In thought, Death copies it over the least valuable card, keeping that card's place.
+        let worst = *run
+            .playing_cards
+            .iter()
+            .min_by(|&&a, &&b| {
+                card_value(&run, a)
+                    .total_cmp(&card_value(&run, b))
+                    .then(a.cmp(&b))
+            })
+            .unwrap();
+        let mut r = run.clone();
+        imagine_use(&mut r, C::Death);
+        let c = r.card(worst);
+        assert_eq!(
+            (c.rank, c.suit, c.enhancement, c.seal, c.edition),
+            (
+                Rank::King,
+                Suit::Hearts,
+                Enhancement::Lucky,
+                Seal::Red,
+                Edition::Polychrome
+            )
+        );
+        assert_eq!(
+            c.sort_id,
+            run.card(worst).sort_id,
+            "the copy keeps its own place"
+        );
+        // The Hanged Man: the two least valuable cards gone (not below 36), worth more than its flat $4.
+        let mut r = run.clone();
+        imagine_use(&mut r, C::HangedMan);
+        assert_eq!(r.playing_cards.len(), run.playing_cards.len() - 2);
+        assert!(!r.playing_cards.contains(&worst));
+        assert!(price(&run, C::HangedMan, &["deck-fix"]) > 4.0);
+        // The Magician: the two cards worth most once Lucky (the plain Aces); a seal on the best unsealed card.
+        let mut r = run.clone();
+        imagine_use(&mut r, C::Magician);
+        let lucky_aces = r
+            .playing_cards
+            .iter()
+            .filter(|&&id| {
+                r.card(id).rank == Rank::Ace && r.card(id).enhancement == Enhancement::Lucky
+            })
+            .count();
+        assert_eq!(lucky_aces, 2);
+        // Glass on a Red-sealed card: worth more with "glass" (its x2 counts twice).
+        let mut sealed = run.clone();
+        sealed.card_mut(king).enhancement = Enhancement::None;
+        assert!(
+            price(&sealed, C::Justice, &["deck-fix", "glass"])
+                > price(&sealed, C::Justice, &["deck-fix"])
+        );
+    }
+
+    #[test]
+    fn with_glass_a_cards_x_mult_counts_by_the_times_it_scores() {
+        use crate::card::{Card, Edition};
+        use crate::teacher::with_options;
+        let mut run = first_shop("GLASS1");
+        run.jokers.clear();
+        let worth = |r: &Run, c: &Card, opts: &[&str]| with_options(opts, || card_worth(r, c));
+        let mut five = Card::new(0, Suit::Hearts, Rank::Five);
+        five.enhancement = Enhancement::Glass;
+        // Off: as before. On, scored once: 45 for the x2 (30 off).
+        assert_eq!(
+            worth(&run, &five, &[]) - worth(&run, &Card::new(0, Suit::Hearts, Rank::Five), &[]),
+            30.0
+        );
+        assert_eq!(
+            worth(&run, &five, &["glass"]) - worth(&run, &five, &[]),
+            15.0
+        );
+        // A Red Seal scores it twice, Hack (2 to 5) a third time: the x2 counts three times.
+        five.seal = Seal::Red;
+        run.add_joker(JokerKind::Hack);
+        let plain_glass = worth(&run, &five, &[]);
+        assert_eq!(
+            worth(&run, &five, &["glass"]) - plain_glass,
+            3.0 * 45.0 - 30.0
+        );
+        // Not on a King (Hack's ranks only), and a Polychrome edition counts by its triggers too.
+        let mut king = Card::new(0, Suit::Hearts, Rank::King);
+        king.enhancement = Enhancement::Glass;
+        king.seal = Seal::Red;
+        king.edition = Edition::Polychrome;
+        assert_eq!(
+            worth(&run, &king, &["glass"]) - worth(&run, &king, &[]),
+            (2.0 * 45.0 - 30.0) + 30.0
+        );
     }
 
     fn first_shop(seed: &str) -> Run {

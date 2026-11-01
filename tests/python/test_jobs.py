@@ -324,3 +324,20 @@ def test_the_next_trials_are_set_against_a_control_with_the_formula_in_force(tmp
     nets = steps["values 1-4"][steps["values 1-4"].index("--value-net") + 1]
     assert nets == jobs.ensemble(4)
     assert "teacher-next" in jobs.JOBS
+
+
+def test_the_deck_fix_trials_are_set_against_the_control_on_the_formula_in_force(tmp_path):
+    folder = tmp_path / "results" / "value"
+    folder.mkdir(parents=True)
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "value-1.bin").write_bytes(b"BMVN")
+    (folder / "teacher-w1.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": 0.4}))
+    (folder / f"f{jobs.FORMULA}-precise-on-teacher-w1.json").write_text(json.dumps({"runs": 2000}))
+    steps = {n: a for n, a, *_ in jobs.tune_steps(tmp_path, jobs.DECK_FIX, tag=f"f{jobs.FORMULA}")}
+    assert "precise" not in steps, "the control's runs are there already"
+    for change in jobs.DECK_FIX:
+        play = steps[change]
+        assert play[play.index("--teacher-options") + 1] == f"precise,{change}"
+        assert steps[f"compare {change}"][1] == f"results/value/f{jobs.FORMULA}-precise-on-teacher-w1.json"
+        assert Path(steps[f"compare {change}"][-1]).name.startswith(f"f{jobs.FORMULA}-")
+    assert "teacher-deck-fix" in jobs.JOBS

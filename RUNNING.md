@@ -447,6 +447,23 @@ tuned teacher (about 1 hour). `make learned-5` then records round 5 with the cha
 measured from here (`teacher-learned-5`...) play with the new numbers, so they are not on the same footing as
 rounds 1 to 4.
 
+## Step 15: held Tarots priced by what they'd do to the deck (about 45 minutes)
+
+Your runs fix the deck towards its strongest cards: 47 to 69 Tarots a run, Death copying the best card, The Hanged
+Man clipping the worst. The bot prices a held Death at $6 whatever the deck, so it never builds that way. With
+`deck-fix`, a held card that changes cards is priced by what it would do to the deck used on the cards the build
+wants (copying a Lucky, Red-sealed Jack with Photograph held is worth about $40, not $6); with `glass`, a card's
+x mult (Glass x2, Polychrome x1.5) counts by the times it scores, retriggers included. After `make learned-5` (or
+whenever no job is running):
+
+```
+make teacher-deck-fix
+```
+
+It tries `deck-fix` at the usual price and at half of it, `deck-fix,glass`, and that with the final hand and Five
+of a Kind, each on the same 2,000 seeds against the tuned teacher. A clear winner is what the next round records
+with.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a
