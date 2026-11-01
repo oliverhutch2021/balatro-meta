@@ -1,0 +1,42 @@
+{
+ "job": "teacher-ideas",
+ "commit": "1d78d03e56475d27c9d79a5aae1b42188f92c183",
+ "started": "2026-11-01T03:26:48+00:00",
+ "finished": "2026-11-01T04:08:02+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   16.6,
+   16.6,
+   16.5
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 1,
+  "final-hand": 617,
+  "compare final-hand": 0,
+  "five-kind": 616,
+  "compare five-kind": 0,
+  "overstock=0.4": 624,
+  "compare overstock=0.4": 0,
+  "midas=3": 615,
+  "compare midas=3": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "final-hand": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-3b.bin --value-weight 1.5 --teacher-options precise,final-hand --runs 2000 --seed 1 --out results/tune/precise+final-hand-on-ensemble3-w1.5.json",
+  "compare final-hand": "scripts/compare_runs.py results/value/precise-on-ensemble3-w1.5.json results/tune/precise+final-hand-on-ensemble3-w1.5.json --out results/tune/precise+final-hand-vs-precise-on-ensemble3-w1.5.json",
+  "five-kind": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-3b.bin --value-weight 1.5 --teacher-options precise,five-kind --runs 2000 --seed 1 --out results/tune/precise+five-kind-on-ensemble3-w1.5.json",
+  "compare five-kind": "scripts/compare_runs.py results/value/precise-on-ensemble3-w1.5.json results/tune/precise+five-kind-on-ensemble3-w1.5.json --out results/tune/precise+five-kind-vs-precise-on-ensemble3-w1.5.json",
+  "overstock=0.4": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-3b.bin --value-weight 1.5 --teacher-options precise,overstock=0.4 --runs 2000 --seed 1 --out results/tune/precise+overstock-0.4-on-ensemble3-w1.5.json",
+  "compare overstock=0.4": "scripts/compare_runs.py results/value/precise-on-ensemble3-w1.5.json results/tune/precise+overstock-0.4-on-ensemble3-w1.5.json --out results/tune/precise+overstock-0.4-vs-precise-on-ensemble3-w1.5.json",
+  "midas=3": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-3b.bin --value-weight 1.5 --teacher-options precise,midas=3 --runs 2000 --seed 1 --out results/tune/precise+midas-3-on-ensemble3-w1.5.json",
+  "compare midas=3": "scripts/compare_runs.py results/value/precise-on-ensemble3-w1.5.json results/tune/precise+midas-3-on-ensemble3-w1.5.json --out results/tune/precise+midas-3-vs-precise-on-ensemble3-w1.5.json"
+ }
+}

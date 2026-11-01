@@ -1,0 +1,31 @@
+{
+ "kind": "comparison",
+ "a": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.534,
+  "wins": 1068,
+  "blinds_beaten": 20.253,
+  "report": "results/value/precise-on-ensemble3-w1.5.json"
+ },
+ "b": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.5425,
+  "wins": 1085,
+  "blinds_beaten": 20.249,
+  "report": "results/tune/precise+overstock-0.4-on-ensemble3-w1.5.json"
+ },
+ "seeds": 2000,
+ "win_rate_diff": 0.0085,
+ "win_rate_diff_ci": [
+  -0.0020027245131918024,
+  0.019002724513191804
+ ],
+ "only_a_won": 49,
+ "only_b_won": 66,
+ "p_value": 0.13535040983481547,
+ "blinds_beaten_diff": -0.004,
+ "blinds_beaten_diff_ci": [
+  -0.07709216441896986,
+  0.06909216441896986
+ ]
+}
