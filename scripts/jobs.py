@@ -172,8 +172,9 @@ TUNE_2 = ("planner-edge=0.3,sharpness=2.5", "planner-edge=0.3,sharpness=2.5,long
 # sold Dusk again and again where the player played rounds down to it on purpose ("final-hand"); the player counts
 # Overstock among the strongest vouchers (the value counts it as 15% more for each dollar) and built an economy on
 # Midas Mask (counted as $1 a round). Each changes only runs where its joker or voucher shows up, so the paired runs
-# show its effect with less noise than its share of all runs would suggest.
-IDEAS = ("final-hand", "overstock=0.4", "midas=3")
+# show its effect with less noise than its share of all runs would suggest. "five-kind": the player won a run built
+# on Five of a Kind (copies of Kings), which the quick search for a round's best hand never played.
+IDEAS = ("final-hand", "five-kind", "overstock=0.4", "midas=3")
 
 
 def file_safe(options: str) -> str:

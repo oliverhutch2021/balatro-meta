@@ -212,7 +212,7 @@ def test_the_ideas_from_the_players_runs_are_tried_as_options_against_the_same_r
     play = plays["final-hand"]
     assert play[play.index("--teacher-options") + 1] == "precise,final-hand"
     assert plays["compare final-hand"][1] == "results/value/precise-on-teacher-plain.json"
-    assert {"overstock=0.4", "midas=3"} <= set(plays)
+    assert {"five-kind", "overstock=0.4", "midas=3"} <= set(plays)
     assert "teacher-ideas" in jobs.JOBS
 
 

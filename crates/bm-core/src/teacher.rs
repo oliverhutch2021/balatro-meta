@@ -85,9 +85,15 @@ pub const OPTIONS: &[&str] = &[
     "precise",
     // With a joker that pays on the round's final hand (Dusk retriggers its cards, Acrobat x3): when the best
     // hand beats the blind only as the final hand, play single spare cards until one hand is left, then the
-    // best; and the value's sample rounds try that way of playing too. From a player's winning runs, who
-    // played rounds down to Dusk on purpose (where the bot would sell Dusk).
+    // best; and the value's sample rounds try that way of playing too (the discards dig for the final hand
+    // first). Not under the bosses that single cards spoil the final hand for (`play_down_spoiled`). From a
+    // player's winning runs, who played rounds down to Dusk on purpose (where the bot would sell Dusk).
     "final-hand",
+    // The quick search for a round's best hand (planner.rs `quick_best`: the value's sample rounds, the
+    // planner's tries) also tries five cards of one rank, a Five of a Kind or a Flush Five, which copies
+    // (Death, DNA, Cryptid) make: without it a deck of copies is judged by its Four of a Kind. From a player's
+    // winning run built on Five of a Kind (played nine times).
+    "five-kind",
 ];
 
 /// The options in force: the switches on, and the value formula's numbers set (`name=value`, the names in
@@ -2386,6 +2392,18 @@ pub(crate) fn final_hand_jokers(run: &Run) -> bool {
     run.count_jokers(JokerKind::Dusk) + run.count_jokers(JokerKind::Acrobat) > 0
 }
 
+/// Bosses under which single cards played first spoil the final hand: The Mouth (one hand type a round:
+/// High Card, after a single card), The Hook (two held cards thrown after each hand), The Ox (playing the
+/// most played type, which single cards soon make High Card, takes all the money) and Crimson Heart (a
+/// joker off for each hand, Dusk perhaps for the final one).
+pub(crate) fn play_down_spoiled(run: &Run) -> bool {
+    use crate::blinds::Boss;
+    matches!(
+        run.blind.as_ref().and_then(|b| b.active_boss()),
+        Some(Boss::Mouth | Boss::Hook | Boss::Ox | Boss::CrimsonHeart)
+    )
+}
+
 /// The best hand's score if it were the round's final hand.
 pub(crate) fn final_hand_score(run: &Run, mask: u64) -> f64 {
     let mut last = run.clone();
@@ -2397,7 +2415,11 @@ pub(crate) fn final_hand_score(run: &Run, mask: u64) -> f64 {
 /// (`mask`) falls short of `needed` now but beats it as the final hand, one spare card (the least worth
 /// keeping) is played on its own while more than one hand is left.
 fn play_down(run: &Run, mask: u64, needed: f64) -> Option<(MoveKind, u64)> {
-    if run.hands_left <= 1 || !final_hand_jokers(run) || run.forced_card().is_some() {
+    if run.hands_left <= 1
+        || !final_hand_jokers(run)
+        || run.forced_card().is_some()
+        || play_down_spoiled(run)
+    {
         return None;
     }
     if final_hand_score(run, mask) < needed {
@@ -2694,6 +2716,38 @@ mod tests {
         assert_eq!(a & mask, 0, "not one of the winning hand");
         let plain = teacher_move(&run, 7);
         assert_ne!(plain, (k, a), "not without the option");
+    }
+
+    #[test]
+    fn a_round_is_not_played_down_where_single_cards_spoil_the_final_hand() {
+        // The Mouth allows one hand type a round: a single card first would leave the final pair scoring
+        // nothing. The same hand as above, under The Mouth.
+        use crate::blinds::{BlindKind, Boss};
+        use crate::card::Rank::*;
+        use Suit::*;
+        let mut run = round_with(
+            BlindKind::Boss(Boss::Mouth),
+            &[JokerKind::Acrobat],
+            &[
+                (Spades, Ace),
+                (Hearts, Ace),
+                (Clubs, Nine),
+                (Diamonds, Seven),
+                (Clubs, Five),
+                (Hearts, Four),
+                (Spades, Three),
+                (Diamonds, Two),
+            ],
+        );
+        assert!(play_down_spoiled(&run));
+        let (now, mask) = best_play(&run, 7);
+        let last = final_hand_score(&run, mask);
+        run.blind.as_mut().unwrap().chips = (now + last) / 2.0;
+        let (k, a) = with_options(&["final-hand"], || teacher_move(&run, 7));
+        assert!(
+            !(k == MoveKind::Play && a.count_ones() == 1 && a & mask == 0),
+            "no single spare card under The Mouth: {k:?} {a:b}"
+        );
     }
 
     #[test]

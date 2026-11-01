@@ -277,7 +277,10 @@ fn sample_round(start: &Run) -> (f64, Vec<Played>) {
     let a = play_out(start, false);
     let b = play_out(start, true);
     let mut best = if b.0 > a.0 { b } else { a };
-    if crate::teacher::on("final-hand") && crate::teacher::final_hand_jokers(start) {
+    if crate::teacher::on("final-hand")
+        && crate::teacher::final_hand_jokers(start)
+        && !crate::teacher::play_down_spoiled(start)
+    {
         let c = play_down(start);
         if c.0 > best.0 {
             best = c;
@@ -286,8 +289,10 @@ fn sample_round(start: &Run) -> (f64, Vec<Played>) {
     best
 }
 
-/// A round played down to its final hand: single spare cards (the least worth keeping) while more than one
-/// hand is left, its best hand last (Dusk retriggers it, Acrobat triples it).
+/// A round played down to its final hand: the discards dig for the best hand (the cards outside it thrown),
+/// then single spare cards (the least worth keeping) are played while more than one hand is left, and the
+/// best hand last (Dusk retriggers it, Acrobat triples it). Only the hands that build the run are kept in
+/// the hands played (not the single spare cards, which would make High Card look like the run's hand).
 fn play_down(start: &Run) -> (f64, Vec<Played>) {
     let mut c = start.clone();
     let mut hands = Vec::new();
@@ -301,19 +306,25 @@ fn play_down(start: &Run) -> (f64, Vec<Played>) {
     steps = 0;
     while c.phase == Phase::Round && steps < 40 {
         let best = quick_best(&c);
-        let mv = if c.hands_left > 1 {
-            let junk = (0..c.hand.len())
-                .filter(|&i| best.1 >> i & 1 == 0)
-                .min_by(|&x, &y| card_value(&c, c.hand[x]).total_cmp(&card_value(&c, c.hand[y])));
-            match junk {
-                Some(j) => (MoveKind::Play, 1u64 << j),
-                None => (MoveKind::Play, best.1),
-            }
+        let mut mv = if c.discards_left > 0 {
+            plan_move(&c, Plan::Best, best)
         } else {
             (MoveKind::Play, best.1)
         };
-        let h = preview(&c, mv.1);
-        hands.push((h.hand, h.chips, h.mult, h.score));
+        let mut spare = false;
+        if mv.0 == MoveKind::Play && c.hands_left > 1 {
+            let junk = (0..c.hand.len())
+                .filter(|&i| best.1 >> i & 1 == 0)
+                .min_by(|&x, &y| card_value(&c, c.hand[x]).total_cmp(&card_value(&c, c.hand[y])));
+            if let Some(j) = junk {
+                mv = (MoveKind::Play, 1u64 << j);
+                spare = true;
+            }
+        }
+        if mv.0 == MoveKind::Play && !spare {
+            let h = preview(&c, mv.1);
+            hands.push((h.hand, h.chips, h.mult, h.score));
+        }
         if apply(&mut c, mv.0, mv.1).is_err() {
             break;
         }

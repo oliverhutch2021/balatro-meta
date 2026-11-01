@@ -223,8 +223,19 @@ pub fn quick_best(run: &Run) -> (f64, u64) {
         .map(|r| by_rank[r])
         .filter(|m| m.count_ones() >= 2)
         .collect();
+    let five = crate::teacher::on("five-kind");
     for &g in &groups {
         cands.push(g & mask_first(g, 4));
+        // Copies (Death, DNA, Cryptid) make five of a rank: a Five of a Kind, or a Flush Five in one suit.
+        if five && g.count_ones() >= 5 {
+            cands.push(mask_first(g, 5));
+            for s in Suit::ALL {
+                let same = by_suit[s as usize].iter().fold(0u64, |m, &i| m | 1 << i) & g;
+                if same.count_ones() >= 5 && same != g {
+                    cands.push(mask_first(same, 5));
+                }
+            }
+        }
     }
     if groups.len() >= 2 {
         cands.push(mask_first(groups[0], 2) | mask_first(groups[1], 2));
@@ -848,6 +859,46 @@ mod tests {
             !opts.contains(&Plan::Flush(Clubs)),
             "two clubs make no flush plan"
         );
+    }
+
+    #[test]
+    fn with_five_kind_the_quick_search_plays_five_of_a_rank() {
+        use crate::blinds::BlindKind;
+        use crate::card::Rank::{Ace, Five, King, Three, Two};
+        use Suit::*;
+        // Five Kings (a Five of a Kind); six Kings, five of them Spades, with the Ace of Spades (a Flush Five,
+        // where the flush the quick search tries is the Ace and four Kings).
+        for (kings, ace) in [
+            (&[Spades, Hearts, Clubs, Diamonds, Spades][..], false),
+            (&[Hearts, Spades, Spades, Spades, Spades, Spades][..], true),
+        ] {
+            let mut run = Run::scenario("FIVEKIND", BlindKind::Small);
+            run.hand.clear();
+            for &s in kings {
+                run.add_card_to_hand(s, King);
+            }
+            if ace {
+                run.add_card_to_hand(Spades, Ace);
+            }
+            for (s, r) in [(Clubs, Two), (Hearts, Three), (Diamonds, Five)] {
+                run.add_card_to_hand(s, r);
+            }
+            let (full, _) = full_best(&run);
+            let (plain, m) = quick_best(&run);
+            assert!(
+                plain < full,
+                "without the option the quick search misses it"
+            );
+            if !ace {
+                assert_eq!(m.count_ones(), 4, "four of the Kings");
+            }
+            let (q, m) = crate::teacher::with_options(&["five-kind"], || quick_best(&run));
+            assert_eq!(m.count_ones(), 5);
+            assert!(
+                (q - full).abs() < 1e-9,
+                "the full search's best: {q} against {full}"
+            );
+        }
     }
 
     #[test]

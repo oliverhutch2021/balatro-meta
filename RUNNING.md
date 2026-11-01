@@ -411,14 +411,15 @@ swaps you make most, and the decisions with the largest gaps either way. Claude 
 patterns that recur into changes to try on thousands of seeds.
 
 The first two games (two wins) showed the bot selling Dusk where you played rounds down to it, and undervaluing
-Overstock and Midas Mask. After `make teacher-tune-2`, with no job running:
+Overstock and Midas Mask; the second was built on Five of a Kind (copies of Kings), a hand the bot's quick search
+never played. After `make teacher-tune-2`, with no job running:
 
 ```
 make teacher-ideas
 ```
 
-tries each as a change to the bot ("final-hand", `overstock=0.4`, `midas=3`), on the same 2,000 seeds against its
-own runs (about 40 minutes).
+tries each as a change to the bot ("final-hand", "five-kind", `overstock=0.4`, `midas=3`), on the same 2,000 seeds
+against its own runs (about 50 minutes).
 
 ## Later steps
 

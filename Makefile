@@ -127,7 +127,7 @@ teacher-tune:  ## The value formula's numbers changed one at a time on the best 
 teacher-tune-2:  ## The tuning's winners together, and pushed further, against the same teacher's own runs (about 50 minutes)
 	$(PY) scripts/jobs.py run teacher-tune-2 $(JOB_FLAGS)
 
-teacher-ideas:  ## What your recorded runs showed the bot missing (Dusk, Overstock, Midas), each against the same runs (about 40 minutes)
+teacher-ideas:  ## What your recorded runs showed the bot missing (Dusk, Five of a Kind, Overstock, Midas), each against the same runs (about 50 minutes)
 	$(PY) scripts/jobs.py run teacher-ideas $(JOB_FLAGS)
 
 SPEED ?= 1
