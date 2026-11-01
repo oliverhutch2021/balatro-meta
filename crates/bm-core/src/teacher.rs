@@ -1115,7 +1115,7 @@ fn round_choice(run: &Run, salt: u64) -> ((MoveKind, u64), bool) {
         return plain((MoveKind::Play, mask));
     }
     if on("final-hand") {
-        if let Some(m) = play_down(run, mask, needed) {
+        if let Some(m) = play_down(run, mask, needed, salt) {
             return plain(m);
         }
     }
@@ -2412,17 +2412,19 @@ pub(crate) fn final_hand_score(run: &Run, mask: u64) -> f64 {
 }
 
 /// Playing the round down to its final hand ("final-hand"): with Dusk or Acrobat, when the best hand
-/// (`mask`) falls short of `needed` now but beats it as the final hand, one spare card (the least worth
-/// keeping) is played on its own while more than one hand is left.
-fn play_down(run: &Run, mask: u64, needed: f64) -> Option<(MoveKind, u64)> {
+/// (`mask`) falls short of `needed` now but beats it as the final hand (judged on a fair copy), one spare
+/// card (the least worth keeping) is played on its own while more than one hand is left. Not with cards face
+/// down in hand: what the final hand would score is then a guess.
+fn play_down(run: &Run, mask: u64, needed: f64, salt: u64) -> Option<(MoveKind, u64)> {
     if run.hands_left <= 1
         || !final_hand_jokers(run)
         || run.forced_card().is_some()
         || play_down_spoiled(run)
+        || run.hand.iter().any(|&id| run.card(id).face_down)
     {
         return None;
     }
-    if final_hand_score(run, mask) < needed {
+    if final_hand_score(&fair_copy(run, salt ^ 0xF1A1), mask) < needed {
         return None;
     }
     let spare: Vec<usize> = (0..run.hand.len())
