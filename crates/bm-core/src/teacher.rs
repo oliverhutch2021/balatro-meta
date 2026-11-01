@@ -249,7 +249,7 @@ pub fn joker_value(k: JokerKind) -> f64 {
 }
 
 /// Jokers whose effect multiplies (applied in the joker phase): they belong at the right end.
-fn multiplies(k: JokerKind) -> bool {
+pub(crate) fn multiplies(k: JokerKind) -> bool {
     use JokerKind::*;
     matches!(
         k,

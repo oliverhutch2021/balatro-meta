@@ -441,8 +441,9 @@ make teacher-next && make learned-5
 ```
 
 `make teacher-next` tries, each on the same 2,000 seeds against the precise teacher: twice the samples behind its
-first look at each option (`quick-x=2`), the four ideas from your runs together, both, and round 4's networks with
-the tuned teacher. `make learned-5` then records round 5 with the change that won most clearly, if one did. Rounds
+first look at each option (`quick-x=2`), the four ideas from your runs together, two of your rules (x mult held
+counts more as the run goes on, `xmult-bonus`; a clipped deck counts more, `thin`), and round 4's networks with the
+tuned teacher (about 1 hour). `make learned-5` then records round 5 with the change that won most clearly, if one did. Rounds
 measured from here (`teacher-learned-5`...) play with the new numbers, so they are not on the same footing as
 rounds 1 to 4.
 

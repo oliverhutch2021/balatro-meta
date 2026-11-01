@@ -211,8 +211,10 @@ IDEAS = ("final-hand", "five-kind", "overstock=0.4", "midas=3")
 FORMULA = 2
 # make teacher-next, on formula 2: twice the samples behind the teacher's first (quick) look at each option, which on
 # the player's 1,325 recorded shop decisions chose better 47 times and worse 12 (judged alike, examples/judge.rs
-# --phase SHOP); the player's four ideas together (each won a little alone, none clearly); and both.
-NEXT = ("quick-x=2", "final-hand,five-kind,overstock=0.4,midas=3", "quick-x=2,final-hand,five-kind,overstock=0.4,midas=3")
+# --phase SHOP); the player's four ideas together (each won a little alone, none clearly); and two of the player's
+# rules: x mult held counts more as the run goes on (42% of the teacher's late losses left a shop at antes 4-7 with $25+
+# and no x mult joker), and a clipped deck counts more (the teacher's decks grow to 55 cards, the player's shrink to 46).
+NEXT = ("quick-x=2", "final-hand,five-kind,overstock=0.4,midas=3", "xmult-bonus=0.5", "xmult-bonus=1", "thin=0.03")
 
 
 def file_safe(options: str) -> str:

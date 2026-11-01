@@ -147,6 +147,14 @@ pub const PARAMS: &[(&str, f64)] = &[
     ("above-cap", ABOVE_CAP),
     ("overstock", OVERSTOCK),
     ("midas", MIDAS),
+    // A player's rule ("every run needs chips, mult, x mult and money; x mult becomes necessary by ante 6"): held x
+    // mult counts this much more, from none at ante 1 to all of it at ante 6 (`xmult_bonus`). Of the teacher's
+    // losses from ante 5 on, 42% had left a shop at antes 4 to 7 with $25 or more and no x mult joker.
+    ("xmult-bonus", 0.0),
+    // A player's rule ("clip your deck down a lot"): each playing card fewer than the deck started with counts this
+    // much more, each one more this much less (`thin_bonus`). The teacher's decks grow (52 to 55 cards by ante 8);
+    // the player's shrink (to 46).
+    ("thin", 0.0),
     // The scales of `Scales`, as multiples of the usual samples.
     ("deals-x", 1.0),
     ("quick-x", 1.0),
@@ -1002,9 +1010,39 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
         long_run,
         money: long_weight * shopping,
         assets: 0.0,
-        total: v + long_run,
+        total: v + long_run + xmult_bonus(run) + thin_bonus(run),
         flows: f,
     })
+}
+
+/// A joker that multiplies the score (x mult), or a Polychrome one (x1.5).
+fn gives_xmult(j: &crate::jokers::Joker) -> bool {
+    use JokerKind::*;
+    !j.debuffed
+        && (crate::teacher::multiplies(j.kind)
+            || j.edition == crate::card::Edition::Polychrome
+            || matches!(
+                j.kind,
+                Photograph | Baron | AncientJoker | TheIdol | Bloodstone | Triboulet
+            ))
+}
+
+/// "xmult-bonus": held x mult, counted more as the run goes on (none at ante 1, all of it from ante 6).
+fn xmult_bonus(run: &Run) -> f64 {
+    let b = p("xmult-bonus", 0.0);
+    if b == 0.0 || !run.jokers.iter().any(gives_xmult) {
+        return 0.0;
+    }
+    b * ((run.ante as f64 - 1.0) / 5.0).clamp(0.0, 1.0)
+}
+
+/// "thin": each playing card fewer than the 52 a deck starts with (more: less).
+fn thin_bonus(run: &Run) -> f64 {
+    let b = p("thin", 0.0);
+    if b == 0.0 {
+        return 0.0;
+    }
+    b * (52.0 - run.playing_cards.len() as f64)
 }
 
 /// What the held jokers pay for in a playing card (its rank, suit, enhancement), beyond the card's own
@@ -1679,6 +1717,28 @@ mod tests {
     }
 
     /// A run at its first shop (the teacher played the first blind).
+    #[test]
+    fn x_mult_held_and_a_clipped_deck_count_more_with_their_numbers() {
+        use crate::teacher::with_options;
+        let mut run = first_shop("NUMBERS2");
+        let total = |r: &Run, opts: &[&str]| with_options(opts, || breakdown(r, 9).unwrap().total);
+        // No x mult held: the bonus changes nothing.
+        run.jokers.retain(|j| !gives_xmult(j));
+        assert_eq!(total(&run, &["xmult-bonus=1"]), total(&run, &[]));
+        // Photograph held at ante 6: all of the bonus; at ante 1, none of it.
+        run.add_joker(JokerKind::Photograph);
+        run.ante = 6;
+        let gain = total(&run, &["xmult-bonus=1"]) - total(&run, &[]);
+        assert!((gain - 1.0).abs() < 1e-9, "{gain}");
+        run.ante = 1;
+        assert_eq!(total(&run, &["xmult-bonus=1"]), total(&run, &[]));
+        // Two cards fewer than 52: twice the number.
+        let gone: Vec<_> = run.playing_cards.drain(..2).collect();
+        run.deck.retain(|id| !gone.contains(id));
+        let gain = total(&run, &["thin=0.1"]) - total(&run, &[]);
+        assert!((gain - 0.2).abs() < 1e-9, "{gain}");
+    }
+
     fn first_shop(seed: &str) -> Run {
         let mut run = Run::new(RunConfig::new(seed));
         let mut step = 0;
