@@ -283,13 +283,33 @@ def test_round_four_records_with_the_trial_that_beat_the_precise_teacher_clearly
     assert opts(record()) == "precise", "no trials yet: the precise teacher"
     tune = tmp_path / "results" / "tune"
     tune.mkdir(parents=True)
-    for change, diff, p in (("final-hand", 0.012, 0.3), ("planner-edge=0.3,sharpness=2.5", 0.02, 0.05),
-                            ("midas=3", 0.03, 0.2)):
-        name = jobs.file_safe(f"precise,{change}")
+    f = f"f{jobs.FORMULA}-"
+    for pre, change, diff, p in (("", "long-run=0.35", 0.06, 0.001), (f, "final-hand", 0.012, 0.3),
+                                 (f, "planner-edge=0.3,sharpness=2.5", 0.02, 0.05), (f, "midas=3", 0.03, 0.2)):
+        name = pre + jobs.file_safe(f"precise,{change}")
         report = f"results/tune/{name}-on-teacher-w1.json"
         (tmp_path / report).write_text(json.dumps({"teacher_options": ["precise", *change.split(",")]}))
-        (tune / f"{name}-vs-precise-on-teacher-w1.json").write_text(json.dumps(
+        (tune / f"{name}-vs-{pre}precise-on-teacher-w1.json").write_text(json.dumps(
             {"kind": "comparison", "b": {"report": report}, "win_rate_diff": diff, "p_value": p}))
-    assert opts(record()) == "precise,planner-edge=0.3,sharpness=2.5", "the largest clear gain, not the largest"
+    assert opts(record()) == "precise,planner-edge=0.3,sharpness=2.5", \
+        "the largest clear gain on the formula in force, not the largest, nor one on an older formula"
     assert opts({n: a for n, a, *_ in jobs.learned_round(3, tmp_path)["teacher-data-3"]}["record"]) == "precise", \
         "round 3 recorded as it did"
+
+
+def test_the_next_trials_are_set_against_a_control_with_the_formula_in_force(tmp_path):
+    folder = tmp_path / "results" / "value"
+    folder.mkdir(parents=True)
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "value-1.bin").write_bytes(b"BMVN")
+    (folder / "teacher-w1.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": 0.4}))
+    (folder / "precise-on-teacher-w1.json").write_text(json.dumps({"runs": 2000}))  # measured with older numbers
+    steps = {n: a for n, a, *_ in jobs.next_steps(tmp_path)}
+    control = steps["precise"][steps["precise"].index("--out") + 1]
+    assert control == f"results/value/f{jobs.FORMULA}-precise-on-teacher-w1.json"
+    for change in jobs.NEXT:
+        assert steps[f"compare {change}"][1] == control
+    assert steps["compare values 1-4"][1] == control
+    nets = steps["values 1-4"][steps["values 1-4"].index("--value-net") + 1]
+    assert nets == jobs.ensemble(4)
+    assert "teacher-next" in jobs.JOBS

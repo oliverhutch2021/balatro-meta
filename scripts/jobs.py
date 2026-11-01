@@ -129,7 +129,8 @@ def best_recording(root: Path = ROOT) -> list[str]:
         return base
     stem = Path(best[2]).stem
     top = None
-    for f in sorted((root / "results" / "tune").glob(f"*-vs-*-on-{stem}.json")):
+    # Only trials on the formula in force (an older formula's winners are in its numbers now, or were beaten).
+    for f in sorted((root / "results" / "tune").glob(f"f{FORMULA}-*-vs-*-on-{stem}.json")):
         try:
             d = json.loads(f.read_text())
             diff, p = float(d["win_rate_diff"]), float(d["p_value"])
@@ -204,37 +205,70 @@ TUNE_2 = ("planner-edge=0.3,sharpness=2.5", "planner-edge=0.3,sharpness=2.5,long
 # show its effect with less noise than its share of all runs would suggest. "five-kind": the player won a run built
 # on Five of a Kind (copies of Kings), which the quick search for a round's best hand never played.
 IDEAS = ("final-hand", "five-kind", "overstock=0.4", "midas=3")
+# The value formula's numbers in force (crates/bm-core/src/value.rs). Version 2: the planner's edge 0.3, sharpness 2.5,
+# the long run 0.35, from make teacher-tune-2 (59.85% against 53.4% on the same 2,000 seeds). A trial is set only
+# against a control measured with the same numbers: their reports carry the version (f2-...).
+FORMULA = 2
+# make teacher-next, on formula 2: twice the samples behind the teacher's first (quick) look at each option, which on
+# the player's 1,325 recorded shop decisions chose better 47 times and worse 12 (judged alike, examples/judge.rs
+# --phase SHOP); the player's four ideas together (each won a little alone, none clearly); and both.
+NEXT = ("quick-x=2", "final-hand,five-kind,overstock=0.4,midas=3", "quick-x=2,final-hand,five-kind,overstock=0.4,midas=3")
 
 
 def file_safe(options: str) -> str:
     return options.replace(",", "+").replace("=", "-")
 
 
-def tune_steps(root: Path = ROOT, changes: tuple[str, ...] = TUNE) -> list[tuple]:
-    """make teacher-tune: the best teacher there is, with the options recordings use (recording_options), tried with
-    each of the formula's numbers in TUNE changed (make teacher-tune-2: TUNE_2), on the first 2,000 of the usual
-    seeds, each set run by run against the same teacher without the change. That teacher's own runs come from make
-    teacher-precise when it has run (the same seeds and options), else this job plays them first."""
+def tune_control(root: Path = ROOT, tag: str = "") -> tuple[list[str], str, str, str]:
+    """The teacher trials are set against: the best learned value's arguments, its report's stem, the options the
+    recordings use, and where that teacher's own runs on the first 2,000 usual seeds are kept (with the formula's
+    version in the name when a tag is given)."""
     best = best_learned(root)
     net_args, stem = (["--value-net", best[0], "--value-weight", best[1]], Path(best[2]).stem) if best else \
         ([], "teacher-plain")
     base = recording_options(root)[1:]
     base_opts = base[0] if base else ""
-    if base_opts:
-        control = f"results/value/{file_safe(base_opts)}-on-{stem}.json"
-    else:
-        control = f"results/value/{stem}.json"
+    pre = f"{tag}-" if tag else ""
+    control = f"results/value/{pre}{file_safe(base_opts)}-on-{stem}.json" if base_opts else \
+        f"results/value/{pre}{stem}.json"
+    return net_args, stem, base_opts, control
+
+
+def tune_steps(root: Path = ROOT, changes: tuple[str, ...] = TUNE, tag: str = "") -> list[tuple]:
+    """make teacher-tune: the best teacher there is, with the options recordings use (recording_options), tried with
+    each of the formula's numbers in TUNE changed (make teacher-tune-2: TUNE_2), on the first 2,000 of the usual
+    seeds, each set run by run against the same teacher without the change. That teacher's own runs come from make
+    teacher-precise when it has run (the same seeds and options), else this job plays them first. With a tag (the
+    formula's version, "f2"), the control and the trials carry it, so a control measured with other numbers is
+    never used."""
+    net_args, stem, base_opts, control = tune_control(root, tag)
+    pre = f"{tag}-" if tag else ""
     steps: list[tuple] = [("build", [*MAKE, "build"])]
     if base_opts and not (root / control).exists():
         steps.append((base_opts, [*BASELINE, "--bot", "teacher", *net_args, "--teacher-options", base_opts,
                                   "--runs", "2000", "--seed", "1", "--out", control]))
     for change in changes:
         opts = f"{base_opts},{change}" if base_opts else change
-        out = f"results/tune/{file_safe(opts)}-on-{stem}.json"
+        out = f"results/tune/{pre}{file_safe(opts)}-on-{stem}.json"
         steps.append((change, [*BASELINE, "--bot", "teacher", *net_args, "--teacher-options", opts, "--runs", "2000",
                                "--seed", "1", "--out", out]))
         steps.append((f"compare {change}", ["scripts/compare_runs.py", control, out, "--out",
-                                            f"results/tune/{file_safe(opts)}-vs-{Path(control).stem}.json"]))
+                                            f"results/tune/{pre}{file_safe(opts)}-vs-{Path(control).stem}.json"]))
+    return steps
+
+
+def next_steps(root: Path = ROOT) -> list[tuple]:
+    """make teacher-next: the trials in NEXT on the formula in force (tune_steps with its version), and round 4's
+    networks with the teacher whose numbers made them (all rounds' together at weight 1.5, with "precise"), each
+    against the same control on the same 2,000 seeds."""
+    tag = f"f{FORMULA}"
+    steps = tune_steps(root, NEXT, tag=tag)
+    *_, control = tune_control(root, tag)
+    out = f"results/tune/{tag}-precise-on-ensemble4-w1.5.json"
+    steps.append(("values 1-4", [*BASELINE, "--bot", "teacher", "--value-net", ensemble(4), "--value-weight", "1.5",
+                                 "--teacher-options", "precise", "--runs", "2000", "--seed", "1", "--out", out]))
+    steps.append(("compare values 1-4", ["scripts/compare_runs.py", control, out, "--out",
+                                         f"results/tune/{Path(out).stem}-vs-{Path(control).stem}.json"]))
     return steps
 
 
@@ -389,6 +423,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-tune": tune_steps(),
     "teacher-tune-2": tune_steps(changes=TUNE_2),
     "teacher-ideas": tune_steps(changes=IDEAS),
+    "teacher-next": next_steps(),
 }
 
 

@@ -162,18 +162,21 @@ fn p(name: &str, usual: f64) -> f64 {
 }
 
 /// How sharply a blind's chance turns with the log margin of a round's total over its target, and the
-/// teacher's planner's edge over the simple players here (a log factor): fitted to the teacher's own
-/// rounds (120 shop positions, 6 rounds each).
-const SHARPNESS: f64 = 3.5;
-const PLANNER_EDGE: f64 = 0.5;
+/// teacher's planner's edge over the simple players here (a log factor): first fitted to the teacher's own
+/// rounds (120 shop positions, 6 rounds each: 3.5 and 0.5), then tuned on the PC (with the long run's weight,
+/// LONG_RUN): the precise teacher on rounds 1 to 3's networks won 59.85% of the first 2,000 usual seeds with
+/// 2.5, 0.3 and 0.35 against 53.4% with 3.5, 0.5 and 0.5 (95% range +4.07 to +8.83 points), and its recording
+/// with them won 59.34% of 25,000 fresh seeds.
+const SHARPNESS: f64 = 2.5;
+const PLANNER_EDGE: f64 = 0.3;
 /// Overstock's extra shop slot, as a share more that each dollar buys (Overstock Plus: 0.8 of it again). A player
 /// counts it among the strongest vouchers: `make teacher-ideas` tries more.
 const OVERSTOCK: f64 = 0.15;
 /// Midas Mask, as dollars a round: its Gold cards (face cards turned Gold when scored, $3 each held at the end
 /// of a round) add up as the deck turns gold, more than this: `make teacher-ideas` tries more.
 const MIDAS: f64 = 1.0;
-/// Weight of the long run (log scoring power some rounds on).
-const LONG_RUN: f64 = 0.5;
+/// Weight of the long run (log scoring power some rounds on): 0.5 until the PC's tuning (see SHARPNESS).
+const LONG_RUN: f64 = 0.35;
 /// Rounds the long run looks ahead.
 const LONG_ROUNDS: f64 = 9.0;
 /// Log scoring power a dollar buys in a shop at ante 1 (falling with the ante: late shops add less to a
@@ -1644,15 +1647,20 @@ mod tests {
         let total = |opts: &[&str]| with_options(opts, || breakdown(&run, 9).unwrap().total);
         let usual = total(&[]);
         assert_eq!(
-            total(&["sharpness=3.5", "long-run=0.5"]),
+            total(&["sharpness=2.5", "long-run=0.35", "planner-edge=0.3"]),
             usual,
             "the usual numbers"
+        );
+        assert_ne!(
+            total(&["sharpness=3.5", "long-run=0.5", "planner-edge=0.5"]),
+            usual,
+            "the numbers before the tuning"
         );
         assert_ne!(total(&["long-run=0.25"]), usual);
         assert_ne!(total(&["sharpness=2"]), usual);
         assert_ne!(total(&["money-scale=40", "precise"]), usual);
         // The last value given counts.
-        assert_eq!(total(&["long-run=0.25", "long-run=0.5"]), usual);
+        assert_eq!(total(&["long-run=0.25", "long-run=0.35"]), usual);
         for bad in ["long-run=x", "long-run=", "nonsense=1", "long-run=inf"] {
             let names = vec![bad.to_string()];
             let err = std::panic::catch_unwind(|| with_options(&[bad], || ()));

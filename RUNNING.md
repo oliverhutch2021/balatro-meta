@@ -428,6 +428,24 @@ the change that won most clearly. All three in a row, overnight:
 make teacher-tune-2 && make teacher-ideas && make learned-4
 ```
 
+## Step 14: the tuned formula, and the next trials (about 1 hour, then round 5)
+
+`make teacher-tune-2` found the formula's numbers that win most: the planner's edge 0.3, sharpness 2.5 and the
+long run 0.35 together won 59.85% of the 2,000 seeds against 53.4% (round 4 recorded with them: 59.34% of 25,000
+fresh seeds). They are now the formula's own numbers (formula 2), so the teacher plays that way without options.
+Trials on it are set only against a control measured with the same numbers (`f2-` in their reports). With no job
+running:
+
+```
+make teacher-next && make learned-5
+```
+
+`make teacher-next` tries, each on the same 2,000 seeds against the precise teacher: twice the samples behind its
+first look at each option (`quick-x=2`), the four ideas from your runs together, both, and round 4's networks with
+the tuned teacher. `make learned-5` then records round 5 with the change that won most clearly, if one did. Rounds
+measured from here (`teacher-learned-5`...) play with the new numbers, so they are not on the same footing as
+rounds 1 to 4.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a
