@@ -220,12 +220,15 @@ FORMULA = 2
 # rules: x mult held counts more as the run goes on (42% of the teacher's late losses left a shop at antes 4-7 with $25+
 # and no x mult joker), and a clipped deck counts more (the teacher's decks grow to 55 cards, the player's shrink to 46).
 NEXT = ("quick-x=2", "final-hand,five-kind,overstock=0.4,midas=3", "xmult-bonus=0.5", "xmult-bonus=1", "thin=0.03")
-# make teacher-deck-fix, on formula 2: held Tarots and Spectrals that change cards priced by what they would do to
-# the deck (value.rs fix_dollars; the player's runs used 47 to 69 Tarots each, fixing the deck towards its strongest
-# cards), at the usual price per point and at half of it; with a card's x mult counted by the times it scores
-# ("glass": the player's view, Glass with a retrigger is a free win); and with the ways of playing such decks too
-# (the final hand, Five of a Kind).
-DECK_FIX = ("deck-fix", "deck-fix,fix-dollars=0.3", "deck-fix,glass", "deck-fix,glass,final-hand,five-kind")
+# make teacher-ideas-2, on formula 2, each against the formula 2 control: from the player's runs and their word.
+# "deck-fix": held Tarots and Spectrals that change cards priced by what they would do to the deck (value.rs
+# fix_dollars; the player used 47 to 69 Tarots a run, fixing the deck towards its strongest cards); with "glass", a
+# card's x mult counted by the times it scores (Glass with a retrigger: "a free win"). "xmult-fit": held x mult that
+# fires with the hands the run plays (The Duo with Pairs), at two weights (the plain x mult bonus, which paid for any,
+# lost). "card-sharp": the planner tries each hand type first so the hands after it get Card Sharp's x3 (on the 55
+# of 300 cloud runs that held Card Sharp: 43 won against 40). Then all of them together.
+IDEAS_2 = ("deck-fix", "deck-fix,glass", "xmult-fit=0.3", "xmult-fit=0.6", "card-sharp",
+           "deck-fix,glass,xmult-fit=0.3,card-sharp")
 
 
 def file_safe(options: str) -> str:
@@ -437,7 +440,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-tune-2": tune_steps(changes=TUNE_2),
     "teacher-ideas": tune_steps(changes=IDEAS),
     "teacher-next": next_steps(),
-    "teacher-deck-fix": tune_steps(changes=DECK_FIX, tag=f"f{FORMULA}"),
+    "teacher-ideas-2": tune_steps(changes=IDEAS_2, tag=f"f{FORMULA}"),
 }
 
 

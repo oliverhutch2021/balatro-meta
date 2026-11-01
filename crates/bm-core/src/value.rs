@@ -155,6 +155,9 @@ pub const PARAMS: &[(&str, f64)] = &[
     // much more, each one more this much less (`thin_bonus`). The teacher's decks grow (52 to 55 cards by ante 8);
     // the player's shrink (to 46).
     ("thin", 0.0),
+    // A player's rule refined: held x mult counts this much more by ante 6 only as far as it fires with the hands
+    // the run plays (`xmult_fit_bonus`: The Duo with Pairs, not The Order with them).
+    ("xmult-fit", 0.0),
     // With "deck-fix": dollars per point a held card-changing Tarot or Spectral would add to the deck's mean card
     // worth (times 52) used on the cards the build wants (`fix_dollars`).
     ("fix-dollars", FIX_DOLLARS),
@@ -923,6 +926,20 @@ fn imagine_use(r: &mut Run, kind: crate::content::ConsumableKind) {
             let Some(to) = kind.tarot_suit() else {
                 return;
             };
+            // Towards a suit the jokers pay for (Blackboard's Spades and Clubs, a suit joker's): the cards the change
+            // adds most to. A player's view: Blackboard is strong once suit Tarots have fixed the deck.
+            let v = gains(r, &|c| {
+                let off = c.suit != to && c.enhancement != Enhancement::Wild;
+                c.suit = to;
+                off
+            });
+            if !v.is_empty() {
+                for &(_, id) in v.iter().take(limit) {
+                    r.card_mut(id).suit = to;
+                }
+                return;
+            }
+            // Else towards the deck's main suit (a Flush build): its least valuable off-suit cards.
             let mut n = [0usize; 4];
             for &id in &ids {
                 n[r.card(id).suit as usize] += 1;
@@ -1224,7 +1241,7 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
         long_run,
         money: long_weight * shopping,
         assets: 0.0,
-        total: v + long_run + xmult_bonus(run) + thin_bonus(run),
+        total: v + long_run + xmult_bonus(run) + xmult_fit_bonus(run, &o.shares) + thin_bonus(run),
         flows: f,
     })
 }
@@ -1248,6 +1265,94 @@ fn xmult_bonus(run: &Run) -> f64 {
         return 0.0;
     }
     b * ((run.ante as f64 - 1.0) / 5.0).clamp(0.0, 1.0)
+}
+
+/// "xmult-fit": held x mult that fires with the hands the run plays, counted more as the run goes on (none at ante 1,
+/// all of it from ante 6): the best held joker's `xmult_fit`, times the number. A player's rule: the x mult has to
+/// work with the hand the run is built on (The Duo with Pairs). The plain "xmult-bonus" paid for any x mult, The
+/// Order with a run of Pairs included, and lost (57.35% against 59.85% at 1).
+fn xmult_fit_bonus(run: &Run, shares: &[f64; 12]) -> f64 {
+    let b = p("xmult-fit", 0.0);
+    if b == 0.0 {
+        return 0.0;
+    }
+    let fit = run
+        .jokers
+        .iter()
+        .map(|j| xmult_fit(run, j, shares))
+        .fold(0.0, f64::max);
+    b * fit * ((run.ante as f64 - 1.0) / 5.0).clamp(0.0, 1.0)
+}
+
+/// How often a joker's x mult fires with the hands the run plays, roughly, from 0 to 1: a hand-type joker by the
+/// share of hands holding its shape (`shares`, from the value's sample rounds), Card Sharp by how much the run
+/// keeps to one hand type, the jokers that want certain cards by the deck's share of them, the rest (Cavendish,
+/// Hologram, Constellation, Ramen, a Polychrome edition...) always. 0 for a joker without x mult.
+pub(crate) fn xmult_fit(run: &Run, j: &crate::jokers::Joker, shares: &[f64; 12]) -> f64 {
+    use HandType::*;
+    use JokerKind::*;
+    if j.debuffed {
+        return 0.0;
+    }
+    if j.edition == crate::card::Edition::Polychrome {
+        return 1.0;
+    }
+    let of = |types: &[HandType]| {
+        types
+            .iter()
+            .map(|&h| shares[h as usize])
+            .sum::<f64>()
+            .min(1.0)
+    };
+    let n = run.playing_cards.len().max(1) as f64;
+    let frac = |f: &dyn Fn(&crate::card::Card) -> bool| {
+        run.playing_cards
+            .iter()
+            .filter(|&&id| f(run.card(id)))
+            .count() as f64
+            / n
+    };
+    let held = (run.hand_size().max(1) as f64).min(8.0);
+    match j.kind {
+        TheDuo => of(&[
+            Pair,
+            TwoPair,
+            ThreeOfAKind,
+            FullHouse,
+            FourOfAKind,
+            FiveOfAKind,
+            FlushHouse,
+            FlushFive,
+        ]),
+        TheTrio => of(&[
+            ThreeOfAKind,
+            FullHouse,
+            FourOfAKind,
+            FiveOfAKind,
+            FlushHouse,
+            FlushFive,
+        ]),
+        TheFamily => of(&[FourOfAKind, FiveOfAKind, FlushFive]),
+        TheOrder => of(&[Straight, StraightFlush]),
+        TheTribe => of(&[Flush, StraightFlush, FlushHouse, FlushFive]),
+        CardSharp => shares.iter().copied().fold(0.0, f64::max),
+        Photograph | Triboulet => (2.0 * frac(&|c| c.rank.is_face())).min(1.0),
+        Baron => (held * frac(&|c| c.rank == Rank::King)).min(1.0),
+        Blackboard => frac(&|c| matches!(c.suit, Suit::Spades | Suit::Clubs)).powi(4),
+        Bloodstone => (2.0 * frac(&|c| c.suit == Suit::Hearts)).min(1.0),
+        SeeingDouble | AncientJoker | HitTheRoad => 0.5,
+        Acrobat => 0.7,
+        TheIdol | FlowerPot => 0.2,
+        JokerStencil => {
+            if run.jokers.len() < run.joker_slots as usize {
+                1.0
+            } else {
+                0.2
+            }
+        }
+        k if crate::teacher::multiplies(k) => 1.0,
+        _ => 0.0,
+    }
 }
 
 /// "thin": each playing card fewer than the 52 a deck starts with (more: less).
@@ -2069,6 +2174,19 @@ mod tests {
             })
             .count();
         assert_eq!(lucky_aces, 2);
+        // With Blackboard, The Moon turns three Hearts or Diamonds to Clubs even though Clubs aren't the main suit.
+        let mut board = run.clone();
+        board.add_joker(JokerKind::Blackboard);
+        let mut r = board.clone();
+        imagine_use(&mut r, C::Moon);
+        let clubs = |x: &Run| {
+            x.playing_cards
+                .iter()
+                .filter(|&&id| x.card(id).suit == Suit::Clubs)
+                .count()
+        };
+        assert_eq!(clubs(&r), clubs(&board) + 3);
+        assert!(price(&board, C::Moon, &["deck-fix"]) > price(&run, C::Moon, &["deck-fix"]));
         // Glass on a Red-sealed card: worth more with "glass" (its x2 counts twice).
         let mut sealed = run.clone();
         sealed.card_mut(king).enhancement = Enhancement::None;
@@ -2113,6 +2231,42 @@ mod tests {
             worth(&run, &king, &["glass"]) - worth(&run, &king, &[]),
             (2.0 * 45.0 - 30.0) + 30.0
         );
+    }
+
+    #[test]
+    fn x_mult_counts_by_how_often_it_fires_with_the_hands_the_run_plays() {
+        use crate::teacher::with_options;
+        let mut run = first_shop("XFIT1");
+        run.jokers.clear();
+        // A run of Pairs (70%) and Straights (10%), High Card the rest.
+        let mut shares = [0.0; 12];
+        shares[HandType::Pair as usize] = 0.7;
+        shares[HandType::Straight as usize] = 0.1;
+        shares[HandType::HighCard as usize] = 0.2;
+        let fit = |r: &Run, k: JokerKind| {
+            let mut t = r.clone();
+            t.add_joker(k);
+            xmult_fit(&t, t.jokers.last().unwrap(), &shares)
+        };
+        assert!((fit(&run, JokerKind::TheDuo) - 0.7).abs() < 1e-9);
+        assert!((fit(&run, JokerKind::TheOrder) - 0.1).abs() < 1e-9);
+        assert_eq!(fit(&run, JokerKind::TheTribe), 0.0);
+        assert!(
+            (fit(&run, JokerKind::CardSharp) - 0.7).abs() < 1e-9,
+            "as far as the run keeps to one hand"
+        );
+        assert_eq!(fit(&run, JokerKind::Cavendish), 1.0);
+        assert_eq!(fit(&run, JokerKind::Joker), 0.0, "no x mult");
+        // The bonus: off unless set; the best held joker's fit, from none at ante 1 to all of it at ante 6.
+        run.add_joker(JokerKind::TheOrder);
+        run.ante = 6;
+        assert_eq!(xmult_fit_bonus(&run, &shares), 0.0);
+        let b = |r: &Run| with_options(&["xmult-fit=1"], || xmult_fit_bonus(r, &shares));
+        assert!((b(&run) - 0.1).abs() < 1e-9);
+        run.add_joker(JokerKind::TheDuo);
+        assert!((b(&run) - 0.7).abs() < 1e-9);
+        run.ante = 1;
+        assert_eq!(b(&run), 0.0);
     }
 
     fn first_shop(seed: &str) -> Run {

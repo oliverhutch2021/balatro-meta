@@ -195,6 +195,23 @@ pub(crate) fn options_for(run: &Run) -> Vec<Plan> {
 /// The best hand among the usual shapes (each pair, trips, two pair, full house, flush, straight, the high
 /// card), scored as the game would score it now: (score, mask). Quicker than trying every subset.
 pub fn quick_best(run: &Run) -> (f64, u64) {
+    let cands = shape_candidates(run);
+    let mut best = (f64::MIN, cands.first().copied().unwrap_or(1));
+    for &m in &cands {
+        if m.count_ones() == 0 || m.count_ones() > 5 {
+            continue;
+        }
+        let s = preview_score(run, m);
+        if s > best.0 {
+            best = (s, m);
+        }
+    }
+    best
+}
+
+/// The hands `quick_best` chooses among: each pair, trips, two pair, full house, flush, straight, the high card
+/// (and five of a rank with "five-kind"), with Cerulean Bell's card and The Psychic's five cards added.
+fn shape_candidates(run: &Run) -> Vec<u64> {
     let hand = seen(run);
     let n = hand.len();
     let mut cands: Vec<u64> = Vec::with_capacity(16);
@@ -290,17 +307,28 @@ pub fn quick_best(run: &Run) -> (f64, u64) {
             }
         }
     }
-    let mut best = (f64::MIN, cands.first().copied().unwrap_or(1));
-    for &m in &cands {
+    cands
+}
+
+/// With Card Sharp (x3 for a hand type already played this round): the best hand of each type the hand can make
+/// now, to play first so the hands after it repeat its type ("card-sharp"). A weaker Pair now can make the next
+/// Pair score three times as much.
+fn sharp_primers(run: &Run, salt: u64) -> Vec<u64> {
+    // Scored on a fair copy: a hand's chance effects (Lucky cards...) are not read off the run's own streams.
+    let fair = fair_copy(run, salt ^ 0x5A4F);
+    let mut by_type: Vec<(crate::poker::HandType, f64, u64)> = Vec::new();
+    for m in shape_candidates(&fair) {
         if m.count_ones() == 0 || m.count_ones() > 5 {
             continue;
         }
-        let s = preview_score(run, m);
-        if s > best.0 {
-            best = (s, m);
+        let h = crate::bots::preview(&fair, m);
+        match by_type.iter_mut().find(|x| x.0 == h.hand) {
+            Some(x) if h.score > x.1 => *x = (h.hand, h.score, m),
+            Some(_) => {}
+            None => by_type.push((h.hand, h.score, m)),
         }
     }
-    best
+    by_type.into_iter().map(|x| x.2).collect()
 }
 
 /// The first `k` set bits of `mask`.
@@ -487,6 +515,20 @@ pub fn plan(run: &Run, best: (f64, u64), salt: u64) -> (MoveKind, u64) {
     if dna && value_aware() {
         if let Some(i) = dna_pick(run) {
             tries.push((Plan::Best, Some((MoveKind::Play, 1 << i))));
+        }
+    }
+    // Card Sharp: each hand type played first, the best hand after it (which its x3 favours repeating).
+    let sharp = crate::teacher::on("card-sharp")
+        && run.hands_left > 1
+        && run
+            .jokers
+            .iter()
+            .any(|j| j.kind == crate::joker_data::JokerKind::CardSharp && !j.debuffed);
+    if sharp {
+        for m in sharp_primers(run, salt) {
+            if m != best.1 {
+                tries.push((Plan::Best, Some((MoveKind::Play, m))));
+            }
         }
     }
     for (n, (p, own)) in tries.into_iter().enumerate() {
@@ -899,6 +941,47 @@ mod tests {
                 "the full search's best: {q} against {full}"
             );
         }
+    }
+
+    #[test]
+    fn with_card_sharp_each_hand_type_is_tried_first() {
+        use crate::blinds::BlindKind;
+        use crate::card::Rank::{Ace, Five, King, Nine, Seven, Ten};
+        use crate::poker::HandType;
+        use Suit::*;
+        let mut run = Run::scenario("SHARP1", BlindKind::Big);
+        run.hand.clear();
+        // A pair of Kings, a pair of Fives, and an Ace, Ten, Nine and Seven: a High Card, two Pairs, a Two Pair.
+        for (s, r) in [
+            (Spades, King),
+            (Hearts, King),
+            (Clubs, Five),
+            (Diamonds, Five),
+            (Spades, Ace),
+            (Hearts, Ten),
+            (Clubs, Nine),
+            (Diamonds, Seven),
+        ] {
+            run.add_card_to_hand(s, r);
+        }
+        let primers = sharp_primers(&run, 7);
+        let types: Vec<HandType> = primers
+            .iter()
+            .map(|&m| crate::bots::preview(&run, m).hand)
+            .collect();
+        for t in [HandType::HighCard, HandType::Pair, HandType::TwoPair] {
+            assert_eq!(
+                types.iter().filter(|&&x| x == t).count(),
+                1,
+                "{t:?} once: {types:?}"
+            );
+        }
+        // The Pair tried is the better one (the Kings).
+        let pair = primers[types.iter().position(|&t| t == HandType::Pair).unwrap()];
+        assert_eq!(pair.count_ones(), 2);
+        assert!((0..run.hand.len())
+            .filter(|&i| pair >> i & 1 == 1)
+            .all(|i| run.card(run.hand[i]).rank == King));
     }
 
     #[test]

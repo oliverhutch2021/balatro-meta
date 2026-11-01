@@ -104,6 +104,11 @@ pub const OPTIONS: &[&str] = &[
     // (value.rs `card_triggers`), in what a card is worth: the cards Death copies, the throws keep, the
     // enhancements go on. A player's view: Glass is the strongest enhancement late, a free win with a retrigger.
     "glass",
+    // With Card Sharp (x3 for a hand type already played this round): when the best hand falls short, the planner
+    // also tries playing each hand type first and the best hand after it, so a cheap Pair can make the next Pair
+    // score three times as much (planner.rs `sharp_primers`). A player's view: Card Sharp "should be a 100%
+    // win"; the teacher's runs holding it at the end win 77%.
+    "card-sharp",
 ];
 
 /// The options in force: the switches on, and the value formula's numbers set (`name=value`, the names in

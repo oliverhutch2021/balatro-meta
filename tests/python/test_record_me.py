@@ -290,7 +290,8 @@ def test_a_run_the_player_moves_on_from_fast_ends_as_the_companion_mod_saw_it(tm
         if fake.finished and rec.finished:
             break
     rec.close()
-    first = min(tmp_path.glob("*.jsonl.gz"))
+    # The run that was lost (the next one, still being played, is saved without an end when recording stops).
+    first = next(f for f in tmp_path.glob("*.jsonl.gz") if f.name.endswith(f"-{fake.finished[0]}.jsonl.gz"))
     with gzip.open(first, "rt") as fh:
         end = json.loads(fh.read().splitlines()[-1])
     assert end["kind"] == "end" and end["why"] == "lost" and not end["won"] and end["state"] == "GAME_OVER", end
