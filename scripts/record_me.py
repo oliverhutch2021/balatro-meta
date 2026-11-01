@@ -333,6 +333,12 @@ class Recorder:
                 self.start_next()
             return
         self.menu_since = None
+        if self.run is not None and gs.get("seed") == self.run.seed and (gs.get("won") or state == "GAME_OVER"):
+            if state in STABLE:
+                self.keep(gs)
+            self.end(gs, "won" if gs.get("won") else "lost")  # a win's screen can show a state that never settles
+            self.last_seen = f"skip:{gs.get('seed')}"
+            return
         if state not in STABLE:
             return
         if self.run is not None and gs.get("seed") != self.run.seed:
@@ -344,7 +350,7 @@ class Recorder:
             if self.run is None:
                 return
         self.keep(gs)
-        if gs.get("won") or state == "GAME_OVER":
+        if gs.get("won") or state == "GAME_OVER":  # a new run's first state (an Endless run is skipped above)
             self.end(gs, "won" if gs.get("won") else "lost")
             self.last_seen = f"skip:{gs.get('seed')}"  # what follows a win (Endless) isn't recorded
 

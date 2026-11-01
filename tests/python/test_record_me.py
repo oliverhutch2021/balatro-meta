@@ -210,3 +210,33 @@ def test_a_run_that_ends_while_the_game_is_busy_still_ends_as_it_did(tmp_path, m
     with gzip.open(files[0], "rt") as fh:
         end = json.loads(fh.read().splitlines()[-1])
     assert end["kind"] == "end" and end["why"] == "lost" and end["state"] == "GAME_OVER"
+
+
+def test_a_win_whose_screen_shows_a_state_that_never_settles_still_ends_the_run_as_won(tmp_path, monkeypatch):
+    # The win screen over a hand still being played out: the run is won, whatever state the game shows.
+    import gzip
+
+    monkeypatch.setattr(record_me, "RUNS", tmp_path)
+    monkeypatch.setattr(record_me, "START_DELAY", 0.0)
+    fake = FakeGame(8)
+    rec = record_me.Recorder(4, api=fake, files=NoMod(), game=None, say=lambda s: None)
+    for _ in range(40):
+        rec.step()
+        fake.person()
+    assert rec.run is not None and fake.game is not None and not fake.game.over
+    real = fake.call
+
+    def won(method, params=None, timeout=None):
+        out = real(method, params, timeout)
+        if method == "gamestate" and out.get("state") != "MENU":
+            out = dict(out, won=True, state="HAND_PLAYED")
+        return out
+
+    monkeypatch.setattr(fake, "call", won)
+    rec.step()
+    assert rec.run is None
+    rec.close()
+    files = list(tmp_path.glob("*.jsonl.gz"))
+    with gzip.open(files[0], "rt") as fh:
+        end = json.loads(fh.read().splitlines()[-1])
+    assert end["kind"] == "end" and end["won"] and end["why"] == "won"
