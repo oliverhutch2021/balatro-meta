@@ -1,0 +1,44 @@
+{
+ "job": "teacher-tune-2",
+ "commit": "16ddc104fdc578fc136b85bde97366f233434978",
+ "started": "2026-11-01T02:33:01+00:00",
+ "finished": "2026-11-01T03:26:43+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   16.1,
+   16.4,
+   16.1
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 20,
+  "precise": 663,
+  "planner-edge=0.3,sharpness=2.5": 642,
+  "compare planner-edge=0.3,sharpness=2.5": 0,
+  "planner-edge=0.3,sharpness=2.5,long-run=0.35": 630,
+  "compare planner-edge=0.3,sharpness=2.5,long-run=0.35": 0,
+  "planner-edge=0.2": 638,
+  "compare planner-edge=0.2": 0,
+  "sharpness=2": 627,
+  "compare sharpness=2": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "precise": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-3b.bin --value-weight 1.5 --teacher-options precise --runs 2000 --seed 1 --out results/value/precise-on-ensemble3-w1.5.json",
+  "planner-edge=0.3,sharpness=2.5": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-3b.bin --value-weight 1.5 --teacher-options precise,planner-edge=0.3,sharpness=2.5 --runs 2000 --seed 1 --out results/tune/precise+planner-edge-0.3+sharpness-2.5-on-ensemble3-w1.5.json",
+  "compare planner-edge=0.3,sharpness=2.5": "scripts/compare_runs.py results/value/precise-on-ensemble3-w1.5.json results/tune/precise+planner-edge-0.3+sharpness-2.5-on-ensemble3-w1.5.json --out results/tune/precise+planner-edge-0.3+sharpness-2.5-vs-precise-on-ensemble3-w1.5.json",
+  "planner-edge=0.3,sharpness=2.5,long-run=0.35": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-3b.bin --value-weight 1.5 --teacher-options precise,planner-edge=0.3,sharpness=2.5,long-run=0.35 --runs 2000 --seed 1 --out results/tune/precise+planner-edge-0.3+sharpness-2.5+long-run-0.35-on-ensemble3-w1.5.json",
+  "compare planner-edge=0.3,sharpness=2.5,long-run=0.35": "scripts/compare_runs.py results/value/precise-on-ensemble3-w1.5.json results/tune/precise+planner-edge-0.3+sharpness-2.5+long-run-0.35-on-ensemble3-w1.5.json --out results/tune/precise+planner-edge-0.3+sharpness-2.5+long-run-0.35-vs-precise-on-ensemble3-w1.5.json",
+  "planner-edge=0.2": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-3b.bin --value-weight 1.5 --teacher-options precise,planner-edge=0.2 --runs 2000 --seed 1 --out results/tune/precise+planner-edge-0.2-on-ensemble3-w1.5.json",
+  "compare planner-edge=0.2": "scripts/compare_runs.py results/value/precise-on-ensemble3-w1.5.json results/tune/precise+planner-edge-0.2-on-ensemble3-w1.5.json --out results/tune/precise+planner-edge-0.2-vs-precise-on-ensemble3-w1.5.json",
+  "sharpness=2": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-3b.bin --value-weight 1.5 --teacher-options precise,sharpness=2 --runs 2000 --seed 1 --out results/tune/precise+sharpness-2-on-ensemble3-w1.5.json",
+  "compare sharpness=2": "scripts/compare_runs.py results/value/precise-on-ensemble3-w1.5.json results/tune/precise+sharpness-2-on-ensemble3-w1.5.json --out results/tune/precise+sharpness-2-vs-precise-on-ensemble3-w1.5.json"
+ }
+}

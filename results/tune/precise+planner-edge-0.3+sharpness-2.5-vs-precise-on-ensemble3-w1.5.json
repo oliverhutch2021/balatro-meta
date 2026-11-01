@@ -1,0 +1,31 @@
+{
+ "kind": "comparison",
+ "a": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.534,
+  "wins": 1068,
+  "blinds_beaten": 20.253,
+  "report": "results/value/precise-on-ensemble3-w1.5.json"
+ },
+ "b": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.583,
+  "wins": 1166,
+  "blinds_beaten": 21.0235,
+  "report": "results/tune/precise+planner-edge-0.3+sharpness-2.5-on-ensemble3-w1.5.json"
+ },
+ "seeds": 2000,
+ "win_rate_diff": 0.049,
+ "win_rate_diff_ci": [
+  0.025292951276044508,
+  0.0727070487239555
+ ],
+ "only_a_won": 246,
+ "only_b_won": 344,
+ "p_value": 6.282492290910861e-05,
+ "blinds_beaten_diff": 0.7705,
+ "blinds_beaten_diff_ci": [
+  0.5253649070600144,
+  1.0156350929399856
+ ]
+}
