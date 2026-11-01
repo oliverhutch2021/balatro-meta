@@ -1,0 +1,28 @@
+{
+ "job": "teacher-data-5",
+ "commit": "e9e3bcb5271bac490878bf5484997e9a5c3c21ad",
+ "started": "2026-11-01T17:59:02+00:00",
+ "finished": "2026-11-01T20:04:10+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   15.9,
+   16.4,
+   16.5
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 1,
+  "record": 7507
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "record": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-3b.bin --value-weight 1.5 --teacher-options precise --runs 25000 --seed 606 --record ~/.cache/balatro-meta/data/value-5 --out results/value/record-5.json"
+ }
+}
