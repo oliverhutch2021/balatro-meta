@@ -298,3 +298,94 @@ fn fair_copies_do_not_know_the_next_shop() {
         "only {differs} of 10 copies saw a different shop"
     );
 }
+
+/// A round under The Mark (face cards drawn face down): four cards in sight and two face cards from the deck,
+/// face down. And the same round with another of the deck's face cards in place of the first face-down one.
+fn mark_round(jokers: &[JokerKind]) -> (Run, Run) {
+    use bm_core::blinds::{BlindKind, Boss};
+    use bm_core::card::{Rank, Suit};
+    let mut run = Run::scenario("FACEDOWN", BlindKind::Boss(Boss::Mark));
+    run.hand.clear();
+    for &k in jokers {
+        run.add_joker(k);
+    }
+    for (s, r) in [
+        (Suit::Clubs, Rank::Two),
+        (Suit::Hearts, Rank::Five),
+        (Suit::Spades, Rank::Five),
+        (Suit::Diamonds, Rank::Nine),
+    ] {
+        run.add_card_to_hand(s, r);
+    }
+    let faces: Vec<usize> = (0..run.deck.len())
+        .filter(|&j| run.card(run.deck[j]).rank.is_face())
+        .take(2)
+        .collect();
+    for &j in faces.iter().rev() {
+        let id = run.deck.remove(j);
+        run.hand.push(id);
+        run.card_mut(id).face_down = true;
+    }
+    let mut other = run.clone();
+    let j = (0..other.deck.len())
+        .filter(|&j| other.card(other.deck[j]).rank.is_face())
+        .nth(3)
+        .unwrap();
+    let (a, b) = (other.hand[4], other.deck[j]);
+    other.hand[4] = b;
+    other.deck[j] = a;
+    other.card_mut(b).face_down = true;
+    other.card_mut(a).face_down = false;
+    (run, other)
+}
+
+#[test]
+fn face_down_cards_in_hand_are_dealt_again_in_a_fair_copy() {
+    // The player sees only card backs (under The Mark, face cards): a lookahead must not play the real ones.
+    let (run, other) = mark_round(&[]);
+    let all = |r: &Run| {
+        let mut v: Vec<u32> = r.deck.iter().chain(r.hand.iter()).copied().collect();
+        v.sort();
+        v
+    };
+    let mut dealt = std::collections::HashSet::new();
+    for salt in 0..20 {
+        let c = fair_copy(&run, salt);
+        assert_eq!(all(&c), all(&run), "the same cards");
+        assert_eq!(c.hand[..4], run.hand[..4], "the cards in sight stay");
+        for i in 4..6 {
+            let card = c.card(c.hand[i]);
+            assert!(
+                card.face_down && card.rank.is_face(),
+                "a face card, face down"
+            );
+            dealt.insert(c.hand[i]);
+        }
+        assert!(c.deck.iter().all(|&id| !c.card(id).face_down));
+    }
+    assert!(dealt.len() > 4, "dealt again: {dealt:?}");
+    // Which of the unseen face cards lie face down makes no difference to the copies.
+    for salt in 0..5 {
+        let (x, y) = (fair_copy(&run, salt), fair_copy(&other, salt));
+        assert_eq!(x.hand, y.hand);
+        assert_eq!(x.deck, y.deck);
+    }
+}
+
+#[test]
+fn the_teacher_plays_the_hand_it_sees_not_the_cards_face_down() {
+    // Jokers that care what the face cards are (Photograph: the first face card scored; Baron: Kings held;
+    // Scary Face): the teacher's move is the same whichever unseen face cards lie face down.
+    let (run, other) = mark_round(&[
+        JokerKind::Photograph,
+        JokerKind::Baron,
+        JokerKind::ScaryFace,
+    ]);
+    for salt in 0..8 {
+        assert_eq!(
+            bm_core::teacher::teacher_move(&run, salt),
+            bm_core::teacher::teacher_move(&other, salt),
+            "salt {salt}"
+        );
+    }
+}

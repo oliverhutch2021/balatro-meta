@@ -365,12 +365,23 @@ fn main_suit(run: &Run) -> Suit {
         .unwrap_or(Suit::Spades)
 }
 
+/// Fair copies behind each hand's score when cards in hand lie face down: what they might be, dealt again
+/// in each (`observe::fair_copy`), so a hand is judged by its mean score over them.
+const FACE_DOWN_DEALS: u64 = 4;
+
 /// The best hand to play now (as the greedy bot judges it): (score, mask).
 fn best_play(run: &Run, salt: u64) -> (f64, u64) {
-    let fair = fair_copy(run, salt);
+    let deals = if run.hand.iter().any(|&id| run.card(id).face_down) {
+        FACE_DOWN_DEALS
+    } else {
+        1
+    };
+    let copies: Vec<Run> = (0..deals)
+        .map(|k| fair_copy(run, salt.wrapping_add(k.wrapping_mul(0x9E37_79B9))))
+        .collect();
     let mut best = (f64::MIN, 1u64);
     for mask in candidate_masks(run.hand.len(), run.forced_card()) {
-        let s = preview_score(&fair, mask);
+        let s = copies.iter().map(|c| preview_score(c, mask)).sum::<f64>() / deals as f64;
         if s > best.0 || (s == best.0 && mask.count_ones() < best.1.count_ones()) {
             best = (s, mask);
         }

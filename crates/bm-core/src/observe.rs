@@ -116,7 +116,10 @@ pub struct Screen {
     pub hand: Vec<CardView>,
     pub jokers: Vec<JokerView>,
     /// What the deck view shows: the cards left in the draw pile, as counts
-    /// by (suit, rank), and how many of them carry each modifier.
+    /// by (suit, rank), and how many of them carry each modifier. As in the
+    /// game's view of the remaining deck, cards lying face down in hand are
+    /// counted with them (the view marks how many with a "?"): it never tells
+    /// which cards they are.
     pub deck_counts: [u8; 52],
     pub deck_enhancements: [u8; 9],
     pub deck_editions: [u8; 5],
@@ -249,7 +252,8 @@ pub fn screen(run: &Run) -> Screen {
     let mut deck_enhancements = [0u8; 9];
     let mut deck_editions = [0u8; 5];
     let mut deck_seals = [0u8; 5];
-    for &id in &run.deck {
+    let face_down = run.hand.iter().filter(|&&id| run.card(id).face_down);
+    for &id in run.deck.iter().chain(face_down) {
         let c = run.card(id);
         deck_counts[suit_index(c.suit) * 13 + rank_index(c.rank)] += 1;
         deck_enhancements[c.enhancement as usize] += 1;
@@ -779,6 +783,48 @@ pub fn joker_tokens(s: &Screen) -> [u16; MAX_JOKERS] {
     t
 }
 
+/// Face-down cards in hand (The Mark, The Fish, The Wheel, The House) show the player only what the boss
+/// says about them: under The Mark that each is a face card, otherwise nothing. In a fair copy each is dealt
+/// again from the cards the player hasn't seen (the deck and the face-down cards themselves) that fit, so a
+/// lookahead plays the hand the player sees, not the cards under it. The pool is ordered by the salt and the
+/// cards alone, so two runs that differ only in which unseen cards lie face down make the same copies.
+fn redeal_face_down(c: &mut Run, order: u64) {
+    let down: Vec<usize> = (0..c.hand.len())
+        .filter(|&i| c.card(c.hand[i]).face_down)
+        .collect();
+    if down.is_empty() {
+        return;
+    }
+    let mark = c.blind.as_ref().and_then(|b| b.active_boss()) == Some(Boss::Mark);
+    let pareidolia = c.pareidolia();
+    let mut pool: Vec<u32> = c
+        .deck
+        .iter()
+        .copied()
+        .chain(down.iter().map(|&i| c.hand[i]))
+        .collect();
+    pool.sort_by_cached_key(|&id| card_key(order ^ 0xFACE_D0E5_CA2D_5EED, id as u64));
+    for &i in &down {
+        let own = c.hand[i];
+        let fits = |id: u32| !mark || c.card(id).is_face_for_boss(pareidolia);
+        let k = pool
+            .iter()
+            .position(|&id| fits(id))
+            .or_else(|| pool.iter().position(|&id| id == own))
+            .expect("a face-down card is in its own pool");
+        c.hand[i] = pool.remove(k);
+    }
+    for &i in &down {
+        let id = c.hand[i];
+        c.card_mut(id).face_down = true;
+    }
+    for &id in &pool {
+        c.card_mut(id).face_down = false;
+    }
+    pool.sort_by_cached_key(|&id| card_key(order, id as u64));
+    c.deck = pool;
+}
+
 /// A card's place in a fair copy's draw order (a well-mixed hash of the salt and the card).
 fn card_key(salt: u64, id: u64) -> u64 {
     let mut z = salt ^ id.wrapping_mul(0x9E37_79B9_7F4A_7C15);
@@ -789,8 +835,9 @@ fn card_key(salt: u64, id: u64) -> u64 {
 
 /// A copy of the run for lookahead whose hidden parts are reshuffled from
 /// what the player could know: the draw order, every future random event
-/// (a fresh seed, so future bosses, tags, shops and rolls are new) and the
-/// order of face-down jokers. `salt` picks the reshuffle.
+/// (a fresh seed, so future bosses, tags, shops and rolls are new), the
+/// order of face-down jokers and which cards the face-down cards in hand are
+/// (`redeal_face_down`). `salt` picks the reshuffle.
 ///
 /// The draw order comes from the salt and each card alone, never from the
 /// cards' real order: copies of positions that hold the same cards deal them
@@ -805,6 +852,7 @@ pub fn fair_copy(run: &Run, salt: u64) -> Run {
     let mut g = LuaRandom::new(sampler.next_u64() as f64 / u64::MAX as f64);
     let order = sampler.next_u64();
     c.deck.sort_by_cached_key(|&id| card_key(order, id as u64));
+    redeal_face_down(&mut c, order);
     let down: Vec<usize> = (0..c.jokers.len())
         .filter(|&i| c.jokers[i].face_down)
         .collect();
