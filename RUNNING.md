@@ -344,7 +344,9 @@ make learned-3
   (`results/value/ensemble3-w*.json`), without options, to set against rounds 1 and 2 on the same footing.
 
 Each later round is the same three jobs: `make learned-4`, then `make learned-5`, and so on (up to 9), each
-recording with the best teacher there is so far.
+recording with the best teacher there is so far. From round 4 that includes the trials of steps 12 and 13: the
+recording uses the change that beat the precise teacher by the most on the same seeds, if one did clearly
+(p below 0.1; `scripts/jobs.py`: `best_recording`).
 
 ## Step 12: tuning the value's formula (about 1 hour)
 
@@ -419,7 +421,12 @@ make teacher-ideas
 ```
 
 tries each as a change to the bot ("final-hand", "five-kind", `overstock=0.4`, `midas=3`), on the same 2,000 seeds
-against its own runs (about 50 minutes).
+against its own runs (about 50 minutes). Then round 4 (step 11's `make learned-4`, about 3.5 hours) records with
+the change that won most clearly. All three in a row, overnight:
+
+```
+make teacher-tune-2 && make teacher-ideas && make learned-4
+```
 
 ## Later steps
 
