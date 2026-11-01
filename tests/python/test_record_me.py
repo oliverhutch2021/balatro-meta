@@ -240,3 +240,94 @@ def test_a_win_whose_screen_shows_a_state_that_never_settles_still_ends_the_run_
     with gzip.open(files[0], "rt") as fh:
         end = json.loads(fh.read().splitlines()[-1])
     assert end["kind"] == "end" and end["won"] and end["why"] == "won"
+
+
+class ModThatSawTheEnd:
+    """The companion mod: it reports no clock (BalatroBot's states settle as they come) and how the last run ended,
+    kept until another run ends."""
+
+    def __init__(self, folder: Path) -> None:
+        self.dir = folder
+        self.last_end = ""
+
+    def write_control(self, **values) -> None:
+        pass
+
+    def read_state(self):
+        return {"last_end": self.last_end, "end": "1"}
+
+
+class FastPlayer(FakeGame):
+    """A person who starts the next run straight from the game-over screen (its New Run button): BalatroBot never
+    shows the game over settled, only the mod saw it."""
+
+    def __init__(self, seed: int, mod: ModThatSawTheEnd) -> None:
+        super().__init__(seed)
+        self.mod = mod
+
+    def person(self) -> None:
+        super().person()
+        if self.game is not None and self.game.over:
+            v = self.game.view()
+            self.mod.last_end = f"{self.game.seed}:lost:{v['ante']}:{v['round']}:GAME_OVER"
+            self.finished.append(self.game.seed)
+            self.game = Game(f"NEXTRUN{len(self.finished)}")
+            self.fresh = True
+
+
+def test_a_run_the_player_moves_on_from_fast_ends_as_the_companion_mod_saw_it(tmp_path, monkeypatch):
+    import gzip
+
+    monkeypatch.setattr(record_me, "RUNS", tmp_path)
+    monkeypatch.setattr(record_me, "START_DELAY", 0.0)
+    mod = ModThatSawTheEnd(tmp_path)
+    fake = FastPlayer(9, mod)
+    logged = []
+    rec = record_me.Recorder(4, api=fake, files=mod, game=None, say=lambda s: None, log=logged.append)
+    for _ in range(20000):
+        rec.step()
+        fake.person()
+        if fake.finished and rec.finished:
+            break
+    rec.close()
+    first = min(tmp_path.glob("*.jsonl.gz"))
+    with gzip.open(first, "rt") as fh:
+        end = json.loads(fh.read().splitlines()[-1])
+    assert end["kind"] == "end" and end["why"] == "lost" and not end["won"] and end["state"] == "GAME_OVER", end
+    assert isinstance(end["ante"], int) and isinstance(end["round"], int)
+    assert any("the mod saw it lost" in s for s in logged), logged
+
+
+def test_a_win_seen_only_by_the_companion_mod_ends_the_run_as_won_even_while_the_game_is_busy(tmp_path, monkeypatch):
+    import gzip
+
+    monkeypatch.setattr(record_me, "RUNS", tmp_path)
+    monkeypatch.setattr(record_me, "START_DELAY", 0.0)
+    monkeypatch.setattr(record_me, "PEEK_EVERY", 0.0)
+    mod = ModThatSawTheEnd(tmp_path)
+    fake = FakeGame(10)
+    rec = record_me.Recorder(4, api=fake, files=mod, game=None, say=lambda s: None)
+    for _ in range(40):
+        rec.step()
+        fake.person()
+    assert rec.run is not None
+    seed = rec.run.seed
+    mod.last_end = "SOMEOTHR:won:8:24:ROUND_EVAL"  # another run's end is not this one's
+    monkeypatch.setattr(rec, "settled", lambda: False)  # the win screen keeps the game busy
+    rec.step()
+    assert rec.run is not None
+    mod.last_end = f"{seed}:won:8:24:ROUND_EVAL"
+    rec.step()
+    assert rec.run is None and rec.last_seen == f"skip:{seed}"
+    rec.close()
+    with gzip.open(next(tmp_path.glob("*.jsonl.gz")), "rt") as fh:
+        end = json.loads(fh.read().splitlines()[-1])
+    assert end == {"kind": "end", "won": True, "ante": 8, "round": 24, "state": "ROUND_EVAL", "why": "won"}
+
+
+def test_the_recorders_log_has_a_timestamp_per_line(tmp_path):
+    log = record_me.log_to(tmp_path / "me" / "recorder.log")
+    log("Recording run 1 (seed ABC).")
+    log("ABC: another run began; the mod saw it won")
+    lines = (tmp_path / "me" / "recorder.log").read_text().splitlines()
+    assert len(lines) == 2 and lines[1].endswith("the mod saw it won") and lines[0][:4].isdigit()

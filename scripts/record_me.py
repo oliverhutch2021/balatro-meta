@@ -9,7 +9,9 @@ replay it exactly (the game counts these as seeded runs: no unlocks, achievement
 recorder only reads the game: it never clicks or changes anything. Each time the game settles after a move of yours
 it keeps the state (ids, cards, money, the shop: none of the game's text), in .sync/me/runs/ on this PC only. A run
 ends with a win (beating the ante 8 boss: choose Main Menu, not Endless) or a loss; back at the main menu (or with New
-Run) the next one starts. Ctrl+C stops recording and closes the game; whatever you played is kept.
+Run) the next one starts. How a run ended is known even when you move on before the game settles: the companion mod
+notes it. Ctrl+C stops recording and closes the game; whatever you played is kept. What the recorder said, and how it
+knew each ending, goes to .sync/me/recorder.log.
 
 Before starting: stop `make watch` (its hidden game shares your save profile). The jobs can keep running.
 While you play, the engine replays each move to check it can follow (scripts/replay_me.py); a run it couldn't
@@ -117,6 +119,22 @@ class RunFile:
         return gz
 
 
+def log_to(path: Path):
+    """A writer of timestamped lines to the recorder's log (on this PC only, beside the runs): what it said, how
+    each run ended and how it knew, and the game's read errors, for a later look at a run that ended oddly."""
+
+    def log(text: str) -> None:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")  # noqa: UP017 - Python 3.10 has no UTC
+            with path.open("a", encoding="utf-8") as f:
+                f.write(f"{stamp} {text}\n")
+        except OSError:
+            pass
+
+    return log
+
+
 def engine_can_follow() -> bool:
     """The engine module is new enough to follow a run (`make build` after `make sync`)."""
     try:
@@ -167,10 +185,11 @@ class LiveReplay:
 
 class Recorder:
     def __init__(self, speed: float, port: int = PORT, api: Api | None = None, files=None, game=None, say=print,
-                 auto_start: bool = True) -> None:
+                 auto_start: bool = True, log=None) -> None:
         self.speed = speed
         self.port = port
         self.say = say
+        self.log = log or (lambda text: None)
         self.api = api
         folder = watch.save_dir() if files is None else None
         self.files = files if files is not None else checker.ModFiles(folder, port)
@@ -249,9 +268,28 @@ class Recorder:
         self.last_ante = None
         self.say(f"Recording run {self.finished + 1} (seed {gs.get('seed')}).")
 
+    def mod_end(self) -> dict | None:
+        """How the run being recorded ended, as the companion mod saw it (it notes each run's end, won or lost, and
+        keeps it until another run ends), in the game's state's terms; None while it plays on, or without the mod.
+        A player who moves on fast (New Run on the game-over screen, Main Menu on the win screen) can leave the game
+        busy until the next run is on the table, so BalatroBot's own state may never show the end."""
+        if self.run is None or getattr(self.files, "dir", None) is None:
+            return None
+        parts = str((self.files.read_state() or {}).get("last_end") or "").split(":")
+        if len(parts) < 2 or parts[0] != self.run.seed or parts[1] not in ("won", "lost"):
+            return None
+        number = lambda i: int(parts[i]) if len(parts) > i and parts[i].isdigit() else None
+        return {"won": parts[1] == "won", "ante_num": number(2), "round_num": number(3),
+                "state": parts[4] if len(parts) > 4 and parts[4] else None}
+
     def end(self, gs: dict | None, why: str) -> None:
         if self.run is None:
             return
+        if gs is None:
+            told = self.mod_end()
+            if told is not None:
+                self.log(f"{self.run.seed}: {why}; the mod saw it {'won' if told['won'] else 'lost'}")
+                gs, why = told, ("won" if told["won"] else "lost")
         end = None
         if gs is not None:
             end = {"won": bool(gs.get("won")), "ante": gs.get("ante_num"), "round": gs.get("round_num"),
@@ -304,6 +342,12 @@ class Recorder:
         if self.run is None or time.time() - self.peeked < PEEK_EVERY:
             return
         self.peeked = time.time()
+        told = self.mod_end()
+        if told is not None:
+            seed = self.run.seed
+            self.end(told, "won" if told["won"] else "lost")
+            self.last_seen = f"skip:{seed}"  # the rest of this run (its end screen, Endless) isn't recorded
+            return
         gs = self.api.call("gamestate")
         if not isinstance(gs, dict) or gs.get("seed") != self.run.seed:
             return
@@ -368,6 +412,8 @@ class Recorder:
                 failures = 0
             except (OSError, ValueError, RuntimeError) as e:
                 failures += 1
+                if failures in (1, 5, 19):
+                    self.log(f"couldn't read the game ({failures} in a row): {e!r}")
                 if failures >= 20:
                     self.say(f"Lost the game ({e}).")
                     break
@@ -445,7 +491,8 @@ def main(argv: list[str] | None = None) -> int:
     msg = watch.install_mod(folder)
     if msg:
         print("Installed the companion mod.")
-    rec = Recorder(speed)
+    log = log_to(RUNS.parent / "recorder.log")
+    rec = Recorder(speed, say=lambda text: (print(text), log(text)), log=log)
     try:
         return rec.loop()
     except KeyboardInterrupt:

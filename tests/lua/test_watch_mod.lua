@@ -53,7 +53,7 @@ love.mousepressed()
 assert(calls.pressed == 1 and calls.drawn == 1 and calls.updated == 1)
 assert(select(1, love.mouse.getPosition()) == 500)
 local s = state()
-assert(s.version == "0.4.0" and s.port == "12350" and s.locked == "0" and s["end"] == "1")
+assert(s.version == "0.5.0" and s.port == "12350" and s.locked == "0" and s["end"] == "1")
 assert(G.SETTINGS.GAMESPEED == 4 and G.GAME.viewed_back == nil)
 G.STATE = 5
 
@@ -101,6 +101,32 @@ love.mousepressed()
 assert(calls.pressed == 3, "input must come back once the checks are gone")
 assert(G.SETTINGS.GAMESPEED == 4 and G.FPS_CAP == 60)
 assert(state().locked == "0")
+
+-- How a run ends is noted and kept until another run ends, so a recorder that was waiting for the game to settle
+-- still learns it when the player moves on fast: lost (the game-over screen), then won (Endless after it changes
+-- nothing). Reports come once a second now that the checks are gone.
+G.STATES.GAME_OVER = 4
+G.GAME = { pseudorandom = { seed = "SEEDLOST" }, round_resets = { ante = 2 }, round = 5 }
+frame(1.1)
+s = state()
+assert(s.seed == "SEEDLOST" and s.won == "0" and s.ante == "2" and s.round == "5" and s.last_end == "")
+G.STATE = G.STATES.GAME_OVER
+frame(1.1)
+assert(state().last_end == "SEEDLOST:lost:2:5:GAME_OVER", state().last_end)
+G.GAME = { pseudorandom = { seed = "SEEDWON1" }, round_resets = { ante = 1 }, round = 1 }
+G.STATE = 5
+frame(1.1)
+assert(state().seed == "SEEDWON1" and state().last_end == "SEEDLOST:lost:2:5:GAME_OVER", "kept while the next run plays")
+G.GAME.won, G.GAME.round_resets.ante, G.GAME.round, G.STATE = true, 8, 24, G.STATES.ROUND_EVAL
+frame(1.1)
+assert(state().won == "1" and state().last_end == "SEEDWON1:won:8:24:ROUND_EVAL", state().last_end)
+G.STATE = G.STATES.GAME_OVER
+frame(1.1)
+assert(state().last_end == "SEEDWON1:won:8:24:ROUND_EVAL", "a win stays a win")
+G.GAME = {}
+frame(1.1)
+assert(state().seed == "" and state().won == "0" and state().last_end == "SEEDWON1:won:8:24:ROUND_EVAL")
+G.STATE = 5
 
 -- A Balatro on the default port uses its own folder (never the checks' files).
 for k in pairs(package.loaded) do if k:match("main") then package.loaded[k] = nil end end

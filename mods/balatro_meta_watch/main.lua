@@ -12,7 +12,7 @@
 -- play yourself) is never affected. Without a fresh control file it does nothing but report its state
 -- once a second.
 
-local VERSION = "0.4.0"
+local VERSION = "0.5.0"
 local PORT = tonumber(os.getenv("BALATROBOT_PORT")) or 12346
 local DIR = "balatro_meta/" .. PORT
 local CONTROL = DIR .. "/control.txt"
@@ -129,7 +129,35 @@ local function state_name()
     return tostring(G.STATE)
 end
 
+-- The run on the table: its seed, whether it is won, its ante and round ("" outside a run).
+local function run_info()
+    local g = G and G.GAME
+    if type(g) ~= "table" then
+        return "", "0", "", ""
+    end
+    local seed = type(g.pseudorandom) == "table" and g.pseudorandom.seed or ""
+    local ante = type(g.round_resets) == "table" and g.round_resets.ante or ""
+    return tostring(seed or ""), (g.won and "1" or "0"), tostring(ante or ""), tostring(g.round or "")
+end
+
+-- How the last run ended (seed:won|lost:ante:round:state), kept until another run ends: a recorder that was
+-- waiting for the game to settle still learns how a run ended when the player moves on to the next one fast.
+local function note_end(seed, won, ante, round)
+    if seed == "" then
+        return
+    end
+    local over = G and G.STATES and G.STATE == G.STATES.GAME_OVER
+    if won == "1" or over then
+        local mark = seed .. ":"
+        if not (M.last_end and M.last_end:sub(1, #mark) == mark) then
+            M.last_end = mark .. (won == "1" and "won" or "lost") .. ":" .. ante .. ":" .. round .. ":" .. state_name()
+        end
+    end
+end
+
 local function write_state()
+    local seed, won, ante, round = run_info()
+    note_end(seed, won, ante, round)
     local lines = {
         "version=" .. VERSION,
         "port=" .. PORT,
@@ -140,6 +168,11 @@ local function write_state()
         "speed=" .. tostring(G and G.SETTINGS and G.SETTINGS.GAMESPEED or ""),
         "locked=" .. (locked() and "1" or "0"),
         "control=" .. tostring(M.stamp or ""),
+        "seed=" .. seed,
+        "won=" .. won,
+        "ante=" .. ante,
+        "round=" .. round,
+        "last_end=" .. (M.last_end or ""),
     }
     if M.error then
         lines[#lines + 1] = "error=" .. tostring(M.error):gsub("[\r\n]", " ")
