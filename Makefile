@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 watch watch-mod record-me compare-me
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas watch watch-mod record-me compare-me
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -126,6 +126,9 @@ teacher-tune:  ## The value formula's numbers changed one at a time on the best 
 
 teacher-tune-2:  ## The tuning's winners together, and pushed further, against the same teacher's own runs (about 50 minutes)
 	$(PY) scripts/jobs.py run teacher-tune-2 $(JOB_FLAGS)
+
+teacher-ideas:  ## What your recorded runs showed the bot missing (Dusk, Overstock, Midas), each against the same runs (about 40 minutes)
+	$(PY) scripts/jobs.py run teacher-ideas $(JOB_FLAGS)
 
 SPEED ?= 1
 PORT ?= 8790

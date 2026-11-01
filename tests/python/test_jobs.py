@@ -207,6 +207,15 @@ def test_the_tunings_winners_are_tried_together_against_the_same_runs(tmp_path):
     assert "teacher-tune-2" in jobs.JOBS
 
 
+def test_the_ideas_from_the_players_runs_are_tried_as_options_against_the_same_runs(tmp_path):
+    plays = {name: argv for name, argv, *_ in jobs.tune_steps(tmp_path, jobs.IDEAS)}
+    play = plays["final-hand"]
+    assert play[play.index("--teacher-options") + 1] == "precise,final-hand"
+    assert plays["compare final-hand"][1] == "results/value/precise-on-teacher-plain.json"
+    assert {"overstock=0.4", "midas=3"} <= set(plays)
+    assert "teacher-ideas" in jobs.JOBS
+
+
 def test_the_rounds_networks_together_are_tried_and_used_when_they_win_most(tmp_path):
     assert jobs.ensemble(2) == "models/value-1.bin,models/value-2.bin"
     assert jobs.ensemble(4) == ("models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,"

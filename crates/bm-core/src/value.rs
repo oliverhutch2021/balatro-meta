@@ -145,6 +145,8 @@ pub const PARAMS: &[(&str, f64)] = &[
     ("money-scale", MONEY_SCALE),
     ("deck-share", DECK_SHARE),
     ("above-cap", ABOVE_CAP),
+    ("overstock", OVERSTOCK),
+    ("midas", MIDAS),
     // The scales of `Scales`, as multiples of the usual samples.
     ("deals-x", 1.0),
     ("quick-x", 1.0),
@@ -164,6 +166,12 @@ fn p(name: &str, usual: f64) -> f64 {
 /// rounds (120 shop positions, 6 rounds each).
 const SHARPNESS: f64 = 3.5;
 const PLANNER_EDGE: f64 = 0.5;
+/// Overstock's extra shop slot, as a share more that each dollar buys (Overstock Plus: 0.8 of it again). A player
+/// counts it among the strongest vouchers: `make teacher-ideas` tries more.
+const OVERSTOCK: f64 = 0.15;
+/// Midas Mask, as dollars a round: its Gold cards (face cards turned Gold when scored, $3 each held at the end
+/// of a round) add up as the deck turns gold, more than this: `make teacher-ideas` tries more.
+const MIDAS: f64 = 1.0;
 /// Weight of the long run (log scoring power some rounds on).
 const LONG_RUN: f64 = 0.5;
 /// Rounds the long run looks ahead.
@@ -263,15 +271,55 @@ pub fn play_out(start: &Run, shape: bool) -> (f64, Vec<Played>) {
     (c.round_chips, hands)
 }
 
-/// Both players on one deal; the better total and its hands.
+/// Both players on one deal; the better total and its hands. With "final-hand" and a joker that pays on the
+/// final hand, a third player keeps its best hand for the last (`play_down`).
 fn sample_round(start: &Run) -> (f64, Vec<Played>) {
     let a = play_out(start, false);
     let b = play_out(start, true);
-    if b.0 > a.0 {
-        b
-    } else {
-        a
+    let mut best = if b.0 > a.0 { b } else { a };
+    if crate::teacher::on("final-hand") && crate::teacher::final_hand_jokers(start) {
+        let c = play_down(start);
+        if c.0 > best.0 {
+            best = c;
+        }
     }
+    best
+}
+
+/// A round played down to its final hand: single spare cards (the least worth keeping) while more than one
+/// hand is left, its best hand last (Dusk retriggers it, Acrobat triples it).
+fn play_down(start: &Run) -> (f64, Vec<Played>) {
+    let mut c = start.clone();
+    let mut hands = Vec::new();
+    let mut steps = 0;
+    while let Some(m) = crate::teacher::reorder(&c) {
+        if apply(&mut c, m.0, m.1).is_err() || steps > 20 {
+            break;
+        }
+        steps += 1;
+    }
+    steps = 0;
+    while c.phase == Phase::Round && steps < 40 {
+        let best = quick_best(&c);
+        let mv = if c.hands_left > 1 {
+            let junk = (0..c.hand.len())
+                .filter(|&i| best.1 >> i & 1 == 0)
+                .min_by(|&x, &y| card_value(&c, c.hand[x]).total_cmp(&card_value(&c, c.hand[y])));
+            match junk {
+                Some(j) => (MoveKind::Play, 1u64 << j),
+                None => (MoveKind::Play, best.1),
+            }
+        } else {
+            (MoveKind::Play, best.1)
+        };
+        let h = preview(&c, mv.1);
+        hands.push((h.hand, h.chips, h.mult, h.score));
+        if apply(&mut c, mv.0, mv.1).is_err() {
+            break;
+        }
+        steps += 1;
+    }
+    (c.round_chips, hands)
 }
 
 fn take_target_away(c: &mut Run) {
@@ -465,7 +513,7 @@ pub fn flows_for(run: &Run, shares: &[f64; 12]) -> Flows {
             GoldenTicket => f.money += 4.0 * scored * gold_cards / deck,
             RoughGem => f.money += scored * diamonds,
             Matador => f.money += 1.3,
-            MidasMask => f.money += 1.0,
+            MidasMask => f.money += p("midas", MIDAS),
             // Cards made.
             Cartomancer => f.tarots += 1.0,
             Perkeo => f.tarots += 1.0,
@@ -609,8 +657,8 @@ pub fn buying_power(run: &Run) -> f64 {
     for (v, f) in [
         (ClearanceSale, 1.25),
         (Liquidation, 1.3),
-        (Overstock, 1.15),
-        (OverstockPlus, 1.12),
+        (Overstock, 1.0 + p("overstock", OVERSTOCK)),
+        (OverstockPlus, 1.0 + 0.8 * p("overstock", OVERSTOCK)),
         (RerollSurplus, 1.05),
         (RerollGlut, 1.05),
         (Hone, 1.03),

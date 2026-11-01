@@ -83,6 +83,11 @@ pub const OPTIONS: &[&str] = &[
     // "looks" and "steady-rounds" together: on the same 400 test runs, 45.0% won against 38.5% (p = 0.03), at
     // about 1.45 times the time. The teacher the recordings use (scripts/jobs.py: recording_options).
     "precise",
+    // With a joker that pays on the round's final hand (Dusk retriggers its cards, Acrobat x3): when the best
+    // hand beats the blind only as the final hand, play single spare cards until one hand is left, then the
+    // best; and the value's sample rounds try that way of playing too. From a player's winning runs, who
+    // played rounds down to Dusk on purpose (where the bot would sell Dusk).
+    "final-hand",
 ];
 
 /// The options in force: the switches on, and the value formula's numbers set (`name=value`, the names in
@@ -1102,6 +1107,11 @@ fn round_choice(run: &Run, salt: u64) -> ((MoveKind, u64), bool) {
     }
     if score >= needed || (run.hands_left <= 1 && run.discards_left == 0) {
         return plain((MoveKind::Play, mask));
+    }
+    if on("final-hand") {
+        if let Some(m) = play_down(run, mask, needed) {
+            return plain(m);
+        }
     }
     if run.forced_card().is_some() && run.discards_left > 0 {
         // Cerulean Bell: as the greedy bot (every selection must hold the boss's card).
@@ -2371,6 +2381,39 @@ fn value_blind_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     }
 }
 
+/// Jokers that pay on the round's final hand: Dusk (its cards retriggered) and Acrobat (x3).
+pub(crate) fn final_hand_jokers(run: &Run) -> bool {
+    run.count_jokers(JokerKind::Dusk) + run.count_jokers(JokerKind::Acrobat) > 0
+}
+
+/// The best hand's score if it were the round's final hand.
+pub(crate) fn final_hand_score(run: &Run, mask: u64) -> f64 {
+    let mut last = run.clone();
+    last.hands_left = 1;
+    preview_score(&last, mask)
+}
+
+/// Playing the round down to its final hand ("final-hand"): with Dusk or Acrobat, when the best hand
+/// (`mask`) falls short of `needed` now but beats it as the final hand, one spare card (the least worth
+/// keeping) is played on its own while more than one hand is left.
+fn play_down(run: &Run, mask: u64, needed: f64) -> Option<(MoveKind, u64)> {
+    if run.hands_left <= 1 || !final_hand_jokers(run) || run.forced_card().is_some() {
+        return None;
+    }
+    if final_hand_score(run, mask) < needed {
+        return None;
+    }
+    let spare: Vec<usize> = (0..run.hand.len())
+        .filter(|&i| mask >> i & 1 == 0)
+        .collect();
+    let junk = spare.into_iter().min_by(|&a, &b| {
+        crate::value::card_value(run, run.hand[a])
+            .total_cmp(&crate::value::card_value(run, run.hand[b]))
+            .then(b.cmp(&a))
+    })?;
+    Some((MoveKind::Play, 1u64 << junk))
+}
+
 /// Moves that only put cards or jokers in another order.
 pub fn reorders(kind: MoveKind) -> bool {
     matches!(
@@ -2550,7 +2593,7 @@ mod tests {
                 apply(&mut mine.clone(), m.0, m.1).is_ok(),
                 "its decision is legal"
             );
-            if step % 7 == 0 && run.phase != Phase::RoundEval {
+            if step.is_multiple_of(7) && run.phase != Phase::RoundEval {
                 new_run();
                 let (measure, v) = judge_option(&mine, step, m);
                 assert!(v.is_finite(), "{:?} {m:?}", run.phase);
@@ -2615,6 +2658,42 @@ mod tests {
             run.add_card_to_hand(s, r);
         }
         run
+    }
+
+    #[test]
+    fn with_final_hand_a_round_is_played_down_to_the_hand_that_wins_it() {
+        // Acrobat triples the final hand: a pair of Aces that falls short now beats the blind as the last hand,
+        // so with "final-hand" a single spare card goes first; without it the teacher doesn't do that.
+        use crate::blinds::BlindKind;
+        use crate::card::Rank::*;
+        use Suit::*;
+        let mut run = round_with(
+            BlindKind::Small,
+            &[JokerKind::Acrobat],
+            &[
+                (Spades, Ace),
+                (Hearts, Ace),
+                (Clubs, Nine),
+                (Diamonds, Seven),
+                (Clubs, Five),
+                (Hearts, Four),
+                (Spades, Three),
+                (Diamonds, Two),
+            ],
+        );
+        let (now, mask) = best_play(&run, 7);
+        let last = final_hand_score(&run, mask);
+        assert!(
+            last > 2.5 * now,
+            "Acrobat triples the final hand: {now} now, {last} last"
+        );
+        run.blind.as_mut().unwrap().chips = (now + last) / 2.0;
+        let (k, a) = with_options(&["final-hand"], || teacher_move(&run, 7));
+        assert_eq!(k, MoveKind::Play);
+        assert_eq!(a.count_ones(), 1, "one spare card");
+        assert_eq!(a & mask, 0, "not one of the winning hand");
+        let plain = teacher_move(&run, 7);
+        assert_ne!(plain, (k, a), "not without the option");
     }
 
     #[test]

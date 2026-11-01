@@ -410,6 +410,16 @@ it has played on to the end of the shop). `.sync/me/report.txt` lists how often 
 swaps you make most, and the decisions with the largest gaps either way. Claude reads it from there, and turns the
 patterns that recur into changes to try on thousands of seeds.
 
+The first two games (two wins) showed the bot selling Dusk where you played rounds down to it, and undervaluing
+Overstock and Midas Mask. After `make teacher-tune-2`, with no job running:
+
+```
+make teacher-ideas
+```
+
+tries each as a change to the bot ("final-hand", `overstock=0.4`, `midas=3`), on the same 2,000 seeds against its
+own runs (about 40 minutes).
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

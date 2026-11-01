@@ -168,6 +168,12 @@ TUNE = ("above-cap=0.25", "money-scale=15", "planner-edge=0.3", "long-run=0.35",
 # sharpness 5 lost (46.4%). Tried now: the two winners together, with the long run too, and each pushed further.
 TUNE_2 = ("planner-edge=0.3,sharpness=2.5", "planner-edge=0.3,sharpness=2.5,long-run=0.35", "planner-edge=0.2",
           "sharpness=2")
+# make teacher-ideas: what a player's winning runs (make record-me, make compare-me) showed the bot missing. It
+# sold Dusk again and again where the player played rounds down to it on purpose ("final-hand"); the player counts
+# Overstock among the strongest vouchers (the value counts it as 15% more for each dollar) and built an economy on
+# Midas Mask (counted as $1 a round). Each changes only runs where its joker or voucher shows up, so the paired runs
+# show its effect with less noise than its share of all runs would suggest.
+IDEAS = ("final-hand", "overstock=0.4", "midas=3")
 
 
 def file_safe(options: str) -> str:
@@ -352,6 +358,7 @@ JOBS: dict[str, list[tuple]] = {
     # The value formula's numbers, each changed in turn on the best teacher there is (tune_steps, TUNE): about an hour.
     "teacher-tune": tune_steps(),
     "teacher-tune-2": tune_steps(changes=TUNE_2),
+    "teacher-ideas": tune_steps(changes=IDEAS),
 }
 
 
