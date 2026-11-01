@@ -46,6 +46,7 @@ RUNS = ROOT / ".sync" / "me" / "runs"
 VERSION = 1
 START_DELAY = 3.0  # seconds at the main menu before the next run starts
 POLL = 0.12  # seconds between reads of the game's state
+PEEK_EVERY = 0.5  # seconds between reads while the game is busy, to catch a run's end before its screen settles
 SPEEDS = {"fast": 10}
 
 
@@ -187,6 +188,7 @@ class Recorder:
         self.last_ante = None
         self.started_seed: str | None = None
         self.live = engine_can_follow()
+        self.peeked = 0.0
 
     # -- the game
     def connect(self, wait: float = 120.0) -> bool:
@@ -296,9 +298,23 @@ class Recorder:
             self.say(f"Couldn't start a run yet ({e}); trying again.")
             self.menu_since = time.time()
 
+    def peek_end(self) -> None:
+        """While the game is still busy: a run won or lost ends now, even if the next run is started before the
+        win or game-over screen settles (its last hand then isn't kept, but how the run ended is)."""
+        if self.run is None or time.time() - self.peeked < PEEK_EVERY:
+            return
+        self.peeked = time.time()
+        gs = self.api.call("gamestate")
+        if not isinstance(gs, dict) or gs.get("seed") != self.run.seed:
+            return
+        if gs.get("won") or gs.get("state") == "GAME_OVER":
+            self.end(gs, "won" if gs.get("won") else "lost")
+            self.last_seen = f"skip:{gs.get('seed')}"
+
     def step(self) -> None:
         """One look at the game."""
         if not self.settled():
+            self.peek_end()
             return
         gs = self.api.call("gamestate")
         if not isinstance(gs, dict):

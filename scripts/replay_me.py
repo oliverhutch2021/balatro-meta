@@ -464,8 +464,10 @@ def explain(line: Line, gs: dict, highlight: list | None, passed: list[dict] | N
         for n, (kind, arg, c, pre) in enumerate(tried):
             if kind in (17, 18) and arg >> 8:
                 continue
-            # A hand that ends the round, then Cash Out clicked before the cash-out screen settled.
-            if kind in (6, 7) and (kind == 7 or c.view()["state"] != "ROUND_EVAL"):
+            # A hand that ends the round, then Cash Out clicked before the cash-out screen settled; or a hand or
+            # discard that made a card (Vagabond, 8 Ball, a Purple Seal...), used or sold before the game settled.
+            made = len(c.view()["consumables"]) > len(game.view()["consumables"])
+            if kind in (6, 7) and not made and (kind == 7 or c.view()["state"] != "ROUND_EVAL"):
                 continue
             for k2, a2 in candidates(c, before, gs, highlight, line.follow, wide=False):
                 r = try_move(c, k2, a2, gs)

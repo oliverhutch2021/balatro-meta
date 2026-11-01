@@ -183,3 +183,30 @@ def test_selecting_cards_is_not_a_new_state():
     picked["hand"]["cards"][0]["state"] = {"highlight": True}
     picked["hand"]["cards"][1]["state"] = {"debuff": True, "highlight": True}
     assert record_me.without_highlights(picked) == record_me.without_highlights(plain)
+
+
+def test_a_run_that_ends_while_the_game_is_busy_still_ends_as_it_did(tmp_path, monkeypatch):
+    # The player starts the next run before the game-over (or win) screen settles: the run still ends as it did.
+    import gzip
+
+    monkeypatch.setattr(record_me, "RUNS", tmp_path)
+    monkeypatch.setattr(record_me, "START_DELAY", 0.0)
+    monkeypatch.setattr(record_me, "PEEK_EVERY", 0.0)
+    fake = FakeGame(7)
+    rec = record_me.Recorder(4, api=fake, files=NoMod(), game=None, say=lambda s: None)
+    busy = {"on": False}
+    real = rec.settled
+    monkeypatch.setattr(rec, "settled", lambda: False if busy["on"] else real())
+    for _ in range(20000):
+        if fake.game is not None and fake.game.over:
+            busy["on"] = True  # never settles from here on
+        rec.step()
+        if busy["on"] and rec.run is None:
+            break
+        fake.person()
+    rec.close()
+    files = list(tmp_path.glob("*.jsonl.gz"))
+    assert len(files) == 1
+    with gzip.open(files[0], "rt") as fh:
+        end = json.loads(fh.read().splitlines()[-1])
+    assert end["kind"] == "end" and end["why"] == "lost" and end["state"] == "GAME_OVER"
