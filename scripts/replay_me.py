@@ -270,6 +270,17 @@ def candidates(game, before: dict, after: dict, highlight: list | None, follow: 
             yield kind, arg
 
 
+def picked_mask(game, highlight: list | None, follow: dict) -> int:
+    """The engine's hand positions of the cards the player had selected (by the game's ids)."""
+    engine_ids = [c["id"] for c in game.view()["hand"]]
+    out = 0
+    for x in highlight or []:
+        e = follow.get(("card", x))
+        if e in engine_ids:
+            out |= 1 << engine_ids.index(e)
+    return out
+
+
 def try_move(game, kind: int, arg: int, after: dict):
     """(the engine after the move, its differences from `after`), or None if the engine refuses the move."""
     c = game.copy()
@@ -431,6 +442,7 @@ def explain(line: Line, gs: dict, highlight: list | None, passed: list[dict] | N
     rank = 0
     for base, pre in bases(line, gs):
         found = False
+        picked = picked_mask(base, highlight, line.follow)
         for kind, arg in candidates(base, before, gs, highlight, line.follow):
             rank += 1
             r = try_move(base, kind, arg, gs)
@@ -441,12 +453,13 @@ def explain(line: Line, gs: dict, highlight: list | None, passed: list[dict] | N
                 soft = len(soft_differences(c, gs))
                 matches.append((soft, rank, c, [*pre, (kind, arg)]))
                 # A Tarot taken from a pack to no visible effect looks like any other: look on for every take
-                # that fits, so the others are kept in reserve.
-                if soft == 0 and kind not in (18, 19):
+                # that fits, so the others are kept in reserve. So with two packs of a kind in the shop: which was
+                # opened shows only later, in the one left (its art differs).
+                if soft == 0 and kind not in (15, 18, 19):
                     found = True
                     break
                 continue
-            tried.append((kind, arg, c, pre))
+            tried.append((kind, arg, c, pre, picked))
             if weight(diff) < weight(closest):
                 closest = diff
             if (kind in (6, 7) or (kind in (17, 18) and arg >> 8)) and all(
@@ -461,8 +474,10 @@ def explain(line: Line, gs: dict, highlight: list | None, passed: list[dict] | N
     if not any(m[0] == 0 and m[3] for m in matches):
         # Two moves the game played out with no settled state in between (a planet taken from a pack, then the
         # rest of the pack skipped): when no single move fits every check.
-        for n, (kind, arg, c, pre) in enumerate(tried):
-            if kind in (17, 18) and arg >> 8:
+        for n, (kind, arg, c, pre, picked) in enumerate(tried):
+            # A card used on cards: only on the ones the player had selected (Death from a pack, say, then The
+            # Fool making another Death before the game settled).
+            if kind in (17, 18) and arg >> 8 and arg >> 8 != picked:
                 continue
             # A hand that ends the round, then Cash Out clicked before the cash-out screen settled; or a hand or
             # discard that made a card (Vagabond, 8 Ball, a Purple Seal...), used or sold before the game settled.
@@ -492,7 +507,7 @@ class Replay:
     # States in a row that no move explains before the replay counts as lost: a state can be caught while an
     # effect is still landing (a Tarot from Hallucination, say), and the next one then explains both.
     MAX_SKIPPED = 3
-    MAX_RESERVES = 16
+    MAX_RESERVES = 48
 
     def __init__(self, first: dict) -> None:
         from balatro_meta._engine import Game
