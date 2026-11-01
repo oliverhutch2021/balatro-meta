@@ -783,11 +783,13 @@ pub fn joker_tokens(s: &Screen) -> [u16; MAX_JOKERS] {
     t
 }
 
-/// Face-down cards in hand (The Mark, The Fish, The Wheel, The House) show the player only what the boss
-/// says about them: under The Mark that each is a face card, otherwise nothing. In a fair copy each is dealt
-/// again from the cards the player hasn't seen (the deck and the face-down cards themselves) that fit, so a
-/// lookahead plays the hand the player sees, not the cards under it. The pool is ordered by the salt and the
-/// cards alone, so two runs that differ only in which unseen cards lie face down make the same copies.
+/// Face-down cards in hand (The Mark, The Fish, The Wheel, The House) don't show which cards they are, and the
+/// game's view of the remaining deck keeps hiding them (it counts them with the deck). What the player can still
+/// read: where each one sits when the hand is sorted by rank and when it is sorted by suit (the game sorts them by
+/// what they are, and sorting costs nothing), and under The Mark that each is a face card. In a fair copy each is
+/// dealt again from the cards the player hasn't seen (the deck and the face-down cards themselves) that would sit in
+/// the same places among the cards in sight, in both sorts, and fit the boss. The pool is ordered by the salt and
+/// the cards alone, so two runs that differ only in which of those cards lie face down make the same copies.
 fn redeal_face_down(c: &mut Run, order: u64) {
     let down: Vec<usize> = (0..c.hand.len())
         .filter(|&i| c.card(c.hand[i]).face_down)
@@ -797,6 +799,22 @@ fn redeal_face_down(c: &mut Run, order: u64) {
     }
     let mark = c.blind.as_ref().and_then(|b| b.active_boss()) == Some(Boss::Mark);
     let pareidolia = c.pareidolia();
+    let sight: Vec<(f64, f64)> = c
+        .hand
+        .iter()
+        .map(|&id| c.card(id))
+        .filter(|card| !card.face_down)
+        .map(|card| (card.sort_key(SortMode::Rank), card.sort_key(SortMode::Suit)))
+        .collect();
+    let place = |id: u32| -> Vec<(std::cmp::Ordering, std::cmp::Ordering)> {
+        let card = c.card(id);
+        let (r, s) = (card.sort_key(SortMode::Rank), card.sort_key(SortMode::Suit));
+        sight
+            .iter()
+            .map(|&(or, os)| (r.total_cmp(&or), s.total_cmp(&os)))
+            .collect()
+    };
+    let fits_boss = |id: u32| !mark || c.card(id).is_face_for_boss(pareidolia);
     let mut pool: Vec<u32> = c
         .deck
         .iter()
@@ -804,18 +822,20 @@ fn redeal_face_down(c: &mut Run, order: u64) {
         .chain(down.iter().map(|&i| c.hand[i]))
         .collect();
     pool.sort_by_cached_key(|&id| card_key(order ^ 0xFACE_D0E5_CA2D_5EED, id as u64));
+    let mut dealt = Vec::with_capacity(down.len());
     for &i in &down {
         let own = c.hand[i];
-        let fits = |id: u32| !mark || c.card(id).is_face_for_boss(pareidolia);
+        let want = place(own);
         let k = pool
             .iter()
-            .position(|&id| fits(id))
+            .position(|&id| fits_boss(id) && place(id) == want)
             .or_else(|| pool.iter().position(|&id| id == own))
-            .expect("a face-down card is in its own pool");
-        c.hand[i] = pool.remove(k);
+            .or_else(|| pool.iter().position(|&id| fits_boss(id)))
+            .unwrap_or(0);
+        dealt.push(pool.remove(k));
     }
-    for &i in &down {
-        let id = c.hand[i];
+    for (&i, id) in down.iter().zip(dealt) {
+        c.hand[i] = id;
         c.card_mut(id).face_down = true;
     }
     for &id in &pool {

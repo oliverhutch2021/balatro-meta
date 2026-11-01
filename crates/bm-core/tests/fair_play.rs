@@ -299,8 +299,10 @@ fn fair_copies_do_not_know_the_next_shop() {
     );
 }
 
-/// A round under The Mark (face cards drawn face down): four cards in sight and two face cards from the deck,
-/// face down. And the same round with another of the deck's face cards in place of the first face-down one.
+/// A round under The Mark (face cards drawn face down): four cards in sight, one of each suit, and two face cards
+/// from the deck, face down. And the same round with another face card of the first one's suit in its place: in
+/// sight of the same cards, sorted by rank or by suit it sits where the first did, so nothing on the screen tells
+/// the two rounds apart.
 fn mark_round(jokers: &[JokerKind]) -> (Run, Run) {
     use bm_core::blinds::{BlindKind, Boss};
     use bm_core::card::{Rank, Suit};
@@ -327,9 +329,12 @@ fn mark_round(jokers: &[JokerKind]) -> (Run, Run) {
         run.card_mut(id).face_down = true;
     }
     let mut other = run.clone();
+    let suit = other.card(other.hand[4]).suit;
     let j = (0..other.deck.len())
-        .filter(|&j| other.card(other.deck[j]).rank.is_face())
-        .nth(3)
+        .find(|&j| {
+            let c = other.card(other.deck[j]);
+            c.rank.is_face() && c.suit == suit
+        })
         .unwrap();
     let (a, b) = (other.hand[4], other.deck[j]);
     other.hand[4] = b;
@@ -341,7 +346,8 @@ fn mark_round(jokers: &[JokerKind]) -> (Run, Run) {
 
 #[test]
 fn face_down_cards_in_hand_are_dealt_again_in_a_fair_copy() {
-    // The player sees only card backs (under The Mark, face cards): a lookahead must not play the real ones.
+    // The player sees card backs: a lookahead must not play the real cards, only cards that fit what the screen
+    // tells (under The Mark a face card, and with a card of each suit in sight, sorting by suit tells its suit).
     let (run, other) = mark_round(&[]);
     let all = |r: &Run| {
         let mut v: Vec<u32> = r.deck.iter().chain(r.hand.iter()).copied().collect();
@@ -359,12 +365,17 @@ fn face_down_cards_in_hand_are_dealt_again_in_a_fair_copy() {
                 card.face_down && card.rank.is_face(),
                 "a face card, face down"
             );
+            assert_eq!(
+                card.suit,
+                run.card(run.hand[i]).suit,
+                "sorting by suit shows its suit"
+            );
             dealt.insert(c.hand[i]);
         }
         assert!(c.deck.iter().all(|&id| !c.card(id).face_down));
     }
-    assert!(dealt.len() > 4, "dealt again: {dealt:?}");
-    // Which of the unseen face cards lie face down makes no difference to the copies.
+    assert!(dealt.len() >= 3, "dealt again: {dealt:?}");
+    // Which of those cards lie face down makes no difference to the copies.
     for salt in 0..5 {
         let (x, y) = (fair_copy(&run, salt), fair_copy(&other, salt));
         assert_eq!(x.hand, y.hand);
@@ -375,7 +386,7 @@ fn face_down_cards_in_hand_are_dealt_again_in_a_fair_copy() {
 #[test]
 fn the_teacher_plays_the_hand_it_sees_not_the_cards_face_down() {
     // Jokers that care what the face cards are (Photograph: the first face card scored; Baron: Kings held;
-    // Scary Face): the teacher's move is the same whichever unseen face cards lie face down.
+    // Scary Face): the teacher's move is the same whichever of them lie face down.
     let (run, other) = mark_round(&[
         JokerKind::Photograph,
         JokerKind::Baron,
@@ -387,5 +398,28 @@ fn the_teacher_plays_the_hand_it_sees_not_the_cards_face_down() {
             bm_core::teacher::teacher_move(&other, salt),
             "salt {salt}"
         );
+    }
+}
+
+#[test]
+fn held_tarots_are_used_on_the_cards_in_sight_whichever_lie_face_down() {
+    use bm_core::content::ConsumableKind;
+    for kind in [
+        ConsumableKind::Death,
+        ConsumableKind::Strength,
+        ConsumableKind::HangedMan,
+        ConsumableKind::Magician,
+    ] {
+        let (mut run, mut other) = mark_round(&[JokerKind::Photograph]);
+        run.give_consumable(kind);
+        other.give_consumable(kind);
+        for salt in 0..6 {
+            // Each position as a run of its own (the teacher forgets what it remembered of the last one).
+            let decide = |r: &Run| {
+                bm_core::teacher::new_run();
+                bm_core::teacher::teacher_move(r, salt)
+            };
+            assert_eq!(decide(&run), decide(&other), "{kind:?}, salt {salt}");
+        }
     }
 }

@@ -914,7 +914,12 @@ fn decision_salt(run: &Run, salt: u64) -> u64 {
         run.discards_left,
     )
         .hash(&mut h);
-    let mut cards = run.hand.clone();
+    // The cards in hand as the player sees them (a card face down is only a card).
+    let mut cards: Vec<u32> = run
+        .hand
+        .iter()
+        .map(|&id| if run.card(id).face_down { u32::MAX } else { id })
+        .collect();
     cards.sort_unstable();
     cards.hash(&mut h);
     run.round_chips.to_bits().hash(&mut h);
