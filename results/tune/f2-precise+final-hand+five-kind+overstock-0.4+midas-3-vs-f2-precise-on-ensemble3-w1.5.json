@@ -1,0 +1,31 @@
+{
+ "kind": "comparison",
+ "a": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.5985,
+  "wins": 1197,
+  "blinds_beaten": 21.1255,
+  "report": "results/value/f2-precise-on-ensemble3-w1.5.json"
+ },
+ "b": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.5975,
+  "wins": 1195,
+  "blinds_beaten": 21.137,
+  "report": "results/tune/f2-precise+final-hand+five-kind+overstock-0.4+midas-3-on-ensemble3-w1.5.json"
+ },
+ "seeds": 2000,
+ "win_rate_diff": -0.001,
+ "win_rate_diff_ci": [
+  -0.017043231569730585,
+  0.015043231569730583
+ ],
+ "only_a_won": 135,
+ "only_b_won": 133,
+ "p_value": 0.9513068870401609,
+ "blinds_beaten_diff": 0.0115,
+ "blinds_beaten_diff_ci": [
+  -0.11233229301194539,
+  0.13533229301194538
+ ]
+}
