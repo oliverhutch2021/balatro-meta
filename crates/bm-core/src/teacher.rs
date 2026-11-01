@@ -109,7 +109,86 @@ pub const OPTIONS: &[&str] = &[
     // score three times as much (planner.rs `sharp_primers`). A player's view: Card Sharp "should be a 100%
     // win"; the teacher's runs holding it at the end win 77%.
     "card-sharp",
+    // A player's rule, "focus on one hand": his wins pile the Planets on the hand the build plays (Pair to level
+    // 27), where the teacher's went only a third to its main hand (on 300 runs: 10 levels a run, its main hand
+    // ending its wins at a median level 5; when a Celestial pack offered that hand's Planet it took another or
+    // skipped 29% of the time, swayed by the learned value's large, noisy differences between Planets). The run's
+    // focus is the hand it has played most (High Card aside, as the run's info shows it), once played four
+    // times (`focus_hand`). A Celestial pack's Black Hole, else the focus's Planet, is taken whenever offered;
+    // the focus's Planet is bought in the shop and used whenever it leaves $4 (any money from ante 5).
+    "focus",
+    // A pack's options judged against the run once the pack is skipped, as each pick is judged once the pack has
+    // closed, not against the position in the pack, whose learned value also reads the cards on offer (on 8 test
+    // runs it rated a Buffoon pack's position 0.07 above the run after skipping it, so a joker had to beat that
+    // too; an Arcana pack's 0.05 below). (A shop's options stay in the shop, so they are judged against it.)
+    "fair-skip",
 ];
+
+/// Plays of a hand before it can be the run's focus ("focus").
+const FOCUS_PLAYS: u32 = 4;
+/// Money the focus's Planet must leave in the shop before ante 5 ("focus").
+const FOCUS_KEEP: i64 = 4;
+
+/// "focus": the run's focus hand, the hand played most this run (High Card aside; a tie to the higher level),
+/// once it has been played `FOCUS_PLAYS` times.
+pub(crate) fn focus_hand(run: &Run) -> Option<HandType> {
+    HandType::ALL
+        .iter()
+        .copied()
+        .filter(|&h| h != HandType::HighCard)
+        .max_by_key(|&h| {
+            let i = run.hand_levels.get(h);
+            (i.played, i.level, std::cmp::Reverse(h as usize))
+        })
+        .filter(|&h| run.hand_levels.get(h).played >= FOCUS_PLAYS)
+}
+
+/// "focus": the card to take from a Celestial pack: a Black Hole (every hand a level), else the focus's Planet.
+fn focus_pick(run: &Run) -> Option<usize> {
+    let p = run.pack.as_ref()?;
+    if BOOSTERS[p.booster as usize].kind != PackKind::Celestial {
+        return None;
+    }
+    let consumable = |i: usize| match p.cards.get(i) {
+        Some(PackCard::Consumable(c)) => Some(c.kind),
+        _ => None,
+    };
+    let n = p.cards.len();
+    if let Some(i) = (0..n).find(|&i| consumable(i) == Some(ConsumableKind::BlackHole)) {
+        return Some(i);
+    }
+    let f = focus_hand(run)?;
+    (0..n).find(|&i| consumable(i).and_then(|k| k.planet_hand()) == Some(f))
+}
+
+/// "focus": in the shop, using a held Planet of the focus (unless held Planets pay), else buying one from the
+/// row when it leaves `FOCUS_KEEP` (any money from ante 5).
+fn focus_shop_move(run: &Run) -> Option<(MoveKind, u64)> {
+    let f = focus_hand(run)?;
+    if !planets_pay_held(run) {
+        if let Some(i) = run.consumables.iter().position(|c| {
+            c.kind.planet_hand() == Some(f) && run.can_use_consumable(c, &[], UseFrom::Slots)
+        }) {
+            return Some((MoveKind::UseConsumable, i as u64));
+        }
+    }
+    let shop = run.shop.as_ref()?;
+    shop.row
+        .iter()
+        .enumerate()
+        .find_map(|(i, r)| match &r.item {
+            RowItem::Consumable(c)
+                if c.kind.set() == ConsumableSet::Planet
+                    && c.kind.planet_hand() == Some(f)
+                    && consumable_room(run, c.edition)
+                    && r.cost <= run.spendable()
+                    && (run.spendable() - r.cost >= FOCUS_KEEP || run.ante >= 5) =>
+            {
+                Some((MoveKind::Buy, i as u64))
+            }
+            _ => None,
+        })
+}
 
 /// The options in force: the switches on, and the value formula's numbers set (`name=value`, the names in
 /// `value::PARAMS`).
@@ -2159,13 +2238,17 @@ fn search(best: &[f64], cost: f64, again: bool) -> f64 {
 
 /// Judge options in two passes: a quick value for each, then the full value for the three best that beat
 /// doing nothing. Returns the first move of the winner, or None if nothing beats doing nothing.
-fn choose(
+/// Doing nothing is judged as the position `base` when given (the run after skipping a pack: "fair-skip"), else
+/// as the position here.
+fn choose_against(
     run: &Run,
+    base: Option<&Run>,
     vs: u64,
     options: Vec<((MoveKind, u64), f64, Judge)>,
 ) -> Option<(MoveKind, u64)> {
     use crate::value::{quick, value};
-    let here_quick = quick(run, vs);
+    let here = base.unwrap_or(run);
+    let here_quick = quick(here, vs);
     let mut options: Vec<_> = options
         .into_iter()
         .filter(|o| o.1 > here_quick + MIN_GAIN)
@@ -2175,7 +2258,7 @@ fn choose(
     }
     options.sort_by(|a, b| b.1.total_cmp(&a.1));
     options.truncate(finalists());
-    let mut best = (value(run, vs) + MIN_GAIN, None);
+    let mut best = (value(here, vs) + MIN_GAIN, None);
     for (first, _, judge) in options {
         let v = match judge {
             Judge::Moves(m) => after(run, vs ^ 0x5EED, &m).map_or(f64::MIN, |c| value(&c, vs)),
@@ -2219,13 +2302,23 @@ fn judged_moves(
 }
 
 fn value_pack_move(run: &Run, salt: u64) -> (MoveKind, u64) {
+    if on("focus") {
+        if let Some(i) = focus_pick(run) {
+            return (MoveKind::PackChoose, i as u64);
+        }
+    }
     let vs = value_salt(run, salt);
     let lists: Vec<_> = pack_options(run, false)
         .into_iter()
         .filter(|m| m[0].0 != MoveKind::PackSkip)
         .collect();
     let options = judged_moves(run, vs, lists);
-    choose(run, vs, options).unwrap_or((MoveKind::PackSkip, 0))
+    // A pick that leaves the pack open (the first of a Mega pack's two) stays judged against the pack.
+    let last_pick = run.pack.as_ref().is_some_and(|p| p.choices_left <= 1);
+    let skipped = (on("fair-skip") && last_pick)
+        .then(|| after(run, vs ^ 0x5EED, &[(MoveKind::PackSkip, 0)]))
+        .flatten();
+    choose_against(run, skipped.as_ref(), vs, options).unwrap_or((MoveKind::PackSkip, 0))
 }
 
 thread_local! {
@@ -2286,6 +2379,11 @@ fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
         });
     if let Some(want) = leaving {
         return move_towards(run, &want).unwrap_or((MoveKind::LeaveShop, 0));
+    }
+    if on("focus") {
+        if let Some(m) = focus_shop_move(run) {
+            return m;
+        }
     }
     let afford = |cost: i64| cost <= 0 || cost <= run.spendable();
     let mut lists = shop_buys(run, vs);
@@ -2364,7 +2462,7 @@ fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
             options.push(((MoveKind::Reroll, 0), q, Judge::Rerolled(samples, again)));
         }
     }
-    if let Some(m) = choose(run, vs, options) {
+    if let Some(m) = choose_against(run, None, vs, options) {
         return m;
     }
     // Leaving: first set the jokers for what happens as the shop closes and the blind starts (or for
@@ -3320,5 +3418,52 @@ mod tests {
             t > g,
             "teacher {t} vs greedy {g} (antes summed over the same 24 seeds)"
         );
+    }
+
+    #[test]
+    fn a_focus_takes_its_own_planets() {
+        use crate::content::ConsumableKind::*;
+        let mut run = Run::scenario("FOCUS1", crate::blinds::BlindKind::Small);
+        assert_eq!(focus_hand(&run), None, "nothing played yet");
+        run.hand_levels.get_mut(HandType::HighCard).played = 12;
+        run.hand_levels.get_mut(HandType::Straight).played = 4;
+        run.hand_levels.get_mut(HandType::Pair).played = 5;
+        assert_eq!(
+            focus_hand(&run),
+            Some(HandType::Pair),
+            "the most played, High Card aside"
+        );
+        // A Celestial pack offering Saturn, Mercury and Jupiter: Mercury.
+        let pack = |run: &mut Run, kinds: &[ConsumableKind]| {
+            let cards = kinds
+                .iter()
+                .map(|&k| PackCard::Consumable(run.make_consumable(k)))
+                .collect();
+            run.pack = Some(crate::packs::OpenPack {
+                booster: 0,
+                cards,
+                choices_left: 1,
+                return_to: Phase::Shop,
+            });
+            run.phase = Phase::Pack;
+        };
+        let celestial = BOOSTERS
+            .iter()
+            .position(|b| b.kind == PackKind::Celestial)
+            .unwrap() as u8;
+        pack(&mut run, &[Saturn, Mercury, Jupiter]);
+        run.pack.as_mut().unwrap().booster = celestial;
+        assert_eq!(focus_pick(&run), Some(1));
+        with_options(&["focus"], || {
+            assert_eq!(value_pack_move(&run, 3), (MoveKind::PackChoose, 1));
+        });
+        // A Black Hole first.
+        pack(&mut run, &[Saturn, Mercury, BlackHole]);
+        run.pack.as_mut().unwrap().booster = celestial;
+        assert_eq!(focus_pick(&run), Some(2));
+        // Not the focus's: the value decides.
+        pack(&mut run, &[Saturn, Venus, Jupiter]);
+        run.pack.as_mut().unwrap().booster = celestial;
+        assert_eq!(focus_pick(&run), None);
     }
 }

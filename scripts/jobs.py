@@ -229,6 +229,12 @@ NEXT = ("quick-x=2", "final-hand,five-kind,overstock=0.4,midas=3", "xmult-bonus=
 # of 300 cloud runs that held Card Sharp: 43 won against 40). Then all of them together.
 IDEAS_2 = ("deck-fix", "deck-fix,glass", "xmult-fit=0.3", "xmult-fit=0.6", "card-sharp",
            "deck-fix,glass,xmult-fit=0.3,card-sharp")
+# make teacher-focus, on formula 2, each against the control: the player's "focus on one hand". "focus": the hand
+# the run has played most is its focus, and its Planets are taken from Celestial packs and bought in the shop
+# whenever offered (the teacher's planets went a third to its main hand; the learned value's differences between
+# Planets are large and noisy). "fair-skip": a pack's picks judged against the run once the pack is skipped, not
+# against the position in the pack, whose learned value also reads the cards on offer. Then both.
+FOCUS = ("focus", "fair-skip", "focus,fair-skip")
 
 
 def file_safe(options: str) -> str:
@@ -441,6 +447,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-ideas": tune_steps(changes=IDEAS),
     "teacher-next": next_steps(),
     "teacher-ideas-2": tune_steps(changes=IDEAS_2, tag=f"f{FORMULA}"),
+    "teacher-focus": tune_steps(changes=FOCUS, tag=f"f{FORMULA}"),
 }
 
 

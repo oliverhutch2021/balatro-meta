@@ -469,6 +469,26 @@ make teacher-ideas-2
 
 A clear winner is what the next round records with.
 
+## Step 16: focus on one hand (about 40 minutes)
+
+Your runs pile the Planets on one hand (Straight to level 19 in 4C3GL8EU, Pair to 27 before); the bot's main hand
+ends its wins at a median level 5, with a third of its Planets. Each tried on the same 2,000 seeds against the
+precise teacher on all five rounds' networks:
+
+- `focus`: the hand the run has played most (High Card aside) is its focus once played four times; a Celestial
+  pack's Black Hole, else the focus's Planet, is always taken, and the focus's Planet is bought in the shop when it
+  leaves $4 (any money from ante 5).
+- `fair-skip`: a pack's picks are judged against the run once the pack is skipped, as each pick is judged once the
+  pack has closed (the learned value rated a position inside a Buffoon pack above the same run after skipping it,
+  so a joker had to beat that too).
+- Both together.
+
+After `make teacher-ideas-2` (or whenever no job is running):
+
+```
+make sync && make teacher-focus
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a
