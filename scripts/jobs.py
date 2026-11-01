@@ -120,12 +120,13 @@ RECORD_WITH_P = 0.1
 
 
 def best_recording(root: Path = ROOT) -> list[str]:
-    """The teacher options a round records with: of the trials on the best learned value (results/tune: each change
-    set run by run against the precise teacher on the same 2,000 seeds), the one that won most over it, if it won
-    clearly (p below RECORD_WITH_P); else recording_options."""
-    base = recording_options(root)
+    """The teacher a round records with, as its arguments (learned value, weight, options): of the trials on the best
+    learned value (results/tune: each change set run by run against the precise teacher on the same 2,000 seeds), the
+    one that won most over it, if it won clearly (p below RECORD_WITH_P), with the networks it played with (a trial
+    can be other networks: make teacher-next's "values 1-4"); else the best learned value with recording_options."""
+    base = [*learned_value_args(root), *recording_options(root)]
     best = best_learned(root)
-    if best is None or not base:
+    if best is None or not recording_options(root):
         return base
     stem = Path(best[2]).stem
     top = None
@@ -134,19 +135,23 @@ def best_recording(root: Path = ROOT) -> list[str]:
         try:
             d = json.loads(f.read_text())
             diff, p = float(d["win_rate_diff"]), float(d["p_value"])
-            options = json.loads((root / d["b"]["report"]).read_text())["teacher_options"]
+            trial = json.loads((root / d["b"]["report"]).read_text())
+            options = trial["teacher_options"]
         except (OSError, ValueError, KeyError, TypeError):
             continue
         if diff > 0 and p < RECORD_WITH_P and options and (top is None or diff > top[0]):
-            top = (diff, options)
-    return base if top is None else ["--teacher-options", ",".join(top[1])]
+            nets = [best[0], best[1]]
+            if trial.get("value_net"):
+                nets = [str(trial["value_net"]), f"{float(trial.get('value_weight', best[1])):g}"]
+            top = (diff, ["--value-net", nets[0], "--value-weight", nets[1], "--teacher-options", ",".join(options)])
+    return base if top is None else top[1]
 
 
 def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
     """Round n (3 or later) of the learned value, three jobs. teacher-data-n: the best teacher there is (the round and
-    weight that won most, with "precise" unless its trial found it no better: recording_options; from round 4, with
-    the trial that beat that teacher clearly, if one did: best_recording) plays 25,000 new runs (seed base
-    101 (n + 1): 404, 505, ...) and records every position it values. value-net-n: the round's
+    weight that won most, with "precise" unless its trial found it no better: recording_options; from round 4, the
+    trial that beat that teacher clearly, with its networks, if one did: best_recording) plays 25,000 new runs (seed
+    base 101 (n + 1): 404, 505, ...) and records every position it values. value-net-n: the round's
     network learns from them and from the round before's recording (more positions; only round n's runs judge and
     measure it). teacher-learned-n: the teacher plays the usual 5,000 seeds with it at weights 1 and 2, without
     options, to set against the earlier rounds on the same footing."""
@@ -154,8 +159,8 @@ def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
     return {
         f"teacher-data-{n}": [
             ("build", [*MAKE, "build"]),
-            ("record", [*BASELINE, "--bot", "teacher", *learned_value_args(root),
-                        *(best_recording(root) if n >= 4 else recording_options(root)),
+            ("record", [*BASELINE, "--bot", "teacher",
+                        *(best_recording(root) if n >= 4 else [*learned_value_args(root), *recording_options(root)]),
                         "--runs", "25000", "--seed", str(101 * (n + 1)), "--record", str(data),
                         "--out", f"results/value/record-{n}.json"]),
         ],

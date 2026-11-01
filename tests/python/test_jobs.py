@@ -293,8 +293,19 @@ def test_round_four_records_with_the_trial_that_beat_the_precise_teacher_clearly
             {"kind": "comparison", "b": {"report": report}, "win_rate_diff": diff, "p_value": p}))
     assert opts(record()) == "precise,planner-edge=0.3,sharpness=2.5", \
         "the largest clear gain on the formula in force, not the largest, nor one on an older formula"
+    nets = lambda a: (a[a.index("--value-net") + 1], a[a.index("--value-weight") + 1])
+    assert nets(record()) == ("models/value-1.bin", "1"), "with the networks the trial played with"
     assert opts({n: a for n, a, *_ in jobs.learned_round(3, tmp_path)["teacher-data-3"]}["record"]) == "precise", \
         "round 3 recorded as it did"
+    # A trial of other networks (make teacher-next's "values 1-4") that gains most clearly records with them.
+    report = f"results/tune/{f}precise-on-ensemble4-w1.5.json"
+    (tmp_path / report).write_text(json.dumps(
+        {"teacher_options": ["precise"], "value_net": "models/a.bin,models/b.bin", "value_weight": 1.5}))
+    (tune / f"{f}precise-on-ensemble4-w1.5-vs-{f}precise-on-teacher-w1.json").write_text(json.dumps(
+        {"kind": "comparison", "b": {"report": report}, "win_rate_diff": 0.025, "p_value": 0.01}))
+    rec = record()
+    assert nets(rec) == ("models/a.bin,models/b.bin", "1.5") and opts(rec) == "precise"
+    assert rec.count("--value-net") == 1 and rec.count("--teacher-options") == 1
 
 
 def test_the_next_trials_are_set_against_a_control_with_the_formula_in_force(tmp_path):
