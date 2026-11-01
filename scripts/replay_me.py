@@ -75,7 +75,9 @@ def lenient(card: dict) -> dict:
 
 
 def joker_match_key(j: dict) -> tuple:
-    return (j.get("key"), j.get("edition"), bool(j.get("face_down")))
+    """A joker as matched between the engine and the game, in any order (sortable: a face-down joker has no key,
+    a plain one no edition)."""
+    return (j.get("key") or "", j.get("edition") or "", bool(j.get("face_down")))
 
 
 def held_key(c: dict) -> tuple:

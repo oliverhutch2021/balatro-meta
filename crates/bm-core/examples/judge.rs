@@ -6,6 +6,7 @@
 //!
 //!     cargo run --release -p bm-core --example judge -- --runs FILE --out FILE
 //!         [--value-net a.bin,b.bin] [--value-weight W] [--teacher-options precise] [--threads N]
+//!         [--phase SHOP]
 //!
 //! The input has one run per line, tab-separated: its name, its seed and its steps; steps are separated by `|`,
 //! each a comma-separated list of `kind:arg` moves (the player's reorders first). The output has one line per
@@ -202,6 +203,8 @@ fn main() {
 
     // Replay each run, keeping the position before each of the player's decisions.
     let text = std::fs::read_to_string(&input).expect("the runs file");
+    // Only the decisions in this phase (as the output names it: SHOP, SMODS_BOOSTER_OPENED...), if given.
+    let only = opt("--phase");
     let mut names = Vec::new();
     let mut decisions = Vec::new();
     for (r, line) in text.lines().filter(|l| !l.trim().is_empty()).enumerate() {
@@ -212,7 +215,11 @@ fn main() {
         let mut done = 0u64;
         for (step, s) in parts.next().unwrap_or("").split('|').enumerate() {
             let moves = parse_moves(s);
-            if moves.iter().any(|m| !teacher::reorders(m.0)) && run.phase != Phase::GameOver {
+            let wanted = only.as_deref().is_none_or(|p| p == phase_name(run.phase));
+            if wanted
+                && moves.iter().any(|m| !teacher::reorders(m.0))
+                && run.phase != Phase::GameOver
+            {
                 decisions.push(Decision {
                     run: r,
                     step,
