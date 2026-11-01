@@ -1,0 +1,32 @@
+{
+ "job": "teacher-learned-3",
+ "commit": "71f664a3a73e62743bc27bd3314d042e75b874d2",
+ "started": "2026-11-01T00:34:16+00:00",
+ "finished": "2026-11-01T01:26:30+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   15.2,
+   16.2,
+   15.9
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 18,
+  "weight-1": 1039,
+  "ensemble-w1": 959,
+  "ensemble-w1.5": 1117
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "weight-1": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-3.bin --value-weight 1 --runs 5000 --seed 1 --out results/value/teacher3-w1.json",
+  "ensemble-w1": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-3b.bin --value-weight 1 --runs 5000 --seed 1 --out results/value/ensemble3-w1.json",
+  "ensemble-w1.5": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-3b.bin --value-weight 1.5 --runs 5000 --seed 1 --out results/value/ensemble3-w1.5.json"
+ }
+}
