@@ -387,3 +387,21 @@ def test_a_new_control_is_set_against_the_one_before(tmp_path):
     assert steps["compare"][1:3] == [f"results/value/f{jobs.FORMULA}-precise-on-ensemble5-w1.5.json",
                                      f"results/value/f{jobs.FORMULA}-precise-on-ensemble6-w1.5.json"]
     assert "teacher-control" in jobs.JOBS
+
+
+def test_the_big_trial_is_named_so_a_clear_gain_is_recorded_with(tmp_path):
+    folder = tmp_path / "results" / "value"
+    folder.mkdir(parents=True)
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "value-1.bin").write_bytes(b"BMVN")
+    (folder / "teacher-w1.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": 0.4}))
+    steps = {n: a for n, a, *_ in jobs.big_steps(tmp_path)}
+    f = jobs.FORMULA
+    assert steps["control"][steps["control"].index("--runs") + 1] == "8000"
+    play = steps[jobs.BIG]
+    assert play[play.index("--teacher-options") + 1] == f"precise,{jobs.BIG}"
+    assert play[play.index("--out") + 1] == f"results/tune/f{f}-precise+focus+fair-skip-8k-on-teacher-w1.json"
+    out = Path(steps["compare"][-1])
+    assert out.match(f"f{f}-*-vs-*-on-teacher-w1.json"), "best_recording reads it"
+    assert "teacher-big" in jobs.JOBS
+

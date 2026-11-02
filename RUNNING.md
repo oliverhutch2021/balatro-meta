@@ -504,6 +504,10 @@ make sync && make teacher-control && make learned-7
 `make teacher-control` plays the precise teacher on the newest networks on the 2,000 seeds the trials use, against
 the control before it (about 15 minutes); `make learned-7` is round 7 (about 3.5 hours).
 
+With a longer night: `make teacher-control && make teacher-big` after it. The second control measures round 7's
+networks; `make teacher-big` tries `focus` and `fair-skip` together (+1.05 points on 2,000 seeds, not clear) on 8,000
+seeds, where a 1-point gain shows (about 1.5 hours).
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

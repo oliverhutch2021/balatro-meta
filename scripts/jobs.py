@@ -316,6 +316,33 @@ def next_steps(root: Path = ROOT) -> list[tuple]:
     return steps
 
 
+# make teacher-big: the most promising small gain so far (make teacher-focus: focus and fair-skip together, +1.05
+# points, p = 0.33 on 2,000 seeds) on 8,000 seeds, where a 1-point gain shows (95% range about +-1 point).
+BIG = "focus,fair-skip"
+BIG_RUNS = 8000
+
+
+def big_steps(root: Path = ROOT, change: str = BIG, runs: int = BIG_RUNS) -> list[tuple]:
+    """make teacher-big: `change` on the precise teacher with the best learned value, against the same teacher, both
+    on the first `runs` usual seeds, run by run. Named so a clear gain is what the next round records with
+    (best_recording reads every f2-...-vs-...-on-<networks> comparison)."""
+    tag = f"f{FORMULA}"
+    net_args, stem, base_opts, _ = tune_control(root, tag)
+    size = f"{runs // 1000}k"
+    control = f"results/value/{tag}-{file_safe(base_opts)}-{size}-on-{stem}.json"
+    opts = f"{base_opts},{change}" if base_opts else change
+    out = f"results/tune/{tag}-{file_safe(opts)}-{size}-on-{stem}.json"
+    steps: list[tuple] = [("build", [*MAKE, "build"])]
+    if not (root / control).exists():
+        steps.append(("control", [*BASELINE, "--bot", "teacher", *net_args, "--teacher-options", base_opts,
+                                  "--runs", str(runs), "--seed", "1", "--out", control]))
+    steps.append((change, [*BASELINE, "--bot", "teacher", *net_args, "--teacher-options", opts,
+                           "--runs", str(runs), "--seed", "1", "--out", out]))
+    versus = f"results/tune/{tag}-{file_safe(opts)}-{size}-vs-{tag}-{file_safe(base_opts)}-{size}-on-{stem}.json"
+    steps.append(("compare", ["scripts/compare_runs.py", control, out, "--out", versus]))
+    return steps
+
+
 def control_steps(root: Path = ROOT) -> list[tuple]:
     """make teacher-control: the precise teacher on the best learned value there is (best_learned: after a round, its
     networks if they won most) on the first 2,000 usual seeds, the control later trials are set against, and set run
@@ -493,6 +520,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-ideas-2": tune_steps(changes=IDEAS_2, tag=f"f{FORMULA}"),
     "teacher-focus": tune_steps(changes=FOCUS, tag=f"f{FORMULA}"),
     "teacher-control": control_steps(),
+    "teacher-big": big_steps(),
 }
 
 
