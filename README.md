@@ -23,9 +23,14 @@ the game in Rust, and a bot that plays it fairly and learns from its own runs.
 - **A viewer** (`make watch`): replays the bot's runs in the browser. Card art is read at runtime from your
   own copy of the game and is never written to disk.
 
+## The project page
+
+[`docs/index.html`](docs/index.html) tells the story so far: the climb, one of the bot's best runs, how it
+plays and learns, and what's next. GitHub Pages serves it from `main`, folder `/docs`.
+
 ## Where it stands
 
-White Stake, Red Deck: the teacher bot wins about 66% of runs on seeds it has never played (2,000 seeds).
+White Stake, Red Deck: the teacher bot wins about 64% of runs on seeds it has never played (64.2% of 8,000).
 The goal is 90%. `results/progress.jsonl` has every step on the way.
 
 ## Running it

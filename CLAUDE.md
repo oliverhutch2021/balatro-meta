@@ -114,6 +114,8 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   parses the game's definitions for sheet cells then; served from memory to
   loopback clients only). No art, positions or text from the game are ever
   written to the repo or to disk.
+- `docs/index.html`: the public project page (GitHub Pages), a standalone copy of the project page
+  artifact: our own art and type only, no personal information.
 - `reference/`: LuaJIT scripts that produce reference fixtures.
 - `tests/fixtures/`: committed fixtures the Rust tests compare against.
 - `rules/`: rules notes, one file per area, with sources.

@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Balatro Meta: a fan project searching for the strategies that win Balatro most often, with a faithful simulator and a bot that plays fairly and learns from its own runs.">
+<title>Balatro Meta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Silkscreen&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&family=Press+Start+2P&display=swap">
+<style>
+/* Layout: one arcade-table world. A swirling, pixelated felt shader fills the screen behind chunky slate panels
+   (a card table under a CRT); score boxes, cards and charts sit in a single centred column. Deliberately
+   single-theme (dark). */
+:root {
+  color-scheme: dark;
+  --felt-deep: #0d2a2a;
+  --panel: rgba(22, 27, 36, 0.92);
+  --panel-edge: #47506a;
+  --panel-solid: #161b24;
+  --ink: #f3f1ea;
+  --muted: #b5b9c9;
+  --faint: #7e8499;
+  --rule: #313849;
+  --chips: #3987e5;
+  --chips-dark: #1f5aa6;
+  --mult: #e66767;
+  --mult-dark: #a53a3a;
+  --gold: #f0b43c;
+  --card: #f4efe2;
+  --card-quote: #e6e0cf;
+  --card-ink: #1d1f2b;
+  --card-muted: #4f5367;
+  --display: "Pixelify Sans", "Silkscreen", ui-monospace, monospace;
+  --label: "Silkscreen", "Pixelify Sans", ui-monospace, monospace;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --digits: "Press Start 2P", "Pixelify Sans", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html { background: var(--felt-deep); }
+body { background: var(--felt-deep); color: var(--ink); font-family: var(--body); font-size: 17px; line-height: 1.6; }
+#bg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; image-rendering: pixelated; display: block;
+  background: radial-gradient(120% 90% at 30% 20%, #1f5a52 0%, #123c3a 45%, #0b2324 100%); }
+.crt { position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    repeating-linear-gradient(to bottom, rgba(0,0,0,0.16) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%); }
+.page { position: relative; z-index: 2; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--display); font-weight: 700; line-height: 1.05; text-wrap: balance; margin: 0; letter-spacing: 0.01em; text-shadow: 0 3px 0 rgba(0,0,0,0.55); }
+h2 { font-size: clamp(28px, 4.6vw, 42px); }
+h3 { font-size: 20px; }
+p { margin: 0; }
+a { color: var(--gold); }
+.label { font-family: var(--label); font-size: 12px; letter-spacing: 0.06em; color: var(--muted); text-shadow: 0 2px 0 rgba(0,0,0,0.6); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.col { max-width: 66ch; }
+.muted { color: var(--muted); }
+
+.panel { background: var(--panel); border: 3px solid var(--panel-edge); border-radius: 14px; box-shadow: 0 6px 0 rgba(0,0,0,0.45); padding: 22px; display: grid; gap: 16px; min-width: 0; }
+
+header .wrap { padding-block: 26px 10px; display: grid; gap: 22px; }
+.top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; align-items: center; }
+.brand { font-family: var(--display); font-weight: 700; font-size: 22px; text-shadow: 0 3px 0 rgba(0,0,0,0.55); }
+.chipbar { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag { font-family: var(--label); font-size: 11px; padding: 6px 10px 5px; border-radius: 8px; background: var(--panel-solid); border: 2px solid var(--panel-edge); color: var(--muted); }
+.hero { padding: 26px; gap: 20px; }
+.hero h1 { font-size: clamp(38px, 7.5vw, 78px); max-width: 15ch; }
+.hero .lede { color: var(--muted); font-size: 19px; max-width: 56ch; }
+.score { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; }
+.box { border-radius: 10px; padding: 10px 16px 8px; display: grid; gap: 2px; min-width: 0; cursor: pointer; transition: transform 120ms ease; user-select: none; }
+.box .v { font-family: var(--digits); font-weight: 400; font-size: clamp(24px, 4.4vw, 40px); line-height: 1.2; text-shadow: 0 3px 0 rgba(0,0,0,0.35); }
+.dg { font-family: var(--digits); font-weight: 400; font-size: 0.74em; letter-spacing: -0.02em; }
+.box .k { font-family: var(--label); font-size: 11px; opacity: 0.9; }
+.box.chips { background: var(--chips); box-shadow: 0 5px 0 var(--chips-dark); color: #fff; }
+.box.mult { background: var(--mult); box-shadow: 0 5px 0 var(--mult-dark); color: #fff; }
+.box.plain { background: var(--panel-solid); border: 2px solid var(--panel-edge); box-shadow: 0 5px 0 rgba(0,0,0,0.5); color: var(--ink); }
+.box:hover { transform: translateY(-2px) rotate(-1deg); }
+.box:active { transform: translateY(3px); box-shadow: none; }
+.box.pop { animation: pop 380ms cubic-bezier(.2,1.6,.4,1); }
+@keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.12) rotate(-2deg); } 100% { transform: scale(1); } }
+.op { font-family: var(--display); font-size: 40px; align-self: center; color: var(--muted); text-shadow: 0 3px 0 rgba(0,0,0,0.55); }
+.hint { font-family: var(--label); font-size: 11px; color: var(--faint); }
+
+section { padding-block: 34px 0; }
+section .wrap { display: grid; gap: 16px; }
+.lead { font-size: 18px; }
+section .wrap > p { text-shadow: 0 2px 0 rgba(0,0,0,0.7); }
+
+.chart { position: relative; width: 100%; overflow-x: auto; }
+.chart svg { display: block; width: 100%; height: auto; min-width: 560px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: var(--label); font-size: 11px; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+.tip { position: absolute; pointer-events: none; background: var(--card); color: var(--card-ink); font-family: var(--mono); font-size: 12px; line-height: 1.45; padding: 6px 9px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -112%); box-shadow: 0 3px 0 rgba(0,0,0,0.4); }
+details { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+details summary { cursor: pointer; padding-block: 4px; font-family: var(--label); font-size: 11px; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-family: var(--label); font-size: 11px; color: var(--muted); font-weight: 400; }
+td.r, th.r { text-align: right; }
+.up { color: var(--chips); font-weight: 600; }
+.down { color: var(--mult); font-weight: 600; }
+
+.cards { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); perspective: 900px; }
+.card { background: var(--card); color: var(--card-ink); border-radius: 14px; padding: 14px 16px 16px; display: grid; gap: 8px; align-content: start; min-width: 0;
+  box-shadow: 0 6px 0 rgba(0,0,0,0.45); transition: transform 160ms ease; }
+.card .when { font-family: var(--label); font-size: 11px; color: var(--card-muted); }
+.card blockquote { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--card-quote); font-style: italic; font-size: 15px; line-height: 1.45; }
+.card p { font-size: 15px; line-height: 1.5; }
+.jokers { display: flex; flex-wrap: wrap; gap: 14px; perspective: 700px; }
+.joker { width: 128px; aspect-ratio: 5 / 7; background: var(--card); color: var(--card-ink); border-radius: 10px; padding: 8px; display: grid; grid-template-rows: auto 1fr auto; gap: 4px; text-align: center;
+  box-shadow: 0 5px 0 rgba(0,0,0,0.5); transition: transform 160ms ease; max-width: 100%; }
+.joker .nm { font-family: var(--display); font-weight: 700; font-size: 14px; line-height: 1.1; }
+.joker .em { border-radius: 6px; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 30px; color: #fff; text-shadow: 0 3px 0 rgba(0,0,0,0.3); }
+.joker .fx { font-family: var(--label); font-size: 9px; line-height: 1.25; color: var(--card-muted); }
+@media (prefers-reduced-motion: no-preference) {
+  .float { animation: bob 4.5s ease-in-out infinite; }
+  .float:nth-child(2n) { animation-delay: -1.2s; }
+  .float:nth-child(3n) { animation-delay: -2.4s; }
+  @keyframes bob { 0%, 100% { translate: 0 0; rotate: -0.6deg; } 50% { translate: 0 -5px; rotate: 0.6deg; } }
+}
+
+.three { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.three > div { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.loop { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); counter-reset: s; }
+.loop > div { background: var(--panel-solid); border: 2px solid var(--panel-edge); border-radius: 10px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; box-shadow: 0 4px 0 rgba(0,0,0,0.45); }
+.loop > div::before { counter-increment: s; content: counter(s); font-family: var(--display); font-weight: 700; font-size: 28px; line-height: 1; color: var(--chips); text-shadow: 0 2px 0 rgba(0,0,0,0.5); }
+.loop > div.new { border-color: var(--mult); }
+.loop > div.new::before { color: var(--mult); }
+.loop b { font-family: var(--display); font-size: 19px; }
+.loop small { color: var(--muted); font-size: 14px; line-height: 1.45; }
+.next { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.next > div { background: var(--panel); border: 2px solid var(--panel-edge); border-radius: 10px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; box-shadow: 0 4px 0 rgba(0,0,0,0.45); }
+.next > div.now { border-color: var(--gold); }
+.next > div.now h3 { color: var(--gold); }
+footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 11px; color: var(--muted); display: grid; gap: 6px; text-shadow: 0 2px 0 rgba(0,0,0,0.6); }
+</style>
+</head>
+<body>
+
+<canvas id="bg" aria-hidden="true"></canvas>
+<div class="crt" aria-hidden="true"></div>
+
+<div class="page">
+<header>
+  <div class="wrap">
+    <div class="top">
+      <span class="brand">Balatro Meta</span>
+      <span class="chipbar"><span class="tag">White Stake</span><span class="tag">Red Deck</span><span class="tag">As of 2 Nov 2026</span></span>
+    </div>
+    <div class="panel hero">
+      <h1>A bot that learns to win Balatro</h1>
+      <p class="lede">It plays a faithful copy of the game, sees only what a player sees, and decides every move by what it expects to win. Four days in, it wins most of its runs. The goal is to find strategies better than its human teacher's.</p>
+      <div class="score" aria-label="From 0.07% to 64.2% of runs won; its biggest hand scored 16.6 billion">
+        <div class="box plain" tabindex="0"><span class="v num">0.07%</span><span class="k">First bot, 30 Oct</span></div>
+        <span class="op" aria-hidden="true">→</span>
+        <div class="box chips" tabindex="0"><span class="v num">64.2%</span><span class="k">Runs won now</span></div>
+        <div class="box mult" tabindex="0"><span class="v num">16.6B</span><span class="k">Its biggest hand</span></div>
+      </div>
+      <p class="hint">Move over the table to steer the felt; tap to stir it.</p>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section id="climb">
+    <div class="wrap">
+      <span class="label">The climb</span>
+      <h2>From <span class="dg">0.07%</span> to <span class="dg">64%</span> in four days</h2>
+      <div class="panel">
+        <p class="col lead">Each point is the best version of the bot at that moment, measured on fresh seeds it never trained on. The big steps came from deciding by value, from a network that learns which positions win, from tuning the value's own numbers, and lately from focusing on one hand.</p>
+        <div class="chart" id="climbChart" role="img" aria-label="Line chart: share of runs won by each version of the bot, from 0.07% on 30 October to 64.2% on 2 November."></div>
+        <details><summary>Show the numbers</summary><div class="tbl"><table id="climbTable"><thead><tr><th>Version</th><th>Date</th><th class="r">Runs</th><th class="r">Won</th></tr></thead><tbody></tbody></table></div></details>
+        <p class="col muted" style="font-size:14px">Measured on 2,000 to 1,000,000 seeds per version; the 95% range is about ±2 points at 2,000 runs and ±0.6 at 25,000.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="run">
+    <div class="wrap">
+      <span class="label">One run · seed F33BTB7X</span>
+      <h2>A <span class="dg">16.6</span>-billion hand against a <span class="dg">40,000</span> target</h2>
+      <div class="panel">
+        <p class="col lead">One of the bot's best runs from its latest recording. It beat all 24 blinds, mostly with one hand each, and played a Flush worth 16,629,409,391 against The Manacle's 40,000 at ante 6.</p>
+        <div class="legend"><span><i style="background:var(--chips)"></i>Bot's best hand</span><span><i style="background:var(--mult)"></i>Blind's target</span></div>
+        <div class="chart" id="runChart" role="img" aria-label="Chart on a log scale: the bot's best hand at each of the 24 blinds against the blind's target. Every hand clears its target; at ante 6 The Manacle a Flush scores 16.6 billion against 40,000."></div>
+        <details><summary>Show the numbers</summary><div class="tbl"><table id="runTable"><thead><tr><th>Ante</th><th>Blind</th><th class="r">Target</th><th>Best hand</th><th class="r">Scored</th></tr></thead><tbody></tbody></table></div></details>
+      </div>
+
+      <h3>The bot in its own words</h3>
+      <p class="col muted">At each shop the bot states what its value sees. These are its own sentences from this run, from the numbers it decides with.</p>
+      <div class="cards">
+        <div class="card float tilt">
+          <span class="when">Ante 1 · first shop · $10</span>
+          <blockquote>The risk is next ante's boss: 52% against 1.6k, so scoring power comes before money.</blockquote>
+          <p>Opens a Buffoon Pack for Half Joker, buys Mail-In Rebate, then Brainstorm in the next shop.</p>
+        </div>
+        <div class="card float tilt">
+          <span class="when">Antes 2–3 · building</span>
+          <blockquote>Build: Ancient Joker pays for Clubs; Mail-In Rebate pays for 3s.</blockquote>
+          <p>Hanging Chad at ante 2, Ancient Joker at ante 3. It sells Half Joker and Banner as better jokers come.</p>
+        </div>
+        <div class="card float tilt">
+          <span class="when">Antes 4–6 · the glass deck</span>
+          <blockquote>Build: Ancient Joker pays for Spades; Glass Joker pays for Glass cards.</blockquote>
+          <p>Glass Joker at ante 4, then Justice taken from six Arcana packs to turn cards to Glass, and The Hanged Man to cut the deck. Seltzer comes in at ante 6.</p>
+        </div>
+        <div class="card float tilt">
+          <span class="when">Ante 6 · The Manacle · 40,000</span>
+          <blockquote>Beats The Manacle (one card less in hand) 100% of the time: a round scores about 474.0M against 40k.</blockquote>
+          <p>Plays A♠ A♠ Q♠ 6♠ 4♠ for 16.6 billion: Spades for Ancient Joker, copied by Brainstorm, with retriggers and Glass cards.</p>
+        </div>
+      </div>
+      <span class="label">Final build · Flush at level 6 · $123 left</span>
+      <div class="jokers" aria-label="Final jokers">
+        <div class="joker float tilt"><span class="nm">Ancient Joker</span><span class="em" style="background:#3c6fb4">♠</span><span class="fx">Pays for one suit, changing each round</span></div>
+        <div class="joker float tilt"><span class="nm">Brainstorm</span><span class="em" style="background:#7a52b8">⧉</span><span class="fx">Copies the leftmost joker</span></div>
+        <div class="joker float tilt"><span class="nm">Hanging Chad</span><span class="em" style="background:#c9822e">↻</span><span class="fx">Retriggers the first card scored</span></div>
+        <div class="joker float tilt"><span class="nm">Glass Joker</span><span class="em" style="background:#3a9c8c">×2.5</span><span class="fx">Grows as Glass cards break</span></div>
+        <div class="joker float tilt"><span class="nm">Seltzer</span><span class="em" style="background:#c44a4a">↻↻</span><span class="fx">Retriggers every card for a while</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <span class="label">How it plays</span>
+      <h2>A faithful game, a fair player</h2>
+      <div class="panel">
+        <div class="three">
+          <div>
+            <h3>The engine</h3>
+            <p>Our own copy of Balatro 1.0.1o in Rust: all 150 jokers, 52 consumables, 32 vouchers, 24 tags and 28 boss blinds. The same seed deals the same cards, shops and packs as the real game, and the engine is checked move by move against the real game.</p>
+          </div>
+          <div>
+            <h3>Fair play</h3>
+            <p>The bot sees only what the screen shows. It never sees the seed, the draw order or the next shop. When it looks ahead, it plays on copies whose hidden cards are reshuffled, the way a player imagines what might come.</p>
+          </div>
+          <div>
+            <h3>Deciding by value</h3>
+            <p>Every move, from a shop purchase to the cards in a hand, is tried on copies and judged by one number: the chance of beating each blind ahead, the run's scoring power later, and money as buying power. A network trained on its own runs adds its estimate of the chance of winning.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="learn">
+    <div class="wrap">
+      <span class="label">How it learns</span>
+      <h2>Play, label, learn, repeat</h2>
+      <div class="panel">
+        <p class="col lead">Each round, the best bot so far plays 25,000 new runs. Every position it saw is labelled with how its run ended, and a network learns the chance of winning from any position. The next round plays with that network.</p>
+        <div class="loop">
+          <div><b>Play</b><small>The best bot plays 25,000 fresh seeds, about 4 million positions.</small></div>
+          <div><b>Label</b><small>Each position is marked won or lost by how its run ended.</small></div>
+          <div><b>Learn</b><small>A network learns the chance of winning from the screen alone, on the GPU in minutes.</small></div>
+          <div><b>Play better</b><small>The bot decides with the network's estimate. Round 4 gained 1.75 points, round 5 only 0.4.</small></div>
+          <div class="new"><b>Explore</b><small>New from round 7: one decision in ten takes another option rated nearly as good, so the network sees where untried choices lead.</small></div>
+        </div>
+        <p class="col muted">Without exploration, the network only learns from the choices the bot already makes, so each round can only refine its habits. That is why the gains were shrinking. Rounds 7 and 8 explored. With its full search, the bot on round 8's networks won 64.0% against 65.75% on round 7's, on the same 2,000 seeds: no gain yet, and within the noise of that many runs.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="loses">
+    <div class="wrap">
+      <span class="label">Where it loses</span>
+      <h2>Late, and just short</h2>
+      <div class="panel">
+        <p class="col lead">Of 25,000 runs in round 5's recording, 10,239 were lost, 82% of them at antes 5 to 8. A losing round typically reaches about three quarters of its target: the bot runs out of scoring as the targets climb.</p>
+        <div class="chart" id="lossChart" role="img" aria-label="Bar chart: runs lost at each ante, out of 25,000. Ante 1: 240, ante 2: 281, ante 3: 375, ante 4: 941, ante 5: 1,811, ante 6: 1,892, ante 7: 1,850, ante 8: 2,849."></div>
+        <div class="tbl col">
+          <table>
+            <thead><tr><th>Lost to</th><th class="r">Runs</th><th class="r">Share of losses</th></tr></thead>
+            <tbody>
+              <tr><td>Big Blind</td><td class="r num">1,420</td><td class="r num">13.9%</td></tr>
+              <tr><td>Violet Vessel (ante 8 boss, 6× target)</td><td class="r num">1,390</td><td class="r num">13.6%</td></tr>
+              <tr><td>The Wall (a very large target)</td><td class="r num">989</td><td class="r num">9.7%</td></tr>
+              <tr><td>The Needle (a single hand)</td><td class="r num">529</td><td class="r num">5.2%</td></tr>
+              <tr><td>Crimson Heart</td><td class="r num">517</td><td class="r num">5.0%</td></tr>
+              <tr><td>Small Blind</td><td class="r num">499</td><td class="r num">4.9%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="teacher">
+    <div class="wrap">
+      <span class="label">The human teacher</span>
+      <h2>A human player's lessons, tested</h2>
+      <div class="panel">
+        <p class="col lead">The project's human player wins about three runs in four at White Stake and records those runs move by move, so the bot's choice can be set against the player's at every decision. The player's losses come early (antes 1 to 3); the bot's come late. Each lesson below became an option and was tested on the same 2,000 seeds with and without it.</p>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>The lesson</th><th>As the bot tried it</th><th class="r">Change</th></tr></thead>
+            <tbody>
+              <tr><td>Focus on one hand</td><td>Always take the most played hand's Planet, with pack picks judged against skipping (8,000 seeds; now the bot's own play)</td><td class="r num up">+1.64</td></tr>
+              <tr><td>Overstock is one of the strongest vouchers</td><td>Value the extra shop slot more</td><td class="r num up">+0.85</td></tr>
+              <tr><td>Five of a Kind from copied cards</td><td>Look for five of a rank</td><td class="r num up">+0.70</td></tr>
+              <tr><td>Card Sharp should be a free win</td><td>Play a cheap hand first for the ×3</td><td class="r num">+0.15</td></tr>
+              <tr><td>Clip the deck hard</td><td>Count each card fewer</td><td class="r num down">−1.00</td></tr>
+              <tr><td>Fix the deck with Tarots</td><td>Price Tarots by what they do to the deck</td><td class="r num down">−1.30</td></tr>
+              <tr><td>X mult is needed by ante 6</td><td>Count held x mult more as the run goes on</td><td class="r num down">−2.50</td></tr>
+              <tr><td>X mult must fit the hand played</td><td>Count only x mult that fires with the run's hands</td><td class="r num down">−2.75</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="col">Focus on one hand, tested with fairer pack skipping on 8,000 seeds, gained 1.64 points (p = 0.001) and is now how the bot plays. None of the other gains is clear on 2,000 seeds, and the rules added as extra points (x mult, a thinner deck) made the bot worse: they skew everything else it weighs. The lessons that help will have to be found by the bot itself, which is what exploration is for. The player's runs show what it is looking for: on 1 November one took Straight from level 1 to 19 in one run and Flush to level 33 in another, where the bot's main hand ends its wins at a median level 5.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="next">
+    <div class="wrap">
+      <span class="label">Next</span>
+      <h2>Target: <span class="dg">90%</span> at White Stake</h2>
+      <div class="next">
+        <div class="now"><h3>Today</h3><p>How much say the networks should get against the formula, measured on 8,000 seeds, where the noise is half as large.</p></div>
+        <div><h3>The player's seeds</h3><p>A benchmark of the seeds the human player won: how many of them the bot wins too, each played several times.</p></div>
+        <div><h3>Deeper play</h3><p>If exploration stalls: a deeper search at each decision, or a network that learns to play by trial and error.</p></div>
+        <div><h3>Then up the stakes</h3><p>Higher stakes and the other decks, once White Stake is solved.</p></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Balatro Meta is an independent, non-commercial fan project. Not affiliated with LocalThunk or Playstack.</span>
+    <span>No art, text or code from the game is used here: the background, cards and type are our own, and card and joker names are given as facts.</span>
+  </div>
+</footer>
+</div>
+
+<script>
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function el(tag, attrs, parent, text) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) {
+      const v = attrs[k];
+      if (typeof v === "string" && v.startsWith("var(")) e.style.setProperty(k, v);
+      else e.setAttribute(k, v);
+    }
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function tipFor(box) {
+    const t = document.createElement("div");
+    t.className = "tip"; t.hidden = true; box.appendChild(t);
+    return {
+      show(html, x, y) { t.innerHTML = html; t.style.left = x + "px"; t.style.top = y + "px"; t.hidden = false; },
+      hide() { t.hidden = true; }
+    };
+  }
+  const fmt = (n) => n.toLocaleString("en-GB", { maximumFractionDigits: 0 });
+  const short = (n) => n >= 1e9 ? (n / 1e9).toFixed(1) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + "k" : String(Math.round(n));
+  const MONO = "JetBrains Mono, monospace", PIX = "Pixelify Sans, monospace", DIG = "'Press Start 2P', monospace";
+
+  const climb = [
+    ["Greedy bot", "30 Oct", 1000000, 0.07], ["Rule-based teacher", "30 Oct", 500000, 1.69],
+    ["Plans its hands", "30 Oct", 100000, 5.42], ["Decides by value", "30 Oct", 12000, 25.16],
+    ["Joker slots and x mult", "30 Oct", 20000, 28.22], ["Learned value", "30 Oct", 5000, 39.26],
+    ["Rounds 1+2 together", "31 Oct", 5000, 43.96], ["More samples (precise)", "31 Oct", 2000, 49.40],
+    ["Round 3 recording", "1 Nov", 25000, 49.66], ["Precise on rounds 1–3", "1 Nov", 2000, 53.40],
+    ["Tuned formula", "1 Nov", 2000, 59.85], ["Round 4's networks", "1 Nov", 2000, 61.60],
+    ["Round 5's networks", "1 Nov", 2000, 62.00], ["Round 6's networks", "2 Nov", 2000, 62.90],
+    ["Focus on one hand, fair skipping", "2 Nov", 8000, 64.24]
+  ];
+  const notes = { 3: "Decides by value", 5: "Learned value", 10: "Tuned formula" };
+  (function () {
+    const box = document.getElementById("climbChart");
+    const W = 900, H = 360, L = 48, R = 24, T = 22, B = 48;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}` }, box);
+    const x = (i) => L + i * (W - L - R) / (climb.length - 1);
+    const y = (v) => T + (1 - v / 70) * (H - T - B);
+    for (let g = 0; g <= 70; g += 10) {
+      el("line", { x1: L, x2: W - R, y1: y(g), y2: y(g), stroke: "var(--rule)", "stroke-width": 1 }, svg);
+      el("text", { x: L - 8, y: y(g) + 4, "text-anchor": "end", "font-family": MONO, "font-size": 11, fill: "var(--muted)" }, svg, g + "%");
+    }
+    let lastDate = "";
+    climb.forEach((d, i) => {
+      if (d[1] !== lastDate) { el("text", { x: x(i), y: H - 16, "text-anchor": "middle", "font-family": MONO, "font-size": 11, fill: "var(--muted)" }, svg, d[1]); lastDate = d[1]; }
+    });
+    el("path", { d: climb.map((d, i) => (i ? "L" : "M") + x(i) + "," + y(d[3])).join(" "), fill: "none", stroke: "var(--chips)", "stroke-width": 3, "stroke-linejoin": "round" }, svg);
+    climb.forEach((d, i) => {
+      el("circle", { cx: x(i), cy: y(d[3]), r: i === climb.length - 1 ? 7 : 4.5, fill: "var(--chips)", stroke: "var(--panel-solid)", "stroke-width": 2 }, svg);
+      if (notes[i]) el("text", { x: x(i) - 8, y: y(d[3]) - 12, "text-anchor": "end", "font-family": PIX, "font-size": 14, fill: "var(--ink)" }, svg, notes[i]);
+    });
+    const last = climb[climb.length - 1];
+    el("text", { x: x(climb.length - 1), y: y(last[3]) - 15, "text-anchor": "end", "font-family": DIG, "font-size": 16, fill: "var(--ink)" }, svg, "64.2%");
+    const tip = tipFor(box);
+    climb.forEach((d, i) => {
+      const hit = el("rect", { x: x(i) - 18, y: T, width: 36, height: H - T - B, fill: "transparent" }, svg);
+      hit.addEventListener("mouseenter", () => { const k = svg.getBoundingClientRect().width / W; tip.show(`<b>${d[0]}</b><br>${d[3].toFixed(2)}% won · ${fmt(d[2])} runs · ${d[1]}`, x(i) * k, y(d[3]) * k); });
+      hit.addEventListener("mouseleave", tip.hide);
+    });
+    const tb = document.querySelector("#climbTable tbody");
+    climb.forEach((d) => { const tr = tb.insertRow(); tr.innerHTML = `<td>${d[0]}</td><td>${d[1]}</td><td class="r num">${fmt(d[2])}</td><td class="r num">${d[3].toFixed(2)}%</td>`; });
+  })();
+
+  const run = [
+    [1, "Small Blind", 300, 308, "Straight"], [1, "Big Blind", 450, 728, "Four of a Kind"], [1, "The Hook", 600, 1260, "Pair"],
+    [2, "Small Blind", 800, 1260, "Pair"], [2, "Big Blind", 1200, 3655, "Three of a Kind"], [2, "The Head", 1600, 3440, "Three of a Kind"],
+    [3, "Small Blind", 2000, 41416, "Full House"], [3, "Big Blind", 3000, 7517, "Flush"], [3, "The Window", 4000, 7206, "Full House"],
+    [4, "Small Blind", 5000, 19224, "Pair"], [4, "Big Blind", 7500, 11485, "Pair"], [4, "The Goad", 10000, 120528, "Two Pair"],
+    [5, "Small Blind", 11000, 92225, "Straight"], [5, "Big Blind", 16500, 69192, "Pair"], [5, "The Flint", 22000, 98697, "Full House"],
+    [6, "Small Blind", 20000, 462420, "Full House"], [6, "Big Blind", 30000, 227510, "Full House"], [6, "The Manacle", 40000, 16629409391, "Flush"],
+    [7, "Small Blind", 35000, 874800, "Pair"], [7, "Big Blind", 52500, 142266, "Straight"], [7, "The Mark", 70000, 97385339, "Flush"],
+    [8, "Small Blind", 50000, 4371932, "Full House"], [8, "Big Blind", 75000, 122858, "Pair"], [8, "Cerulean Bell", 100000, 255113, "Pair"]
+  ];
+  (function () {
+    const box = document.getElementById("runChart");
+    const W = 900, H = 380, L = 56, R = 20, T = 24, B = 44;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}` }, box);
+    const lo = 2, hi = 11;
+    const x = (i) => L + (i + 0.5) * (W - L - R) / run.length;
+    const y = (v) => T + (1 - (Math.log10(v) - lo) / (hi - lo)) * (H - T - B);
+    const labels = { 2: "100", 3: "1k", 5: "100k", 7: "10M", 9: "1B", 11: "100B" };
+    for (let e = lo; e <= hi; e++) {
+      el("line", { x1: L, x2: W - R, y1: y(10 ** e), y2: y(10 ** e), stroke: "var(--rule)", "stroke-width": 1 }, svg);
+      if (labels[e]) el("text", { x: L - 8, y: y(10 ** e) + 4, "text-anchor": "end", "font-family": MONO, "font-size": 11, fill: "var(--muted)" }, svg, labels[e]);
+    }
+    const half = (x(1) - x(0)) / 2;
+    for (let a = 1; a <= 8; a++) {
+      const i0 = (a - 1) * 3;
+      el("text", { x: (x(i0) + x(i0 + 2)) / 2, y: H - 16, "text-anchor": "middle", "font-family": MONO, "font-size": 11, fill: "var(--muted)" }, svg, "Ante " + a);
+      if (a > 1) el("line", { x1: x(i0) - half, x2: x(i0) - half, y1: T, y2: H - B, stroke: "var(--rule)", "stroke-width": 1, "stroke-dasharray": "2 4" }, svg);
+    }
+    el("path", { d: run.map((d, i) => (i ? "L" : "M") + (x(i) - half) + "," + y(d[2]) + " L" + (x(i) + half) + "," + y(d[2])).join(" "), fill: "none", stroke: "var(--mult)", "stroke-width": 2.5 }, svg);
+    run.forEach((d, i) => {
+      el("line", { x1: x(i), x2: x(i), y1: y(d[2]), y2: y(d[3]), stroke: "var(--chips)", "stroke-width": 2, opacity: 0.55 }, svg);
+      el("circle", { cx: x(i), cy: y(d[3]), r: d[3] > 1e9 ? 7.5 : 5, fill: "var(--chips)", stroke: "var(--panel-solid)", "stroke-width": 2 }, svg);
+    });
+    el("text", { x: x(17) - 12, y: y(run[17][3]) + 5, "text-anchor": "end", "font-family": DIG, "font-size": 13, fill: "var(--ink)" }, svg, "16.6B Flush");
+    const tip = tipFor(box);
+    run.forEach((d, i) => {
+      const hit = el("rect", { x: x(i) - 16, y: T, width: 32, height: H - T - B, fill: "transparent" }, svg);
+      hit.addEventListener("mouseenter", () => { const k = svg.getBoundingClientRect().width / W; tip.show(`<b>Ante ${d[0]} · ${d[1]}</b><br>target ${fmt(d[2])}<br>${d[4]} ${fmt(d[3])} (${short(d[3] / d[2])}×)`, x(i) * k, y(d[3]) * k); });
+      hit.addEventListener("mouseleave", tip.hide);
+    });
+    const tb = document.querySelector("#runTable tbody");
+    run.forEach((d) => { const tr = tb.insertRow(); tr.innerHTML = `<td>${d[0]}</td><td>${d[1]}</td><td class="r num">${fmt(d[2])}</td><td>${d[4]}</td><td class="r num">${fmt(d[3])}</td>`; });
+  })();
+
+  (function () {
+    const lost = [240, 281, 375, 941, 1811, 1892, 1850, 2849];
+    const box = document.getElementById("lossChart");
+    const W = 900, H = 300, L = 48, R = 20, T = 30, B = 40;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}` }, box);
+    const max = 3000, bw = (W - L - R) / lost.length;
+    const y = (v) => T + (1 - v / max) * (H - T - B);
+    for (let g = 0; g <= max; g += 1000) {
+      el("line", { x1: L, x2: W - R, y1: y(g), y2: y(g), stroke: "var(--rule)", "stroke-width": 1 }, svg);
+      el("text", { x: L - 8, y: y(g) + 4, "text-anchor": "end", "font-family": MONO, "font-size": 11, fill: "var(--muted)" }, svg, fmt(g));
+    }
+    const tip = tipFor(box);
+    lost.forEach((v, i) => {
+      const x0 = L + i * bw + bw * 0.18, w = bw * 0.64;
+      const r = el("path", { d: `M${x0},${y(0)} L${x0},${y(v) + 4} Q${x0},${y(v)} ${x0 + 4},${y(v)} L${x0 + w - 4},${y(v)} Q${x0 + w},${y(v)} ${x0 + w},${y(v) + 4} L${x0 + w},${y(0)} Z`, fill: i >= 4 ? "var(--mult)" : "var(--faint)" }, svg);
+      el("text", { x: x0 + w / 2, y: y(v) - 7, "text-anchor": "middle", "font-family": MONO, "font-size": 11, fill: "var(--ink)" }, svg, fmt(v));
+      el("text", { x: x0 + w / 2, y: H - 16, "text-anchor": "middle", "font-family": MONO, "font-size": 11, fill: "var(--muted)" }, svg, "Ante " + (i + 1));
+      r.addEventListener("mouseenter", () => { const k = svg.getBoundingClientRect().width / W; tip.show(`<b>Ante ${i + 1}</b><br>${fmt(v)} runs lost (${(100 * v / 10239).toFixed(1)}% of losses)`, (x0 + w / 2) * k, y(v) * k); });
+      r.addEventListener("mouseleave", tip.hide);
+    });
+    el("text", { x: L + 4 * bw + 4, y: T - 10, "font-family": PIX, "font-size": 15, fill: "var(--ink)" }, svg, "Antes 5–8: 82% of losses");
+  })();
+
+  // The felt: our own swirling, pixelated shader behind everything (steered by the pointer, stirred by a tap).
+  const canvas = document.getElementById("bg");
+  let pulse = 0, mx = 0.5, my = 0.5, tmx = 0.5, tmy = 0.5;
+  let gl = null;
+  try { gl = canvas.getContext("webgl", { antialias: false }); } catch (e) { gl = null; }
+  let frame = null;
+  if (gl) {
+    const vs = "attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }";
+    const fs = [
+      "precision mediump float;",
+      "uniform vec2 res; uniform float t; uniform vec2 m; uniform float pulse;",
+      "void main(){",
+      "  vec2 uv = (gl_FragCoord.xy - 0.5 * res) / min(res.x, res.y);",
+      "  vec2 c = (m - 0.5) * vec2(0.7, -0.7);",
+      "  vec2 d = uv - c;",
+      "  float r = length(d);",
+      "  float a = atan(d.y, d.x) + (1.8 - r) * 1.9 + t * 0.12 + pulse * 1.5 * exp(-r * 2.0);",
+      "  vec2 q = vec2(cos(a), sin(a)) * r * 2.6;",
+      "  for (int i = 0; i < 4; i++) { float fi = float(i);",
+      "    q += 0.55 * vec2(sin(q.y * 1.3 + t * 0.21 + fi), cos(q.x * 1.15 - t * 0.17 + fi * 1.7)); }",
+      "  float v = 0.5 + 0.5 * sin(q.x * 1.1 + q.y * 0.9);",
+      "  float w = 0.5 + 0.5 * sin(q.y * 1.6 - q.x * 0.7 + 2.0);",
+      "  vec3 deep = vec3(0.05, 0.17, 0.17); vec3 felt = vec3(0.12, 0.34, 0.30);",
+      "  vec3 red = vec3(0.55, 0.16, 0.15); vec3 blue = vec3(0.12, 0.28, 0.52);",
+      "  vec3 col = mix(deep, felt, smoothstep(0.15, 0.85, v));",
+      "  col = mix(col, red, smoothstep(0.78, 0.97, w) * 0.65);",
+      "  col = mix(col, blue, smoothstep(0.72, 0.95, v * (1.0 - w) * 2.2) * 0.55);",
+      "  col = floor(col * 14.0 + 0.5) / 14.0;",
+      "  col += pulse * 0.06 * sin(r * 26.0 - t * 6.0) * exp(-r * 2.5);",
+      "  col *= 1.0 - 0.35 * dot(uv, uv);",
+      "  gl_FragColor = vec4(col, 1.0);",
+      "}"].join("\n");
+    const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(prog);
+    if (gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      gl.useProgram(prog);
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+      const loc = gl.getAttribLocation(prog, "p");
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      const uRes = gl.getUniformLocation(prog, "res"), uT = gl.getUniformLocation(prog, "t"),
+            uM = gl.getUniformLocation(prog, "m"), uP = gl.getUniformLocation(prog, "pulse");
+      const PIXEL = 5;
+      const size = () => {
+        canvas.width = Math.max(32, Math.ceil(window.innerWidth / PIXEL));
+        canvas.height = Math.max(32, Math.ceil(window.innerHeight / PIXEL));
+        gl.viewport(0, 0, canvas.width, canvas.height);
+      };
+      size();
+      window.addEventListener("resize", () => { size(); if (still) requestAnimationFrame(frame); });
+      const t0 = performance.now();
+      let running = false;
+      frame = (now) => {
+        const t = still ? 4.0 : (now - t0) / 1000;
+        mx += (tmx - mx) * 0.04; my += (tmy - my) * 0.04;
+        pulse *= 0.965;
+        gl.uniform2f(uRes, canvas.width, canvas.height);
+        gl.uniform1f(uT, t);
+        gl.uniform2f(uM, mx, my);
+        gl.uniform1f(uP, pulse);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        if (!still || pulse > 0.01) requestAnimationFrame(frame); else running = false;
+      };
+      requestAnimationFrame(frame);
+      window.addEventListener("pointermove", (e) => { tmx = e.clientX / window.innerWidth; tmy = e.clientY / window.innerHeight; }, { passive: true });
+      const stir = (e) => {
+        if (e && e.clientX != null) { tmx = mx = e.clientX / window.innerWidth; tmy = my = e.clientY / window.innerHeight; }
+        pulse = Math.min(2.5, pulse + 1.2);
+        if (still && !running) { running = true; requestAnimationFrame(frame); }
+      };
+      window.addEventListener("pointerdown", (e) => { if (!e.target.closest("a, summary, details, table, .chart")) stir(e); });
+      document.querySelectorAll(".box").forEach((b) => {
+        b.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); stir(); } });
+      });
+    }
+  }
+  document.querySelectorAll(".box").forEach((b) => {
+    const go = () => { b.classList.remove("pop"); void b.offsetWidth; b.classList.add("pop"); };
+    b.addEventListener("click", go);
+    b.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") go(); });
+  });
+
+  // Cards lean towards the pointer.
+  if (!still) {
+    document.querySelectorAll(".tilt").forEach((c) => {
+      c.addEventListener("pointermove", (e) => {
+        const r = c.getBoundingClientRect();
+        const dx = (e.clientX - r.left) / r.width - 0.5, dy = (e.clientY - r.top) / r.height - 0.5;
+        c.style.transform = `rotateY(${dx * 14}deg) rotateX(${-dy * 14}deg) translateY(-4px)`;
+      });
+      c.addEventListener("pointerleave", () => { c.style.transform = ""; });
+    });
+  }
+})();
+</script>
+</body>
+</html>
