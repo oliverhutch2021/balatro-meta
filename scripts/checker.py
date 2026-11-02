@@ -40,7 +40,7 @@ from watch import (
 
 CHECK_PORT = 12350
 RECORD_PORT = 12351  # make record-me's game (scripts/record_me.py): the checks wait while it is up
-MOD_VERSION = "0.5.0"
+MOD_VERSION = "0.6.0"
 # Overnight: Balatro's memory grows over a long session and can run out, so the hidden game gets a fresh
 # start every hour, or sooner when it gets big, and at once when it stops answering.
 RESTART_EVERY = 3600  # seconds
@@ -265,7 +265,7 @@ class Checker:
 
     # -- the hidden game
     def control(self) -> None:
-        self.files.write_control(lock=0)
+        self.files.write_control(lock=0, mute=1)  # its window is hidden; its sound is off too
 
     def mod_ok(self) -> bool:
         st = self.files.read_state()

@@ -18,6 +18,8 @@ love = {
         getFont = function() return { getWidth = function() return 100 end, getHeight = function() return 12 end } end,
     },
     mouse = { getPosition = function() return 500, 400 end, isDown = function() return true end },
+    audio = { volume = 0.7, getVolume = function() return love.audio.volume end,
+              setVolume = function(v) love.audio.volume = v end },
     mousepressed = function() calls.pressed = calls.pressed + 1 end,
     update = function() calls.updated = calls.updated + 1 end,
     draw = function() calls.drawn = calls.drawn + 1 end,
@@ -53,7 +55,7 @@ love.mousepressed()
 assert(calls.pressed == 1 and calls.drawn == 1 and calls.updated == 1)
 assert(select(1, love.mouse.getPosition()) == 500)
 local s = state()
-assert(s.version == "0.5.0" and s.port == "12350" and s.locked == "0" and s["end"] == "1")
+assert(s.version == "0.6.0" and s.port == "12350" and s.locked == "0" and s["end"] == "1")
 assert(G.SETTINGS.GAMESPEED == 4 and G.GAME.viewed_back == nil)
 G.STATE = 5
 
@@ -87,8 +89,18 @@ local before = state().time
 frame(0.06)
 assert(state().time ~= before, "a fresh report")
 
--- Asked to: lock, speed and an uncapped frame rate.
-files[CONTROL] = "n=3\nlock=1\nspeed=10\nuncap=1\n"
+-- The checks' sound: untouched unless asked; muted while asked.
+assert(love.audio.volume == 0.7 and state().muted == "0")
+files[CONTROL] = "n=21\nlock=0\nmute=1\n"
+frame()
+assert(love.audio.volume == 0 and state().muted == "1")
+love.audio.volume = 0.5 -- the game sets it itself: muted again by the next read
+files[CONTROL] = "n=22\nlock=0\nmute=1\n"
+frame()
+assert(love.audio.volume == 0, "set again while asked")
+
+-- Asked to: lock, speed and an uncapped frame rate (and still muted).
+files[CONTROL] = "n=3\nlock=1\nspeed=10\nuncap=1\nmute=1\n"
 frame()
 love.mousepressed()
 assert(calls.pressed == 2, "a click while locked must be swallowed")
@@ -101,6 +113,7 @@ love.mousepressed()
 assert(calls.pressed == 3, "input must come back once the checks are gone")
 assert(G.SETTINGS.GAMESPEED == 4 and G.FPS_CAP == 60)
 assert(state().locked == "0")
+assert(love.audio.volume == 0.7 and state().muted == "0", "the sound comes back as it was")
 
 -- How a run ends is noted and kept until another run ends, so a recorder that was waiting for the game to settle
 -- still learns it when the player moves on fast: lost (the game-over screen), then won (Endless after it changes

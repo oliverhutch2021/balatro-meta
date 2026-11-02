@@ -2,8 +2,8 @@
 	"id": "balatro_meta_watch",
 	"name": "Balatro Meta Watch",
 	"author": ["Balatro Meta"],
-	"description": "Companion of the Balatro Meta real-game checks: while they run, it reports when the game has finished playing out a move, readies the run-setup deck BalatroBot needs to start a run, and can block mouse and keyboard or set the game speed when asked. It changes nothing in the rules.",
+	"description": "Companion of the Balatro Meta real-game checks: while they run, it reports when the game has finished playing out a move, readies the run-setup deck BalatroBot needs to start a run, and can block mouse and keyboard, set the game speed or mute the sound when asked. It changes nothing in the rules.",
 	"prefix": "bmwatch",
 	"main_file": "main.lua",
-	"version": "0.5.0"
+	"version": "0.6.0"
 }

@@ -193,7 +193,8 @@ One-time setup for the checks, on Windows:
 `make watch` installs or updates the companion mod (`mods/balatro_meta_watch`) itself and starts the hidden
 game through BalatroBot's launcher on its own port (12350), so it never touches a Balatro you have open.
 Balatro opens a window while it loads (full screen and black if that's how you play); the checks hide it
-as soon as it appears, so a start or restart no longer covers your screen. It can run overnight: Balatro's memory grows over a long session, so the hidden game gets a fresh start
+as soon as it appears, so a start or restart no longer covers your screen, and the companion mod keeps its
+sound off (only that game's, while the checks run; your own Balatro and settings are untouched). It can run overnight: Balatro's memory grows over a long session, so the hidden game gets a fresh start
 every hour (sooner if it passes 3 GB, and at once if it crashes or stops answering), and only the newest
 two of its log files are kept (it logs every call, about 100 MB an hour); a Balatro you play yourself keeps
 all of its logs.

@@ -6,13 +6,13 @@
 --   * reports whether the game is still playing out the last move (queued animations), so the checks
 --     compare only once the move is over;
 --   * in the menu, makes sure BalatroBot can start the next run (see ensure_viewed_back);
---   * if asked, blocks mouse and keyboard (with a small badge) and sets the game speed.
+--   * if asked, blocks mouse and keyboard (with a small badge), sets the game speed and mutes the sound.
 -- It changes nothing in the rules. It talks through files next to the game's saves (love.filesystem):
 -- balatro_meta/<BalatroBot port>/control.txt in, state.txt out, so a Balatro on another port (one you
 -- play yourself) is never affected. Without a fresh control file it does nothing but report its state
 -- once a second.
 
-local VERSION = "0.5.0"
+local VERSION = "0.6.0"
 local PORT = tonumber(os.getenv("BALATROBOT_PORT")) or 12346
 local DIR = "balatro_meta/" .. PORT
 local CONTROL = DIR .. "/control.txt"
@@ -88,6 +88,26 @@ local function apply_speed()
         G.SETTINGS.GAMESPEED = M.saved.speed
         G.FPS_CAP = M.saved.cap
         M.saved = nil
+    end
+end
+
+-- Sound off while the checks ask for it (their game plays unseen, so it shouldn't be heard either). The master
+-- volume of LOVE's audio belongs to this game process alone and is never saved to your settings; it comes back
+-- when the checks stop. Set again every tenth of a second, in case the game sets it itself.
+local function apply_mute()
+    if not (love.audio and love.audio.setVolume and love.audio.getVolume) then
+        return
+    end
+    if active() and M.control.mute == "1" then
+        if M.volume == nil then
+            M.volume = love.audio.getVolume()
+        end
+        if love.audio.getVolume() ~= 0 then
+            love.audio.setVolume(0)
+        end
+    elseif M.volume ~= nil then
+        love.audio.setVolume(M.volume)
+        M.volume = nil
     end
 end
 
@@ -167,6 +187,7 @@ local function write_state()
         "complete=" .. ((G and G.STATE_COMPLETE) and "1" or "0"),
         "speed=" .. tostring(G and G.SETTINGS and G.SETTINGS.GAMESPEED or ""),
         "locked=" .. (locked() and "1" or "0"),
+        "muted=" .. (M.volume ~= nil and "1" or "0"),
         "control=" .. tostring(M.stamp or ""),
         "seed=" .. seed,
         "won=" .. won,
@@ -191,6 +212,7 @@ function M.update()
         M.last_read = t
         read_control()
         apply_speed()
+        apply_mute()
     end
     if t - M.last_state >= (active() and 0.05 or 1.0) then
         M.last_state = t
