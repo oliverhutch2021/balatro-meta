@@ -40,7 +40,8 @@ def sign_test(k: int, n: int) -> float:
     if n == 0:
         return 1.0
     k = min(k, n - k)
-    tail = sum(math.comb(n, i) for i in range(k + 1)) / 2.0 ** n
+    # Whole numbers throughout: 2.0 ** n overflows a float past n = 1023 (8,000 seeds can have more split runs).
+    tail = sum(math.comb(n, i) for i in range(k + 1)) / 2 ** n
     return min(1.0, 2.0 * tail)
 
 

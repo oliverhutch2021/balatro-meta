@@ -43,6 +43,13 @@ def test_the_shorter_report_sets_the_seeds_compared():
     assert c["seeds"] == 2 and c["a"]["wins"] == 2 and c["b"]["wins"] == 0
 
 
+def test_the_sign_test_takes_many_split_runs():
+    # 8,000 seeds on the PC split 724 against 855 (make teacher-big): past 1,023 a float power of two overflows.
+    p = cr.sign_test(855, 1579)
+    assert 0.0005 < p < 0.002
+    assert cr.sign_test(5000, 10000) == pytest.approx(1.0, abs=0.02)
+
+
 def test_the_sign_test_is_exact():
     assert cr.sign_test(0, 0) == 1.0
     assert cr.sign_test(10, 10) == pytest.approx(2 / 1024)
