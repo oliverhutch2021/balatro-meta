@@ -21,8 +21,10 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -71,29 +73,71 @@ class WinBridge:
     BalatroBot listens. The bridge runs on Windows through WSL's interop and relays each call over
     stdin/stdout, so no networking or firewall change is needed."""
 
+    SLACK = 15  # seconds on top of a call's own timeout before the bridge itself counts as stuck
+
     def __init__(self, python: str, script: str, cwd: str | None = "/mnt/c") -> None:
         self.proc = subprocess.Popen([python, "-u", script], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.DEVNULL, text=True, cwd=cwd)
+        self.lock = threading.Lock()  # one call at a time, whichever thread makes it
+        self.seq = 0
+        self.lines: queue.Queue = queue.Queue()
+        threading.Thread(target=self._read, daemon=True).start()
+
+    def _read(self) -> None:
+        for line in self.proc.stdout:
+            self.lines.put(line)
+        self.lines.put(None)  # the bridge has stopped
 
     def post(self, url: str, body: dict, timeout: float):
-        if self.proc.poll() is not None:
-            raise OSError("the Windows bridge has stopped")
-        self.proc.stdin.write(json.dumps({"url": url, "body": body, "timeout": timeout}) + "\n")
-        self.proc.stdin.flush()
-        line = self.proc.stdout.readline()
-        if not line:
-            raise OSError("the Windows bridge has stopped")
-        out = json.loads(line)
-        if not out.get("ok"):
-            raise OSError(out.get("error") or "the Windows bridge failed")
-        return out["result"]
+        """One call. Each reply carries its call's number, so a reply left over from a call that was given up
+        (or any stray line) is skipped instead of being taken as the answer to the next call. A bridge that
+        doesn't answer within the call's timeout plus SLACK is stopped (windows_bridge starts a new one)."""
+        with self.lock:
+            if self.proc.poll() is not None:
+                raise OSError("the Windows bridge has stopped")
+            self.seq += 1
+            try:
+                self.proc.stdin.write(json.dumps({"id": self.seq, "url": url, "body": body, "timeout": timeout})
+                                      + "\n")
+                self.proc.stdin.flush()
+            except OSError:
+                raise OSError("the Windows bridge has stopped") from None
+            deadline = time.monotonic() + timeout + self.SLACK
+            while True:
+                try:
+                    line = self.lines.get(timeout=max(0.0, deadline - time.monotonic()))
+                except queue.Empty:
+                    self.close()
+                    raise OSError(f"the Windows bridge didn't answer in {timeout + self.SLACK:g} s") from None
+                if line is None:
+                    raise OSError("the Windows bridge has stopped")
+                try:
+                    out = json.loads(line)
+                except ValueError:
+                    continue  # not a reply (something else printed on its output)
+                if not isinstance(out, dict) or out.get("id") != self.seq:
+                    continue  # a late reply to an earlier call
+                if not out.get("ok"):
+                    raise OSError(out.get("error") or "the Windows bridge failed")
+                return out["result"]
 
     def close(self) -> None:
         if self.proc.poll() is None:
             self.proc.terminate()
+            try:
+                self.proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
 
 
 _bridge: list = []  # the one bridge of this process, once started (or [None] if it can't be)
+
+
+def reset_bridge() -> None:
+    """Stop the bridge; the next windows_bridge() starts a fresh one."""
+    if _bridge and _bridge[0] is not None:
+        _bridge[0].close()
+    _bridge.clear()
 
 
 def windows_bridge() -> WinBridge | None:

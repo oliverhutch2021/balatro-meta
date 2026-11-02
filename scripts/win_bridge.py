@@ -2,8 +2,9 @@
 
 BalatroBot listens on Windows' 127.0.0.1, which WSL's default (NAT) networking can't reach. watch.py
 starts this under Windows Python, through WSL's Windows interop, and talks to it over stdin/stdout:
-one JSON request per line ({"url", "body", "timeout"}) in, one JSON line out ({"ok": true,
-"result": ...} or {"ok": false, "error": "..."}). Standard library only; no proxy is used.
+one JSON request per line ({"id", "url", "body", "timeout"}) in, one JSON line out ({"id", "ok": true,
+"result": ...} or {"id", "ok": false, "error": "..."}; the id is the request's, so the caller can tell a
+late reply from the one it waits for). Standard library only; no proxy is used.
 """
 import json
 import sys
@@ -16,6 +17,7 @@ def main() -> None:
         line = line.strip()
         if not line:
             continue
+        req = {}
         try:
             req = json.loads(line)
             data = json.dumps(req["body"]).encode("utf-8")
@@ -24,6 +26,7 @@ def main() -> None:
                 out = {"ok": True, "result": json.loads(resp.read().decode("utf-8"))}
         except Exception as e:  # noqa: BLE001 - every failure must go back to the caller as a line
             out = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        out["id"] = req.get("id") if isinstance(req, dict) else None
         sys.stdout.write(json.dumps(out) + "\n")
         sys.stdout.flush()
 

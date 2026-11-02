@@ -243,6 +243,7 @@ class Checker:
         self.checked: set[str] = set()
         self.started_at = 0.0  # when the hidden game now running first answered
         self.memory_checked = 0.0
+        self.last_error: str | None = None  # why the last try to reach the hidden game failed
         self.state = {"state": "starting", "message": "Starting the hidden game", "runs": 0, "moves": 0,
                       "differences": 0, "stopped_early": 0, "errors": 0, "restarts": 0, "last_restart": None,
                       "memory_mb": None, "up_since": None, "last_difference": None, "current": None, "last": None,
@@ -289,15 +290,22 @@ class Checker:
             try:
                 api.call("health", timeout=3)
                 self.api = api
+                self.last_error = None
                 if not self.started_at:
                     self.started_at = time.time()
                     self.note(up_since=self.started_at)
                 return True
-            except (OSError, RuntimeError, ValueError):
+            except (OSError, RuntimeError, ValueError) as exc:
+                self.last_error = f"{'through the Windows bridge' if api.bridge else 'directly'}: {exc}"
                 continue
         if self.launch_allowed and time.time() - self.game.launched_at > 90:
-            if self.game.launched_at:
-                self.game.stop()  # the last start never answered: clear it away first
+            if self.game.launched_at:  # the last start never answered: clear it away, and the link with it
+                self.say(f"[checks] the hidden game didn't answer within 90 s (last try {self.last_error}); "
+                         "starting it again")
+                self.note(last_restart={"reason": f"no answer within 90 s ({self.last_error})", "time": time.time()})
+                self.add("restarts")
+                self.game.stop()
+                watch.reset_bridge()
             if self.game.launch():
                 self.note(state="starting", message="Starting a hidden copy of Balatro for the checks")
                 return False
@@ -314,6 +322,7 @@ class Checker:
         self.add("restarts")
         self.say(f"[checks] restarting the hidden game: {reason}")
         self.game.stop()
+        watch.reset_bridge()  # a fresh link too: one left waiting on the old game can't answer for the new one
         self.api = None
         self.game.launched_at = 0.0
         self.started_at = 0.0
@@ -458,6 +467,8 @@ class Checker:
                 self.note(state="waiting", message="Waiting for the companion mod in the hidden game"
                           if st is None else "The hidden game runs an older companion mod: it restarts with the new one")
                 if st is not None and self.launch_allowed and time.time() - self.game.launched_at > 90:
+                    self.say(f"[checks] the hidden game runs companion mod {st.get('version')!r}, not "
+                             f"{MOD_VERSION!r}: starting it again")
                     self.game.stop()  # an old copy left running: start it again with the new mod
                     self.api = None
                 stop.wait(3)

@@ -474,3 +474,46 @@ def test_the_hidden_games_window_is_kept_out_of_sight_while_it_loads(monkeypatch
     assert "balatrobot" in script, "only a Balatro started by the launcher on this port is hidden"
     game.stop()
     assert not hider.alive and not launcher.alive
+
+
+def test_the_bridge_takes_only_the_reply_to_its_own_call(tmp_path, monkeypatch):
+    """A reply left over from an earlier call, or a stray line, is never taken as the answer; a bridge that
+    goes quiet is given up on instead of waited on for ever."""
+    script = tmp_path / "bridge.py"
+    script.write_text(
+        "import json, sys\n"
+        "for line in sys.stdin:\n"
+        "    req = json.loads(line)\n"
+        "    if req['body'].get('method') == 'quiet':\n"
+        "        continue\n"
+        "    print('some banner a Windows Python printed', flush=True)\n"
+        "    print(json.dumps({'id': req['id'] - 1, 'ok': True, 'result': {'result': 'stale'}}), flush=True)\n"
+        "    print(json.dumps({'id': req['id'], 'ok': True, 'result': {'result': req['body']['method']}}), flush=True)\n")
+    bridge = watch.WinBridge(sys.executable, str(script), cwd=None)
+    monkeypatch.setattr(watch.WinBridge, "SLACK", 0.5)
+    try:
+        api = watch.Api("http://127.0.0.1:1", bridge)
+        assert api.call("health", timeout=1) == "health"
+        assert api.call("gamestate", timeout=1) == "gamestate"
+        with pytest.raises(OSError, match="didn't answer"):
+            api.call("quiet", timeout=0.5)
+        with pytest.raises(OSError, match="stopped"):
+            api.call("health", timeout=1)
+    finally:
+        bridge.close()
+
+
+def test_a_hidden_game_that_never_answers_is_started_again_and_says_why(tmp_path, monkeypatch):
+    monkeypatch.setattr(checker, "WATCH", tmp_path)
+    lines = []
+    c = checker.Checker(files=checker.ModFiles(None), launch=True, say=lines.append)
+    c.game = FakeHiddenGame()
+    monkeypatch.setattr(watch, "windows_bridge", lambda: None)
+    resets = []
+    monkeypatch.setattr(watch, "reset_bridge", lambda: resets.append(1))
+    assert not c.connect() and c.game.launches == 1 and not lines, "the first start says nothing"
+    c.game.launched_at -= 91
+    assert not c.connect()
+    assert c.game.stops == 1 and c.game.launches == 2 and resets == [1]
+    assert len(lines) == 1 and "didn't answer within 90 s" in lines[0] and "directly" in lines[0]
+    assert c.summary()["restarts"] == 1
