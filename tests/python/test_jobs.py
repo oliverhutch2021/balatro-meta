@@ -155,7 +155,7 @@ def test_round_three_records_with_precise_unless_its_trial_found_it_no_better(tm
                 want = f"results/value/ensemble{n}-w" if name.startswith("ensemble") else f"results/value/teacher{n}-w"
                 assert argv[argv.index("--out") + 1].startswith(want)
         assert jobs.LEARNED_ROUNDS[n - 1] == (f"models/value-{n}.bin", f"results/value/teacher{n}-w{{w}}.json")
-    assert "teacher-data-10" not in jobs.JOBS
+    assert f"teacher-data-{jobs.LAST_ROUND + 1}" not in jobs.JOBS
     assert len(jobs.LEARNED_ROUNDS) == 2 * jobs.LAST_ROUND - 1, "each round's network, and from round 2 all so far"
     # A round's recording uses the best network so far, whichever round it came from.
     (tmp_path / "models").mkdir()
@@ -429,6 +429,9 @@ def test_the_weight_trials_are_set_against_the_networks_own_weight_and_recorded_
     (folder / f"f{f}-precise-8k-on-teacher-w1.json").write_text("{}")
     steps = {n: a for n, a, *_ in jobs.weight_steps(tmp_path)}
     assert "control" not in steps and steps["vs-round-7"][1] == jobs.ROUND_7_8K
+    (tmp_path / f"results/tune/f{f}-precise-8k-w2.5-on-teacher-w1.json").write_text("{}")
+    steps = {n: a for n, a, *_ in jobs.weight_steps(tmp_path)}
+    assert "weight-2.5" not in steps and "compare-2.5" in steps and "weight-4" in steps, "played once per networks"
     assert "teacher-weights" in jobs.JOBS
 
 

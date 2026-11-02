@@ -538,6 +538,17 @@ noise of 2,000), each set run by run against 1.5, and 1.5 against round 7's netw
 make teacher-weights && make learned-9 && make teacher-control
 ```
 
+## Step 20: round 9's networks at each weight, while you sleep (about 4 hours after step 19)
+
+`make teacher-weights` found a clear gain: at weight 2.5 the networks won 66.46% of the 8,000 seeds against 63.86% at
+1.5 (+2.6 points, p = 0.00001; weight 4: +2.4), so round 9 records at 2.5. Run again after round 9, the job measures
+round 9's networks the same way (runs already played are only compared again). To start it on its own once step 19
+has finished, in a second Ubuntu tab:
+
+```
+cd /mnt/h/balatro-meta && touch /tmp/bm-mark && while [ ! .sync/DONE-teacher-control.txt -nt /tmp/bm-mark ]; do sleep 60; done && make teacher-weights
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

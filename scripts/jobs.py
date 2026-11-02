@@ -54,7 +54,7 @@ BASELINE = ["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "ba
 # Each round of the learned value: its network, and the reports of the teacher playing with it at each weight on the
 # usual 5,000 seeds (round 1: make teacher-learned; round 2: make teacher-learned-2).
 # Rounds 3 and later are all alike (learned_round), up to this one.
-LAST_ROUND = 9
+LAST_ROUND = 12
 
 
 def ensemble(n: int) -> str:
@@ -359,7 +359,9 @@ ROUND_7_8K = "results/tune/f2-precise+focus+fair-skip-8k-on-ensemble7-w1.5.json"
 def weight_steps(root: Path = ROOT, weights: tuple[str, ...] = WEIGHT_TRIALS, runs: int = BIG_RUNS) -> list[tuple]:
     """make teacher-weights: the precise teacher on the best learned value at its weight and at each of `weights`,
     on the first `runs` usual seeds, each set run by run against the first (a clear gain is what the next round
-    records with: best_recording reads each f3-...-vs-...-on-<networks> comparison and the trial's own weight)."""
+    records with: best_recording reads each f3-...-vs-...-on-<networks> comparison and the trial's own weight).
+    Runs already played on the same networks are only compared again, so after a new round the job measures that
+    round's networks, and before one it costs nothing."""
     tag = f"f{FORMULA}"
     net_args, stem, base_opts, _ = tune_control(root, tag)
     size = f"{runs // 1000}k"
@@ -377,8 +379,10 @@ def weight_steps(root: Path = ROOT, weights: tuple[str, ...] = WEIGHT_TRIALS, ru
     nets = net_args[net_args.index("--value-net") + 1]
     for w in weights:
         out = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-on-{stem}.json"
-        steps.append((f"weight-{w}", [*BASELINE, "--bot", "teacher", "--value-net", nets, "--value-weight", w,
-                                      "--teacher-options", opts, "--runs", str(runs), "--seed", "1", "--out", out]))
+        if not (root / out).exists():  # already played on these networks: only compared again
+            steps.append((f"weight-{w}", [*BASELINE, "--bot", "teacher", "--value-net", nets, "--value-weight", w,
+                                          "--teacher-options", opts, "--runs", str(runs), "--seed", "1",
+                                          "--out", out]))
         steps.append((f"compare-{w}", ["scripts/compare_runs.py", control, out, "--out",
                                        f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-vs-"
                                        f"{tag}-{file_safe(opts)}-{size}-on-{stem}.json"]))
