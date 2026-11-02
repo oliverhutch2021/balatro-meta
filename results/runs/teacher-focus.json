@@ -1,0 +1,38 @@
+{
+ "job": "teacher-focus",
+ "commit": "9e1b4c363d3f55e49bd691cb5a989da8ba860242",
+ "started": "2026-11-02T00:25:25+00:00",
+ "finished": "2026-11-02T01:08:35+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   16.4,
+   17.1,
+   16.9
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 19,
+  "focus": 829,
+  "compare focus": 0,
+  "fair-skip": 861,
+  "compare fair-skip": 0,
+  "focus,fair-skip": 879,
+  "compare focus,fair-skip": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "focus": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin --value-weight 1.5 --teacher-options precise,focus --runs 2000 --seed 1 --out results/tune/f2-precise+focus-on-ensemble5-w1.5.json",
+  "compare focus": "scripts/compare_runs.py results/value/f2-precise-on-ensemble5-w1.5.json results/tune/f2-precise+focus-on-ensemble5-w1.5.json --out results/tune/f2-precise+focus-vs-f2-precise-on-ensemble5-w1.5.json",
+  "fair-skip": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin --value-weight 1.5 --teacher-options precise,fair-skip --runs 2000 --seed 1 --out results/tune/f2-precise+fair-skip-on-ensemble5-w1.5.json",
+  "compare fair-skip": "scripts/compare_runs.py results/value/f2-precise-on-ensemble5-w1.5.json results/tune/f2-precise+fair-skip-on-ensemble5-w1.5.json --out results/tune/f2-precise+fair-skip-vs-f2-precise-on-ensemble5-w1.5.json",
+  "focus,fair-skip": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin --value-weight 1.5 --teacher-options precise,focus,fair-skip --runs 2000 --seed 1 --out results/tune/f2-precise+focus+fair-skip-on-ensemble5-w1.5.json",
+  "compare focus,fair-skip": "scripts/compare_runs.py results/value/f2-precise-on-ensemble5-w1.5.json results/tune/f2-precise+focus+fair-skip-on-ensemble5-w1.5.json --out results/tune/f2-precise+focus+fair-skip-vs-f2-precise-on-ensemble5-w1.5.json"
+ }
+}
