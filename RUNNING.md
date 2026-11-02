@@ -490,6 +490,20 @@ After `make teacher-ideas-2` (or whenever no job is running):
 make sync && make teacher-focus
 ```
 
+## Step 17: the next control, then round 7 exploring (about 4 hours)
+
+Since the formula was tuned, the bot has stayed near 60% (62.0% with round 5's networks): each learned-value round
+gains less, because the network only learns from the choices the bot already makes. From round 7 the recording
+explores: one shop or pack decision in ten takes another option the bot rates nearly as high, so the network also
+sees where those lead. Measuring never explores. After `make learned-6`, with no job running:
+
+```
+make sync && make teacher-control && make learned-7
+```
+
+`make teacher-control` plays the precise teacher on the newest networks on the 2,000 seeds the trials use, against
+the control before it (about 15 minutes); `make learned-7` is round 7 (about 3.5 hours).
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

@@ -2259,6 +2259,7 @@ fn choose_against(
     options.sort_by(|a, b| b.1.total_cmp(&a.1));
     options.truncate(finalists());
     let mut best = (value(here, vs) + MIN_GAIN, None);
+    let mut judged = vec![best];
     for (first, _, judge) in options {
         let v = match judge {
             Judge::Moves(m) => after(run, vs ^ 0x5EED, &m).map_or(f64::MIN, |c| value(&c, vs)),
@@ -2279,12 +2280,66 @@ fn choose_against(
                 search(&best, cost, again)
             }
         };
+        judged.push((v, Some(first)));
         if v > best.0 {
             best = (v, Some(first));
         }
     }
-    best.1
+    explore(run, vs, &judged, best).1
 }
+
+/// "explore=p" (for recordings, never for measuring): with chance p, a decision between options takes another
+/// that the value rates nearly as high (within "explore-within" of the best, doing nothing included) in place of
+/// the best. The learned value learns only from the positions its recordings reach: without this, never from
+/// what a choice the teacher doesn't make leads to (a run that piles its Planets on one hand, an engine of copied
+/// cards), so each round can only refine the teacher's own habits. The chance comes from a hash of the decision,
+/// so a run explores the same way on any thread.
+fn explore(
+    run: &Run,
+    vs: u64,
+    judged: &[(f64, Option<(MoveKind, u64)>)],
+    best: (f64, Option<(MoveKind, u64)>),
+) -> (f64, Option<(MoveKind, u64)>) {
+    let p = param("explore").unwrap_or(0.0);
+    if p <= 0.0 {
+        return best;
+    }
+    let within = param("explore-within").unwrap_or(EXPLORE_WITHIN);
+    let others: Vec<_> = judged
+        .iter()
+        .copied()
+        .filter(|&(v, m)| m != best.1 && v > f64::MIN && v >= best.0 - within)
+        .collect();
+    if others.is_empty() {
+        return best;
+    }
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (
+        vs,
+        run.ante,
+        run.round,
+        run.money,
+        run.phase as u8,
+        run.jokers.len(),
+        run.consumables.len(),
+    )
+        .hash(&mut h);
+    (
+        run.reroll_cost,
+        run.playing_cards.len(),
+        format!("{:?}", judged.iter().map(|j| j.1).collect::<Vec<_>>()),
+    )
+        .hash(&mut h);
+    let r = h.finish();
+    if (r % 1_000_000) as f64 >= p * 1_000_000.0 {
+        return best;
+    }
+    others[((r >> 32) % others.len() as u64) as usize]
+}
+
+/// How far below the best an option may be to be explored ("explore-within", in the value's units: log chance).
+const EXPLORE_WITHIN: f64 = 0.25;
 
 /// Options given as move lists, with their quick values.
 fn judged_moves(
@@ -3465,5 +3520,45 @@ mod tests {
         pack(&mut run, &[Saturn, Venus, Jupiter]);
         run.pack.as_mut().unwrap().booster = celestial;
         assert_eq!(focus_pick(&run), None);
+    }
+
+    #[test]
+    fn exploring_takes_another_option_rated_nearly_as_high() {
+        let run = Run::scenario("EXPLORE1", crate::blinds::BlindKind::Small);
+        let a = Some((MoveKind::Buy, 0));
+        let b = Some((MoveKind::Buy, 1));
+        let c = Some((MoveKind::Reroll, 0));
+        let judged = [(1.0, None), (1.5, a), (1.4, b), (0.5, c)];
+        let best = (1.5, a);
+        assert_eq!(explore(&run, 9, &judged, best), best, "off");
+        with_options(&["explore=1"], || {
+            for vs in 0..20 {
+                let got = explore(&run, vs, &judged, best);
+                assert!(
+                    got.1 == b,
+                    "only the option within 0.25 of the best: {got:?}"
+                );
+                assert_eq!(got, explore(&run, vs, &judged, best), "the same each time");
+            }
+        });
+        with_options(&["explore=1", "explore-within=0.6"], || {
+            let picks: std::collections::HashSet<_> = (0..40)
+                .map(|vs| format!("{:?}", explore(&run, vs, &judged, best).1))
+                .collect();
+            assert_eq!(
+                picks.len(),
+                2,
+                "doing nothing and the second option, not the one rated 1.0 below"
+            );
+        });
+        with_options(&["explore=0.1"], || {
+            let n = (0..2000)
+                .filter(|&vs| explore(&run, vs, &judged, best) != best)
+                .count();
+            assert!(
+                (120..280).contains(&n),
+                "about one decision in ten: {n} of 2,000"
+            );
+        });
     }
 }

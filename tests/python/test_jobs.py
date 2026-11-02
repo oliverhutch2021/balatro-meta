@@ -357,3 +357,33 @@ def test_the_focus_trials_are_set_against_the_control_on_the_formula_in_force(tm
         assert play[play.index("--teacher-options") + 1] == f"precise,{change}"
         assert steps[f"compare {change}"][1] == f"results/value/f{jobs.FORMULA}-precise-on-teacher-w1.json"
     assert "teacher-focus" in jobs.JOBS
+
+
+def test_recordings_explore_from_round_7_and_measuring_never_does(tmp_path):
+    args = ["--value-net", "models/value-1.bin", "--value-weight", "1.5", "--teacher-options", "precise"]
+    assert jobs.exploring(args, 6) == args
+    assert jobs.exploring(args, 7)[-1] == f"precise,{jobs.EXPLORE}"
+    assert jobs.exploring([], 8) == ["--teacher-options", jobs.EXPLORE]
+    record = jobs.learned_round(7, tmp_path)["teacher-data-7"][1][1]
+    assert jobs.EXPLORE in record[record.index("--teacher-options") + 1]
+    for name, steps in jobs.learned_round(7, tmp_path).items():
+        if name != "teacher-data-7":
+            assert not any(jobs.EXPLORE in " ".join(map(str, s[1])) for s in steps), name
+
+
+def test_a_new_control_is_set_against_the_one_before(tmp_path):
+    folder = tmp_path / "results" / "value"
+    folder.mkdir(parents=True)
+    (tmp_path / "models").mkdir()
+    nets = jobs.ensemble(6).split(",")
+    for n in nets:
+        (tmp_path / n).write_bytes(b"BMVN")
+    (folder / "ensemble6-w1.5.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": 0.56}))
+    (folder / "ensemble5-w1.5.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": 0.54}))
+    (folder / f"f{jobs.FORMULA}-precise-on-ensemble5-w1.5.json").write_text(json.dumps({"runs": 2000}))
+    steps = {n: a for n, a, *_ in jobs.control_steps(tmp_path)}
+    play = steps["precise"]
+    assert play[play.index("--out") + 1] == f"results/value/f{jobs.FORMULA}-precise-on-ensemble6-w1.5.json"
+    assert steps["compare"][1:3] == [f"results/value/f{jobs.FORMULA}-precise-on-ensemble5-w1.5.json",
+                                     f"results/value/f{jobs.FORMULA}-precise-on-ensemble6-w1.5.json"]
+    assert "teacher-control" in jobs.JOBS

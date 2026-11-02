@@ -147,6 +147,27 @@ def best_recording(root: Path = ROOT) -> list[str]:
     return base if top is None else top[1]
 
 
+# From round 7 the recordings explore (teacher option "explore": a shop or pack decision takes, one time in ten,
+# another option the value rates nearly as high as the best), so the learned value also sees where the choices the
+# teacher doesn't make lead. Rounds 4 to 6 gained less each time (+1.75, then +0.4 points on the same 2,000 seeds):
+# a value learned only from the teacher's own choices can only refine its habits. Measuring never explores.
+EXPLORE = "explore=0.1"
+EXPLORE_FROM = 7
+
+
+def exploring(args: list[str], n: int) -> list[str]:
+    """A recording's teacher arguments, with the exploration rounds from EXPLORE_FROM on use."""
+    if n < EXPLORE_FROM:
+        return args
+    args = list(args)
+    if "--teacher-options" in args:
+        i = args.index("--teacher-options") + 1
+        args[i] = f"{args[i]},{EXPLORE}"
+    else:
+        args += ["--teacher-options", EXPLORE]
+    return args
+
+
 def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
     """Round n (3 or later) of the learned value, three jobs. teacher-data-n: the best teacher there is (the round and
     weight that won most, with "precise" unless its trial found it no better: recording_options; from round 4, the
@@ -160,7 +181,8 @@ def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
         f"teacher-data-{n}": [
             ("build", [*MAKE, "build"]),
             ("record", [*BASELINE, "--bot", "teacher",
-                        *(best_recording(root) if n >= 4 else [*learned_value_args(root), *recording_options(root)]),
+                        *exploring(best_recording(root) if n >= 4
+                                   else [*learned_value_args(root), *recording_options(root)], n),
                         "--runs", "25000", "--seed", str(101 * (n + 1)), "--record", str(data),
                         "--out", f"results/value/record-{n}.json"]),
         ],
@@ -291,6 +313,28 @@ def next_steps(root: Path = ROOT) -> list[tuple]:
                                  "--teacher-options", "precise", "--runs", "2000", "--seed", "1", "--out", out]))
     steps.append(("compare values 1-4", ["scripts/compare_runs.py", control, out, "--out",
                                          f"results/tune/{Path(out).stem}-vs-{Path(control).stem}.json"]))
+    return steps
+
+
+def control_steps(root: Path = ROOT) -> list[tuple]:
+    """make teacher-control: the precise teacher on the best learned value there is (best_learned: after a round, its
+    networks if they won most) on the first 2,000 usual seeds, the control later trials are set against, and set run
+    by run against the control before it (the one on the highest round's networks below it)."""
+    tag = f"f{FORMULA}"
+    steps = tune_steps(root, (), tag=tag)
+    *_, control = tune_control(root, tag)
+
+    def rounds(name: str) -> int:
+        digits = "".join(c for c in name.split("-on-")[-1].split("-w")[0] if c.isdigit())
+        return int(digits) if digits else 0
+
+    older = [f for f in (root / "results" / "value").glob(f"{tag}-precise-on-*.json")
+             if f.name != Path(control).name and rounds(f.name) < rounds(Path(control).name)]
+    if older:
+        prev = max(older, key=lambda f: (rounds(f.name), f.name))
+        prev_rel = f"results/value/{prev.name}"
+        steps.append(("compare", ["scripts/compare_runs.py", prev_rel, control, "--out",
+                                  f"results/tune/{Path(control).stem}-vs-{prev.stem}.json"]))
     return steps
 
 
@@ -448,6 +492,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-next": next_steps(),
     "teacher-ideas-2": tune_steps(changes=IDEAS_2, tag=f"f{FORMULA}"),
     "teacher-focus": tune_steps(changes=FOCUS, tag=f"f{FORMULA}"),
+    "teacher-control": control_steps(),
 }
 
 

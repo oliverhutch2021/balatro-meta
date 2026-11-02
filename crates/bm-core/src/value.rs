@@ -161,6 +161,10 @@ pub const PARAMS: &[(&str, f64)] = &[
     // With "deck-fix": dollars per point a held card-changing Tarot or Spectral would add to the deck's mean card
     // worth (times 52) used on the cards the build wants (`fix_dollars`).
     ("fix-dollars", FIX_DOLLARS),
+    // Recordings only (teacher.rs `explore`): the chance that a shop or pack decision takes another option the
+    // value rates nearly as high as the best, and how far below the best it may be (log chance).
+    ("explore", 0.0),
+    ("explore-within", 0.25),
     // The scales of `Scales`, as multiples of the usual samples.
     ("deals-x", 1.0),
     ("quick-x", 1.0),
