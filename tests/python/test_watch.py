@@ -445,3 +445,32 @@ def test_a_stopped_bridge_is_replaced(monkeypatch):
     monkeypatch.setattr(Path, "read_text", lambda self, *a, **k: "Linux microsoft-standard-WSL2"
                         if str(self) == "/proc/version" else real_read(self, *a, **k))
     assert watch.windows_bridge() == "new bridge" and started == [1]
+
+
+def test_the_hidden_games_window_is_kept_out_of_sight_while_it_loads(monkeypatch):
+    started = []
+
+    class FakePopen:
+        def __init__(self, cmd, **kw):
+            self.cmd, self.alive = cmd, True
+            started.append(self)
+
+        def poll(self):
+            return None if self.alive else 0
+
+        def terminate(self):
+            self.alive = False
+
+    game = checker.HiddenGame(port=12350)
+    monkeypatch.setattr(game, "command", lambda: ["uvx.exe", "balatrobot", "serve", "--port", "12350"])
+    monkeypatch.setattr(game, "prune_logs", lambda: None)
+    monkeypatch.setattr(checker.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(checker.subprocess, "run", lambda *a, **k: None)
+    assert game.launch()
+    hider, launcher = started
+    assert hider.cmd[0] == "powershell.exe" and launcher.cmd[0] == "uvx.exe", "the hider is watching first"
+    script = hider.cmd[-1]
+    assert "$port = 12350;" in script and "ShowWindow" in script and "Get-Process -Name Balatro" in script
+    assert "balatrobot" in script, "only a Balatro started by the launcher on this port is hidden"
+    game.stop()
+    assert not hider.alive and not launcher.alive

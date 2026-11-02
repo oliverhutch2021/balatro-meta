@@ -2,7 +2,8 @@
 game is compared with the engine. The viewer (make watch) starts them and stops them with itself.
 
 The hidden game is BalatroBot's own launcher with --headless --fast on a port of its own (12350), so it
-never shows a window and never touches a Balatro you have open. The companion mod
+never touches a Balatro you have open; its window, which Balatro opens while it loads (full screen if
+that's how you play), is hidden as soon as it appears (hide_window_script). The companion mod
 (mods/balatro_meta_watch) tells the checker when the game has finished playing out a move, and readies
 the run-setup deck BalatroBot's `start` needs. After every move the game's money, hands, discards, cards
 in hand, round chips, blinds and tags, jokers and consumables (with their sell values), the shop's cards,
@@ -86,13 +87,42 @@ class ModFiles:
         return out if "end" in out else None
 
 
+HIDE_FOR = 180  # seconds after a launch that its window is kept hidden (the game loads in well under that)
+
+
+def hide_window_script(port: int, seconds: int = HIDE_FOR) -> str:
+    """PowerShell that keeps the hidden game's window out of sight while it loads. Balatro opens its window
+    as your own game is set up (often full screen and black until it has loaded), before BalatroBot's
+    headless mode takes over. Every 50 ms this hides any window of a Balatro.exe started by the BalatroBot
+    launcher on this port; a Balatro you play yourself (Steam's, or make record-me's on its own port) is
+    never touched. Hiding only stops the window being drawn on screen: the game runs as before."""
+    return (
+        "Add-Type -Namespace BM -Name Win -MemberDefinition "
+        "'[DllImport(\"user32.dll\")] public static extern bool ShowWindow(System.IntPtr h, int n);'; "
+        f"$port = {int(port)}; $ours = @{{}}; $until = (Get-Date).AddSeconds({int(seconds)}); "
+        "function Test-Ours($id) { for ($i = 0; $i -lt 6 -and $id; $i++) { "
+        "$p = Get-CimInstance Win32_Process -Filter \"ProcessId=$id\" -ErrorAction SilentlyContinue; "
+        "if (-not $p) { return $false }; "
+        "if ($p.CommandLine -like '*balatrobot*' -and $p.CommandLine -match ('--port\\s+' + $port + '(\\s|$)')) "
+        "{ return $true }; "
+        "$id = $p.ParentProcessId }; return $false }; "
+        "while ((Get-Date) -lt $until) { "
+        "foreach ($g in Get-Process -Name Balatro -ErrorAction SilentlyContinue) { "
+        "if (-not $ours.ContainsKey($g.Id)) { $ours[$g.Id] = Test-Ours $g.Id }; "
+        "if ($ours[$g.Id] -and $g.MainWindowHandle -ne 0) { [BM.Win]::ShowWindow($g.MainWindowHandle, 0) | Out-Null } }; "
+        "Start-Sleep -Milliseconds 50 }"
+    )
+
+
 class HiddenGame:
-    """The headless Balatro the checks use, started through BalatroBot's launcher (uvx on Windows)."""
+    """The headless Balatro the checks use, started through BalatroBot's launcher (uvx on Windows), its
+    window kept out of sight while it loads (`hide_window_script`)."""
 
     def __init__(self, port: int = CHECK_PORT, save_folder: Path | None = None) -> None:
         self.port = port
         self.save_folder = save_folder
         self.proc: subprocess.Popen | None = None
+        self.hider: subprocess.Popen | None = None
         self.launched_at = 0.0
 
     def command(self) -> list[str] | None:
@@ -123,6 +153,13 @@ class HiddenGame:
             return False
         self.prune_logs()
         self.launched_at = time.time()
+        try:  # first, so it is watching before the window opens
+            self.hider = subprocess.Popen(["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle",
+                                           "Hidden", "-Command", hide_window_script(self.port)], cwd="/mnt/c",
+                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                          start_new_session=True)
+        except OSError:
+            self.hider = None  # the game still starts; its window just shows while it loads
         self.proc = subprocess.Popen(cmd, cwd="/mnt/c", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                      start_new_session=True)
         return True
@@ -139,9 +176,10 @@ class HiddenGame:
                            capture_output=True, timeout=30, check=False)
         except (OSError, subprocess.TimeoutExpired):
             pass
-        if self.proc is not None and self.proc.poll() is None:
-            self.proc.terminate()
-        self.proc = None
+        for proc in (self.proc, self.hider):
+            if proc is not None and proc.poll() is None:
+                proc.terminate()
+        self.proc = self.hider = None
 
     def memory_mb(self) -> float | None:
         """How much memory the hidden game uses (its working set), or None if that can't be read."""
