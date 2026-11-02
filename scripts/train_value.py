@@ -75,6 +75,12 @@ class Data:
 RUN_OFFSET = 1_000_000
 
 
+def shown(path) -> str:
+    """A path as reports show it: the home folder as ~ (reports are committed and the repo can be public)."""
+    s, home = str(path), str(Path.home())
+    return "~" + s[len(home):] if s == home or s.startswith(home + "/") else s
+
+
 def load_data(folders: Path | list[Path], max_runs: int | None = None) -> Data:
     """Every chunk of one or more recordings, each in run order (the recorder writes chunks of whole runs, sorted),
     the newest last."""
@@ -499,9 +505,9 @@ def train(a) -> dict:
             raise SystemExit(f"The engine reads the network differently (by {engine_diff}).")
     secs = time.time() - t0
     report = {
-        "kind": "value-net", "data": str(a.data[-1]), "recording": {k: man.get(k) for k in (
+        "kind": "value-net", "data": shown(a.data[-1]), "recording": {k: man.get(k) for k in (
             "bot", "seed_base", "runs", "rows", "wins", "value_net", "value_weight", "teacher_options")},
-        "older_recordings": [{"data": str(d), **{k: m.get(k) for k in ("bot", "seed_base", "runs", "rows", "wins",
+        "older_recordings": [{"data": shown(d), **{k: m.get(k) for k in ("bot", "seed_base", "runs", "rows", "wins",
                                                                        "value_net", "value_weight")}}
                              for d, m in zip(a.data[:-1], data.manifests[:-1])],
         "inputs": data.inputs, "input_version": version, "chosen": cfg, "tried": tried,

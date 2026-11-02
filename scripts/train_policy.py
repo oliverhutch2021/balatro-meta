@@ -74,6 +74,12 @@ BLOCK_FIELDS = ("end_runs", "end_seconds", "runs", "wins", "ante", "moves", "ref
 CUT = "Too many moves"  # what ends a run cut short (the engine's tally::CUT)
 
 
+def shown(path) -> str:
+    """A path as reports show it: the home folder as ~ (reports are committed and the repo can be public)."""
+    s, home = str(path), str(Path.home())
+    return "~" + s[len(home):] if s == home or s.startswith(home + "/") else s
+
+
 def engine():
     from balatro_meta import _engine
 
@@ -586,7 +592,7 @@ def imitate(a) -> dict:
             best = (jl, {k2: v2.detach().clone() for k2, v2 in model.state_dict().items()})
     model.load_state_dict(best[1])
     save(torch, Path(a.out), model, {"kind": "imitate", "data": str(a.data)})
-    report = {"kind": "imitate", "data": str(a.data), "moves": int(keep.sum()), "train_moves": len(train_rows),
+    report = {"kind": "imitate", "data": shown(a.data), "moves": int(keep.sum()), "train_moves": len(train_rows),
               "judge_moves": len(judge_rows), "weights": sum(p.numel() for p in model.parameters()),
               "cfg": model.cfg, "history": history, "device": str(device), "seconds": round(time.time() - t0, 1),
               "model": str(a.out)}

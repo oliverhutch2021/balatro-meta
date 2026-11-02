@@ -20,7 +20,13 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   names. Nothing from them goes into this repo: no code, comments, text, art
   or sound. Rules notes in `rules/` are in our own words; the engine is our own
   Rust. Only facts that exact seeds depend on (stream names, constants) are
-  carried over. The repo stays private.
+  carried over.
+- **Public repo.** The repo can be public: it is an unofficial fan project
+  (README), holds only our own work, and names no person, account or
+  computer: no real names, user names, e-mail addresses, home folders or
+  host names in code, notes, results or commit messages. Reports show the
+  home folder as `~` and the machine as `PC` (`jobs.public`, `jobs.HOST`).
+  The user's own recorded games (`.sync/me/`) and the models stay off it.
 
 ## Layout
 
@@ -134,6 +140,6 @@ baseline.
 
 ## Workflow
 
-Claude writes code in the cloud; the user's PC (WSL2 Ubuntu, 16
-threads, RTX 4070 Ti 12 GB) runs heavy jobs. The cloud cannot push to GitHub:
+Claude writes code in the cloud; the user's PC (WSL2 Ubuntu, 16 threads,
+RTX 4070 Ti 12 GB) runs heavy jobs. The cloud cannot push to GitHub:
 Claude leaves `.sync/claude.bundle`, the user runs `make sync` and pushes.

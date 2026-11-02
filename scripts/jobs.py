@@ -43,6 +43,8 @@ WATCH = SYNC / "watch"  # what the live viewer reads (make watch)
 PROGRESS = ROOT / "results" / "progress.jsonl"
 # Big recordings live on the WSL disk, like the build: the repo's drive only holds code and results.
 DATA = Path(os.environ.get("BM_DATA", Path.home() / ".cache" / "balatro-meta" / "data"))
+# How results name the machine that ran them (committed, so not the computer's own name).
+HOST = os.environ.get("BM_HOST", "PC")
 PY = sys.executable
 MAKE = ["make", "--no-print-directory"]
 
@@ -623,6 +625,12 @@ def _first_line(*cmd: str) -> str | None:
         return None
 
 
+def public(text: str) -> str:
+    """Text that goes into a committed result with the home folder as ~ (the repo can be public)."""
+    home = str(Path.home())
+    return text.replace(home + "/", "~/").replace(home, "~") if home not in ("", "/") else text
+
+
 def machine() -> dict:
     mem = None
     try:
@@ -635,7 +643,7 @@ def machine() -> dict:
         load = [round(x, 1) for x in os.getloadavg()]  # how busy Linux was (other jobs slow benchmarks)
     except OSError:
         load = None
-    return {"host": socket.gethostname(), "platform": platform.platform(), "cpu_threads": os.cpu_count(),
+    return {"host": HOST, "platform": platform.platform(), "cpu_threads": os.cpu_count(),
             "ram_gb": mem, "load_avg_1_5_15": load, "python": platform.python_version(),
             "rustc": _first_line("rustc", "--version"),
             "gpu": _first_line("nvidia-smi", "--query-gpu=name,memory.total,driver_version",
@@ -811,15 +819,15 @@ def watch_note(job: str, st: dict, steps: list, state: str, step: str | None = N
 def finish(job: str, st: dict) -> None:
     stamp = {"job": job, "commit": st["commit"], "started": st["started"], "finished": now(),
              "machine": machine(), "steps": {k: v["seconds"] for k, v in st["steps"].items()},
-             "commands": {s[0]: " ".join(f"{k}={v}" for k, v in (s[2] if len(s) > 2 else {}).items())
-                          + (" " if len(s) > 2 else "") + shlex.join(s[1]) for s in JOBS[job]}}
+             "commands": {s[0]: public(" ".join(f"{k}={v}" for k, v in (s[2] if len(s) > 2 else {}).items())
+                                       + (" " if len(s) > 2 else "") + shlex.join(s[1])) for s in JOBS[job]}}
     runs = ROOT / "results" / "runs"
     runs.mkdir(parents=True, exist_ok=True)
     (runs / f"{job}.json").write_text(json.dumps(stamp, indent=1) + "\n")
     git("add", "--all", "results")
     if git("diff", "--cached", "--name-only"):
-        git("commit", "--quiet", "-m", f"results({job}): {stamp['machine']['host']}, "
-                                       f"{stamp['machine']['cpu_threads']} threads, code {st['commit'][:9]}")
+        git("commit", "--quiet", "-m", f"results({job}): {stamp['machine']['cpu_threads']} threads, "
+                                       f"code {st['commit'][:9]}")
     base = "refs/remotes/claude/main"
     has_base = subprocess.run(["git", "rev-parse", "--verify", "--quiet", base], cwd=ROOT,
                               stdout=subprocess.DEVNULL).returncode == 0

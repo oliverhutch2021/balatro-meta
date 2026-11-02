@@ -405,3 +405,14 @@ def test_the_big_trial_is_named_so_a_clear_gain_is_recorded_with(tmp_path):
     assert out.match(f"f{f}-*-vs-*-on-teacher-w1.json"), "best_recording reads it"
     assert "teacher-big" in jobs.JOBS
 
+
+
+def test_committed_results_name_no_computer_and_no_home_folder(monkeypatch):
+    home = str(Path.home())
+    assert jobs.public(f"scripts/train_value.py --data {home}/.cache/balatro-meta/data/value-2") == \
+        "scripts/train_value.py --data ~/.cache/balatro-meta/data/value-2"
+    assert jobs.public(f"{home}/.venvs/x/bin/python -m pytest") == "~/.venvs/x/bin/python -m pytest"
+    assert jobs.public("models/value-3.bin") == "models/value-3.bin"
+    monkeypatch.delenv("BM_HOST", raising=False)
+    import importlib
+    assert importlib.reload(jobs).machine()["host"] == "PC"
