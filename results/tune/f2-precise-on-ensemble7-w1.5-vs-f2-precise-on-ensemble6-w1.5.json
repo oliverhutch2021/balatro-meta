@@ -1,0 +1,31 @@
+{
+ "kind": "comparison",
+ "a": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.629,
+  "wins": 1258,
+  "blinds_beaten": 21.253,
+  "report": "results/value/f2-precise-on-ensemble6-w1.5.json"
+ },
+ "b": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.6245,
+  "wins": 1249,
+  "blinds_beaten": 21.3615,
+  "report": "results/value/f2-precise-on-ensemble7-w1.5.json"
+ },
+ "seeds": 2000,
+ "win_rate_diff": -0.0045,
+ "win_rate_diff_ci": [
+  -0.026346736685372487,
+  0.017346736685372486
+ ],
+ "only_a_won": 253,
+ "only_b_won": 244,
+ "p_value": 0.7197473709322041,
+ "blinds_beaten_diff": 0.1085,
+ "blinds_beaten_diff_ci": [
+  -0.07398745463113036,
+  0.29098745463113035
+ ]
+}
