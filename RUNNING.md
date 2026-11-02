@@ -549,6 +549,21 @@ has finished, in a second Ubuntu tab:
 cd /mnt/h/balatro-meta && touch /tmp/bm-mark && while [ ! .sync/DONE-teacher-control.txt -nt /tmp/bm-mark ]; do sleep 60; done && make teacher-weights
 ```
 
+## Step 21: the exam, then round 10 with whole builds (about 6 hours after step 20)
+
+`make teacher-exam` plays the best teacher there is on 8,000 seeds kept for that alone (seed base 5003): ideas are
+compared and chosen on the usual seeds, which flatters them a little, so the headline number comes from seeds that
+never chose anything. `make learned-10` is the first round whose recording explores whole builds: a quarter of its
+runs commit from the start to one hand type, picked at random by the run's number (never from the game), its
+Planets taken and bought as the focus's, so the learned value sees how builds the teacher wouldn't choose end. To
+start them on their own once step 20 has finished, in a third Ubuntu tab:
+
+```
+cd /mnt/h/balatro-meta && touch /tmp/bm-mark2 && while [ ! .sync/DONE-teacher-weights.txt -nt /tmp/bm-mark2 ]; do sleep 60; done && make teacher-exam && make learned-10 && make teacher-control
+```
+
+Ctrl+C stops it whenever you need the PC; the same line (or `make learned-10`) carries on where it stopped.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

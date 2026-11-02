@@ -158,8 +158,53 @@ pub(crate) fn focus_hand(run: &Run) -> Option<HandType> {
         .filter(|&h| run.hand_levels.get(h).played >= FOCUS_PLAYS)
 }
 
+/// "commit=p", recordings only (whole-build exploration): with chance `p` a run commits from its first decision to
+/// one hand type, its focus from the start, whatever it plays: its Planets taken and bought as the focus's are. The
+/// hand and whether the run commits come from the run's own number (the top bits of the salt every decision of a
+/// recorded run gets: `examples/baseline.rs`), never from the game, so they say nothing about the run. The
+/// recordings then hold whole runs of builds the teacher would not choose, and the learned value sees how they end
+/// (round 7's "explore" only takes single moves the value already rates nearly as high, along its own habits).
+const COMMIT_HANDS: [HandType; 7] = [
+    HandType::Pair,
+    HandType::TwoPair,
+    HandType::ThreeOfAKind,
+    HandType::Straight,
+    HandType::Flush,
+    HandType::FullHouse,
+    HandType::FourOfAKind,
+];
+
+thread_local! {
+    /// The run's commitment once decided (`committed`), forgotten at each run's start (`new_run`).
+    static COMMIT: std::cell::Cell<Option<Option<HandType>>> = const { std::cell::Cell::new(None) };
+}
+
+/// "commit": the hand this run is committed to, if any (decided at its first decision, kept for the run).
+fn committed(salt: u64) -> Option<HandType> {
+    let p = param("commit").unwrap_or(0.0);
+    if p <= 0.0 {
+        return None;
+    }
+    if let Some(c) = COMMIT.with(|c| c.get()) {
+        return c;
+    }
+    let mut z = (salt >> 20) ^ 0xC0FF_EE00_D15E_A5E5;
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^= z >> 31;
+    let c = ((z % 10_000) as f64 / 10_000.0 < p)
+        .then(|| COMMIT_HANDS[(z / 10_000 % COMMIT_HANDS.len() as u64) as usize]);
+    COMMIT.with(|cell| cell.set(Some(c)));
+    c
+}
+
+/// The hand the focus moves serve: the committed one ("commit"), else the focus (`focus_hand`).
+fn run_focus(run: &Run, salt: u64) -> Option<HandType> {
+    committed(salt).or_else(|| focus_hand(run))
+}
+
 /// "focus": the card to take from a Celestial pack: a Black Hole (every hand a level), else the focus's Planet.
-fn focus_pick(run: &Run) -> Option<usize> {
+fn focus_pick(run: &Run, salt: u64) -> Option<usize> {
     let p = run.pack.as_ref()?;
     if BOOSTERS[p.booster as usize].kind != PackKind::Celestial {
         return None;
@@ -172,14 +217,14 @@ fn focus_pick(run: &Run) -> Option<usize> {
     if let Some(i) = (0..n).find(|&i| consumable(i) == Some(ConsumableKind::BlackHole)) {
         return Some(i);
     }
-    let f = focus_hand(run)?;
+    let f = run_focus(run, salt)?;
     (0..n).find(|&i| consumable(i).and_then(|k| k.planet_hand()) == Some(f))
 }
 
 /// "focus": in the shop, using a held Planet of the focus (unless held Planets pay), else buying one from the
 /// row when it leaves `FOCUS_KEEP` (any money from ante 5).
-fn focus_shop_move(run: &Run) -> Option<(MoveKind, u64)> {
-    let f = focus_hand(run)?;
+fn focus_shop_move(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
+    let f = run_focus(run, salt)?;
     if !planets_pay_held(run) {
         if let Some(i) = run.consumables.iter().position(|c| {
             c.kind.planet_hand() == Some(f) && run.can_use_consumable(c, &[], UseFrom::Slots)
@@ -2373,7 +2418,7 @@ fn judged_moves(
 
 fn value_pack_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     if focus_on() {
-        if let Some(i) = focus_pick(run) {
+        if let Some(i) = focus_pick(run, salt) {
             return (MoveKind::PackChoose, i as u64);
         }
     }
@@ -2451,7 +2496,7 @@ fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
         return move_towards(run, &want).unwrap_or((MoveKind::LeaveShop, 0));
     }
     if focus_on() {
-        if let Some(m) = focus_shop_move(run) {
+        if let Some(m) = focus_shop_move(run, salt) {
             return m;
         }
     }
@@ -2733,6 +2778,7 @@ pub fn decision(run: &Run, salt: u64) -> (Run, Vec<(MoveKind, u64)>, (MoveKind, 
 /// Tarots used, say), so a run must not meet another run's: each run then plays the same however many runs
 /// came before it on its thread, and a job's results don't depend on how its runs fell to its threads.
 pub fn new_run() {
+    COMMIT.with(|c| c.set(None));
     CHOICES.with(|c| c.borrow_mut().clear());
     HAND_ORDERS.with(|c| c.borrow_mut().clear());
     WEAKEST.with(|c| c.borrow_mut().clear());
@@ -3523,7 +3569,7 @@ mod tests {
             .unwrap() as u8;
         pack(&mut run, &[Saturn, Mercury, Jupiter]);
         run.pack.as_mut().unwrap().booster = celestial;
-        assert_eq!(focus_pick(&run), Some(1));
+        assert_eq!(focus_pick(&run, 0), Some(1));
         assert_eq!(
             value_pack_move(&run, 3),
             (MoveKind::PackChoose, 1),
@@ -3537,11 +3583,84 @@ mod tests {
         // A Black Hole first.
         pack(&mut run, &[Saturn, Mercury, BlackHole]);
         run.pack.as_mut().unwrap().booster = celestial;
-        assert_eq!(focus_pick(&run), Some(2));
+        assert_eq!(focus_pick(&run, 0), Some(2));
         // Not the focus's: the value decides.
         pack(&mut run, &[Saturn, Venus, Jupiter]);
         run.pack.as_mut().unwrap().booster = celestial;
-        assert_eq!(focus_pick(&run), None);
+        assert_eq!(focus_pick(&run, 0), None);
+    }
+
+    #[test]
+    fn a_committed_run_serves_one_hand_from_the_start_chosen_by_its_number_alone() {
+        use crate::content::ConsumableKind::*;
+        let mut run = Run::scenario("COMMIT1", crate::blinds::BlindKind::Small);
+        run.hand_levels.get_mut(HandType::Pair).played = 9; // the focus, were the run not committed
+        new_run();
+        assert_eq!(committed(5 << 20), None, "off unless asked");
+        assert_eq!(run_focus(&run, 5 << 20), Some(HandType::Pair));
+        let commits: Vec<Option<HandType>> = (0..400u64)
+            .map(|i| {
+                new_run();
+                with_options(&["commit=1"], || {
+                    let c = committed(i << 20 | 7);
+                    assert_eq!(
+                        committed(i << 20 | 300),
+                        c,
+                        "the same for every decision of the run"
+                    );
+                    c
+                })
+            })
+            .collect();
+        assert!(
+            commits.iter().all(|c| c.is_some()),
+            "every run commits at 1"
+        );
+        for h in COMMIT_HANDS {
+            assert!(commits.contains(&Some(h)), "{h:?} comes up");
+        }
+        let some = (0..400u64)
+            .filter(|&i| {
+                new_run();
+                with_options(&["commit=0.25"], || committed(i << 20).is_some())
+            })
+            .count();
+        assert!((60..140).contains(&some), "about a quarter commit: {some}");
+        // Committed to Straight: its Planet is taken over the most played hand's, and the same on any run state.
+        let i = (0..400u64)
+            .find(|&i| commits[i as usize] == Some(HandType::Straight))
+            .unwrap();
+        let celestial = BOOSTERS
+            .iter()
+            .position(|b| b.kind == PackKind::Celestial)
+            .unwrap() as u8;
+        let cards = [Mercury, Saturn]
+            .iter()
+            .map(|&k| PackCard::Consumable(run.make_consumable(k)))
+            .collect();
+        run.pack = Some(crate::packs::OpenPack {
+            booster: celestial,
+            cards,
+            choices_left: 1,
+            return_to: Phase::Shop,
+        });
+        run.phase = Phase::Pack;
+        new_run();
+        assert_eq!(
+            focus_pick(&run, i << 20),
+            Some(0),
+            "Mercury, the Pair's, without commit"
+        );
+        new_run();
+        with_options(&["commit=1"], || {
+            assert_eq!(focus_pick(&run, i << 20), Some(1), "Saturn, the Straight's")
+        });
+        new_run();
+        assert_eq!(
+            COMMIT.with(|c| c.get()),
+            None,
+            "forgotten at the next run's start"
+        );
     }
 
     #[test]

@@ -155,19 +155,47 @@ def best_recording(root: Path = ROOT) -> list[str]:
 # a value learned only from the teacher's own choices can only refine its habits. Measuring never explores.
 EXPLORE = "explore=0.1"
 EXPLORE_FROM = 7
+# From round 10 a quarter of the recorded runs also commit from the start to one hand type, picked at random by the
+# run's number (teacher option "commit": its Planets taken and bought as the focus's): whole builds the teacher
+# wouldn't choose, played to the end, where "explore" only tries single moves along its own habits.
+COMMIT = "commit=0.25"
+COMMIT_FROM = 10
 
 
 def exploring(args: list[str], n: int) -> list[str]:
-    """A recording's teacher arguments, with the exploration rounds from EXPLORE_FROM on use."""
+    """A recording's teacher arguments, with the exploration rounds from EXPLORE_FROM on use (and from COMMIT_FROM,
+    whole-build exploration too)."""
     if n < EXPLORE_FROM:
         return args
+    extra = f"{EXPLORE},{COMMIT}" if n >= COMMIT_FROM else EXPLORE
     args = list(args)
     if "--teacher-options" in args:
         i = args.index("--teacher-options") + 1
-        args[i] = f"{args[i]},{EXPLORE}"
+        args[i] = f"{args[i]},{extra}"
     else:
-        args += ["--teacher-options", EXPLORE]
+        args += ["--teacher-options", extra]
     return args
+
+
+# make teacher-exam: the headline number. Ideas are compared on the usual seeds (seed base 1) and the winners kept,
+# which flatters those seeds a little; the exam's seeds (a base no recording or trial uses) only ever measure the
+# best teacher there is, never choose anything.
+EXAM_SEED = 5003
+EXAM_RUNS = 8000
+
+
+def exam_steps(root: Path = ROOT, runs: int = EXAM_RUNS) -> list[tuple]:
+    """make teacher-exam: the teacher a round would record with (best_recording: the best networks, weight and
+    options, without exploring) on the exam's seeds."""
+    args = best_recording(root)
+    net = args[args.index("--value-net") + 1] if "--value-net" in args else ""
+    rounds = sorted({int(n) for n in re.findall(r"value-(\d+)b?\.bin", net)})
+    w = args[args.index("--value-weight") + 1] if "--value-weight" in args else "0"
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else ""
+    name = f"exam-{runs // 1000}k-f{FORMULA}-{file_safe(opts) or 'plain'}-rounds{rounds[-1] if rounds else 0}-w{w}"
+    return [("build", [*MAKE, "build"]),
+            ("exam", [*BASELINE, "--bot", "teacher", *args, "--runs", str(runs), "--seed", str(EXAM_SEED),
+                      "--out", f"results/exam/{name}.json"])]
 
 
 def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
@@ -568,6 +596,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-control": control_steps(),
     "teacher-big": big_steps(),
     "teacher-weights": weight_steps(),
+    "teacher-exam": exam_steps(),
 }
 
 

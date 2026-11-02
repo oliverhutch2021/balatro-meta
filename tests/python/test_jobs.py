@@ -453,6 +453,32 @@ def test_a_clear_gain_at_another_weight_is_what_the_next_round_records_with(tmp_
     assert args[args.index("--value-weight") + 1] == "2.5" and args[args.index("--teacher-options") + 1] == "precise"
 
 
+def test_from_round_10_a_quarter_of_the_recorded_runs_commit_to_one_hand():
+    assert jobs.exploring(["--teacher-options", "precise"], 9) == ["--teacher-options", "precise,explore=0.1"]
+    assert jobs.exploring(["--teacher-options", "precise"], 10) == \
+        ["--teacher-options", "precise,explore=0.1,commit=0.25"]
+    rec = dict((n, a) for n, a, *_ in jobs.JOBS["teacher-data-10"])["record"]
+    assert "commit=0.25" in rec[rec.index("--teacher-options") + 1]
+
+
+def test_the_exam_measures_the_best_teacher_on_seeds_used_for_nothing_else(tmp_path):
+    folder = tmp_path / "results" / "value"
+    folder.mkdir(parents=True)
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "value-1.bin").write_bytes(b"BMVN")
+    (folder / "teacher-w1.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": 0.4}))
+    steps = {n: a for n, a, *_ in jobs.exam_steps(tmp_path)}
+    exam = steps["exam"]
+    assert exam[exam.index("--seed") + 1] == str(jobs.EXAM_SEED) and exam[exam.index("--runs") + 1] == "8000"
+    assert exam[exam.index("--value-net") + 1] == "models/value-1.bin"
+    assert exam[exam.index("--teacher-options") + 1] == "precise" and "explore" not in " ".join(exam)
+    assert exam[exam.index("--out") + 1] == f"results/exam/exam-8k-f{jobs.FORMULA}-precise-rounds1-w1.json"
+    recording_bases = {int(a[a.index("--seed") + 1]) for job, steps in jobs.JOBS.items() if job.startswith("teacher-data")
+                       for n, a, *_ in steps if n == "record"}
+    assert jobs.EXAM_SEED not in recording_bases | {1}
+    assert "teacher-exam" in jobs.JOBS
+
+
 def test_committed_results_name_no_computer_and_no_home_folder(monkeypatch):
     home = str(Path.home())
     assert jobs.public(f"scripts/train_value.py --data {home}/.cache/balatro-meta/data/value-2") == \

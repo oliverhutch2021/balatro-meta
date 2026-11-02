@@ -165,6 +165,9 @@ pub const PARAMS: &[(&str, f64)] = &[
     // value rates nearly as high as the best, and how far below the best it may be (log chance).
     ("explore", 0.0),
     ("explore-within", 0.25),
+    // Recordings only (teacher.rs `committed`): the chance that a run commits from the start to one hand type, its
+    // Planets taken and bought as the focus's (whole-build exploration).
+    ("commit", 0.0),
     // The scales of `Scales`, as multiples of the usual samples.
     ("deals-x", 1.0),
     ("quick-x", 1.0),
