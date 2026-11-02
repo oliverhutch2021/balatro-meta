@@ -1,0 +1,30 @@
+{
+ "job": "teacher-control",
+ "commit": "394b5c5393ca223e98948f97620873d5553e23b6",
+ "started": "2026-11-02T04:33:29+00:00",
+ "finished": "2026-11-02T04:44:13+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   16.4,
+   16.3,
+   16.1
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 1,
+  "precise": 642,
+  "compare": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "precise": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin --value-weight 1.5 --teacher-options precise --runs 2000 --seed 1 --out results/value/f2-precise-on-ensemble6-w1.5.json",
+  "compare": "scripts/compare_runs.py results/value/f2-precise-on-ensemble5-w1.5.json results/value/f2-precise-on-ensemble6-w1.5.json --out results/tune/f2-precise-on-ensemble6-w1.5-vs-f2-precise-on-ensemble5-w1.5.json"
+ }
+}
