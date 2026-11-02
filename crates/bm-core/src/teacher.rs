@@ -116,13 +116,28 @@ pub const OPTIONS: &[&str] = &[
     // focus is the hand it has played most (High Card aside, as the run's info shows it), once played four
     // times (`focus_hand`). A Celestial pack's Black Hole, else the focus's Planet, is taken whenever offered;
     // the focus's Planet is bought in the shop and used whenever it leaves $4 (any money from ante 5).
+    // The teacher's own play since 2 November (with "fair-skip": +1.64 points on 8,000 seeds, 64.24% against
+    // 62.60%, p = 0.001), so the name now changes nothing; "no-focus" switches it off.
     "focus",
+    "no-focus",
     // A pack's options judged against the run once the pack is skipped, as each pick is judged once the pack has
     // closed, not against the position in the pack, whose learned value also reads the cards on offer (on 8 test
     // runs it rated a Buffoon pack's position 0.07 above the run after skipping it, so a joker had to beat that
     // too; an Arcana pack's 0.05 below). (A shop's options stay in the shop, so they are judged against it.)
+    // The teacher's own play since 2 November, with "focus"; "no-fair-skip" switches it off.
     "fair-skip",
+    "no-fair-skip",
 ];
+
+/// "focus" is on unless "no-focus" is (the teacher's own play since 2 November).
+fn focus_on() -> bool {
+    !on("no-focus")
+}
+
+/// "fair-skip" is on unless "no-fair-skip" is.
+fn fair_skip_on() -> bool {
+    !on("no-fair-skip")
+}
 
 /// Plays of a hand before it can be the run's focus ("focus").
 const FOCUS_PLAYS: u32 = 4;
@@ -2357,7 +2372,7 @@ fn judged_moves(
 }
 
 fn value_pack_move(run: &Run, salt: u64) -> (MoveKind, u64) {
-    if on("focus") {
+    if focus_on() {
         if let Some(i) = focus_pick(run) {
             return (MoveKind::PackChoose, i as u64);
         }
@@ -2370,7 +2385,7 @@ fn value_pack_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     let options = judged_moves(run, vs, lists);
     // A pick that leaves the pack open (the first of a Mega pack's two) stays judged against the pack.
     let last_pick = run.pack.as_ref().is_some_and(|p| p.choices_left <= 1);
-    let skipped = (on("fair-skip") && last_pick)
+    let skipped = (fair_skip_on() && last_pick)
         .then(|| after(run, vs ^ 0x5EED, &[(MoveKind::PackSkip, 0)]))
         .flatten();
     choose_against(run, skipped.as_ref(), vs, options).unwrap_or((MoveKind::PackSkip, 0))
@@ -2435,7 +2450,7 @@ fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     if let Some(want) = leaving {
         return move_towards(run, &want).unwrap_or((MoveKind::LeaveShop, 0));
     }
-    if on("focus") {
+    if focus_on() {
         if let Some(m) = focus_shop_move(run) {
             return m;
         }
@@ -3509,9 +3524,16 @@ mod tests {
         pack(&mut run, &[Saturn, Mercury, Jupiter]);
         run.pack.as_mut().unwrap().booster = celestial;
         assert_eq!(focus_pick(&run), Some(1));
+        assert_eq!(
+            value_pack_move(&run, 3),
+            (MoveKind::PackChoose, 1),
+            "the teacher's own play"
+        );
         with_options(&["focus"], || {
             assert_eq!(value_pack_move(&run, 3), (MoveKind::PackChoose, 1));
         });
+        assert!(with_options(&["no-focus"], || !focus_on()));
+        assert!(with_options(&["no-fair-skip"], || !fair_skip_on()) && fair_skip_on());
         // A Black Hole first.
         pack(&mut run, &[Saturn, Mercury, BlackHole]);
         run.pack.as_mut().unwrap().booster = celestial;

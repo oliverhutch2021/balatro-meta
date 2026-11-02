@@ -234,8 +234,10 @@ TUNE_2 = ("planner-edge=0.3,sharpness=2.5", "planner-edge=0.3,sharpness=2.5,long
 IDEAS = ("final-hand", "five-kind", "overstock=0.4", "midas=3")
 # The value formula's numbers in force (crates/bm-core/src/value.rs). Version 2: the planner's edge 0.3, sharpness 2.5,
 # the long run 0.35, from make teacher-tune-2 (59.85% against 53.4% on the same 2,000 seeds). A trial is set only
-# against a control measured with the same numbers: their reports carry the version (f2-...).
-FORMULA = 2
+# against a control measured with the same numbers: their reports carry the version (f2-...). Version 3: the same
+# numbers, with "focus" and "fair-skip" the teacher's own play (make teacher-big: +1.64 points on 8,000 seeds, 64.24%
+# against 62.60%, p = 0.001), so trials from 2 November are set against controls that play that way (f3-...).
+FORMULA = 3
 # make teacher-next, on formula 2: twice the samples behind the teacher's first (quick) look at each option, which on
 # the player's 1,325 recorded shop decisions chose better 47 times and worse 12 (judged alike, examples/judge.rs
 # --phase SHOP); the player's four ideas together (each won a little alone, none clearly); and two of the player's

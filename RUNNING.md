@@ -508,6 +508,21 @@ With a longer night: `make teacher-control && make teacher-big` after it. The se
 networks; `make teacher-big` tries `focus` and `fair-skip` together (+1.05 points on 2,000 seeds, not clear) on 8,000
 seeds, where a 1-point gain shows (about 1.5 hours).
 
+## Step 18: focus and fair skipping become the bot's own play (about 5 hours)
+
+`make teacher-big` found the first clear gain since the formula was tuned: `focus` and `fair-skip` together won
+64.24% of 8,000 seeds against 62.60% (+1.64 points, p = 0.001). They are now how the bot plays (`no-focus` and
+`no-fair-skip` switch them off), and trials from here are set against controls that play that way (`f3-` in their
+reports). Its comparison step failed on that many seeds (a number too large for the test); Claude ran the fixed
+test, so `make teacher-big` only has to commit the results. With no job running:
+
+```
+make teacher-big && make sync && make teacher-control && make learned-8 && make teacher-control
+```
+
+The first `make teacher-control` measures the new play on the 2,000 trial seeds (the new control); `make learned-8`
+is round 8, exploring, and the last `make teacher-control` sets round 8's networks against round 7's.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a
