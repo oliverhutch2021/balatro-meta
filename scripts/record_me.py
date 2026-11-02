@@ -2,6 +2,7 @@
 
     make record-me               Balatro opens at 4x speed; play White Stake, Red Deck runs as you normally would
     make record-me SPEED=fast    the game at 10x (any number works too: SPEED=2)
+    make record-me SEEDS=AAAA1111,BBBB2222    the first runs on these seeds (then fresh ones)
 
 Balatro opens through BalatroBot's launcher on a port of its own (12351), like the hidden game of the real-game checks
 but in a window with sound. From the main menu each run starts by itself, with a fresh random seed, so the engine can
@@ -185,8 +186,10 @@ class LiveReplay:
 
 class Recorder:
     def __init__(self, speed: float, port: int = PORT, api: Api | None = None, files=None, game=None, say=print,
-                 auto_start: bool = True, log=None) -> None:
+                 auto_start: bool = True, log=None, seeds: list[str] | None = None) -> None:
         self.speed = speed
+        # Seeds asked for (SEEDS=...): the next runs start on them, in order, then on fresh ones.
+        self.seeds = list(seeds or [])
         self.port = port
         self.say = say
         self.log = log or (lambda text: None)
@@ -264,6 +267,8 @@ class Recorder:
                 self.last_seen = f"skip:{gs.get('seed')}"
             return
         self.run = RunFile(gs, seeded=self.started_seed == gs.get("seed"), speed=self.speed)
+        if self.seeds and gs.get("seed") == self.seeds[0]:
+            self.seeds.pop(0)
         self.replay = None
         self.last_ante = None
         self.say(f"Recording run {self.finished + 1} (seed {gs.get('seed')}).")
@@ -328,7 +333,7 @@ class Recorder:
         self.highlight = hl
 
     def start_next(self) -> None:
-        seed = watch.fresh_seed()
+        seed = self.seeds[0] if self.seeds else watch.fresh_seed()
         self.started_seed = seed
         try:
             self.api.call("start", {"deck": "RED", "stake": "WHITE", "seed": seed})
@@ -466,7 +471,14 @@ class PlayGame(checker.HiddenGame):
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--speed", default=os.environ.get("SPEED") or "4", help="4 (default), fast (10x), or a number")
+    ap.add_argument("--seeds", default=os.environ.get("SEEDS") or "",
+                    help="seeds for the first runs, comma-separated (then fresh ones)")
     a = ap.parse_args(argv)
+    seeds = [x.strip().upper() for x in a.seeds.split(",") if x.strip()]
+    bad = [x for x in seeds if len(x) != 8 or not x.isalnum()]
+    if bad:
+        print(f"A seed is eight letters and digits: {', '.join(bad)}")
+        return 2
     try:
         speed = speed_value(a.speed)
     except ValueError as e:
@@ -492,7 +504,9 @@ def main(argv: list[str] | None = None) -> int:
     if msg:
         print("Installed the companion mod.")
     log = log_to(RUNS.parent / "recorder.log")
-    rec = Recorder(speed, say=lambda text: (print(text), log(text)), log=log)
+    rec = Recorder(speed, say=lambda text: (print(text), log(text)), log=log, seeds=seeds)
+    if seeds:
+        rec.say(f"The next runs start on {', '.join(seeds)}, in that order.")
     try:
         return rec.loop()
     except KeyboardInterrupt:

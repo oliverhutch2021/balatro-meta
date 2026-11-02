@@ -117,6 +117,21 @@ def test_runs_are_started_recorded_ended_and_replayed(tmp_path, monkeypatch):
     assert any("saved" in s for s in said)
 
 
+def test_runs_start_on_the_seeds_asked_for_then_on_fresh_ones(tmp_path, monkeypatch):
+    monkeypatch.setattr(record_me, "RUNS", tmp_path)
+    monkeypatch.setattr(record_me, "START_DELAY", 0.0)
+    fake = FakeGame(5)
+    rec = record_me.Recorder(4, api=fake, files=NoMod(), game=None, say=lambda s: None, seeds=["ASKED123"])
+    for _ in range(20000):
+        rec.step()
+        fake.person()
+        if len(fake.finished) == 2 and fake.game is None:
+            break
+    rec.close()
+    assert fake.finished[0] == "ASKED123"
+    assert fake.finished[1] != "ASKED123" and not rec.seeds
+
+
 def test_a_run_of_another_deck_or_stake_is_not_recorded(tmp_path, monkeypatch):
     monkeypatch.setattr(record_me, "RUNS", tmp_path)
     fake = FakeGame(4)

@@ -388,7 +388,8 @@ the bot's.
    ```
 
    Balatro opens (at 4x speed; `make record-me SPEED=fast` for 10x) with BalatroBot and the companion mod, and a
-   White Stake, Red Deck run starts by itself with a fresh random seed.
+   White Stake, Red Deck run starts by itself with a fresh random seed. To play given seeds first (seeds the bot
+   keeps losing, say): `make record-me SEEDS=MV3B41CL,XR7SBBFC`.
 3. Play. The recorder only watches: it never clicks or changes anything. When a run ends, win or lose, choose
    Main Menu (after a win: Main Menu, not Endless; beating ante 8 is the win we count) and the next run starts by
    itself a few seconds later. You can change the game speed in the game's own options as usual.

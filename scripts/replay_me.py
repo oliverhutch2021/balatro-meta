@@ -574,9 +574,11 @@ class Replay:
                 reserves.append((index, line.after(m[2], m[3], gs, index)))
         return line.after(best[2], best[3], gs, index)
 
-    def feed(self, gs: dict, highlight: list | None = None) -> list[tuple[int, int]] | None:
+    def feed(self, gs: dict, highlight: list | None = None,
+             ahead: list[tuple[dict, list | None]] | None = None) -> list[tuple[int, int]] | None:
         """The next settled state the game showed. Returns the engine's moves that lead there (an empty list
-        when only the order of cards or jokers changed), or None if no move explains it (yet; see `lost`)."""
+        when only the order of cards or jokers changed), or None if no move explains it (yet; see `lost`).
+        `ahead`: the states that come next, when the whole run is known (a recorded run, not a live one)."""
         self.index += 1
         self.history.append((gs, highlight))
         if self.lost:
@@ -591,7 +593,11 @@ class Replay:
             self.reserves.append((self.index, self.line))
             self.reserves.extend(alternatives)
         if new is None:
-            new = self.from_reserve()
+            # A state caught while a move was still landing (a pack's card taken while the pack still shows, a
+            # pack opened before its price is paid) is passed over when this line explains one of the next states,
+            # unless a kept-back line explains them too (an earlier choice was then wrong).
+            soon = self.explains_soon(self.line, [*passed, gs], ahead)
+            new = self.from_reserve(ahead if soon else None)
         if new is None:
             self.skipped += 1
             if self.skipped >= self.MAX_SKIPPED:
@@ -604,11 +610,27 @@ class Replay:
         del self.reserves[:-self.MAX_RESERVES]
         return new.moves[n_before:] if len(new.moves) >= n_before else list(new.moves)
 
-    def from_reserve(self) -> Line | None:
-        """The newest kept-back line that explains every state since it branched, up to this one."""
+    def explains_soon(self, line: Line, seen: list[dict], ahead: list[tuple[dict, list | None]] | None) -> bool:
+        """Whether `line` (at this state) explains one of the next states, as many as may still be passed over."""
+        seen = list(seen)
+        why = self.why
+        try:
+            for j, (g2, h2) in enumerate((ahead or [])[: self.MAX_SKIPPED - 1 - self.skipped]):
+                if self.advance(line, g2, h2, self.index + 1 + j, None, seen) is not None:
+                    return True
+                seen.append(g2)
+            return False
+        finally:
+            self.why = why
+
+    def from_reserve(self, ahead: list[tuple[dict, list | None]] | None = None) -> Line | None:
+        """The newest kept-back line that explains every state since it branched, up to this one (and, with
+        `ahead`, one of the next states too: else it stays kept back)."""
+        later = []
+        found = None
         while self.reserves:
-            at, line = self.reserves.pop()
-            ok = True
+            at, start = self.reserves.pop()
+            line, ok = start, True
             for j in range(at + 1, self.index + 1):
                 gs, hl = self.history[j]
                 nxt = self.advance(line, gs, hl, j, None)
@@ -616,10 +638,18 @@ class Replay:
                     ok = False
                     break
                 line = nxt
-            if ok:
-                self.notes.append(f"state {at}: went back and took the other move that fitted")
-                return line
-        return None
+            if not ok:
+                continue
+            if ahead is not None and not self.explains_soon(line, [], ahead):
+                later.append((at, start))
+                continue
+            found = (at, line)
+            break
+        self.reserves.extend(reversed(later))
+        if found is None:
+            return None
+        self.notes.append(f"state {found[0]}: went back and took the other move that fitted")
+        return found[1]
 
     def summary(self) -> dict:
         v = self.game.view()
@@ -653,8 +683,9 @@ def replay_states(states: list[dict]) -> Replay | None:
     if not states:
         return None
     r = Replay(states[0]["gs"])
-    for s in states[1:]:
-        r.feed(s["gs"], s.get("highlighted_before"))
+    for i, s in enumerate(states[1:], 1):
+        ahead = [(t["gs"], t.get("highlighted_before")) for t in states[i + 1:i + Replay.MAX_SKIPPED]]
+        r.feed(s["gs"], s.get("highlighted_before"), ahead)
         if r.lost:
             break
     return r

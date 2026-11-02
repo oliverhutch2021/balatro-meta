@@ -148,8 +148,8 @@ watch: build  ## Watch the running job live in your browser: its numbers and one
 watch-mod:  ## (Re)install the companion mod into your Balatro Mods folder (make watch does it too)
 	$(PY) scripts/watch.py --install-mod
 
-record-me: build  ## Record your own White Stake, Red Deck runs as you play them (SPEED=fast: 10x; RUNNING.md, step 13)
-	$(PY) scripts/record_me.py --speed $(if $(filter command line environment,$(origin SPEED)),$(SPEED),4)
+record-me: build  ## Record your own White Stake, Red Deck runs as you play them (SPEED=fast: 10x; SEEDS=a,b: these seeds first)
+	$(PY) scripts/record_me.py --speed $(if $(filter command line environment,$(origin SPEED)),$(SPEED),4) $(if $(SEEDS),--seeds $(SEEDS))
 
 compare-me: build  ## Set each decision of your recorded runs against the best teacher's (report in .sync/me/)
 	$(PY) scripts/compare_me.py
