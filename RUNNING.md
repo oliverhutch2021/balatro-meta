@@ -524,6 +524,19 @@ make teacher-big && make sync && make teacher-control && make learned-8 && make 
 The first `make teacher-control` measures the new play on the 2,000 trial seeds (the new control); `make learned-8`
 is round 8, exploring, and the last `make teacher-control` sets round 8's networks against round 7's.
 
+## Step 19: how much say the networks get, then round 9 (about 7 hours)
+
+Round 8 (the second round that explores) gave no gain where it counts: with the precise teacher, round 8's
+networks won 64.0% of the 2,000 trial seeds against round 7's 65.75% (p = 0.12, within the noise). Yet on their
+own they won more (47.9% against 43.3%), so stronger networks may need more say against the formula.
+`make teacher-weights` plays the newest networks at weights 1.5, 2.5 and 4 on the first 8,000 usual seeds (half the
+noise of 2,000), each set run by run against 1.5, and 1.5 against round 7's networks on the same seeds. A clear gain
+(p below 0.1) is what round 9 records with. Overnight, with no job running:
+
+```
+make teacher-weights && make learned-9 && make teacher-control
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

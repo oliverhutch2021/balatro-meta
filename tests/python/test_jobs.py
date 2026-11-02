@@ -407,6 +407,49 @@ def test_the_big_trial_is_named_so_a_clear_gain_is_recorded_with(tmp_path):
 
 
 
+def test_the_weight_trials_are_set_against_the_networks_own_weight_and_recorded_with(tmp_path):
+    folder = tmp_path / "results" / "value"
+    folder.mkdir(parents=True)
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "value-1.bin").write_bytes(b"BMVN")
+    (folder / "teacher-w1.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": 0.4}))
+    steps = {n: a for n, a, *_ in jobs.weight_steps(tmp_path)}
+    f = jobs.FORMULA
+    control = steps["control"]
+    assert control[control.index("--runs") + 1] == "8000" and control[control.index("--value-weight") + 1] == "1"
+    assert control[control.index("--out") + 1] == f"results/value/f{f}-precise-8k-on-teacher-w1.json"
+    for w in jobs.WEIGHT_TRIALS:
+        play = steps[f"weight-{w}"]
+        assert play[play.index("--value-weight") + 1] == w and play[play.index("--teacher-options") + 1] == "precise"
+        assert play[play.index("--value-net") + 1] == "models/value-1.bin"
+        assert Path(steps[f"compare-{w}"][-1]).match(f"f{f}-*-vs-*-on-teacher-w1.json"), "best_recording reads it"
+    assert "vs-round-7" not in steps, "only once round 7's 8,000 runs are there"
+    (tmp_path / jobs.ROUND_7_8K).parent.mkdir(parents=True)
+    (tmp_path / jobs.ROUND_7_8K).write_text("{}")
+    (folder / f"f{f}-precise-8k-on-teacher-w1.json").write_text("{}")
+    steps = {n: a for n, a, *_ in jobs.weight_steps(tmp_path)}
+    assert "control" not in steps and steps["vs-round-7"][1] == jobs.ROUND_7_8K
+    assert "teacher-weights" in jobs.JOBS
+
+
+def test_a_clear_gain_at_another_weight_is_what_the_next_round_records_with(tmp_path):
+    folder = tmp_path / "results" / "value"
+    tune = tmp_path / "results" / "tune"
+    folder.mkdir(parents=True)
+    tune.mkdir()
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "value-1.bin").write_bytes(b"BMVN")
+    (folder / "teacher-w1.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": 0.4}))
+    f = jobs.FORMULA
+    trial = f"results/tune/f{f}-precise-8k-w2.5-on-teacher-w1.json"
+    (tmp_path / trial).write_text(json.dumps({"value_net": "models/value-1.bin", "value_weight": 2.5,
+                                              "teacher_options": ["precise"]}))
+    (tune / f"f{f}-precise-8k-w2.5-vs-f{f}-precise-8k-on-teacher-w1.json").write_text(json.dumps(
+        {"win_rate_diff": 0.012, "p_value": 0.03, "b": {"report": trial}}))
+    args = jobs.best_recording(tmp_path)
+    assert args[args.index("--value-weight") + 1] == "2.5" and args[args.index("--teacher-options") + 1] == "precise"
+
+
 def test_committed_results_name_no_computer_and_no_home_folder(monkeypatch):
     home = str(Path.home())
     assert jobs.public(f"scripts/train_value.py --data {home}/.cache/balatro-meta/data/value-2") == \

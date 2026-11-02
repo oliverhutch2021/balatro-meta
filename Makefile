@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big watch watch-mod record-me compare-me
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights watch watch-mod record-me compare-me
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -144,6 +144,9 @@ teacher-control:  ## The precise teacher on the newest round's networks, 2,000 s
 
 teacher-big:  ## focus + fair-skip on 8,000 seeds against the same teacher without them, to see a 1-point gain (about 1.5 hours)
 	$(PY) scripts/jobs.py run teacher-big $(JOB_FLAGS)
+
+teacher-weights:  ## The newest networks at weights 1.5, 2.5 and 4 on 8,000 seeds, each against 1.5 (about 3 hours)
+	$(PY) scripts/jobs.py run teacher-weights $(JOB_FLAGS)
 
 SPEED ?= 1
 PORT ?= 8790

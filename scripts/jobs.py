@@ -347,6 +347,44 @@ def big_steps(root: Path = ROOT, change: str = BIG, runs: int = BIG_RUNS) -> lis
     return steps
 
 
+# make teacher-weights: how much say the learned value gets against the formula. Round 8's networks won more than
+# round 7's when the teacher played with them alone (47.9% against 43.3% on the usual 5,000 seeds, ensembles 57.0%
+# against 54.9%), yet not with the precise teacher at weight 1.5 (64.0% against 65.75% on 2,000 seeds, p = 0.12):
+# stronger networks may need more weight. Each weight on the first 8,000 usual seeds, where the noise is half that
+# of 2,000, set run by run against weight 1.5 (and that against round 7's networks on the same seeds).
+WEIGHT_TRIALS = ("2.5", "4")
+ROUND_7_8K = "results/tune/f2-precise+focus+fair-skip-8k-on-ensemble7-w1.5.json"  # formula 3's play, before it had a name
+
+
+def weight_steps(root: Path = ROOT, weights: tuple[str, ...] = WEIGHT_TRIALS, runs: int = BIG_RUNS) -> list[tuple]:
+    """make teacher-weights: the precise teacher on the best learned value at its weight and at each of `weights`,
+    on the first `runs` usual seeds, each set run by run against the first (a clear gain is what the next round
+    records with: best_recording reads each f3-...-vs-...-on-<networks> comparison and the trial's own weight)."""
+    tag = f"f{FORMULA}"
+    net_args, stem, base_opts, _ = tune_control(root, tag)
+    size = f"{runs // 1000}k"
+    opts = base_opts or "precise"
+    control = f"results/value/{tag}-{file_safe(opts)}-{size}-on-{stem}.json"
+    steps: list[tuple] = [("build", [*MAKE, "build"])]
+    if not (root / control).exists():
+        steps.append(("control", [*BASELINE, "--bot", "teacher", *net_args, "--teacher-options", opts,
+                                  "--runs", str(runs), "--seed", "1", "--out", control]))
+    if (root / ROUND_7_8K).exists() and "ensemble7-" not in stem:
+        steps.append(("vs-round-7", ["scripts/compare_runs.py", ROUND_7_8K, control, "--out",
+                                     f"results/tune/{Path(control).stem}-vs-round-7.json"]))
+    if "--value-net" not in net_args:
+        return steps
+    nets = net_args[net_args.index("--value-net") + 1]
+    for w in weights:
+        out = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-on-{stem}.json"
+        steps.append((f"weight-{w}", [*BASELINE, "--bot", "teacher", "--value-net", nets, "--value-weight", w,
+                                      "--teacher-options", opts, "--runs", str(runs), "--seed", "1", "--out", out]))
+        steps.append((f"compare-{w}", ["scripts/compare_runs.py", control, out, "--out",
+                                       f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-vs-"
+                                       f"{tag}-{file_safe(opts)}-{size}-on-{stem}.json"]))
+    return steps
+
+
 def control_steps(root: Path = ROOT) -> list[tuple]:
     """make teacher-control: the precise teacher on the best learned value there is (best_learned: after a round, its
     networks if they won most) on the first 2,000 usual seeds, the control later trials are set against, and set run
@@ -525,6 +563,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-focus": tune_steps(changes=FOCUS, tag=f"f{FORMULA}"),
     "teacher-control": control_steps(),
     "teacher-big": big_steps(),
+    "teacher-weights": weight_steps(),
 }
 
 
