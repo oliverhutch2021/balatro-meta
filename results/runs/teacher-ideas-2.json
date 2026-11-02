@@ -1,0 +1,52 @@
+{
+ "job": "teacher-ideas-2",
+ "commit": "fa6d7bca0dccbf3d1ce55d7ff595935ac31789b7",
+ "started": "2026-11-01T22:45:23+00:00",
+ "finished": "2026-11-02T00:18:57+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   16.0,
+   16.8,
+   16.9
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 1,
+  "precise": 745,
+  "deck-fix": 781,
+  "compare deck-fix": 0,
+  "deck-fix,glass": 848,
+  "compare deck-fix,glass": 0,
+  "xmult-fit=0.3": 815,
+  "compare xmult-fit=0.3": 0,
+  "xmult-fit=0.6": 786,
+  "compare xmult-fit=0.6": 0,
+  "card-sharp": 810,
+  "compare card-sharp": 0,
+  "deck-fix,glass,xmult-fit=0.3,card-sharp": 827,
+  "compare deck-fix,glass,xmult-fit=0.3,card-sharp": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "precise": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin --value-weight 1.5 --teacher-options precise --runs 2000 --seed 1 --out results/value/f2-precise-on-ensemble5-w1.5.json",
+  "deck-fix": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin --value-weight 1.5 --teacher-options precise,deck-fix --runs 2000 --seed 1 --out results/tune/f2-precise+deck-fix-on-ensemble5-w1.5.json",
+  "compare deck-fix": "scripts/compare_runs.py results/value/f2-precise-on-ensemble5-w1.5.json results/tune/f2-precise+deck-fix-on-ensemble5-w1.5.json --out results/tune/f2-precise+deck-fix-vs-f2-precise-on-ensemble5-w1.5.json",
+  "deck-fix,glass": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin --value-weight 1.5 --teacher-options precise,deck-fix,glass --runs 2000 --seed 1 --out results/tune/f2-precise+deck-fix+glass-on-ensemble5-w1.5.json",
+  "compare deck-fix,glass": "scripts/compare_runs.py results/value/f2-precise-on-ensemble5-w1.5.json results/tune/f2-precise+deck-fix+glass-on-ensemble5-w1.5.json --out results/tune/f2-precise+deck-fix+glass-vs-f2-precise-on-ensemble5-w1.5.json",
+  "xmult-fit=0.3": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin --value-weight 1.5 --teacher-options precise,xmult-fit=0.3 --runs 2000 --seed 1 --out results/tune/f2-precise+xmult-fit-0.3-on-ensemble5-w1.5.json",
+  "compare xmult-fit=0.3": "scripts/compare_runs.py results/value/f2-precise-on-ensemble5-w1.5.json results/tune/f2-precise+xmult-fit-0.3-on-ensemble5-w1.5.json --out results/tune/f2-precise+xmult-fit-0.3-vs-f2-precise-on-ensemble5-w1.5.json",
+  "xmult-fit=0.6": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin --value-weight 1.5 --teacher-options precise,xmult-fit=0.6 --runs 2000 --seed 1 --out results/tune/f2-precise+xmult-fit-0.6-on-ensemble5-w1.5.json",
+  "compare xmult-fit=0.6": "scripts/compare_runs.py results/value/f2-precise-on-ensemble5-w1.5.json results/tune/f2-precise+xmult-fit-0.6-on-ensemble5-w1.5.json --out results/tune/f2-precise+xmult-fit-0.6-vs-f2-precise-on-ensemble5-w1.5.json",
+  "card-sharp": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin --value-weight 1.5 --teacher-options precise,card-sharp --runs 2000 --seed 1 --out results/tune/f2-precise+card-sharp-on-ensemble5-w1.5.json",
+  "compare card-sharp": "scripts/compare_runs.py results/value/f2-precise-on-ensemble5-w1.5.json results/tune/f2-precise+card-sharp-on-ensemble5-w1.5.json --out results/tune/f2-precise+card-sharp-vs-f2-precise-on-ensemble5-w1.5.json",
+  "deck-fix,glass,xmult-fit=0.3,card-sharp": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin --value-weight 1.5 --teacher-options precise,deck-fix,glass,xmult-fit=0.3,card-sharp --runs 2000 --seed 1 --out results/tune/f2-precise+deck-fix+glass+xmult-fit-0.3+card-sharp-on-ensemble5-w1.5.json",
+  "compare deck-fix,glass,xmult-fit=0.3,card-sharp": "scripts/compare_runs.py results/value/f2-precise-on-ensemble5-w1.5.json results/tune/f2-precise+deck-fix+glass+xmult-fit-0.3+card-sharp-on-ensemble5-w1.5.json --out results/tune/f2-precise+deck-fix+glass+xmult-fit-0.3+card-sharp-vs-f2-precise-on-ensemble5-w1.5.json"
+ }
+}

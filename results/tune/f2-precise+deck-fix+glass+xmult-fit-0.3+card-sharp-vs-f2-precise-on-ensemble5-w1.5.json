@@ -1,0 +1,31 @@
+{
+ "kind": "comparison",
+ "a": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.62,
+  "wins": 1240,
+  "blinds_beaten": 21.305,
+  "report": "results/value/f2-precise-on-ensemble5-w1.5.json"
+ },
+ "b": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.5895,
+  "wins": 1179,
+  "blinds_beaten": 21.0675,
+  "report": "results/tune/f2-precise+deck-fix+glass+xmult-fit-0.3+card-sharp-on-ensemble5-w1.5.json"
+ },
+ "seeds": 2000,
+ "win_rate_diff": -0.0305,
+ "win_rate_diff_ci": [
+  -0.052742751084342065,
+  -0.008257248915657937
+ ],
+ "only_a_won": 289,
+ "only_b_won": 228,
+ "p_value": 0.008257752448590257,
+ "blinds_beaten_diff": -0.2375,
+ "blinds_beaten_diff_ci": [
+  -0.42753660339606986,
+  -0.04746339660393012
+ ]
+}
