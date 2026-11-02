@@ -427,6 +427,31 @@ def pack_evidence(line: Line, moves: list, passed: list[dict]) -> int:
     return 0 if taken[0] in gone else 1
 
 
+def used_up(game, gs: dict):
+    """Held cards the game no longer shows, two or more, each used with no settled state in between (Perkeo's
+    Negative Planets used one after another): (the engine after using them all, the moves), or None when that
+    isn't what happened (cards gone that need targets, or the game holding something the engine doesn't)."""
+    held = game_view(gs).get("consumables")
+    if held is None:
+        return None
+    left = [(c.get("key"), c.get("edition")) for c in held]
+    mine = [(c.get("key"), c.get("edition")) for c in engine_view(game)["consumables"]]
+    gone = list(mine)
+    for k in left:
+        if k not in gone:
+            return None
+        gone.remove(k)
+    if not 2 <= len(gone) <= 8:
+        return None
+    c, moves = game.copy(), []
+    for k in gone:
+        now = [(x.get("key"), x.get("edition")) for x in engine_view(c)["consumables"]]
+        if k not in now or not c.step(17, now.index(k)):
+            return None
+        moves.append((17, now.index(k)))
+    return c, moves
+
+
 def explain(line: Line, gs: dict, highlight: list | None, passed: list[dict] | None = None) -> tuple[list, list[str]]:
     """The moves that take this line's engine to the game's state `gs`: [(checks failed, rank, engine, moves)],
     best first (empty if none), and what came closest otherwise. "No move" fits only when nothing that a move
@@ -494,6 +519,13 @@ def explain(line: Line, gs: dict, highlight: list | None, passed: list[dict] | N
                     if soft == 0:
                         break
             if matches and matches[-1][0] == 0 and matches[-1][3]:
+                break
+    if not any(m[0] == 0 and m[3] for m in matches):
+        # Several held cards used before the game settled (a run of Planets clicked one after another).
+        for base, pre in bases(line, gs):
+            u = used_up(base, gs)
+            if u is not None and not compare(u[0], gs):
+                matches.append((len(soft_differences(u[0], gs)), 200000, u[0], [*pre, *u[1]]))
                 break
     if passed:
         matches = [(m[0] + pack_evidence(line, m[3], passed), *m[1:]) for m in matches]
