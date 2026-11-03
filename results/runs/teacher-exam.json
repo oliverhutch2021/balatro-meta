@@ -1,8 +1,8 @@
 {
  "job": "teacher-exam",
- "commit": "a44ffd21e04a379ecd915e2caaa15967eb5d9b34",
- "started": "2026-11-03T05:32:54+00:00",
- "finished": "2026-11-03T06:19:15+00:00",
+ "commit": "20f31c98348fe593324110bef0a20c2c9ea88818",
+ "started": "2026-11-03T21:58:15+00:00",
+ "finished": "2026-11-03T22:53:51+00:00",
  "machine": {
   "host": "PC",
   "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
@@ -10,7 +10,7 @@
   "ram_gb": 15.2,
   "load_avg_1_5_15": [
    15.8,
-   16.5,
+   16.8,
    16.6
   ],
   "python": "3.12.3",
@@ -19,7 +19,7 @@
  },
  "steps": {
   "build": 1,
-  "exam": 2780
+  "exam": 3335
  },
  "commands": {
   "build": "make --no-print-directory build",
