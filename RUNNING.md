@@ -594,6 +594,20 @@ the input's.
 cd /mnt/h/balatro-meta && make learned-11 && make teacher-inputs
 ```
 
+## Step 24: every stake, White to Gold (about 1.5 hours)
+
+`make teacher-stakes` plays the best teacher there is (the exam's) at every stake on the first 2,000 usual seeds.
+Stakes add their rules one by one, so the steps from one to the next show what each costs. On 60 runs each, the
+teacher without networks went from 18 wins (White) to 15 (Red), 4 (Green: blinds grow faster), 1, 0..., and from
+19.4 blinds beaten a run to 8.8 at Gold: the biggest falls were Green's faster blinds (3.6 blinds), Blue's lost
+discard (2.1) and Gold's rentals (2.3); eternal jokers cost nothing. From Green on most runs end at an ante's Small or
+Big Blind, not its boss. The formula's own numbers turned at Green (the long run's weight and rounds, what money is
+worth) changed nothing clearly: the gap needs networks that learned the stake, not another hand-tuned formula.
+
+```
+cd /mnt/h/balatro-meta && make teacher-stakes
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

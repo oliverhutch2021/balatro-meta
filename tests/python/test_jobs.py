@@ -484,6 +484,31 @@ def test_the_input_trial_trains_both_layouts_on_the_same_runs_and_sets_them_run_
     assert e["name"].startswith(f"Learned value {jobs.INPUT_ROUND}, input layout 2 \u00d72.5")
 
 
+def test_every_stake_is_measured_with_the_best_teacher_on_the_same_seeds(tmp_path):
+    folder = tmp_path / "results" / "value"
+    folder.mkdir(parents=True)
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "value-1.bin").write_bytes(b"BMVN")
+    (folder / "teacher-w1.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": 0.4}))
+    steps = {n: a for n, a, *_ in jobs.stakes_steps(tmp_path)}
+    best = jobs.best_recording(tmp_path)
+    outs = set()
+    for s in range(1, 9):
+        play = steps[f"stake-{s}"]
+        assert play[play.index("--stake") + 1] == str(s) and play[play.index("--seed") + 1] == "1"
+        assert play[play.index("--runs") + 1] == str(jobs.STAKE_RUNS)
+        assert play[play.index("--value-net") + 1] == best[best.index("--value-net") + 1], "the best teacher"
+        out = play[play.index("--out") + 1]
+        assert out.startswith(f"results/stakes/stake{s}-")
+        outs.add(out)
+    assert len(outs) == 8 and "teacher-stakes" in jobs.JOBS
+    # The Progress panel names the stake, unless it is White's.
+    p = tmp_path / out
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"kind": "baseline", "runs": 2000, "bot": "teacher bot", "stake": "Gold Stake"}))
+    assert jobs.progress_entry("teacher-stakes", "stake-8", play, "HEAD", root=tmp_path)["name"].endswith("Gold Stake")
+
+
 def test_a_clear_gain_at_another_weight_is_what_the_next_round_records_with(tmp_path):
     folder = tmp_path / "results" / "value"
     tune = tmp_path / "results" / "tune"

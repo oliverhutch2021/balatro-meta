@@ -480,6 +480,11 @@ pub fn flows_for(run: &Run, shares: &[f64; 12]) -> Flows {
     let share = |h: &[HandType]| h.iter().map(|&t| shares[t as usize]).sum::<f64>().min(1.0);
     let mut f = Flows::default();
     for j in &run.jokers {
+        // Gold Stake's rental jokers cost their rent at every round's end, working or not (`run.rs`): money the
+        // shops to come won't have. Bought for $1 they look like a bargain otherwise.
+        if j.rental {
+            f.money -= crate::run::RENTAL_COST as f64;
+        }
         if j.debuffed {
             continue;
         }

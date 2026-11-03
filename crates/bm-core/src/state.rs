@@ -79,6 +79,18 @@ pub struct RunConfig {
     pub first_sort_id: u64,
 }
 
+/// The stakes by number (`RunConfig::stake`): each adds its rule to those below it.
+pub const STAKES: [&str; 8] = [
+    "White Stake",
+    "Red Stake",
+    "Green Stake",
+    "Black Stake",
+    "Blue Stake",
+    "Purple Stake",
+    "Orange Stake",
+    "Gold Stake",
+];
+
 impl RunConfig {
     pub fn new(seed: &str) -> RunConfig {
         RunConfig {
@@ -87,6 +99,18 @@ impl RunConfig {
             stake: 1,
             tag_profile: TagProfile::default(),
             first_sort_id: 1,
+        }
+    }
+
+    /// The same at another stake (1 White ... 8 Gold).
+    pub fn at_stake(seed: &str, stake: u8) -> RunConfig {
+        assert!(
+            (1..=8).contains(&stake),
+            "stakes run from 1 (White) to 8 (Gold), not {stake}"
+        );
+        RunConfig {
+            stake,
+            ..RunConfig::new(seed)
         }
     }
 }

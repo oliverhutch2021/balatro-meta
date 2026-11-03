@@ -228,6 +228,27 @@ def exam_steps(root: Path = ROOT, runs: int = EXAM_RUNS) -> list[tuple]:
                       "--out", f"results/exam/{name}.json"])]
 
 
+# make teacher-stakes: the best teacher there is (the exam's: best_recording, without exploring) at every stake, White
+# to Gold, on the first 2,000 usual seeds each. Each stake adds a rule (Red: the Small Blind pays nothing; Green and
+# Purple: blinds grow faster; Black: eternal jokers; Blue: a discard fewer; Orange: perishable jokers; Gold: rental
+# jokers), so the steps from one stake to the next show what each rule costs. The networks learned White Stake's runs
+# alone, so this is where the teacher stands before learning any other.
+STAKE_RUNS = 2000
+
+
+def stakes_steps(root: Path = ROOT, runs: int = STAKE_RUNS) -> list[tuple]:
+    args = best_recording(root)
+    net = args[args.index("--value-net") + 1] if "--value-net" in args else ""
+    rounds = sorted({int(n) for n in re.findall(r"value-(\d+)b?\.bin", net)})
+    w = args[args.index("--value-weight") + 1] if "--value-weight" in args else "0"
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else ""
+    tail = f"{runs // 1000}k-f{FORMULA}-{file_safe(opts) or 'plain'}-rounds{rounds[-1] if rounds else 0}-w{w}"
+    return [("build", [*MAKE, "build"]),
+            *[(f"stake-{s}", [*BASELINE, "--bot", "teacher", *args, "--runs", str(runs), "--seed", "1",
+                              "--stake", str(s), "--out", f"results/stakes/stake{s}-{tail}.json"])
+              for s in range(1, 9)]]
+
+
 # make teacher-inputs: does seeing the deck card by card (input layout 2: which ranks and suits carry which
 # enhancement, seal and edition) make better networks than layout 1's totals? Round 11 is the first recording to hold
 # layout 2 (rounds 1 to 10 hold layout 1 alone), so both pairs learn from round 11's runs alone, with the seeds every
@@ -677,6 +698,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-weights": weight_steps(),
     "teacher-weights-high": weight_steps(weights=HIGH_WEIGHT_TRIALS, against=HIGH_AGAINST),
     "teacher-inputs": input_steps(),
+    "teacher-stakes": stakes_steps(),
     "teacher-exam": exam_steps(),
 }
 
@@ -850,6 +872,8 @@ def progress_entry(job: str, step: str, argv: list[str], commit: str, root: Path
     options = arg("--teacher-options")
     if options:
         name += ", " + options.replace(",", ", ")
+    if r.get("stake") and r.get("stake") != "White Stake":  # the Progress panel's lines are White's otherwise
+        name += f", {r['stake']}"
     return {"time": now(), "name": name, "job": job, "step": step, "code": code, "title": title, "out": out,
             "bot": r.get("bot"),
             "seed": int(arg("--seed") or 1), "value_net": net, "value_weight": w, "teacher_options": options,

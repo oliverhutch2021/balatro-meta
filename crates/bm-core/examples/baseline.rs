@@ -40,7 +40,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -55,6 +55,7 @@ use bm_core::observe::{
 use bm_core::packs::PackCard;
 use bm_core::poker::HandType;
 use bm_core::shop::RowItem;
+use bm_core::state::STAKES;
 use bm_core::teacher::teacher_move;
 use bm_core::{Phase, Run, RunConfig};
 
@@ -197,7 +198,7 @@ fn detail_row(run: &Run, s: &RunSummary) -> String {
 /// `script`: the run's recorded moves (`--replay`), played in place of the bot's.
 fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64)]>) -> RunSummary {
     bm_core::teacher::new_run();
-    let mut run = Run::new(RunConfig::new(&seed));
+    let mut run = Run::new(RunConfig::at_stake(&seed, STAKE.load(Ordering::Relaxed)));
     let mut s = RunSummary {
         record: keep.then(Vec::new),
         recorded: RECORD.load(Ordering::Relaxed).then(Recorded::default),
@@ -341,6 +342,9 @@ static DETAIL: AtomicBool = AtomicBool::new(false);
 
 /// Whether runs keep their valued positions (`--record`).
 static RECORD: AtomicBool = AtomicBool::new(false);
+
+/// The stake every run is played at (`--stake`: 1 White ... 8 Gold).
+static STAKE: AtomicU8 = AtomicU8::new(1);
 
 /// Runs per chunk of recorded positions.
 const RUNS_PER_CHUNK: u64 = 250;
@@ -571,12 +575,14 @@ impl Recorder {
         let text = format!(
             "{{\n \"format\": 1,\n \"input\": \"{input}\",\n \"input_version\": {VALUE_INPUT_VERSION},\n \
              \"inputs\": {inputs},\n \"layouts\": [{}],\n \"runs\": {},\n \"rows\": {},\n \"chunks\": {},\n \
-             \"runs_per_chunk\": {RUNS_PER_CHUNK},\n \"labels\": [{}],\n \"moves_kept\": {moves_kept},\n{about}\n}}\n",
+             \"runs_per_chunk\": {RUNS_PER_CHUNK},\n \"labels\": [{}],\n \"moves_kept\": {moves_kept},\n \
+             \"stake\": {stake},\n{about}\n}}\n",
             layouts.join(", "),
             self.runs,
             self.rows,
             self.chunks,
             labels.join(", "),
+            stake = STAKE.load(Ordering::Relaxed),
         );
         write_atomic(&self.dir.join("manifest.json"), &text);
     }
@@ -615,7 +621,7 @@ fn field<'a>(line: &'a str, key: &str) -> &'a str {
 
 /// The runs of a recording made with `--record`, in run order, and the lines of its manifest that say how it
 /// was played (bot, seed base, networks, options), for the new recording's manifest.
-fn load_replay(dir: &Path) -> (Vec<Replayed>, String) {
+fn load_replay(dir: &Path) -> (Vec<Replayed>, String, u8) {
     let manifest = std::fs::read_to_string(dir.join("manifest.json")).unwrap_or_else(|e| {
         panic!(
             "{}: no manifest.json ({e}): the recording is missing or didn't finish",
@@ -698,7 +704,12 @@ fn load_replay(dir: &Path) -> (Vec<Replayed>, String) {
         .file_name()
         .map_or(String::new(), |n| n.to_string_lossy().into_owned());
     let about = format!("{},\n \"replayed_from\": {}", about.join(",\n"), esc(&from));
-    (runs, about)
+    // The stake the runs were played at (recordings from before stakes were named are White Stake's).
+    let stake = manifest
+        .lines()
+        .find(|l| l.starts_with(" \"stake\": "))
+        .map_or(1, |l| field(l, "stake").parse().expect("a stake number"));
+    (runs, about, stake)
 }
 
 /// Everything counted so far.
@@ -920,10 +931,11 @@ fn report_json(r: &Report) -> String {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0.0, |d| d.as_secs_f64());
+    let stake = STAKE.load(Ordering::Relaxed);
     let mut o = String::new();
     let _ = write!(
         o,
-        "{{\n \"kind\": \"baseline\",\n \"bot\": {},\n \"deck\": \"Red Deck\",\n \"stake\": \"White Stake\",\n \
+        "{{\n \"kind\": \"baseline\",\n \"bot\": {},\n \"deck\": \"Red Deck\",\n \"stake\": {},\n \"stake_number\": {},\n \
          \"done\": {},\n \"updated\": {},\n \"elapsed\": {},\n \"threads\": {},\n \"target\": {},\n \"runs\": {},\n \
          \"rate\": {},\n \"moves\": {},\n \"wins\": {},\n \"win_rate\": {},\n \"win_ci\": [{}, {}],\n \"mean_ante\": {},\n \
          \"ante_hist\": {:?},\n \"blinds_beaten_per_run\": {},\n \"refused_moves\": {},\n \"lost_to\": [{}],\n \
@@ -931,6 +943,8 @@ fn report_json(r: &Report) -> String {
          \"per_run\": {{\"moves\": {}, \"jokers_bought\": {}, \"rerolls\": {}, \"skips\": {}, \"packs\": {}, \
          \"vouchers\": {}, \"money_at_end\": {}}},\n \"best_runs\": {},\n \"history\": [{}]\n}}\n",
         esc(r.bot),
+        esc(STAKES[usize::from(stake) - 1]),
+        stake,
         r.done,
         num(now),
         num(r.elapsed),
@@ -1088,9 +1102,21 @@ fn main() {
     // `--replay DIR`: the runs of a recording made with `--record`, each played again by its own moves instead of
     // by a bot, so `--record` writes their positions as this code encodes them (a new input, no new search).
     let replay = opt("--replay").map(|d| load_replay(Path::new(&d)));
+    // `--stake N` (1 White ... 8 Gold); a replay plays at its recording's.
+    let stake: u8 = match &replay {
+        Some((_, _, s)) => *s,
+        None => opt("--stake").map_or(1, |s| {
+            s.parse().expect("--stake takes 1 (White) to 8 (Gold)")
+        }),
+    };
+    assert!(
+        (1..=8).contains(&stake),
+        "--stake takes 1 (White) to 8 (Gold), not {stake}"
+    );
+    STAKE.store(stake, Ordering::Relaxed);
     let runs_wanted: Option<u64> = opt("--runs").and_then(|s| s.replace('_', "").parse().ok());
     let target: u64 = match &replay {
-        Some((runs, _)) => runs_wanted.map_or(runs.len() as u64, |n| n.min(runs.len() as u64)),
+        Some((runs, _, _)) => runs_wanted.map_or(runs.len() as u64, |n| n.min(runs.len() as u64)),
         None => runs_wanted.unwrap_or(1_000_000),
     };
     let seconds: Option<f64> = opt("--seconds").and_then(|s| s.parse().ok());
@@ -1178,7 +1204,8 @@ fn main() {
     let start = Instant::now();
     let deadline = seconds.map(Duration::from_secs_f64);
     println!(
-        "Baseline: the {bot_name} on {threads} threads, {target} runs (Red Deck, White Stake)."
+        "Baseline: the {bot_name} on {threads} threads, {target} runs (Red Deck, {}).",
+        STAKES[usize::from(stake) - 1]
     );
 
     std::thread::scope(|scope| {
@@ -1195,7 +1222,7 @@ fn main() {
                         }
                         let mut s = match &replay {
                             None => play(run_seed(base, i), i, true, bot, None),
-                            Some((runs, _)) => {
+                            Some((runs, _, _)) => {
                                 let r = &runs[i as usize];
                                 let s = play(r.seed.clone(), i, true, bot, Some(&r.moves));
                                 if s.refused
@@ -1396,7 +1423,7 @@ fn main() {
         let opts = bm_core::teacher::options();
         let about = match &replay {
             // A replay keeps how the runs were played; only the encoding is this code's.
-            Some((_, about)) => about.clone(),
+            Some((_, about, _)) => about.clone(),
             None => format!(
                 " \"bot\": {},\n \"seed_base\": {base},\n \"value_net\": {},\n \"value_weight\": {},\n \
                  \"teacher_options\": [{}],\n \"wins\": {},\n \"seconds\": {}",

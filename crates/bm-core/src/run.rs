@@ -57,6 +57,9 @@ pub fn joker_sell_value(j: &crate::jokers::Joker) -> i64 {
     j.sell_cost
 }
 
+/// What Gold Stake's rental jokers cost at the end of every round, working or not.
+pub const RENTAL_COST: i64 = 3;
+
 impl Run {
     /// Start a new run (`rules/run_setup.md` section 3).
     pub fn new(cfg: RunConfig) -> Run {
@@ -983,7 +986,7 @@ impl Run {
                 }
             }
             if self.jokers[i].rental {
-                self.money -= 3;
+                self.money -= RENTAL_COST;
             }
             if self.jokers[i].perishable && self.jokers[i].perish_tally > 0 {
                 self.jokers[i].perish_tally -= 1;
