@@ -155,9 +155,10 @@ def best_recording(root: Path = ROOT) -> list[str]:
 # a value learned only from the teacher's own choices can only refine its habits. Measuring never explores.
 EXPLORE = "explore=0.1"
 EXPLORE_FROM = 7
-# From round 10 a quarter of the recorded runs also commit from the start to one hand type, picked at random by the
-# run's number (teacher option "commit": its Planets taken and bought as the focus's): whole builds the teacher
-# wouldn't choose, played to the end, where "explore" only tries single moves along its own habits.
+# From round 10 a quarter of the recorded runs also commit, from ante 3 (the shop after ante 2's boss), to one hand
+# type picked at random by the run's number (teacher option "commit": its Planets taken and bought as the focus's):
+# whole builds the teacher wouldn't choose, played to the end, where "explore" only tries single moves along its own
+# habits.
 COMMIT = "commit=0.25"
 COMMIT_FROM = 10
 

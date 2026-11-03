@@ -554,8 +554,8 @@ cd /mnt/h/balatro-meta && touch /tmp/bm-mark && while [ ! .sync/DONE-teacher-con
 `make teacher-exam` plays the best teacher there is on 8,000 seeds kept for that alone (seed base 5003): ideas are
 compared and chosen on the usual seeds, which flatters them a little, so the headline number comes from seeds that
 never chose anything. `make learned-10` is the first round whose recording explores whole builds: a quarter of its
-runs commit from the start to one hand type, picked at random by the run's number (never from the game), its
-Planets taken and bought as the focus's, so the learned value sees how builds the teacher wouldn't choose end. To
+runs commit from ante 3 (the shop after ante 2's boss; before that they play as usual) to one hand type, picked at
+random by the run's number (never from the game), its Planets taken and bought as the focus's, so the learned value sees how builds the teacher wouldn't choose end. To
 start them on their own once step 20 has finished, in a third Ubuntu tab:
 
 ```

@@ -158,12 +158,14 @@ pub(crate) fn focus_hand(run: &Run) -> Option<HandType> {
         .filter(|&h| run.hand_levels.get(h).played >= FOCUS_PLAYS)
 }
 
-/// "commit=p", recordings only (whole-build exploration): with chance `p` a run commits from its first decision to
-/// one hand type, its focus from the start, whatever it plays: its Planets taken and bought as the focus's are. The
+/// "commit=p", recordings only (whole-build exploration): with chance `p` a run commits, from ante `COMMIT_ANTE` on
+/// (the shop after ante 2's boss: the run has found its feet), to one hand type as its focus, whatever it has played
+/// so far: its Planets taken and bought as the focus's are. Before that it plays as usual. The
 /// hand and whether the run commits come from the run's own number (the top bits of the salt every decision of a
 /// recorded run gets: `examples/baseline.rs`), never from the game, so they say nothing about the run. The
 /// recordings then hold whole runs of builds the teacher would not choose, and the learned value sees how they end
 /// (round 7's "explore" only takes single moves the value already rates nearly as high, along its own habits).
+const COMMIT_ANTE: i32 = 3;
 const COMMIT_HANDS: [HandType; 7] = [
     HandType::Pair,
     HandType::TwoPair,
@@ -198,9 +200,15 @@ fn committed(salt: u64) -> Option<HandType> {
     c
 }
 
-/// The hand the focus moves serve: the committed one ("commit"), else the focus (`focus_hand`).
+/// The hand the focus moves serve: the committed one ("commit", from ante `COMMIT_ANTE`), else the focus
+/// (`focus_hand`).
 fn run_focus(run: &Run, salt: u64) -> Option<HandType> {
-    committed(salt).or_else(|| focus_hand(run))
+    let c = if run.ante >= COMMIT_ANTE {
+        committed(salt)
+    } else {
+        None
+    };
+    c.or_else(|| focus_hand(run))
 }
 
 /// "focus": the card to take from a Celestial pack: a Black Hole (every hand a level), else the focus's Planet.
@@ -3626,7 +3634,8 @@ mod tests {
             })
             .count();
         assert!((60..140).contains(&some), "about a quarter commit: {some}");
-        // Committed to Straight: its Planet is taken over the most played hand's, and the same on any run state.
+        // Committed to Straight: from ante 3 its Planet is taken over the most played hand's; before, the run plays
+        // as usual.
         let i = (0..400u64)
             .find(|&i| commits[i as usize] == Some(HandType::Straight))
             .unwrap();
@@ -3651,6 +3660,14 @@ mod tests {
             Some(0),
             "Mercury, the Pair's, without commit"
         );
+        for ante in [1, 2] {
+            run.ante = ante;
+            new_run();
+            with_options(&["commit=1"], || {
+                assert_eq!(focus_pick(&run, i << 20), Some(0), "ante {ante}: not yet")
+            });
+        }
+        run.ante = COMMIT_ANTE;
         new_run();
         with_options(&["commit=1"], || {
             assert_eq!(focus_pick(&run, i << 20), Some(1), "Saturn, the Straight's")
