@@ -41,7 +41,13 @@ def sign_test(k: int, n: int) -> float:
         return 1.0
     k = min(k, n - k)
     # Whole numbers throughout: 2.0 ** n overflows a float past n = 1023 (8,000 seeds can have more split runs).
-    tail = sum(math.comb(n, i) for i in range(k + 1)) / 2 ** n
+    # Adjacent binomial coefficients share almost all their work. Build each from the previous one,
+    # keeping the sum exact, instead of recomputing k+1 large combinations from scratch.
+    term = total = 1
+    for i in range(1, k + 1):
+        term = term * (n - i + 1) // i
+        total += term
+    tail = total / 2 ** n
     return min(1.0, 2.0 * tail)
 
 

@@ -136,6 +136,101 @@ impl Net {
         }
         h
     }
+
+    /// The first output, using the inference thread's reusable buffers. The teacher only uses the win
+    /// logit; the other outputs predict the ending stage for training. Keep `forward` for full-output
+    /// exports and parity checks. Accumulation order and f32 arithmetic match it exactly.
+    pub fn first_output(&self, x: &[f32]) -> f32 {
+        INFERENCE.with(|w| {
+            let mut w = w.borrow_mut();
+            w.read(x);
+            self.first_with(&mut w)
+        })
+    }
+
+    fn first_with(&self, w: &mut Inference) -> f32 {
+        let (last, hidden) = self
+            .layers
+            .split_last()
+            .expect("a validated network has layers");
+        for (layer_index, layer) in hidden.iter().enumerate() {
+            w.next.clone_from(&layer.bias);
+            if layer_index == 0 {
+                for &(i, v) in &w.input {
+                    if i >= layer.inputs {
+                        break;
+                    }
+                    for (o, weight) in w
+                        .next
+                        .iter_mut()
+                        .zip(&layer.weights[i * layer.outputs..][..layer.outputs])
+                    {
+                        *o += v * weight;
+                    }
+                }
+            } else {
+                for (i, &v) in w.current.iter().enumerate().take(layer.inputs) {
+                    if v == 0.0 {
+                        continue;
+                    }
+                    for (o, weight) in w
+                        .next
+                        .iter_mut()
+                        .zip(&layer.weights[i * layer.outputs..][..layer.outputs])
+                    {
+                        *o += v * weight;
+                    }
+                }
+            }
+            if layer.relu {
+                for o in &mut w.next {
+                    *o = o.max(0.0);
+                }
+            }
+            std::mem::swap(&mut w.current, &mut w.next);
+        }
+        let mut out = last.bias[0];
+        if hidden.is_empty() {
+            for &(i, v) in &w.input {
+                if i >= last.inputs {
+                    break;
+                }
+                out += v * last.weights[i * last.outputs];
+            }
+        } else {
+            for (i, &v) in w.current.iter().enumerate().take(last.inputs) {
+                if v != 0.0 {
+                    out += v * last.weights[i * last.outputs];
+                }
+            }
+        }
+        if last.relu {
+            out.max(0.0)
+        } else {
+            out
+        }
+    }
+}
+
+/// Reused across all networks in an ensemble and across decisions on one worker. Input nonzeros are
+/// collected once per ensemble, in their original order; no full input copy or auxiliary output vector.
+#[derive(Default)]
+struct Inference {
+    input: Vec<(usize, f32)>,
+    current: Vec<f32>,
+    next: Vec<f32>,
+}
+
+impl Inference {
+    fn read(&mut self, x: &[f32]) {
+        self.input.clear();
+        self.input
+            .extend(x.iter().copied().enumerate().filter(|&(_, v)| v != 0.0));
+    }
+}
+
+thread_local! {
+    static INFERENCE: RefCell<Inference> = RefCell::new(Inference::default());
 }
 
 static NET: OnceLock<Vec<Net>> = OnceLock::new();
@@ -223,13 +318,19 @@ pub fn win_chance(run: &Run) -> Option<f64> {
 }
 
 fn chance_of(net: &Net, x: &[f32]) -> f64 {
-    let y = net.forward(x);
-    1.0 / (1.0 + (-(y[0] as f64)).exp())
+    1.0 / (1.0 + (-(net.first_output(x) as f64)).exp())
 }
 
 /// An ensemble's chance: the mean of its networks' chances.
 fn mean_chance(nets: &[Net], x: &[f32]) -> f64 {
-    nets.iter().map(|n| chance_of(n, x)).sum::<f64>() / nets.len().max(1) as f64
+    INFERENCE.with(|w| {
+        let mut w = w.borrow_mut();
+        w.read(x);
+        nets.iter()
+            .map(|n| 1.0 / (1.0 + (-(n.first_with(&mut w) as f64)).exp()))
+            .sum::<f64>()
+            / nets.len().max(1) as f64
+    })
 }
 
 /// The chance of winning by a given network.
@@ -469,6 +570,59 @@ mod tests {
         assert!((mean_chance(&[a.clone(), b.clone()], &x) - (0.5 + 2.0 / 3.0) / 2.0).abs() < 1e-6);
         assert!((mean_chance(&[b], &x) - 2.0 / 3.0).abs() < 1e-6);
         assert!((mean_chance(&[a], &x) - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn win_only_inference_is_bit_identical_across_shapes_and_reused_buffers() {
+        let mut nets = Vec::new();
+        for widths in [vec![26], vec![64, 26], vec![128, 64, 26], vec![3, 7, 1]] {
+            for last_relu in [false, true] {
+                let mut inputs = VALUE_LEN;
+                let mut specs = Vec::new();
+                for (i, &outputs) in widths.iter().enumerate() {
+                    let weights = (0..inputs * outputs)
+                        .map(|j| ((j * 37 + i * 17) % 101) as f32 / 500.0 - 0.1)
+                        .collect();
+                    let bias = (0..outputs).map(|j| j as f32 / 100.0 - 0.03).collect();
+                    specs.push((
+                        inputs,
+                        outputs,
+                        i + 1 < widths.len() || last_relu,
+                        weights,
+                        bias,
+                    ));
+                    inputs = outputs;
+                }
+                nets.push(Net::from_bytes(&file(&specs)).unwrap());
+            }
+        }
+        for stride in [1, 7, 31, VALUE_LEN + 1] {
+            let x: Vec<f32> = (0..VALUE_LEN)
+                .map(|i| {
+                    if i % stride == 0 {
+                        (i % 23) as f32 / 7.0 - 1.0
+                    } else {
+                        0.0
+                    }
+                })
+                .collect();
+            for net in &nets {
+                assert_eq!(net.first_output(&x).to_bits(), net.forward(&x)[0].to_bits());
+            }
+            let full_mean = nets
+                .iter()
+                .map(|n| 1.0 / (1.0 + (-(n.forward(&x)[0] as f64)).exp()))
+                .sum::<f64>()
+                / nets.len() as f64;
+            assert_eq!(mean_chance(&nets, &x).to_bits(), full_mean.to_bits());
+        }
+        let zero = vec![0.0; VALUE_LEN];
+        for net in nets.iter().rev() {
+            assert_eq!(
+                net.first_output(&zero).to_bits(),
+                net.forward(&zero)[0].to_bits()
+            );
+        }
     }
 
     #[test]

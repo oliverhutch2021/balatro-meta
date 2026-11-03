@@ -69,6 +69,13 @@ def test_reports_that_do_not_pair_are_refused():
         cr.compare(report("YZ"), report("YA"))
 
 
+def test_sign_test_matches_the_binomial_definition_including_ties_and_extreme_tails():
+    for n in range(65):
+        for k in range(n + 1):
+            expected = min(1.0, 2 * sum(math.comb(n, i) for i in range(min(k, n - k) + 1)) / 2 ** n)
+            assert cr.sign_test(k, n) == expected
+
+
 def test_the_command_writes_the_comparison(tmp_path, capsys):
     pa, pb, out = tmp_path / "plain.json", tmp_path / "steady.json", tmp_path / "vs" / "c.json"
     pa.write_text(json.dumps(report("AYAY" * 50)))
