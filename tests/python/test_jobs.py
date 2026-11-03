@@ -479,6 +479,42 @@ def test_the_exam_measures_the_best_teacher_on_seeds_used_for_nothing_else(tmp_p
     assert "teacher-exam" in jobs.JOBS
 
 
+def test_the_weights_are_measured_on_the_newest_round_and_the_best_on_8000_seeds_is_recorded_with(tmp_path):
+    f = jobs.FORMULA
+    (tmp_path / "models").mkdir()
+    for n in range(1, 10):
+        for name in (f"value-{n}.bin", f"value-{n}b.bin"):
+            (tmp_path / "models" / name).write_bytes(b"BMVN")
+    value, tune = tmp_path / "results" / "value", tmp_path / "results" / "tune"
+    value.mkdir(parents=True)
+    tune.mkdir()
+    # The 5,000-seed tests still favour round 8's networks; the newest round's are 9's.
+    (value / "ensemble8-w1.5.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": 0.57}))
+    (value / "ensemble9-w1.5.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": 0.55}))
+    steps = {n: a for n, a, *_ in jobs.weight_steps(tmp_path)}
+    play = steps["weight-2.5"]
+    assert play[play.index("--value-net") + 1] == jobs.ensemble(9)
+    assert play[play.index("--out") + 1] == f"results/tune/f{f}-precise-8k-w2.5-on-ensemble9-w1.5.json"
+
+    def report(path, nets, w, rate, options=("precise",), runs=8000):
+        (tmp_path / path).write_text(json.dumps({"kind": "baseline", "runs": runs, "win_rate": rate, "seed_base": 1,
+                                                 "value_net": nets, "value_weight": w,
+                                                 "teacher_options": list(options)}))
+    assert jobs.best_8k(tmp_path) is None
+    report(f"results/value/f{f}-precise-8k-on-ensemble8-w1.5.json", jobs.ensemble(8), 1.5, 0.6386)
+    report(f"results/tune/f{f}-precise-8k-w2.5-on-ensemble8-w1.5.json", jobs.ensemble(8), 2.5, 0.6646)
+    report(f"results/tune/f{f}-precise-8k-w2.5-on-ensemble9-w1.5.json", jobs.ensemble(9), 2.5, 0.6702)
+    report(f"results/tune/f{f}-precise+explore-0.1-8k-on-ensemble9-w1.5.json", jobs.ensemble(9), 2.5, 0.70,
+           options=("precise", "explore=0.1"))
+    report(f"results/tune/f{f}-precise-2k-w4-on-ensemble9-w1.5.json", jobs.ensemble(9), 4, 0.71, runs=2000)
+    rate, args = jobs.best_8k(tmp_path)
+    assert rate == 0.6702 and args == ["--value-net", jobs.ensemble(9), "--value-weight", "2.5",
+                                       "--teacher-options", "precise"], "exploring and 2,000-seed runs never count"
+    assert jobs.best_recording(tmp_path) == args
+    exam = dict((n, a) for n, a, *_ in jobs.exam_steps(tmp_path))["exam"]
+    assert exam[exam.index("--out") + 1] == f"results/exam/exam-8k-f{f}-precise-rounds9-w2.5.json"
+
+
 def test_committed_results_name_no_computer_and_no_home_folder(monkeypatch):
     home = str(Path.home())
     assert jobs.public(f"scripts/train_value.py --data {home}/.cache/balatro-meta/data/value-2") == \

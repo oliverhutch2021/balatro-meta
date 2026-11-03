@@ -121,11 +121,40 @@ def recording_options(root: Path = ROOT) -> list[str]:
 RECORD_WITH_P = 0.1
 
 
+def best_8k(root: Path = ROOT) -> tuple[float, list[str]] | None:
+    """The teacher that won most of the first 8,000 usual seeds (make teacher-weights and teacher-big on the formula in
+    force, any networks and weight: the same seeds, so their rates compare directly), as its win rate and arguments
+    (networks, weight, options); None before any. Exploring runs never count (recordings use other seeds anyway)."""
+    best = None
+    for folder in ("value", "tune"):
+        for f in sorted((root / "results" / folder).glob(f"f{FORMULA}-*-8k-*.json")):
+            if "-vs-" in f.name:
+                continue
+            try:
+                r = json.loads(f.read_text())
+                rate, runs, base = float(r["win_rate"]), int(r["runs"]), int(r.get("seed_base", 1))
+                options = r.get("teacher_options") or []
+                options = options.split(",") if isinstance(options, str) else list(options)
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+            if runs < 8000 or base != 1 or not r.get("value_net") or any(o.startswith("explore") for o in options):
+                continue
+            if best is None or rate > best[0]:
+                args = ["--value-net", str(r["value_net"]), "--value-weight", f"{float(r['value_weight']):g}"]
+                best = (rate, args + (["--teacher-options", ",".join(options)] if options else []))
+    return best
+
+
 def best_recording(root: Path = ROOT) -> list[str]:
-    """The teacher a round records with, as its arguments (learned value, weight, options): of the trials on the best
-    learned value (results/tune: each change set run by run against the precise teacher on the same 2,000 seeds), the
-    one that won most over it, if it won clearly (p below RECORD_WITH_P), with the networks it played with (a trial
-    can be other networks: make teacher-next's "values 1-4"); else the best learned value with recording_options."""
+    """The teacher a round records with, as its arguments (learned value, weight, options): the one that won most of the
+    first 8,000 usual seeds when one has played them (best_8k: make teacher-weights measures each new round's networks
+    at several weights there); before that, of the trials on the best learned value (results/tune: each change set
+    run by run against the precise teacher on the same 2,000 seeds), the one that won most over it, if it won clearly
+    (p below RECORD_WITH_P), with the networks it played with (a trial can be other networks: make teacher-next's
+    "values 1-4"); else the best learned value with recording_options."""
+    eight = best_8k(root)
+    if eight is not None:
+        return eight[1]
     base = [*learned_value_args(root), *recording_options(root)]
     best = best_learned(root)
     if best is None or not recording_options(root):
@@ -386,13 +415,18 @@ ROUND_7_8K = "results/tune/f2-precise+focus+fair-skip-8k-on-ensemble7-w1.5.json"
 
 
 def weight_steps(root: Path = ROOT, weights: tuple[str, ...] = WEIGHT_TRIALS, runs: int = BIG_RUNS) -> list[tuple]:
-    """make teacher-weights: the precise teacher on the best learned value at its weight and at each of `weights`,
+    """make teacher-weights: the precise teacher on the newest round's networks (all rounds' together; before any
+    ensemble, the best learned value) at weight 1.5 and at each of `weights`,
     on the first `runs` usual seeds, each set run by run against the first (a clear gain is what the next round
     records with: best_recording reads each f3-...-vs-...-on-<networks> comparison and the trial's own weight).
     Runs already played on the same networks are only compared again, so after a new round the job measures that
     round's networks, and before one it costs nothing."""
     tag = f"f{FORMULA}"
     net_args, stem, base_opts, _ = tune_control(root, tag)
+    newest = next((n for n in range(LAST_ROUND, 1, -1) if all((root / m).exists() for m in ensemble(n).split(","))),
+                  None)
+    if newest is not None:  # the newest round's networks: the 5,000-seed tests at weights 1 and 1.5 can miss them
+        net_args, stem = ["--value-net", ensemble(newest), "--value-weight", "1.5"], f"ensemble{newest}-w1.5"
     size = f"{runs // 1000}k"
     opts = base_opts or "precise"
     control = f"results/value/{tag}-{file_safe(opts)}-{size}-on-{stem}.json"
