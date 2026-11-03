@@ -152,11 +152,11 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
     </div>
     <div class="panel hero">
       <h1>A bot that learns to win Balatro</h1>
-      <p class="lede">It plays a faithful copy of the game, sees only what a player sees, and decides every move by what it expects to win. Four days in, it wins most of its runs. The goal is to find strategies better than its human teacher's.</p>
-      <div class="score" aria-label="From 0.07% to 64.2% of runs won; its biggest hand scored 16.6 billion">
+      <p class="lede">It plays a faithful copy of the game, sees only what a player sees, and decides every move by what it expects to win. Five days in, it wins two runs in three. The goal is to find strategies better than its human teacher's.</p>
+      <div class="score" aria-label="From 0.07% to 66.5% of runs won; its biggest hand scored 16.6 billion">
         <div class="box plain" tabindex="0"><span class="v num">0.07%</span><span class="k">First bot, 30 Oct</span></div>
         <span class="op" aria-hidden="true">→</span>
-        <div class="box chips" tabindex="0"><span class="v num">64.2%</span><span class="k">Runs won now</span></div>
+        <div class="box chips" tabindex="0"><span class="v num">66.5%</span><span class="k">Runs won now</span></div>
         <div class="box mult" tabindex="0"><span class="v num">16.6B</span><span class="k">Its biggest hand</span></div>
       </div>
       <p class="hint">Move over the table to steer the felt; tap to stir it.</p>
@@ -168,10 +168,10 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
   <section id="climb">
     <div class="wrap">
       <span class="label">The climb</span>
-      <h2>From <span class="dg">0.07%</span> to <span class="dg">64%</span> in four days</h2>
+      <h2>From <span class="dg">0.07%</span> to <span class="dg">66.5%</span> in five days</h2>
       <div class="panel">
-        <p class="col lead">Each point is the best version of the bot at that moment, measured on fresh seeds it never trained on. The big steps came from deciding by value, from a network that learns which positions win, from tuning the value's own numbers, and lately from focusing on one hand.</p>
-        <div class="chart" id="climbChart" role="img" aria-label="Line chart: share of runs won by each version of the bot, from 0.07% on 30 October to 64.2% on 2 November."></div>
+        <p class="col lead">Each point is the best version of the bot at that moment, measured on fresh seeds it never trained on. The big steps came from deciding by value, from a network that learns which positions win, from tuning the value's own numbers, from focusing on one hand, and lately from giving the networks more say against the formula. The last point is the exam: 8,000 seeds kept apart and never used to choose anything.</p>
+        <div class="chart" id="climbChart" role="img" aria-label="Line chart: share of runs won by each version of the bot, from 0.07% on 30 October to 66.5% on 3 November."></div>
         <details><summary>Show the numbers</summary><div class="tbl"><table id="climbTable"><thead><tr><th>Version</th><th>Date</th><th class="r">Runs</th><th class="r">Won</th></tr></thead><tbody></tbody></table></div></details>
         <p class="col muted" style="font-size:14px">Measured on 2,000 to 1,000,000 seeds per version; the 95% range is about ±2 points at 2,000 runs and ±0.6 at 25,000.</p>
       </div>
@@ -260,7 +260,7 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
           <div><b>Play better</b><small>The bot decides with the network's estimate. Round 4 gained 1.75 points, round 5 only 0.4.</small></div>
           <div class="new"><b>Explore</b><small>New from round 7: one decision in ten takes another option rated nearly as good, so the network sees where untried choices lead.</small></div>
         </div>
-        <p class="col muted">Without exploration, the network only learns from the choices the bot already makes, so each round can only refine its habits. That is why the gains were shrinking. Rounds 7 and 8 explored. With its full search, the bot on round 8's networks won 64.0% against 65.75% on round 7's, on the same 2,000 seeds: no gain yet, and within the noise of that many runs.</p>
+        <p class="col muted">Without exploration, the network only learns from the choices the bot already makes, so each round can only refine its habits. That is why the gains were shrinking. Rounds 7 to 10 explored, round 10 with whole builds (a quarter of its runs commit from ante 3 to one hand picked at random), and their networks are no better than round 7's. The last step came from giving the networks more say against the formula: +2.6 points on 8,000 seeds.</p>
       </div>
     </div>
   </section>
@@ -320,9 +320,9 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
       <span class="label">Next</span>
       <h2>Target: <span class="dg">90%</span> at White Stake</h2>
       <div class="next">
-        <div class="now"><h3>Today</h3><p>How much say the networks should get against the formula, measured on 8,000 seeds, where the noise is half as large.</p></div>
+        <div class="now"><h3>Today</h3><p>Looking further ahead at the big shop and pack decisions, on imagined futures built only from what's on screen, and training on every recording, with wins played on into Endless to tell strong builds from lucky ones.</p></div>
         <div><h3>The player's seeds</h3><p>A benchmark of the seeds the human player won: how many of them the bot wins too, each played several times.</p></div>
-        <div><h3>Deeper play</h3><p>If exploration stalls: a deeper search at each decision, or a network that learns to play by trial and error.</p></div>
+        <div><h3>A harder table</h3><p>Black Deck at Gold Stake as a second benchmark: one hand fewer each round, and every stake's rules at once.</p></div>
         <div><h3>Then up the stakes</h3><p>Higher stakes and the other decks, once White Stake is solved.</p></div>
       </div>
     </div>
@@ -372,7 +372,8 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
     ["Round 3 recording", "1 Nov", 25000, 49.66], ["Precise on rounds 1–3", "1 Nov", 2000, 53.40],
     ["Tuned formula", "1 Nov", 2000, 59.85], ["Round 4's networks", "1 Nov", 2000, 61.60],
     ["Round 5's networks", "1 Nov", 2000, 62.00], ["Round 6's networks", "2 Nov", 2000, 62.90],
-    ["Focus on one hand, fair skipping", "2 Nov", 8000, 64.24]
+    ["Focus on one hand, fair skipping", "2 Nov", 8000, 64.24], ["Networks get more say (weight 2.5)", "2 Nov", 8000, 66.46],
+    ["Exam: seeds kept apart", "3 Nov", 8000, 66.49]
   ];
   const notes = { 3: "Decides by value", 5: "Learned value", 10: "Tuned formula" };
   (function () {
@@ -395,7 +396,7 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
       if (notes[i]) el("text", { x: x(i) - 8, y: y(d[3]) - 12, "text-anchor": "end", "font-family": PIX, "font-size": 14, fill: "var(--ink)" }, svg, notes[i]);
     });
     const last = climb[climb.length - 1];
-    el("text", { x: x(climb.length - 1), y: y(last[3]) - 15, "text-anchor": "end", "font-family": DIG, "font-size": 16, fill: "var(--ink)" }, svg, "64.2%");
+    el("text", { x: x(climb.length - 1), y: y(last[3]) - 15, "text-anchor": "end", "font-family": DIG, "font-size": 16, fill: "var(--ink)" }, svg, "66.5%");
     const tip = tipFor(box);
     climb.forEach((d, i) => {
       const hit = el("rect", { x: x(i) - 18, y: T, width: 36, height: H - T - B, fill: "transparent" }, svg);

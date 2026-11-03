@@ -30,7 +30,8 @@ plays and learns, and what's next. GitHub Pages serves it from `main`, folder `/
 
 ## Where it stands
 
-White Stake, Red Deck: the teacher bot wins about 64% of runs on seeds it has never played (64.2% of 8,000).
+White Stake, Red Deck: the teacher bot wins about two runs in three on seeds it has never played: 66.5% of the
+exam's 8,000 seeds, which are kept apart and never used to choose anything.
 The goal is 90%. `results/progress.jsonl` has every step on the way.
 
 ## Running it
