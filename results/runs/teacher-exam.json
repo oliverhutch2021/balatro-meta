@@ -1,0 +1,28 @@
+{
+ "job": "teacher-exam",
+ "commit": "a44ffd21e04a379ecd915e2caaa15967eb5d9b34",
+ "started": "2026-11-03T05:32:54+00:00",
+ "finished": "2026-11-03T06:19:15+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   15.8,
+   16.5,
+   16.6
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 1,
+  "exam": 2780
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "exam": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise --runs 8000 --seed 5003 --out results/exam/exam-8k-f3-precise-rounds8-w2.5.json"
+ }
+}
