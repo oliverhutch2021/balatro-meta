@@ -57,7 +57,10 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   `learned.rs` (the learned value: a network read
   from the screen alone, `observe::encode_value`, trained by
   `scripts/train_value.py` on positions `baseline --record` keeps, each
-  labelled with how its run ended), `explain.rs` (the teacher's plan in
+  labelled with how its run ended; each chunk also keeps every run's moves,
+  so `baseline --replay DIR --record NEW` encodes a recording's positions
+  afresh in seconds, checking every run ends as recorded: a new value input
+  needs no new recording, from round 11 on), `explain.rs` (the teacher's plan in
   words, for the viewer),
   `planner.rs` (the teacher's rounds: which hand to build, tried on fair
   copies; digging; taking value from a round it can already win),

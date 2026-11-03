@@ -11,9 +11,17 @@
 //! between rounds (blind choice, shop, open packs) as the value network's input (sparse, half precision),
 //! labelled with how its run ended. Chunks of 250 runs in run order (`chunk-NNNNN-{idx,val,ptr,lab}.npy`
 //! and `-runs.json`), then `manifest.json` once every run is in, so the same seeds give the same files.
+//! Each chunk also keeps every move of its runs (`-mkind.npy`, `-marg.npy`; `runs.json` gives each run's
+//! count), and the manifest says so (`"moves_kept": true`).
 //! `--record-moves DIR` keeps every move instead, for the network that learns to play (`make train`): each
 //! position's screen input (`observe::encode`), the move kinds it allowed and the bot's move
 //! (`-mov.npy`: kind, argument, legal kinds as bits), in the same chunks.
+//!
+//! `--replay DIR --record NEW` plays the runs of a recording made with `--record` again, each by its own
+//! moves (no bot, no search: seconds for a whole round), and records their positions as this code encodes
+//! them: a new value input needs no new recording. Each run must end as it was recorded, after the same
+//! moves; if one doesn't (the engine's rules changed since), it says which and leaves NEW without a
+//! manifest. The manifest keeps how the runs were played (bot, seed base, networks, options).
 //!
 //! With `BM_WATCH_DIR` set (the job runner sets it), it writes there for the live viewer:
 //! `progress.json` about once a second (runs, runs a second, win rate, final antes, what ended the
@@ -84,6 +92,8 @@ struct RunSummary {
     detail: Option<String>,
     /// The positions the teacher valued (`--record`).
     recorded: Option<Recorded>,
+    /// `--replay`: the recorded moves ran out before the run ended.
+    unfinished: bool,
 }
 
 impl RunSummary {
@@ -182,7 +192,8 @@ fn detail_row(run: &Run, s: &RunSummary) -> String {
     )
 }
 
-fn play(seed: String, salt: u64, keep: bool, bot: Bot) -> RunSummary {
+/// `script`: the run's recorded moves (`--replay`), played in place of the bot's.
+fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64)]>) -> RunSummary {
     bm_core::teacher::new_run();
     let mut run = Run::new(RunConfig::new(&seed));
     let mut s = RunSummary {
@@ -212,7 +223,19 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot) -> RunSummary {
             }
             _ => false,
         };
-        let (k, a) = bot(&run, salt << 20 | step);
+        let (k, a) = match script {
+            None => bot(&run, salt << 20 | step),
+            Some(m) => match m.get(step as usize) {
+                Some(&(k, a)) => (
+                    MoveKind::from_index(i64::from(k)).expect("a recorded move's kind"),
+                    a,
+                ),
+                None => {
+                    s.unfinished = true;
+                    break;
+                }
+            },
+        };
         if keep_this && moves {
             let legal = legal_kinds(&run)
                 .iter()
@@ -375,6 +398,8 @@ struct RecordedRun {
     end_stage: u32,
     end_ante: usize,
     rec: Recorded,
+    /// Every move of the run (kind, argument): with the seed they play the run again (`--replay`).
+    moves: Vec<(u8, u64)>,
 }
 
 /// Recorded runs grouped into chunks by run number; a chunk is written once all its runs are in.
@@ -433,12 +458,15 @@ impl Recorder {
         let mut rows = Rows::default();
         let mut lab: Vec<f32> = Vec::new();
         let mut mov: Vec<i64> = Vec::new();
+        let (mut kinds, mut args): (Vec<u8>, Vec<u64>) = (Vec::new(), Vec::new());
         let mut list = Vec::new();
         for r in &runs {
             rows.extend(&r.rec.rows);
             for m in &r.rec.moves {
                 mov.extend_from_slice(m);
             }
+            kinds.extend(r.moves.iter().map(|&(k, _)| k));
+            args.extend(r.moves.iter().map(|&(_, a)| a));
             for at in &r.rec.at {
                 lab.extend_from_slice(&[
                     r.run as f32,
@@ -452,12 +480,13 @@ impl Recorder {
                 ]);
             }
             list.push(format!(
-                "{{\"run\": {}, \"seed\": {}, \"won\": {}, \"end_stage\": {}, \"rows\": {}}}",
+                "{{\"run\": {}, \"seed\": {}, \"won\": {}, \"end_stage\": {}, \"rows\": {}, \"moves\": {}}}",
                 r.run,
                 esc(&r.seed),
                 r.won,
                 r.end_stage,
-                r.rec.rows.len()
+                r.rec.rows.len(),
+                r.moves.len()
             ));
         }
         let n = rows.len();
@@ -503,6 +532,14 @@ impl Recorder {
                 "mov.npy",
                 npy_bytes("<i8", &[n, 3], &le_bytes(&mov, i64::to_le_bytes)),
             ));
+        } else {
+            // Every move of every run, in run order (`runs.json` gives each run's count): the runs can be
+            // played again move by move, so their positions can be encoded afresh (`--replay`).
+            files.push(("mkind.npy", npy_bytes("|u1", &[kinds.len()], &kinds)));
+            files.push((
+                "marg.npy",
+                npy_bytes("<u8", &[args.len()], &le_bytes(&args, u64::to_le_bytes)),
+            ));
         }
         for (part, bytes) in files {
             let path = name(part);
@@ -522,10 +559,11 @@ impl Recorder {
         } else {
             ("value", VALUE_LEN)
         };
+        let moves_kept = RECORD_MODE.load(Ordering::Relaxed) == 1;
         let text = format!(
             "{{\n \"format\": 1,\n \"input\": \"{input}\",\n \"input_version\": {VALUE_INPUT_VERSION},\n \
              \"inputs\": {inputs},\n \"runs\": {},\n \"rows\": {},\n \"chunks\": {},\n \
-             \"runs_per_chunk\": {RUNS_PER_CHUNK},\n \"labels\": [{}],\n{about}\n}}\n",
+             \"runs_per_chunk\": {RUNS_PER_CHUNK},\n \"labels\": [{}],\n \"moves_kept\": {moves_kept},\n{about}\n}}\n",
             self.runs,
             self.rows,
             self.chunks,
@@ -533,6 +571,125 @@ impl Recorder {
         );
         write_atomic(&self.dir.join("manifest.json"), &text);
     }
+}
+
+/// A recorded run to play again move by move (`--replay DIR`), and how it ended when it was recorded.
+struct Replayed {
+    seed: String,
+    moves: Vec<(u8, u64)>,
+    won: bool,
+    end_stage: u32,
+}
+
+/// The data of a `.npy` file this program wrote (version 1.0, its own dtype and shape).
+fn npy_data(path: &Path) -> Vec<u8> {
+    let b = std::fs::read(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    assert!(
+        b.len() >= 10 && b.starts_with(b"\x93NUMPY\x01\x00"),
+        "{}: not a .npy file this program wrote",
+        path.display()
+    );
+    let header = u16::from_le_bytes([b[8], b[9]]) as usize;
+    b[10 + header..].to_vec()
+}
+
+/// A field's text in one line of `runs.json` (written by `Recorder::write`: one run to a line).
+fn field<'a>(line: &'a str, key: &str) -> &'a str {
+    let tag = format!("\"{key}\": ");
+    let at = line
+        .find(&tag)
+        .unwrap_or_else(|| panic!("no {key:?} in runs.json line {line:?}"))
+        + tag.len();
+    let rest = &line[at..];
+    rest[..rest.find([',', '}']).unwrap_or(rest.len())].trim()
+}
+
+/// The runs of a recording made with `--record`, in run order, and the lines of its manifest that say how it
+/// was played (bot, seed base, networks, options), for the new recording's manifest.
+fn load_replay(dir: &Path) -> (Vec<Replayed>, String) {
+    let manifest = std::fs::read_to_string(dir.join("manifest.json")).unwrap_or_else(|e| {
+        panic!(
+            "{}: no manifest.json ({e}): the recording is missing or didn't finish",
+            dir.display()
+        )
+    });
+    assert!(
+        manifest.contains("\"moves_kept\": true"),
+        "{}: recorded before recordings kept every move, so its runs can't be played again",
+        dir.display()
+    );
+    let about: Vec<&str> = manifest
+        .lines()
+        .filter(|l| {
+            [
+                "bot",
+                "seed_base",
+                "value_net",
+                "value_weight",
+                "teacher_options",
+                "wins",
+            ]
+            .iter()
+            .any(|k| l.starts_with(&format!(" \"{k}\": ")))
+        })
+        .map(|l| l.trim_end_matches(','))
+        .collect();
+    let mut chunks: Vec<PathBuf> = std::fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("chunk-") && n.ends_with("-runs.json"))
+        })
+        .collect();
+    chunks.sort();
+    let mut runs = Vec::new();
+    for c in chunks {
+        let stem = c
+            .to_string_lossy()
+            .trim_end_matches("-runs.json")
+            .to_string();
+        let kinds = npy_data(Path::new(&format!("{stem}-mkind.npy")));
+        let args: Vec<u64> = npy_data(Path::new(&format!("{stem}-marg.npy")))
+            .chunks_exact(8)
+            .map(|b| u64::from_le_bytes(b.try_into().expect("8 bytes")))
+            .collect();
+        assert_eq!(
+            kinds.len(),
+            args.len(),
+            "{stem}: as many kinds as arguments"
+        );
+        let mut at = 0;
+        for line in std::fs::read_to_string(&c)
+            .expect("read runs.json")
+            .lines()
+            .filter(|l| l.trim_start().starts_with('{'))
+        {
+            let run: usize = field(line, "run").parse().expect("a run number");
+            assert_eq!(run, runs.len(), "{stem}: runs in order, none missing");
+            let n: usize = field(line, "moves").parse().expect("a move count");
+            let moves = kinds[at..at + n]
+                .iter()
+                .copied()
+                .zip(args[at..at + n].iter().copied())
+                .collect();
+            at += n;
+            runs.push(Replayed {
+                seed: field(line, "seed").trim_matches('"').to_string(),
+                moves,
+                won: field(line, "won") == "true",
+                end_stage: field(line, "end_stage").parse().expect("an end stage"),
+            });
+        }
+        assert_eq!(at, kinds.len(), "{stem}: every move belongs to a run");
+    }
+    let from = dir
+        .file_name()
+        .map_or(String::new(), |n| n.to_string_lossy().into_owned());
+    let about = format!("{},\n \"replayed_from\": {}", about.join(",\n"), esc(&from));
+    (runs, about)
 }
 
 /// Everything counted so far.
@@ -919,9 +1076,14 @@ fn main() {
             .and_then(|i| args.get(i + 1))
             .cloned()
     };
-    let target: u64 = opt("--runs")
-        .and_then(|s| s.replace('_', "").parse().ok())
-        .unwrap_or(1_000_000);
+    // `--replay DIR`: the runs of a recording made with `--record`, each played again by its own moves instead of
+    // by a bot, so `--record` writes their positions as this code encodes them (a new input, no new search).
+    let replay = opt("--replay").map(|d| load_replay(Path::new(&d)));
+    let runs_wanted: Option<u64> = opt("--runs").and_then(|s| s.replace('_', "").parse().ok());
+    let target: u64 = match &replay {
+        Some((runs, _)) => runs_wanted.map_or(runs.len() as u64, |n| n.min(runs.len() as u64)),
+        None => runs_wanted.unwrap_or(1_000_000),
+    };
     let seconds: Option<f64> = opt("--seconds").and_then(|s| s.parse().ok());
     let base: u64 = opt("--seed").and_then(|s| s.parse().ok()).unwrap_or(1);
     let threads: usize = match opt("--threads").and_then(|s| s.parse().ok()) {
@@ -945,6 +1107,8 @@ fn main() {
         println!("Teacher options: {}", names.join(", "));
     }
     let details: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    // `--replay`: runs that went another way than recorded.
+    let diverged: Mutex<Vec<String>> = Mutex::new(Vec::new());
     // The learned value (`--value-net`), and how much it counts (`--value-weight`).
     let value_net = opt("--value-net");
     if let Some(p) = &value_net {
@@ -964,6 +1128,11 @@ fn main() {
         ("teacher", false) => (teacher_move, "teacher bot"),
         ("teacher", true) => (teacher_move, "teacher bot with a learned value"),
         (other, _) => panic!("unknown bot {other:?}: greedy or teacher"),
+    };
+    let bot_name = if replay.is_some() {
+        "replayed runs"
+    } else {
+        bot_name
     };
     // How each run ended, in seed order (for paired comparisons), when there aren't too many runs.
     let stages: Option<Mutex<Vec<u8>>> =
@@ -1015,7 +1184,30 @@ fn main() {
                         if i >= target || over {
                             break;
                         }
-                        let mut s = play(run_seed(base, i), i, true, bot);
+                        let mut s = match &replay {
+                            None => play(run_seed(base, i), i, true, bot, None),
+                            Some((runs, _)) => {
+                                let r = &runs[i as usize];
+                                let s = play(r.seed.clone(), i, true, bot, Some(&r.moves));
+                                if s.refused
+                                    || s.unfinished
+                                    || s.moves != r.moves.len() as u64
+                                    || s.won != r.won
+                                    || s.stage != r.end_stage
+                                {
+                                    diverged.lock().unwrap().push(format!(
+                                        "run {i} (seed {}): recorded {} moves, {}; replayed {} moves, {}{}",
+                                        r.seed,
+                                        r.moves.len(),
+                                        if r.won { "won".into() } else { format!("ended at stage {}", r.end_stage) },
+                                        s.moves,
+                                        if s.won { "won".into() } else { format!("ended at stage {}", s.stage) },
+                                        if s.refused { " (a move refused)" } else if s.unfinished { " (not over)" } else { "" }
+                                    ));
+                                }
+                                s
+                            }
+                        };
                         if let Some(d) = s.detail.take() {
                             details.lock().unwrap().push(d);
                         }
@@ -1030,6 +1222,7 @@ fn main() {
                                 end_stage: s.stage,
                                 end_ante: s.end,
                                 rec,
+                                moves: s.record.clone().unwrap_or_default(),
                             });
                         }
                         local.add(&s);
@@ -1174,20 +1367,38 @@ fn main() {
 
     let t = totals.into_inner().unwrap();
     let el = start.elapsed().as_secs_f64();
+    // A replayed run that went another way means the engine no longer plays what was recorded: its positions and
+    // labels would be wrong, so the new recording is left without a manifest (the trainer refuses it).
+    let diverged = diverged.into_inner().unwrap();
+    if !diverged.is_empty() {
+        eprintln!(
+            "{} of {} runs replayed differently from how they were recorded (the engine's rules changed since?):",
+            diverged.len(),
+            t.runs
+        );
+        for d in diverged.iter().take(10) {
+            eprintln!("  {d}");
+        }
+        std::process::exit(1);
+    }
     if let Some(r) = recorder {
         let mut r = r.into_inner().unwrap();
         r.finish();
         let opts = bm_core::teacher::options();
-        let about = format!(
-            " \"bot\": {},\n \"seed_base\": {base},\n \"value_net\": {},\n \"value_weight\": {},\n \
-             \"teacher_options\": [{}],\n \"wins\": {},\n \"seconds\": {}",
-            esc(bot_name),
-            value_net.as_deref().map_or("null".into(), esc),
-            num(learned::weight()),
-            opts.iter().map(|o| esc(o)).collect::<Vec<_>>().join(", "),
-            t.wins,
-            num(el)
-        );
+        let about = match &replay {
+            // A replay keeps how the runs were played; only the encoding is this code's.
+            Some((_, about)) => about.clone(),
+            None => format!(
+                " \"bot\": {},\n \"seed_base\": {base},\n \"value_net\": {},\n \"value_weight\": {},\n \
+                 \"teacher_options\": [{}],\n \"wins\": {},\n \"seconds\": {}",
+                esc(bot_name),
+                value_net.as_deref().map_or("null".into(), esc),
+                num(learned::weight()),
+                opts.iter().map(|o| esc(o)).collect::<Vec<_>>().join(", "),
+                t.wins,
+                num(el)
+            ),
+        };
         r.manifest(&about);
         println!(
             "Recorded {} positions from {} runs in {} chunks: {}",

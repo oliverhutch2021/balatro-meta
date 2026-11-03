@@ -85,6 +85,44 @@ def test_the_same_seeds_record_the_same_files(recording, tmp_path):
         assert (again / f.name).read_bytes() == f.read_bytes(), f.name
 
 
+def test_a_recording_plays_again_move_by_move_to_the_same_files(recording, tmp_path):
+    # Every move is kept, so the runs play again without the bot and their positions are encoded afresh: with the
+    # same code, to the very same files. A new value input then needs no new recording.
+    man = json.loads((recording / "manifest.json").read_text())
+    assert man["moves_kept"] is True
+    runs = [r for c in sorted(recording.glob("chunk-*-runs.json")) for r in json.loads(c.read_text())]
+    kinds = np.concatenate([np.load(c) for c in sorted(recording.glob("chunk-*-mkind.npy"))])
+    assert len(kinds) == sum(r["moves"] for r in runs) and len(np.concatenate(
+        [np.load(c) for c in sorted(recording.glob("chunk-*-marg.npy"))])) == len(kinds)
+    again = tmp_path / "again"
+    baseline("--replay", str(recording), "--threads", "2", "--record", str(again))
+    for f in sorted(recording.glob("chunk-*")):
+        assert (again / f.name).read_bytes() == f.read_bytes(), f.name
+    new = json.loads((again / "manifest.json").read_text())
+    assert new["replayed_from"] == recording.name and new["bot"] == man["bot"] and new["seed_base"] == man["seed_base"]
+    assert new["input_version"] == VALUE_INPUT_VERSION and new["rows"] == man["rows"]
+    assert tv.load_data(again).rows == man["rows"]
+
+
+def test_a_run_that_plays_again_differently_leaves_no_recording(recording, tmp_path):
+    if not shutil.which("cargo"):
+        pytest.skip("cargo is not installed")
+    changed = tmp_path / "changed"
+    shutil.copytree(recording, changed)
+    kind = min(changed.glob("chunk-*-mkind.npy"))
+    kinds = np.load(kind)
+    assert kinds[0] == 0, "a run starts at its first blind choice"
+    kinds[0] = 2  # the first run's first move becomes a cash-out, which no blind choice allows
+    np.save(kind, kinds)
+    out = tmp_path / "out"
+    r = subprocess.run(["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "baseline", "--",
+                        "--replay", str(changed), "--threads", "2", "--record", str(out)],
+                       cwd=ROOT, capture_output=True, text=True, check=False, timeout=900,
+                       env={k: v for k, v in os.environ.items() if k != "BM_WATCH_DIR"})
+    assert r.returncode == 1 and "replayed differently" in r.stderr, r.stderr
+    assert not (out / "manifest.json").exists(), "the trainer refuses a recording without a manifest"
+
+
 def test_a_network_written_for_the_engine_reads_the_same(tmp_path):
     rng = np.random.default_rng(3)
     layers = random_net(rng, [8, 4, 3])
