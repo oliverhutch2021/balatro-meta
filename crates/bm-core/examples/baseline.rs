@@ -982,10 +982,11 @@ fn report_json(r: &Report) -> String {
 fn sample_json(s: &RunSummary, record: &[(u8, u64)], pick: &str, run: u64, bot: &str) -> String {
     let moves: Vec<String> = record.iter().map(|(k, a)| format!("[{k}, {a}]")).collect();
     format!(
-        "{{\"seed\": {}, \"bot\": {}, \"source\": \"baseline\", \"pick\": {}, \"run\": {run}, \
+        "{{\"seed\": {}, \"stake\": {}, \"bot\": {}, \"source\": \"baseline\", \"pick\": {}, \"run\": {run}, \
          \"label\": {}, \"result\": {}, \"won\": {}, \"ante\": {}, \"stage\": {}, \"closeness\": {}, \
          \"best_hand\": {}, \"moves\": [{}]}}\n",
         esc(&s.seed),
+        STAKE.load(Ordering::Relaxed),
         esc(bot),
         esc(pick),
         esc(&if pick == "best" { format!("one of the {bot}'s best runs") } else { format!("a typical run by the {bot}") }),

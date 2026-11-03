@@ -604,6 +604,10 @@ discard (2.1) and Gold's rentals (2.3); eternal jokers cost nothing. From Green 
 Big Blind, not its boss. The formula's own numbers turned at Green (the long run's weight and rounds, what money is
 worth) changed nothing clearly: the gap needs networks that learned the stake, not another hand-tuned formula.
 
+It plays Gold first and White last. `make watch` in another tab replays each stake's runs as they come, the stake
+in the run's name, and its real-game checks start the hidden game at the run's stake: the first check of every
+stake's own rules against the game (a difference it finds is a finding about the engine, saved like any other).
+
 ```
 cd /mnt/h/balatro-meta && make teacher-stakes
 ```

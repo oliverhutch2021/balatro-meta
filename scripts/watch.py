@@ -39,6 +39,21 @@ MOVE_NAMES = ("select blind", "skip blind", "cash out", "leave shop", "sort by r
               "redeem a voucher", "open a pack", "sell a consumable", "use a consumable", "take a pack card",
               "skip the pack", "reroll the boss")
 # Moves BalatroBot has no call for: a replay stops before them (not a mismatch).
+# Stakes by number (a saved run's "stake", the engine's RunConfig::stake), as the page names them and as BalatroBot's
+# start and gamestate name them.
+STAKE_NAMES = ["White Stake", "Red Stake", "Green Stake", "Black Stake", "Blue Stake", "Purple Stake",
+               "Orange Stake", "Gold Stake"]
+BALATROBOT_STAKES = ["WHITE", "RED", "GREEN", "BLACK", "BLUE", "PURPLE", "ORANGE", "GOLD"]
+
+
+def stake_of(sample: dict) -> int:
+    """A saved run's stake (1 White ... 8 Gold); runs saved before stakes were named are White Stake's."""
+    s = int(sample.get("stake") or 1)
+    if not 1 <= s <= 8:
+        raise ValueError(f"a run saved at stake {s}: stakes run from 1 (White) to 8 (Gold)")
+    return s
+
+
 UNSUPPORTED = {13: "BalatroBot has no 'buy and use'", 20: "BalatroBot has no boss reroll"}
 # Moves BalatroBot only takes in some states (engine state before the move).
 ALLOWED_STATES = {

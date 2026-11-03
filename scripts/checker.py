@@ -24,7 +24,9 @@ from pathlib import Path
 
 import watch
 from watch import (
+    BALATROBOT_STAKES,
     ROOT,
+    STAKE_NAMES,
     WATCH,
     Api,
     apply_in_game,
@@ -35,6 +37,7 @@ from watch import (
     game_view,
     hand_permutation,
     settle,
+    stake_of,
     unsupported,
 )
 
@@ -368,11 +371,12 @@ class Checker:
             time.sleep(0.02)
 
     # -- one run
-    def check_run(self, seed: str, moves, label: str) -> tuple[bool, str]:
-        """Play a run in the game and the engine together. (ok, message); ok is False on a difference."""
+    def check_run(self, seed: str, moves, label: str, stake: int = 1) -> tuple[bool, str]:
+        """Play a run in the game and the engine together, at `stake` (1 White ... 8 Gold): the game starts there
+        too, so a stake's own rules are checked as well. (ok, message); ok is False on a difference."""
         from balatro_meta._engine import Game
 
-        game = Game(seed)
+        game = Game(seed, stake)
         api = self.api
         self.note(current={"seed": game.seed, "label": label, "move": 0})
         try:
@@ -380,7 +384,7 @@ class Checker:
         except RuntimeError:
             pass
         self.wait_idle()  # a few frames in the menu: the mod readies the run-setup deck `start` needs
-        gs = settle(api, api.call("start", {"deck": "RED", "stake": "WHITE", "seed": game.seed}))
+        gs = settle(api, api.call("start", {"deck": "RED", "stake": BALATROBOT_STAKES[stake - 1], "seed": game.seed}))
         self.wait_idle()
         gs, diff = compare(api, game, gs)
         if diff:
@@ -440,9 +444,9 @@ class Checker:
                                    "file": shown, "time": time.time()})
         return f"engine and game differ after move {step} ({what}): " + "; ".join(diff[:3]) + f". Details in {shown}"
 
-    def next_run(self) -> tuple[str, list | None, str]:
-        """A run to check: one of the job's best runs not checked yet (they go furthest, so they cover the
-        most rules), else the newest typical run not checked yet, else a demo run."""
+    def next_run(self) -> tuple[str, list | None, str, int]:
+        """A run to check, and its stake: one of the job's best runs not checked yet (they go furthest, so they
+        cover the most rules), else the newest typical run not checked yet, else a demo run (White Stake)."""
         if self.jobs is not None:
             for p in [p for _, p in self.jobs.best()] + self.jobs.samples():
                 if str(p) in self.checked:
@@ -450,8 +454,12 @@ class Checker:
                 self.checked.add(str(p))
                 s = self.jobs.read_sample(p)
                 if s:
-                    return s["seed"], [tuple(m) for m in s["moves"]], s.get("label") or "a job's run"
-        return fresh_seed(), None, "demo run (greedy bot)"
+                    stake = stake_of(s)
+                    label = s.get("label") or "a job's run"
+                    if stake != 1:
+                        label = f"{label}, {STAKE_NAMES[stake - 1]}"
+                    return s["seed"], [tuple(m) for m in s["moves"]], label, stake
+        return fresh_seed(), None, "demo run (greedy bot)", 1
 
     # -- the loop
     def loop(self, stop: threading.Event) -> None:
@@ -491,10 +499,10 @@ class Checker:
             if reason:
                 self.restart(reason)
                 continue
-            seed, moves, label = self.next_run()
+            seed, moves, label, stake = self.next_run()
             self.note(state="running", message="Checking runs in a hidden copy of your game")
             try:
-                ok, msg = self.check_run(seed, moves, label)
+                ok, msg = self.check_run(seed, moves, label, stake)
             except (OSError, ValueError) as exc:  # it crashed, hung or stopped answering
                 ok, msg = None, f"lost the hidden game: {exc}"
                 self.add("errors")

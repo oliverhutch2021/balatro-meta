@@ -49,6 +49,7 @@ def area(items: list, cheat_price: bool = False) -> dict:
 class FakeGame:
     def __init__(self, cheat: bool = False, cheat_price: bool = False, cheat_sell: bool = False) -> None:
         self.game = None
+        self.stake = None  # BalatroBot's name of the stake the last start asked for
         self.order: list[int] = []
         self.cheat = cheat
         self.cheat_price = cheat_price
@@ -92,7 +93,8 @@ class FakeGame:
         if method == "menu":
             self.game = None
         elif method == "start":
-            self.game = Game(p["seed"])
+            self.stake = p.get("stake", "WHITE")
+            self.game = Game(p["seed"], watch.BALATROBOT_STAKES.index(self.stake) + 1)
             self.order = []
         elif method in kinds:
             assert self.game.step(kinds[method], 0), method
@@ -315,7 +317,7 @@ def test_the_checks_take_the_jobs_best_runs_first(tmp_path, monkeypatch):
     api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
     mod = AlwaysIdle()
     c = checker.Checker(jobs=jobs, api=api, files=mod, launch=False, say=lambda *_: None)
-    seed, got, _ = c.next_run()
+    seed, got, *_ = c.next_run()
     assert seed == "CHECKME1" and [list(m) for m in got] == moves
     assert c.next_run()[0] == "TYPICAL1"
     assert c.next_run()[1] is None, "then demo runs"
@@ -323,6 +325,41 @@ def test_the_checks_take_the_jobs_best_runs_first(tmp_path, monkeypatch):
     srv.shutdown()
     assert ok and c.summary()["moves"] == 6, msg
     assert mod.reads > 0, "the checks waited for the game through the mod's reports"
+
+
+def test_a_run_saved_at_a_stake_is_checked_at_that_stake(tmp_path, monkeypatch):
+    """A job's run at Gold Stake: the checks take its stake from the sample and start the game there, and the
+    engine plays it there too (at White Stake its moves would not even fit)."""
+    import viewer
+
+    monkeypatch.setattr(watch, "WATCH", tmp_path)
+    monkeypatch.setattr(checker, "WATCH", tmp_path)
+    samples = tmp_path / "watch" / "job" / "samples"
+    samples.mkdir(parents=True)
+    g = Game("GOLDRUN1", 8)
+    moves = []
+    for _ in range(40):
+        if g.over:
+            break
+        k, a = g.greedy_move()
+        g.step(k, a)
+        moves.append([k, a])
+    (samples / "best-0000000001.json").write_text(json.dumps(
+        {"seed": "GOLDRUN1", "stake": 8, "moves": moves, "pick": "best", "won": False, "stage": 2}))
+    jobs = viewer.JobFiles(tmp_path / "watch", tmp_path / "logs")
+    fake = FakeGame()
+    srv = serve(fake)
+    api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
+    c = checker.Checker(jobs=jobs, api=api, files=AlwaysIdle(), launch=False, say=lambda *_: None)
+    seed, got, label, stake = c.next_run()
+    assert (seed, stake) == ("GOLDRUN1", 8) and "Gold Stake" in label
+    ok, msg = c.check_run(seed, got, label, stake)
+    srv.shutdown()
+    assert ok, msg
+    assert fake.stake == "GOLD" and c.summary()["moves"] == len(moves)
+    assert watch.stake_of({"seed": "X"}) == 1, "runs saved before stakes were named are White Stake's"
+    with pytest.raises(ValueError):
+        watch.stake_of({"stake": 9})
 
 
 def test_face_down_jokers_are_compared_by_their_true_values():

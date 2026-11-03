@@ -22,9 +22,9 @@ from balatro_meta._engine import Game
 import viewer
 
 
-def greedy_run(seed: str, limit: int = 5000) -> tuple[list[list[int]], dict]:
-    """A run by the greedy bot: its moves and its last view."""
-    g = Game(seed)
+def greedy_run(seed: str, limit: int = 5000, stake: int = 1) -> tuple[list[list[int]], dict]:
+    """A run by the greedy bot (at `stake`): its moves and its last view."""
+    g = Game(seed, stake)
     moves = []
     while not g.over and len(moves) < limit:
         k, a = g.greedy_move()
@@ -160,6 +160,26 @@ def test_a_saved_run_replays_to_its_recorded_end(tmp_path):
     # The run at any move, for rewinding.
     k = len(moves) // 2
     assert viewer.view_at("REPLAY01", [tuple(m) for m in moves], k)["money"] == run.moves[k - 1]["money"]
+
+
+def test_a_run_saved_at_a_stake_replays_at_that_stake(tmp_path):
+    # A Gold Stake run: replayed at Gold to its recorded end, the page told its stake. At White its blinds and
+    # discards differ, so the same moves would not play out the same.
+    moves, end = greedy_run("GOLDVIEW", stake=8)
+    samples = tmp_path / "watch" / "teacher-stakes" / "samples"
+    save(samples, "best-0000000001.json", seed="GOLDVIEW", stake=8, moves=moves, pick="best", won=end["won"],
+         stage=2, closeness=0.5, best_hand=100, label="one of the greedy bot's best runs")
+    v = viewer.Viewer("max")
+    rep = viewer.Replayer(v, jobs_at(tmp_path))
+    s, rank = rep.pick_run()
+    out = rep.play(threading.Event(), s["seed"], [tuple(m) for m in s["moves"]], s["label"], "job", "greedy bot",
+                   None, "best", rank, viewer.stake_of(s))
+    run = v.run
+    assert len(run.moves) == len(moves) and not out.startswith("the engine refused"), out
+    assert run.stake == 8 and run.public()["stake"] == 8 and run.label.endswith("Gold Stake")
+    assert run.view["ante"] == end["ante"] and run.view["money"] == end["money"]
+    k = len(moves) // 2
+    assert viewer.view_at("GOLDVIEW", [tuple(m) for m in moves], k, 8)["money"] == run.moves[k - 1]["money"]
 
 
 def test_demo_runs_without_a_job(tmp_path):

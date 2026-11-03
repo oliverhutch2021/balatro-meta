@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from watch import ROOT, WATCH, card_name, describe, fresh_seed
+from watch import ROOT, STAKE_NAMES, WATCH, card_name, describe, fresh_seed, stake_of
 
 PAGE = ROOT / "viewer" / "index.html"
 LOGS = ROOT / ".sync" / "logs"
@@ -98,9 +98,11 @@ def chosen_cards(hand: list[dict], mask: int) -> list[dict]:
 
 
 class RunRecord:
-    def __init__(self, seed: str, label: str, source: str, bot: str, expected: str | None = None) -> None:
+    def __init__(self, seed: str, label: str, source: str, bot: str, expected: str | None = None,
+                 stake: int = 1) -> None:
         self.id = f"{seed}-{time.time():.3f}"
         self.seed, self.label, self.source, self.bot = seed, label, source, bot
+        self.stake = stake
         self.expected = expected  # what the job recorded for this run
         self.started = time.time()
         self.pick: str | None = None  # "best" or "typical" (from a job), None for a demo
@@ -113,7 +115,8 @@ class RunRecord:
         self.proj: dict[int, dict] = {}
 
     def public(self, since: int = 0) -> dict:
-        return {"id": self.id, "seed": self.seed, "label": self.label, "source": self.source, "bot": self.bot,
+        return {"id": self.id, "seed": self.seed, "stake": self.stake, "label": self.label, "source": self.source,
+                "bot": self.bot,
                 "expected": self.expected, "pick": self.pick, "rank": self.rank, "started": self.started,
                 "result": self.result,
                 "start": self.start, "n_moves": len(self.moves), "moves": self.moves[since:], "view": self.view}
@@ -135,11 +138,12 @@ class Viewer:
         self.run: RunRecord | None = None
         self.last_run: RunRecord | None = None
 
-    def new_run(self, seed: str, label: str, source: str, bot: str, expected: str | None = None) -> RunRecord:
+    def new_run(self, seed: str, label: str, source: str, bot: str, expected: str | None = None,
+                stake: int = 1) -> RunRecord:
         with self.lock:
             if self.run is not None:
                 self.last_run = self.run
-            self.run = RunRecord(seed, label, source, bot, expected)
+            self.run = RunRecord(seed, label, source, bot, expected, stake)
             return self.run
 
     def take_next(self) -> bool:
@@ -148,11 +152,11 @@ class Viewer:
             return flag
 
 
-def view_at(seed: str, moves: list[tuple[int, int]], n: int) -> dict:
-    """The run as it was after its first n moves (replayed with the engine)."""
+def view_at(seed: str, moves: list[tuple[int, int]], n: int, stake: int = 1) -> dict:
+    """The run as it was after its first n moves (replayed with the engine, at the run's stake)."""
     from balatro_meta._engine import Game
 
-    g = Game(seed)
+    g = Game(seed, stake)
     for k, a in moves[:n]:
         g.step(k, a)
     return details(g.view())
@@ -364,12 +368,15 @@ class Replayer:
             time.sleep(0.02)
 
     def play(self, stop: threading.Event, seed: str, moves, label: str, source: str, bot: str,
-             expected: str | None = None, pick: str | None = None, rank: int | None = None) -> str:
+             expected: str | None = None, pick: str | None = None, rank: int | None = None,
+             stake: int = 1) -> str:
         from balatro_meta._engine import Game
 
-        game = Game(seed)
+        game = Game(seed, stake)  # a run plays again only at the stake it was played at
         v = self.viewer
-        rec = v.new_run(game.seed, label, source, bot, expected)
+        if stake != 1:
+            label = f"{label}, {STAKE_NAMES[stake - 1]}"
+        rec = v.new_run(game.seed, label, source, bot, expected, stake)
         with v.lock:
             rec.pick, rec.rank = pick, rank
             rec.start = summary(game.view())
@@ -439,7 +446,7 @@ class Replayer:
                 if s:
                     self.play(stop, s["seed"], [tuple(m) for m in s["moves"]], s.get("label") or "a job's run",
                               "job", s.get("bot") or "the job's bot", s.get("result"), s.get("pick") or "typical",
-                              rank)
+                              rank, stake_of(s))
                 else:
                     self.play(stop, fresh_seed(), None, "demo run (greedy bot)", "demo", "greedy bot")
             except Exception as exc:  # noqa: BLE001 - a bad sample must never stop the viewer
@@ -491,7 +498,7 @@ class Analyst:
                 continue
             rec, k, moves = t
             try:
-                g = Game(rec.seed)
+                g = Game(rec.seed, rec.stake)
                 for m in moves[:k]:
                     g.step(*m)
                 salt = (hash(rec.id) & 0xFFFF) * 1000 + k
@@ -581,11 +588,11 @@ def make_handler(viewer: Viewer, jobs: JobFiles, checks=None, art=None, progress
                     run_id, n = q.get("run", [""])[0], int(q.get("n", ["0"])[0] or 0)
                     with viewer.lock:
                         run = viewer.run if viewer.run and viewer.run.id == run_id else None
-                        seed, moves = (run.seed, list(run.move_list)) if run else (None, [])
+                        seed, moves, stake = (run.seed, list(run.move_list), run.stake) if run else (None, [], 1)
                     if seed is None or not 0 <= n <= len(moves):
                         self.send({"error": "no such move in the run on screen"}, code=404)
                     else:
-                        self.send(view_at(seed, moves, n))
+                        self.send(view_at(seed, moves, n, stake))
                 else:
                     self.send({"error": "not found"}, code=404)
             except (BrokenPipeError, ConnectionResetError):

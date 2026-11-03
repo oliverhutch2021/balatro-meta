@@ -246,7 +246,7 @@ def stakes_steps(root: Path = ROOT, runs: int = STAKE_RUNS) -> list[tuple]:
     return [("build", [*MAKE, "build"]),
             *[(f"stake-{s}", [*BASELINE, "--bot", "teacher", *args, "--runs", str(runs), "--seed", "1",
                               "--stake", str(s), "--out", f"results/stakes/stake{s}-{tail}.json"])
-              for s in range(1, 9)]]
+              for s in range(8, 0, -1)]]  # Gold first: the stakes furthest from what the networks learned
 
 
 # make teacher-inputs: does seeing the deck card by card (input layout 2: which ranks and suits carry which
