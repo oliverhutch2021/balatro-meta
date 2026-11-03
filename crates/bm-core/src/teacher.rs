@@ -1130,7 +1130,9 @@ fn card_order(run: &Run, mask: u64, salt: u64) -> Option<(MoveKind, u64)> {
 }
 
 /// Luchador sold at the start of a boss round when the boss makes the blind much harder to beat (its sale
-/// disables the boss): judged by the best-hand plan's tries with and without the boss.
+/// disables the boss): judged by the best-hand plan's tries with and without the boss. Only a Luchador in
+/// sight: face down (Amber Acorn) the player knows it holds one but not which card it is, and at the round's
+/// start nothing has shown it yet.
 fn luchador_sale(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
     run.blind.as_ref().and_then(|b| b.active_boss())?;
     if run.hands_played_round > 0 || run.discards_used_round > 0 {
@@ -1139,7 +1141,7 @@ fn luchador_sale(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
     let l = run
         .jokers
         .iter()
-        .position(|j| j.kind == JokerKind::Luchador && !j.debuffed)?;
+        .position(|j| j.kind == JokerKind::Luchador && !j.debuffed && !j.face_down)?;
     let with_boss = crate::planner::beat_rate(run, salt);
     if with_boss >= 0.9 {
         return None;

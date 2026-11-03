@@ -855,20 +855,27 @@ fn card_key(salt: u64, id: u64) -> u64 {
 
 /// A copy of the run for lookahead whose hidden parts are reshuffled from
 /// what the player could know: the draw order, every future random event
-/// (a fresh seed, so future bosses, tags, shops and rolls are new), the
-/// order of face-down jokers and which cards the face-down cards in hand are
-/// (`redeal_face_down`). `salt` picks the reshuffle.
+/// (a fresh seed, so future bosses, tags, shops and rolls are new; the
+/// copy's `cfg.seed` is that seed, so the real one isn't in it), the ante's
+/// voucher while no shop has shown it yet, the order of face-down jokers and
+/// which cards the face-down cards in hand are (`redeal_face_down`). `salt`
+/// picks the reshuffle.
 ///
 /// The draw order comes from the salt and each card alone, never from the
 /// cards' real order: copies of positions that hold the same cards deal them
 /// alike (so the options of one decision, and doing nothing, are all judged
 /// on the same deals), and a card added or removed changes the deals only
-/// where it comes in.
+/// where it comes in. Face-down jokers likewise: the player knows which
+/// jokers lie face down but not where, so they are set out in creation order
+/// (where Amber Acorn's own shuffles start) and shuffled from there; a copy
+/// never starts from the real row, so two runs that differ only in where
+/// those jokers lie make the same copies.
 pub fn fair_copy(run: &Run, salt: u64) -> Run {
     let mut c = run.clone();
     let mut sampler = SeedSampler::new(salt);
     let seed = sampler.next_seed();
     c.rng = Streams::new(&seed);
+    c.cfg.seed = seed;
     let mut g = LuaRandom::new(sampler.next_u64() as f64 / u64::MAX as f64);
     let order = sampler.next_u64();
     c.deck.sort_by_cached_key(|&id| card_key(order, id as u64));
@@ -877,12 +884,17 @@ pub fn fair_copy(run: &Run, salt: u64) -> Run {
         .filter(|&i| c.jokers[i].face_down)
         .collect();
     if down.len() > 1 {
-        let mut order = down.clone();
-        shuffle(&mut order, &mut g);
-        let moved: Vec<_> = order.iter().map(|&i| c.jokers[i].clone()).collect();
+        let mut known = down.clone();
+        known.sort_by_key(|&i| c.jokers[i].sort_id);
+        shuffle(&mut known, &mut g);
+        let moved: Vec<_> = known.iter().map(|&i| c.jokers[i].clone()).collect();
         for (slot, j) in down.iter().zip(moved) {
             c.jokers[*slot] = j;
         }
+    }
+    if c.shop_voucher.is_some() && !c.shop_voucher_shown {
+        let key = format!("Voucher{}", c.ante);
+        c.shop_voucher = Some(c.next_voucher(&key));
     }
     c
 }

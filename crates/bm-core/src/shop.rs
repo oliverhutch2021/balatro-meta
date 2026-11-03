@@ -120,6 +120,7 @@ impl Run {
         }
         // 3. The ante's voucher.
         if let Some(v) = self.shop_voucher {
+            self.shop_voucher_shown = true;
             let sort_id = self.take_sort_id();
             self.mark_present(Center::Voucher(v));
             let cost = self.price(v.base_cost(), Edition::None);

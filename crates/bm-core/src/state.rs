@@ -243,6 +243,9 @@ pub struct Run {
     pub pack: Option<OpenPack>,
     /// The ante's voucher, offered in each shop until a voucher is redeemed.
     pub shop_voucher: Option<VoucherKind>,
+    /// Whether a shop has shown `shop_voucher` yet. It is drawn at the run's start and when a boss is beaten, but
+    /// the player first sees it in the next shop: until then a fair copy draws its own (`observe::fair_copy`).
+    pub shop_voucher_shown: bool,
     /// Joker-row slots in the shop.
     pub joker_max: i32,
     pub shop_rates: ShopRates,
@@ -380,6 +383,7 @@ clone_by_field!(Run {
     shop,
     pack,
     shop_voucher,
+    shop_voucher_shown,
     joker_max,
     shop_rates,
     discount_percent,

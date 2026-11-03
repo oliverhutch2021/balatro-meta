@@ -401,6 +401,140 @@ fn the_teacher_plays_the_hand_it_sees_not_the_cards_face_down() {
     }
 }
 
+/// Amber Acorn at ante 8: the jokers flipped and shuffled, so the player knows which five it holds but not where
+/// each one lies. Hearts Ace to Eight in hand (Straight Flushes to build), the joker row turned by `turn` places
+/// (`order` gives the creation order: their sort ids, and so what Amber Acorn's own shuffle starts from, stay the
+/// same). Every turn shows the same screen.
+fn acorn_round(turn: usize, straight_flush_level: i32) -> Run {
+    use bm_core::blinds::{BlindKind, Boss};
+    use bm_core::card::{Rank, Suit};
+    use bm_core::poker::HandType;
+    let mut run = Run::scenario("ACORNLUC", BlindKind::Boss(Boss::AmberAcorn));
+    run.ante = 8;
+    run.blind.as_mut().unwrap().chips = 100_000.0;
+    run.hand.clear();
+    for r in [
+        Rank::Ace,
+        Rank::Two,
+        Rank::Three,
+        Rank::Four,
+        Rank::Five,
+        Rank::Six,
+        Rank::Seven,
+        Rank::Eight,
+    ] {
+        run.add_card_to_hand(Suit::Hearts, r);
+    }
+    for k in [
+        JokerKind::Luchador,
+        JokerKind::Joker,
+        JokerKind::Cavendish,
+        JokerKind::Blueprint,
+        JokerKind::Brainstorm,
+    ] {
+        run.add_joker(k);
+    }
+    run.jokers.rotate_left(turn);
+    for j in run.jokers.iter_mut() {
+        j.face_down = true;
+    }
+    run.hand_levels
+        .level_up(HandType::StraightFlush, straight_flush_level - 1);
+    run
+}
+
+#[test]
+fn the_teacher_cannot_tell_which_face_down_joker_is_which() {
+    // Which face-down joker lies where is hidden: whatever the teacher does (sell a joker to disable the boss, play,
+    // discard), it must do the same wherever the hidden jokers really are. A sale aimed at the real Luchador's slot
+    // would read the hidden row.
+    for level in 2..=8 {
+        let runs: Vec<Run> = (0..5).map(|t| acorn_round(t, level)).collect();
+        for r in &runs[1..] {
+            assert_eq!(screen(r), screen(&runs[0]), "the same screen");
+        }
+        for salt in 0..6u64 {
+            let moves: Vec<_> = runs
+                .iter()
+                .map(|r| {
+                    bm_core::teacher::new_run();
+                    bm_core::teacher::teacher_move(r, salt)
+                })
+                .collect();
+            assert!(
+                moves.iter().all(|m| *m == moves[0]),
+                "level {level}, salt {salt}: {moves:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_fair_copy_places_face_down_jokers_from_what_the_player_knows() {
+    // The copies of two runs that differ only in where the face-down jokers lie are the same copies: the
+    // reshuffle starts from the jokers themselves (in creation order, as Amber Acorn's does), never from the row.
+    let (a, b) = (acorn_round(0, 1), acorn_round(2, 1));
+    let kinds = |r: &Run| r.jokers.iter().map(|j| j.kind).collect::<Vec<_>>();
+    assert_ne!(kinds(&a), kinds(&b));
+    let mut rows = std::collections::HashSet::new();
+    for salt in 0..40 {
+        let (x, y) = (fair_copy(&a, salt), fair_copy(&b, salt));
+        assert_eq!(kinds(&x), kinds(&y), "salt {salt}");
+        assert!(x.jokers.iter().all(|j| j.face_down));
+        rows.insert(kinds(&x));
+    }
+    assert!(
+        rows.len() >= 20,
+        "the copies place them many ways: {}",
+        rows.len()
+    );
+}
+
+#[test]
+fn a_fair_copy_does_not_know_the_ante_s_voucher_before_a_shop_shows_it() {
+    // A run's first voucher is drawn at the start but shown only in its first shop: until then a fair copy draws
+    // its own. Once a shop has shown it, it is known and stays.
+    let mut differs = 0;
+    for i in 0..30 {
+        let run = Run::new(RunConfig::new(&format!("VOUCHER{i}")));
+        let real = run.shop_voucher;
+        assert!(real.is_some());
+        let copies: Vec<_> = (0..4).map(|s| fair_copy(&run, s).shop_voucher).collect();
+        assert!(copies.iter().all(|v| v.is_some()));
+        if copies.iter().any(|&v| v != real) {
+            differs += 1;
+        }
+        // Into the first shop: from there the voucher is on the screen, and every copy keeps it.
+        let mut shown = run.clone();
+        shown.select_blind().unwrap();
+        shown.blind.as_mut().unwrap().chips = 1.0;
+        shown.play(&[0]).unwrap();
+        shown.cash_out().unwrap();
+        assert_eq!(shown.phase, Phase::Shop);
+        for s in 0..4 {
+            assert_eq!(fair_copy(&shown, s).shop_voucher, shown.shop_voucher);
+        }
+    }
+    assert!(
+        differs >= 25,
+        "only {differs} of 30 runs' copies drew another voucher"
+    );
+}
+
+#[test]
+fn a_fair_copy_does_not_carry_the_real_seed() {
+    let run = Run::new(RunConfig::new("REALSEED"));
+    for s in 0..5 {
+        let c = fair_copy(&run, s);
+        assert_ne!(c.cfg.seed, run.cfg.seed);
+        assert_eq!(
+            c.rng.seed(),
+            c.cfg.seed,
+            "the copy's seed is the one its streams come from"
+        );
+    }
+}
+
 #[test]
 fn held_tarots_are_used_on_the_cards_in_sight_whichever_lie_face_down() {
     use bm_core::content::ConsumableKind;

@@ -123,6 +123,7 @@ impl Run {
             shop: None,
             pack: None,
             shop_voucher: None,
+            shop_voucher_shown: false,
             joker_max: 2,
             shop_rates: Default::default(),
             discount_percent: 0,
@@ -1029,6 +1030,7 @@ impl Run {
         if boss_round {
             let key = format!("Voucher{}", self.ante);
             self.shop_voucher = Some(self.next_voucher(&key));
+            self.shop_voucher_shown = false;
             for i in 0..self.playing_cards.len() {
                 let id = self.playing_cards[i];
                 self.card_mut(id).played_this_ante = false;
