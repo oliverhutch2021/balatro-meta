@@ -205,6 +205,11 @@ fn joker_view(run: &Run, j: &crate::jokers::Joker, own: Option<usize>) -> JokerV
     }
 }
 
+/// A known gap: a Stone Card's rank and suit are hidden in the game (`rules/consumables.md`: tarots change them
+/// "invisibly"), yet they are shown here and counted in the deck view's ranks and suits. They matter only once its
+/// enhancement changes (a tarot turns it into another enhanced card) or Death copies it. Hiding them changes what
+/// layout 1's floats mean, so it waits for a layout that starts a new list (`VALUE_LAYOUTS`), once networks of
+/// layout 1 are no longer played.
 fn card_view(c: &Card) -> CardView {
     CardView {
         face: if c.face_down {

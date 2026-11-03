@@ -614,3 +614,43 @@ fn held_tarots_are_used_on_the_cards_in_sight_whichever_lie_face_down() {
         }
     }
 }
+
+#[test]
+fn the_teacher_moves_the_same_on_a_fair_copy_of_any_position() {
+    // A fair copy shows the same screen and draws everything hidden afresh (the draw order, the streams and seed,
+    // which cards lie face down, where face-down jokers lie, an unseen voucher), so a teacher that decides from the
+    // screen and fair copies alone moves the same on both. Positions from teacher-played runs, each pushed toward
+    // rare situations (`Run::shake`: any joker, consumable or boss, modified cards, face-down cards and jokers).
+    // A small slice of `examples/fair_fuzz.rs`, which also found the hidden Luchador's kind of leak.
+    use bm_core::env::{apply, run_seed};
+    use bm_core::teacher::{new_run, teacher_move};
+    let mut checked = 0;
+    for r in 0..3u64 {
+        let mut run = Run::new(RunConfig::new(&run_seed(7, r)));
+        new_run();
+        let mut step = 0u64;
+        while run.phase != Phase::GameOver && !run.won && step < 3000 {
+            let salt = r << 20 | step;
+            if step.is_multiple_of(4) {
+                let mut pos = run.clone();
+                let what = pos.shake(salt);
+                new_run();
+                let real = teacher_move(&pos, salt);
+                let copy = fair_copy(&pos, 0xBEEF ^ step);
+                assert_eq!(screen(&copy), screen(&pos), "run {r} move {step} [{what}]");
+                new_run();
+                assert_eq!(
+                    teacher_move(&copy, salt),
+                    real,
+                    "run {r} move {step} [{what}]"
+                );
+                checked += 1;
+                new_run();
+            }
+            let (k, a) = teacher_move(&run, salt);
+            apply(&mut run, k, a).unwrap();
+            step += 1;
+        }
+    }
+    assert!(checked > 100, "only {checked} positions checked");
+}
