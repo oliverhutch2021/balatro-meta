@@ -143,6 +143,55 @@ def test_a_network_written_for_the_engine_reads_the_same(tmp_path):
         value_net_forward(tv.export_bmvn(tmp_path / "old.bin", layers, VALUE_INPUT_VERSION + 1), [0.0] * VALUE_LEN)
 
 
+def test_a_network_of_an_older_layout_reads_the_start_of_this_engines_input(recording, tmp_path):
+    # Rounds 1 to 10's networks read layout 1: they load, and read layout 1's floats of today's longer input.
+    n1 = tv.layouts(json.loads((recording / "manifest.json").read_text()))[1]
+    assert n1 < VALUE_LEN
+    rng = np.random.default_rng(5)
+    layers, width = [], n1
+    for k, o in enumerate([6, 3]):
+        layers.append((rng.normal(0, 1 / np.sqrt(width), (o, width)).astype(np.float32),
+                       rng.normal(0, 0.1, o).astype(np.float32), k == 0))
+        width = o
+    blob = tv.export_bmvn(tmp_path / "v1.bin", layers, 1)
+    for seed in ["OLDLAYOUT", "A1B2C3D4"]:
+        x = np.array(Game(seed).value_input(), np.float32)
+        assert len(x) == VALUE_LEN
+        want = tv.forward_np(layers, x[None, :n1])[0]
+        np.testing.assert_allclose(value_net_forward(blob, x.tolist()), want, rtol=1e-4, atol=1e-5)
+
+
+def test_a_recording_of_a_newer_layout_trains_as_the_older_one_too(recording, tmp_path):
+    man = json.loads((recording / "manifest.json").read_text())
+    held = tv.layouts(man)
+    assert held[VALUE_INPUT_VERSION] == VALUE_LEN and 1 in held and held[1] < VALUE_LEN
+    n1 = held[1]
+    new, old_view = tv.load_data(recording), tv.load_data(recording, layout=1)
+    assert (new.inputs, new.manifest["input_version"]) == (VALUE_LEN, VALUE_INPUT_VERSION)
+    assert (old_view.inputs, old_view.manifest["input_version"]) == (n1, 1) and old_view.rows == new.rows
+    rows = np.arange(0, new.rows, 97)
+    np.testing.assert_array_equal(old_view.dense(rows), new.dense(rows)[:, :n1])
+    # A recording made before the new layout (its manifest names no layouts, its rows layout 1's floats): trained
+    # with a newer one, both are read as layout 1, the layout they share; layout 2 can't be asked of them.
+    older = tmp_path / "older"
+    shutil.copytree(recording, older)
+    for c in sorted(older.glob("chunk-*-ptr.npy")):
+        stem = str(c)[: -len("-ptr.npy")]
+        ci, cv = np.load(f"{stem}-idx.npy"), np.load(f"{stem}-val.npy")
+        keep = ci.view(np.int16) < n1
+        np.save(f"{stem}-ptr.npy", np.concatenate([[0], np.cumsum(keep)])[np.load(c)].astype(np.int64))
+        np.save(f"{stem}-idx.npy", ci[keep])
+        np.save(f"{stem}-val.npy", cv[keep])
+    om = dict(man, inputs=n1, input_version=1)
+    om.pop("layouts")
+    (older / "manifest.json").write_text(json.dumps(om))
+    both = tv.load_data([older, recording])
+    assert (both.inputs, both.manifest["input_version"], both.rows) == (n1, 1, 2 * new.rows)
+    np.testing.assert_array_equal(both.dense(rows), old_view.dense(rows))
+    with pytest.raises(SystemExit, match="layout 2"):
+        tv.load_data([older, recording], layout=2)
+
+
 def test_folding_the_input_scale_into_the_first_layer_changes_nothing():
     torch = pytest.importorskip("torch")
     torch.manual_seed(0)

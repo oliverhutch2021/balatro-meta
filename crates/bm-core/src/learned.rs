@@ -10,7 +10,8 @@
 //!
 //! The weights file is our own format (little-endian):
 //! - `b"BMVN"`, format version (u32, 1), input layout version (u32, `VALUE_INPUT_VERSION`), input length
-//!   (u32, `VALUE_LEN`), layer count (u32);
+//!   (u32, `VALUE_LEN`), layer count (u32); any layout of `observe::VALUE_LAYOUTS` loads: an older layout's
+//!   floats are the start of this engine's input, so its first layer reads just those;
 //! - per layer: inputs (u32), outputs (u32), activation (u32: 0 none, 1 ReLU), then the weights as f32 in
 //!   input-major order (all of input 0's outputs, then input 1's...) and the biases (f32 per output).
 //!
@@ -24,7 +25,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 
-use crate::observe::{encode_value, screen, VALUE_INPUT_VERSION, VALUE_LEN};
+use crate::observe::{encode_value, screen, VALUE_INPUT_VERSION, VALUE_LAYOUTS, VALUE_LEN};
 use crate::state::{Phase, Run};
 
 /// One dense layer.
@@ -77,10 +78,18 @@ impl Net {
         }
         let layout = read_u32(&mut b)?;
         let inputs = read_u32(&mut b)? as usize;
-        if layout != VALUE_INPUT_VERSION || inputs != VALUE_LEN {
+        // An older layout's floats are the start of this engine's input (`VALUE_LAYOUTS`): the network reads
+        // just those, as it was trained to.
+        if !VALUE_LAYOUTS.contains(&(layout, inputs)) {
             return Err(format!(
                 "the network reads input layout {layout} ({inputs} floats), this engine's is \
-                 {VALUE_INPUT_VERSION} ({VALUE_LEN}): retrain it on data recorded by this engine"
+                 {VALUE_INPUT_VERSION} ({VALUE_LEN}) and it reads layouts {}: retrain it on data recorded by \
+                 this engine",
+                VALUE_LAYOUTS
+                    .iter()
+                    .map(|(v, n)| format!("{v} ({n})"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ));
         }
         let n = read_u32(&mut b)? as usize;
@@ -496,13 +505,13 @@ mod tests {
 
     /// A weights file for the given layers.
     fn file(layers: &[Spec]) -> Vec<u8> {
+        file_as(VALUE_INPUT_VERSION, VALUE_LEN, layers)
+    }
+
+    /// A weights file that says it reads input layout `layout` (`inputs` floats).
+    fn file_as(layout: u32, inputs: usize, layers: &[Spec]) -> Vec<u8> {
         let mut b = b"BMVN".to_vec();
-        for v in [
-            1u32,
-            VALUE_INPUT_VERSION,
-            VALUE_LEN as u32,
-            layers.len() as u32,
-        ] {
+        for v in [1u32, layout, inputs as u32, layers.len() as u32] {
             b.extend(v.to_le_bytes());
         }
         for (i, o, relu, w, bias) in layers {
@@ -557,6 +566,64 @@ mod tests {
             (3, 1, false, vec![0.0; 3], vec![0.0])
         ]))
         .is_err());
+    }
+
+    #[test]
+    fn a_network_of_an_older_layout_reads_the_start_of_the_input_as_it_was_trained() {
+        use crate::observe::VALUE_LEN_1;
+        // Weights on every input it has (the last of layout 1's included): fed this engine's longer input, it
+        // gives what it gives on layout 1's floats alone, whatever the floats after them hold.
+        let n1 = VALUE_LEN_1;
+        let w: Vec<f32> = (0..n1 * 3)
+            .map(|j| ((j * 37) % 11) as f32 / 10.0 - 0.5)
+            .collect();
+        let layers = [
+            (n1, 3, true, w, vec![0.1, -0.2, 0.3]),
+            (
+                3,
+                2,
+                false,
+                vec![1.0, 0.5, -1.0, 0.25, 2.0, -0.75],
+                vec![0.05, 0.0],
+            ),
+        ];
+        let old = Net::from_bytes(&file_as(1, n1, &layers)).unwrap();
+        let mut x: Vec<f32> = (0..VALUE_LEN)
+            .map(|i| {
+                if i % 9 == 0 {
+                    (i % 7) as f32 - 3.0
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        x[n1 - 1] = 1.5;
+        let alone = old.forward(&x[..n1]);
+        assert_eq!(old.forward(&x), alone);
+        x[n1..].iter_mut().for_each(|v| *v = 4.0);
+        assert_eq!(
+            old.forward(&x),
+            alone,
+            "the floats after its layout's are not read"
+        );
+        assert_eq!(old.first_output(&x).to_bits(), alone[0].to_bits());
+        // In an ensemble with a network of this engine's layout: each reads its own, the mean as usual.
+        let new = Net::from_bytes(&file(&[(
+            VALUE_LEN,
+            1,
+            false,
+            vec![0.01; VALUE_LEN],
+            vec![0.0],
+        )]))
+        .unwrap();
+        let sig = |z: f32| 1.0 / (1.0 + (-(z as f64)).exp());
+        let want = (sig(alone[0]) + sig(new.forward(&x)[0])) / 2.0;
+        assert_eq!(mean_chance(&[old, new], &x).to_bits(), want.to_bits());
+        // A length that is no layout's, or a layout with another length, is refused.
+        let one = |inputs: usize| vec![(inputs, 1, false, vec![0.0; inputs], vec![0.0])];
+        assert!(Net::from_bytes(&file_as(1, VALUE_LEN, &one(VALUE_LEN))).is_err());
+        assert!(Net::from_bytes(&file_as(VALUE_INPUT_VERSION, n1, &one(n1))).is_err());
+        assert!(Net::from_bytes(&file_as(1, n1 + 1, &one(n1 + 1))).is_err());
     }
 
     #[test]

@@ -81,9 +81,19 @@ def shown(path) -> str:
     return "~" + s[len(home):] if s == home or s.startswith(home + "/") else s
 
 
-def load_data(folders: Path | list[Path], max_runs: int | None = None) -> Data:
+def layouts(manifest: dict) -> dict[int, int]:
+    """The input layouts a recording's rows hold, version: floats. Each layout's floats are the first of the next
+    one's (observe.rs VALUE_LAYOUTS), so a row of a newer layout holds every older one; a recording made before
+    manifests listed them holds its own alone."""
+    pairs = manifest.get("layouts") or [[manifest["input_version"], manifest["inputs"]]]
+    return {int(v): int(n) for v, n in pairs}
+
+
+def load_data(folders: Path | list[Path], max_runs: int | None = None, layout: int | None = None) -> Data:
     """Every chunk of one or more recordings, each in run order (the recorder writes chunks of whole runs, sorted),
-    the newest last."""
+    the newest last. `layout`: the input layout to read the rows in (a newer recording's rows cut to its floats); by
+    default the newest every recording holds, so recordings of rounds before and after a new layout train together
+    as before, and a network of the new layout comes only from recordings that hold it."""
     folders = [folders] if isinstance(folders, (str, Path)) else list(folders)
     parts = []
     for folder in folders:
@@ -105,11 +115,20 @@ def load_data(folders: Path | list[Path], max_runs: int | None = None) -> Data:
             keep = max(1, math.ceil(max_runs / manifest["runs_per_chunk"]))
             chunks, sizes = chunks[:keep], sizes[:keep]
         parts.append((folder, manifest, chunks, sizes))
-    first = parts[-1][1]
+    shared = set.intersection(*(set(layouts(m)) for _, m, _, _ in parts))
+    version = max(shared, default=None) if layout is None else layout
+    if version is None or version not in shared:
+        held = "; ".join(f"{f}: {sorted(layouts(m))}" for f, m, _, _ in parts)
+        raise SystemExit(f"Not every recording holds input layout {version} ({held}), so they can't be mixed.")
+    sizes_of = {layouts(m)[version] for _, m, _, _ in parts}
+    if len(sizes_of) != 1:
+        raise SystemExit(f"The recordings give input layout {version} different lengths: {sorted(sizes_of)}.")
+    inputs = sizes_of.pop()
+    first = dict(parts[-1][1], inputs=inputs, input_version=version,
+                 layouts=[[v, n] for v, n in sorted(layouts(parts[-1][1]).items()) if v <= version])
     for folder, manifest, _, _ in parts:
-        for key in ("inputs", "input_version", "labels"):
-            if manifest.get(key) != first.get(key):
-                raise SystemExit(f"{folder}: its {key} differ from the newest recording's, so they can't be mixed.")
+        if manifest.get("labels") != first.get("labels"):
+            raise SystemExit(f"{folder}: its labels differ from the newest recording's, so they can't be mixed.")
     if len(parts) > 9:
         raise SystemExit("At most 9 recordings at once.")
     n_rows = sum(r for _, _, _, sizes in parts for r, _ in sizes)
@@ -127,8 +146,13 @@ def load_data(folders: Path | list[Path], max_runs: int | None = None) -> Data:
             cp = np.load(folder / f"{c}-ptr.npy")
             if len(cp) != nr + 1 or cp[0] != 0 or cp[-1] != nz:
                 raise SystemExit(f"{folder}/{c}: its row pointers don't match its rows.")
-            idx[z0:z0 + nz] = np.load(folder / f"{c}-idx.npy").view(np.int16)
-            val[z0:z0 + nz] = np.load(folder / f"{c}-val.npy")
+            ci, cv = np.load(folder / f"{c}-idx.npy").view(np.int16), np.load(folder / f"{c}-val.npy")
+            if int(manifest["inputs"]) > inputs:  # a newer layout's rows, cut to the floats of this one
+                keep = (ci >= 0) & (ci < inputs)
+                cp = np.concatenate([[0], np.cumsum(keep)])[cp]
+                ci, cv, nz = ci[keep], cv[keep], int(cp[-1])
+            idx[z0:z0 + nz] = ci
+            val[z0:z0 + nz] = cv
             ptr[r0 + 1:r0 + nr + 1] = cp[1:] + z0
             lab[r0:r0 + nr] = np.load(folder / f"{c}-lab.npy")
             r0, z0 = r0 + nr, z0 + nz
@@ -446,7 +470,7 @@ def train(a) -> dict:
     t0 = time.time()
     rng = np.random.default_rng(a.seed)
     folders = [Path(d).expanduser() for d in a.data]
-    data = load_data(folders, a.max_runs)
+    data = load_data(folders, a.max_runs, a.input_layout)
     man = data.manifest
     if data.rows == 0:
         raise SystemExit("The recording has no positions.")
@@ -556,6 +580,8 @@ def main() -> None:
     ap.add_argument("--patience", type=int, default=8, help="judgings without improvement to stop at")
     ap.add_argument("--scale-rows", type=int, default=200_000, help="rows sampled for the input scaling")
     ap.add_argument("--max-runs", type=int, help="use only the first runs of the recording")
+    ap.add_argument("--input-layout", type=int,
+                    help="the input layout to train on (default: the newest every recording holds)")
     ap.add_argument("--split", type=int, default=SPLIT, help="one run in this many judges, another measures")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--cpu", action="store_true", help="train on the CPU even with a GPU")

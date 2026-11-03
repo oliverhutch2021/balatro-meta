@@ -60,7 +60,11 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   labelled with how its run ended; each chunk also keeps every run's moves,
   so `baseline --replay DIR --record NEW` encodes a recording's positions
   afresh in seconds, checking every run ends as recorded: a new value input
-  needs no new recording, from round 11 on), `explain.rs` (the teacher's plan in
+  needs no new recording, from round 11 on; input layouts,
+  `observe::VALUE_LAYOUTS`, only ever add floats at the end, so a network
+  of an older layout loads and reads the start of today's input, and
+  `train_value.py --input-layout` reads a newer recording as an older
+  layout), `explain.rs` (the teacher's plan in
   words, for the viewer),
   `planner.rs` (the teacher's rounds: which hand to build, tried on fair
   copies; digging; taking value from a round it can already win),

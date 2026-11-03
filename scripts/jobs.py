@@ -228,6 +228,36 @@ def exam_steps(root: Path = ROOT, runs: int = EXAM_RUNS) -> list[tuple]:
                       "--out", f"results/exam/{name}.json"])]
 
 
+# make teacher-inputs: does seeing the deck card by card (input layout 2: which ranks and suits carry which
+# enhancement, seal and edition) make better networks than layout 1's totals? Round 11 is the first recording to hold
+# layout 2 (rounds 1 to 10 hold layout 1 alone), so both pairs learn from round 11's runs alone, with the seeds every
+# round's pair uses, and play at the same weight on the first 8,000 usual seeds, set run by run: the same runs and
+# the same compute, so a difference is the input's. Round 11's own networks (make value-net-11, rounds 10 and 11 read
+# as layout 1, the layout they share) stay the ensemble's.
+INPUT_ROUND = 11
+INPUT_WEIGHT = "2.5"
+
+
+def input_steps(n: int = INPUT_ROUND, w: str = INPUT_WEIGHT, runs: int | None = None) -> list[tuple]:
+    runs = BIG_RUNS if runs is None else runs
+    data = DATA / f"value-{n}"
+    steps: list[tuple] = [("setup-gpu", [*MAKE, "setup-gpu"]), ("build", [*MAKE, "build"])]
+    plays = {}
+    for layout in (1, 2):
+        nets = [f"models/value-{n}-layout{layout}{suffix}.bin" for suffix in ("", "b")]
+        for net, seed in zip(nets, ("1", "2")):
+            steps.append((f"train-layout{layout}{'' if seed == '1' else 'b'}", [
+                "scripts/train_value.py", "--data", str(data), "--input-layout", str(layout), "--seed", seed,
+                "--out", net, "--report", f"results/value/{Path(net).stem}.json"]))
+        plays[layout] = f"results/tune/f{FORMULA}-precise-{runs // 1000}k-w{w}-on-value-{n}-layout{layout}.json"
+        steps.append((f"play-layout{layout}", [*BASELINE, "--bot", "teacher", "--value-net", ",".join(nets),
+                                               "--value-weight", w, "--teacher-options", "precise",
+                                               "--runs", str(runs), "--seed", "1", "--out", plays[layout]]))
+    steps.append(("compare", ["scripts/compare_runs.py", plays[1], plays[2], "--out",
+                              f"results/tune/f{FORMULA}-precise-{runs // 1000}k-w{w}-value-{n}-layout2-vs-layout1.json"]))
+    return steps
+
+
 def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
     """Round n (3 or later) of the learned value, three jobs. teacher-data-n: the best teacher there is (the round and
     weight that won most, with "precise" unless its trial found it no better: recording_options; from round 4, the
@@ -646,6 +676,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-big": big_steps(),
     "teacher-weights": weight_steps(),
     "teacher-weights-high": weight_steps(weights=HIGH_WEIGHT_TRIALS, against=HIGH_AGAINST),
+    "teacher-inputs": input_steps(),
     "teacher-exam": exam_steps(),
 }
 
@@ -804,7 +835,10 @@ def progress_entry(job: str, step: str, argv: list[str], commit: str, root: Path
     w = float(weight) if weight else (1.0 if net else None)
     bot = str(r.get("bot") or "bot")
     rnd = re.search(r"value-(\d+)\.bin$", net or "")
-    if net and "," in net:
+    layout = re.search(r"value-(\d+)-layout(\d+)b?\.bin", net or "")
+    if layout:  # make teacher-inputs: one round's networks on one input layout
+        name = f"Learned value {layout[1]}, input layout {layout[2]} ×{w:g}"
+    elif net and "," in net:
         rounds = re.findall(r"value-(\d+)\.bin", net)
         name = f"Learned values {'+'.join(rounds)} \u00d7{w:g}"
     elif net:

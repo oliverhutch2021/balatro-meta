@@ -49,7 +49,9 @@ use bm_core::bots::greedy_move;
 use bm_core::env::{apply, legal_kinds, run_seed, MoveKind};
 use bm_core::joker_data::{JokerKind, N_JOKERS};
 use bm_core::learned::{self, le_bytes, npy_bytes, Rows};
-use bm_core::observe::{encode, encode_value, screen, OBS_LEN, VALUE_INPUT_VERSION, VALUE_LEN};
+use bm_core::observe::{
+    encode, encode_value, screen, OBS_LEN, VALUE_INPUT_VERSION, VALUE_LAYOUTS, VALUE_LEN,
+};
 use bm_core::packs::PackCard;
 use bm_core::poker::HandType;
 use bm_core::shop::RowItem;
@@ -560,10 +562,17 @@ impl Recorder {
             ("value", VALUE_LEN)
         };
         let moves_kept = RECORD_MODE.load(Ordering::Relaxed) == 1;
+        // The input layouts the rows hold (`VALUE_LAYOUTS`: each one's floats start the next one's), so the trainer
+        // can read them as an older layout too. The screen's encoding is the same in every layout.
+        let layouts: Vec<String> = VALUE_LAYOUTS
+            .iter()
+            .map(|&(v, n)| format!("[{v}, {}]", if input == "screen" { OBS_LEN } else { n }))
+            .collect();
         let text = format!(
             "{{\n \"format\": 1,\n \"input\": \"{input}\",\n \"input_version\": {VALUE_INPUT_VERSION},\n \
-             \"inputs\": {inputs},\n \"runs\": {},\n \"rows\": {},\n \"chunks\": {},\n \
+             \"inputs\": {inputs},\n \"layouts\": [{}],\n \"runs\": {},\n \"rows\": {},\n \"chunks\": {},\n \
              \"runs_per_chunk\": {RUNS_PER_CHUNK},\n \"labels\": [{}],\n \"moves_kept\": {moves_kept},\n{about}\n}}\n",
+            layouts.join(", "),
             self.runs,
             self.rows,
             self.chunks,

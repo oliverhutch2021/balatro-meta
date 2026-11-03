@@ -579,6 +579,21 @@ If the exam is already running in another tab, this waits for it, takes the new 
 cd /mnt/h/balatro-meta && touch /tmp/bm-mark3 && while [ ! .sync/DONE-teacher-exam.txt -nt /tmp/bm-mark3 ]; do sleep 60; done && make sync && make teacher-weights-high
 ```
 
+## Step 23: round 11, then the deck card by card (about 5.5 hours)
+
+Round 11's recording is the first to keep every move (a run's seed and moves play it again exactly, so its
+positions can be encoded again for any new input in seconds: `baseline --replay`) and the first in input layout 2.
+Layout 2 adds the deck counted by whole cards (which ranks and suits carry which enhancement, seal and edition) after
+layout 1's floats, which stay as they were: the networks of rounds 1 to 10 read layout 1's part and play as before,
+and round 11's own networks (`make value-net-11`: rounds 10 and 11, read as layout 1, the layout they share) join
+the ensemble as usual. `make teacher-inputs` then asks whether the new input helps: two networks of each layout learn
+from round 11's runs alone and play at weight 2.5 on the first 8,000 usual seeds, set run by run, so a difference is
+the input's.
+
+```
+cd /mnt/h/balatro-meta && make learned-11 && make teacher-inputs
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

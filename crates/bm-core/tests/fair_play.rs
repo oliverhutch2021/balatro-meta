@@ -202,9 +202,66 @@ fn the_value_input_counts_the_jokers_by_kind() {
     assert_eq!(held[JokerKind::Blueprint.index()], 1.0);
     assert_eq!(held.iter().sum::<f32>(), 3.0);
     assert!(
-        v[OBS_LEN + N_JOKERS..].iter().all(|&x| x == 0.0),
+        v[OBS_LEN + N_JOKERS..bm_core::observe::VALUE_LEN_1]
+            .iter()
+            .all(|&x| x == 0.0),
         "no shop or pack yet"
     );
+}
+
+#[test]
+fn the_value_input_tells_which_cards_carry_which_upgrades() {
+    use bm_core::card::{Enhancement, Rank, Seal, Suit};
+    use bm_core::observe::{DECK_COMBOS, VALUE_LEN_1};
+    let base = Run::new(RunConfig::new("COMBOS01"));
+    let find = |r: &Run, s: Suit, k: Rank| {
+        *r.deck
+            .iter()
+            .find(|&&id| r.card(id).suit == s && r.card(id).rank == k)
+            .unwrap()
+    };
+    let input = |r: &Run| {
+        let mut x = Vec::new();
+        encode_value(&screen(r), &mut x);
+        x
+    };
+    // The outside review's pair: a Steel King of Hearts with a Red Seal, against the same Steel King with the Red
+    // Seal on a Two of Hearts. Layout 1 counts one Steel card and one Red Seal in both; layout 2 says on what.
+    let mut a = base.clone();
+    let k = find(&a, Suit::Hearts, Rank::King);
+    a.card_mut(k).enhancement = Enhancement::Steel;
+    a.card_mut(k).seal = Seal::Red;
+    let mut b = base.clone();
+    let k = find(&b, Suit::Hearts, Rank::King);
+    b.card_mut(k).enhancement = Enhancement::Steel;
+    let two = find(&b, Suit::Hearts, Rank::Two);
+    b.card_mut(two).seal = Seal::Red;
+    let (xa, xb) = (input(&a), input(&b));
+    assert_eq!(xa.len(), VALUE_LEN);
+    assert_eq!(
+        xa[..VALUE_LEN_1],
+        xb[..VALUE_LEN_1],
+        "layout 1 can't tell them apart"
+    );
+    assert_ne!(xa, xb, "layout 2 can");
+    // Harder: both on Kings. A Red-Sealed Steel King and a plain King, against a Steel King and a Red-Sealed King:
+    // the same ranks, the same upgrades, on the same rank; only which card carries both differs.
+    let mut c = base.clone();
+    let kh = find(&c, Suit::Hearts, Rank::King);
+    c.card_mut(kh).enhancement = Enhancement::Steel;
+    c.card_mut(kh).seal = Seal::Red;
+    let mut d = base.clone();
+    let kh = find(&d, Suit::Hearts, Rank::King);
+    d.card_mut(kh).enhancement = Enhancement::Steel;
+    let ks = find(&d, Suit::Spades, Rank::King);
+    d.card_mut(ks).seal = Seal::Red;
+    let (xc, xd) = (input(&c), input(&d));
+    assert_eq!(xc[..VALUE_LEN_1], xd[..VALUE_LEN_1]);
+    assert_ne!(xc, xd);
+    // Each card in the deck is counted once in each of the four tables.
+    let tail: f32 = xa[VALUE_LEN_1..].iter().sum();
+    assert_eq!(VALUE_LEN - VALUE_LEN_1, DECK_COMBOS);
+    assert_eq!(tail, 4.0 * base.deck.len() as f32);
 }
 
 /// The same check through shops and packs: buying, rerolling, opening and

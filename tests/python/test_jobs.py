@@ -459,6 +459,31 @@ def test_the_high_weights_are_set_against_weight_4_as_well(tmp_path):
     assert "teacher-weights-high" in jobs.JOBS
 
 
+def test_the_input_trial_trains_both_layouts_on_the_same_runs_and_sets_them_run_by_run(tmp_path):
+    steps = {n: a for n, a, *_ in jobs.input_steps()}
+    data = str(jobs.DATA / f"value-{jobs.INPUT_ROUND}")
+    for layout in (1, 2):
+        for name, seed in ((f"train-layout{layout}", "1"), (f"train-layout{layout}b", "2")):
+            t = steps[name]
+            assert t[t.index("--data") + 1] == data and t.count("--data") == 1, "round 11's runs alone"
+            assert t[t.index("--input-layout") + 1] == str(layout) and t[t.index("--seed") + 1] == seed
+        play = steps[f"play-layout{layout}"]
+        nets = play[play.index("--value-net") + 1].split(",")
+        assert nets == [steps[f"train-layout{layout}"][-3], steps[f"train-layout{layout}b"][-3]]
+        assert play[play.index("--value-weight") + 1] == jobs.INPUT_WEIGHT
+        assert play[play.index("--seed") + 1] == "1" and play[play.index("--runs") + 1] == "8000"
+    compare = steps["compare"]
+    assert compare[1] == steps["play-layout1"][-1] and compare[2] == steps["play-layout2"][-1]
+    assert not any("value-11-layout" in m for m in jobs.ensemble(11).split(",")), "the ensemble keeps its own"
+    assert "teacher-inputs" in jobs.JOBS
+    # The Progress panel names each pair by its round and layout.
+    out = tmp_path / play[play.index("--out") + 1]
+    out.parent.mkdir(parents=True)
+    out.write_text(json.dumps({"kind": "baseline", "runs": 8000, "bot": "teacher bot with a learned value"}))
+    e = jobs.progress_entry("teacher-inputs", "play-layout2", play, "HEAD", root=tmp_path)
+    assert e["name"].startswith(f"Learned value {jobs.INPUT_ROUND}, input layout 2 \u00d72.5")
+
+
 def test_a_clear_gain_at_another_weight_is_what_the_next_round_records_with(tmp_path):
     folder = tmp_path / "results" / "value"
     tune = tmp_path / "results" / "tune"

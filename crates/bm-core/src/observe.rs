@@ -124,6 +124,10 @@ pub struct Screen {
     pub deck_enhancements: [u8; 9],
     pub deck_editions: [u8; 5],
     pub deck_seals: [u8; 5],
+    /// The same cards counted by what each one is as a whole (`deck_combo_slots`): which ranks and suits carry
+    /// which enhancement with which seal, and which edition. The totals above can't tell a Red-Sealed Steel
+    /// King from a Steel King and a Red Seal on a Two.
+    pub deck_combos: [u8; DECK_COMBOS],
     pub deck_left: u32,
     pub deck_total: u32,
     /// Targets shown on held jokers: The Idol, Mail-In Rebate, Ancient
@@ -222,6 +226,22 @@ fn rank_index(r: Rank) -> usize {
     (r.id() - 2) as usize
 }
 
+/// How many counts `Screen::deck_combos` holds: rank by enhancement by seal (13 x 9 x 5), suit by enhancement by
+/// seal (4 x 9 x 5), rank by edition (13 x 5) and suit by edition (4 x 5).
+pub const DECK_COMBOS: usize = 13 * 9 * 5 + 4 * 9 * 5 + 13 * 5 + 4 * 5;
+
+/// The four counts of `Screen::deck_combos` a card adds one to.
+fn deck_combo_slots(c: &Card) -> [usize; 4] {
+    let (r, s) = (rank_index(c.rank), suit_index(c.suit));
+    let (e, d, l) = (c.enhancement as usize, c.edition as usize, c.seal as usize);
+    [
+        (r * 9 + e) * 5 + l,
+        13 * 9 * 5 + (s * 9 + e) * 5 + l,
+        13 * 9 * 5 + 4 * 9 * 5 + r * 5 + d,
+        13 * 9 * 5 + 4 * 9 * 5 + 13 * 5 + s * 5 + d,
+    ]
+}
+
 /// The visible state of a run.
 pub fn screen(run: &Run) -> Screen {
     let blind = match run.phase {
@@ -252,6 +272,7 @@ pub fn screen(run: &Run) -> Screen {
     let mut deck_enhancements = [0u8; 9];
     let mut deck_editions = [0u8; 5];
     let mut deck_seals = [0u8; 5];
+    let mut deck_combos = [0u8; DECK_COMBOS];
     let face_down = run.hand.iter().filter(|&&id| run.card(id).face_down);
     for &id in run.deck.iter().chain(face_down) {
         let c = run.card(id);
@@ -259,6 +280,9 @@ pub fn screen(run: &Run) -> Screen {
         deck_enhancements[c.enhancement as usize] += 1;
         deck_editions[c.edition as usize] += 1;
         deck_seals[c.seal as usize] += 1;
+        for k in deck_combo_slots(c) {
+            deck_combos[k] = deck_combos[k].saturating_add(1);
+        }
     }
     let holds = |k: JokerKind| run.jokers.iter().any(|j| j.kind == k && !j.face_down);
     let offered_orbital = |s: BlindSlot| {
@@ -311,6 +335,7 @@ pub fn screen(run: &Run) -> Screen {
         deck_enhancements,
         deck_editions,
         deck_seals,
+        deck_combos,
         deck_left: run.deck.len() as u32,
         deck_total: run.playing_cards.len() as u32,
         idol: holds(JokerKind::TheIdol).then_some(run.idol),
@@ -737,17 +762,27 @@ pub fn obs_layout() -> Vec<(&'static str, usize, usize, usize)> {
     out
 }
 
-/// Length of the value network's input (`encode_value`).
-pub const VALUE_LEN: usize = OBS_LEN + 3 * N_JOKERS;
+/// Length of layout 1 of the value input: `encode`'s floats and the jokers counted by kind.
+pub const VALUE_LEN_1: usize = OBS_LEN + 3 * N_JOKERS;
+
+/// Length of the value network's input (`encode_value`): layout 1, then the deck by whole cards (layout 2).
+pub const VALUE_LEN: usize = VALUE_LEN_1 + DECK_COMBOS;
 
 /// The value input's layout version: bumped whenever `encode` or
 /// `encode_value` changes what a float means, so a network trained on one
 /// layout is refused by another (`learned.rs`).
-pub const VALUE_INPUT_VERSION: u32 = 1;
+pub const VALUE_INPUT_VERSION: u32 = 2;
+
+/// Every layout a network may have been trained on, (version, floats). Each one's floats are the first floats of
+/// the next one's, meaning the same, so a network of an older layout reads the start of this engine's input and
+/// plays as it always did (`learned.rs`): a new layout only adds floats at the end. A layout that changed what an
+/// existing float means would start a new list.
+pub const VALUE_LAYOUTS: [(u32, usize); 2] = [(1, VALUE_LEN_1), (VALUE_INPUT_VERSION, VALUE_LEN)];
 
 /// What the value network reads: `encode`'s floats, then the jokers held, in
 /// the shop and in an open pack as counts by kind (`encode` gives a joker's
-/// kind as one number, which a plain network can't take apart).
+/// kind as one number, which a plain network can't take apart), then (layout
+/// 2) the deck counted by whole cards (`Screen::deck_combos`).
 pub fn encode_value(s: &Screen, out: &mut Vec<f32>) {
     encode(s, out);
     let base = out.len();
@@ -770,6 +805,8 @@ pub fn encode_value(s: &Screen, out: &mut Vec<f32>) {
             count(2, j);
         }
     }
+    debug_assert_eq!(out.len(), VALUE_LEN_1);
+    out.extend(s.deck_combos.iter().map(|&c| f32::from(c)));
     debug_assert_eq!(out.len(), VALUE_LEN);
 }
 
