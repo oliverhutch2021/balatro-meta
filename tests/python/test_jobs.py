@@ -435,6 +435,30 @@ def test_the_weight_trials_are_set_against_the_networks_own_weight_and_recorded_
     assert "teacher-weights" in jobs.JOBS
 
 
+def test_the_high_weights_are_set_against_weight_4_as_well(tmp_path):
+    folder = tmp_path / "results" / "value"
+    folder.mkdir(parents=True)
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "value-1.bin").write_bytes(b"BMVN")
+    (folder / "teacher-w1.json").write_text(json.dumps({"kind": "baseline", "runs": 5000, "win_rate": 0.4}))
+    f = jobs.FORMULA
+    steps = {n: a for n, a, *_ in jobs.weight_steps(tmp_path, weights=jobs.HIGH_WEIGHT_TRIALS,
+                                                    against=jobs.HIGH_AGAINST)}
+    for w in jobs.HIGH_WEIGHT_TRIALS:
+        play = steps[f"weight-{w}"]
+        assert play[play.index("--value-weight") + 1] == w and play[play.index("--runs") + 1] == "8000"
+        assert play[play.index("--seed") + 1] == "1", "the usual seeds: the exam's stay for the exam"
+        out = play[play.index("--out") + 1]
+        against = steps[f"compare-{w}-vs-4"]
+        assert against[1] == f"results/tune/f{f}-precise-8k-w4-on-teacher-w1.json" and against[2] == out
+        assert against[-1] == f"results/tune/f{f}-precise-8k-w{w}-vs-w4-on-teacher-w1.json"
+        assert f"compare-{w}" in steps, "and against 1.5, like the other weights"
+    assert "weight-4" not in steps, "4 is already played: only set against"
+    assert not any(n.startswith("compare-") and n.endswith("-vs-4") for n in
+                   {n for n, *_ in jobs.weight_steps(tmp_path)}), "make teacher-weights is as before"
+    assert "teacher-weights-high" in jobs.JOBS
+
+
 def test_a_clear_gain_at_another_weight_is_what_the_next_round_records_with(tmp_path):
     folder = tmp_path / "results" / "value"
     tune = tmp_path / "results" / "tune"

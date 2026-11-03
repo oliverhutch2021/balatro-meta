@@ -564,6 +564,21 @@ cd /mnt/h/balatro-meta && touch /tmp/bm-mark2 && while [ ! .sync/DONE-teacher-we
 
 Ctrl+C stops it whenever you need the PC; the same line (or `make learned-10`) carries on where it stopped.
 
+## Step 22: the exam on the fair-play fixes, then the networks nearly alone (about 2.75 hours)
+
+The fair-play fixes (Luchador in sight only, face-down jokers and the ante's voucher in fair copies) change how the
+teacher plays a little, so the headline is measured again: `make teacher-exam` plays the same teacher on the same
+exam seeds, and set run by run against the last exam it shows what the fixes cost or gave. Then
+`make teacher-weights-high` plays round 10's networks at weights 8 and 16 on the first 8,000 usual seeds, each set
+run by run against weight 4 and 1.5. At those weights the formula's numbers barely move a decision: if the rate
+holds or climbs, the strength is in the networks, and another stake is a matter of training them there.
+
+If the exam is already running in another tab, this waits for it, takes the new code and starts the trial:
+
+```
+cd /mnt/h/balatro-meta && touch /tmp/bm-mark3 && while [ ! .sync/DONE-teacher-exam.txt -nt /tmp/bm-mark3 ]; do sleep 60; done && make sync && make teacher-weights-high
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

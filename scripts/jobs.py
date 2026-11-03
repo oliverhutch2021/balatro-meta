@@ -413,14 +413,24 @@ def big_steps(root: Path = ROOT, change: str = BIG, runs: int = BIG_RUNS) -> lis
 WEIGHT_TRIALS = ("2.5", "4")
 ROUND_7_8K = "results/tune/f2-precise+focus+fair-skip-8k-on-ensemble7-w1.5.json"  # formula 3's play, before it had a name
 
+# make teacher-weights-high: can the networks carry the teacher with the formula all but out? Round 10's networks went
+# 63.5%, 64.9%, 66.1% at weights 1.5, 2.5 and 4 on the first 8,000 usual seeds, still rising. At 8 and 16 the
+# formula's numbers barely move a decision. If the rate holds or climbs, the strength is in the networks, and another
+# stake or deck is a matter of training them there, not of tuning the formula again by hand. Each is set run by run
+# against weight 4 as well as 1.5.
+HIGH_WEIGHT_TRIALS = ("8", "16")
+HIGH_AGAINST = "4"
 
-def weight_steps(root: Path = ROOT, weights: tuple[str, ...] = WEIGHT_TRIALS, runs: int = BIG_RUNS) -> list[tuple]:
+
+def weight_steps(root: Path = ROOT, weights: tuple[str, ...] = WEIGHT_TRIALS, runs: int = BIG_RUNS,
+                 against: str | None = None) -> list[tuple]:
     """make teacher-weights: the precise teacher on the newest round's networks (all rounds' together; before any
     ensemble, the best learned value) at weight 1.5 and at each of `weights`,
     on the first `runs` usual seeds, each set run by run against the first (a clear gain is what the next round
     records with: best_recording reads each f3-...-vs-...-on-<networks> comparison and the trial's own weight).
     Runs already played on the same networks are only compared again, so after a new round the job measures that
-    round's networks, and before one it costs nothing."""
+    round's networks, and before one it costs nothing. `against`: a weight already played on those networks that
+    each of `weights` is also set against (make teacher-weights-high: against 4)."""
     tag = f"f{FORMULA}"
     net_args, stem, base_opts, _ = tune_control(root, tag)
     newest = next((n for n in range(LAST_ROUND, 1, -1) if all((root / m).exists() for m in ensemble(n).split(","))),
@@ -449,6 +459,10 @@ def weight_steps(root: Path = ROOT, weights: tuple[str, ...] = WEIGHT_TRIALS, ru
         steps.append((f"compare-{w}", ["scripts/compare_runs.py", control, out, "--out",
                                        f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-vs-"
                                        f"{tag}-{file_safe(opts)}-{size}-on-{stem}.json"]))
+        if against is not None and against != w:
+            ref = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{against}-on-{stem}.json"
+            vs = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-vs-w{against}-on-{stem}.json"
+            steps.append((f"compare-{w}-vs-{against}", ["scripts/compare_runs.py", ref, out, "--out", vs]))
     return steps
 
 
@@ -631,6 +645,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-control": control_steps(),
     "teacher-big": big_steps(),
     "teacher-weights": weight_steps(),
+    "teacher-weights-high": weight_steps(weights=HIGH_WEIGHT_TRIALS, against=HIGH_AGAINST),
     "teacher-exam": exam_steps(),
 }
 
