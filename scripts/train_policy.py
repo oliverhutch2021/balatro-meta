@@ -316,21 +316,56 @@ def cards_entropy(torch, logits, here):
     return (h * here).sum(1)
 
 
+def conditioned_picks(torch, p, lo, hi, gen=None):
+    """Independent picks with probabilities p (B, n), conditioned on picking between lo and hi of them, drawn exactly:
+    card by card, each taken with the chance that taking it (or not) still leaves the rest able to bring the count into
+    range. So a draw has exactly the probability cards_logp gives it. Returns the picks and which rows could fit at
+    all (a row that can't, fewer cards present than lo, picks nothing)."""
+    B, n = p.shape
+    q = p.double()
+    K = int(hi.max()) + 2 if B else 2  # counts 0 .. the largest hi, and "more" (which never fits)
+    # suffix[:, i, k]: P(k of the cards from i on are picked), as count_dist counts all of them.
+    suffix = torch.zeros(B, n + 1, K, dtype=torch.float64, device=p.device)
+    suffix[:, n, 0] = 1.0
+    for i in range(n - 1, -1, -1):
+        nxt, pi = suffix[:, i + 1], q[:, i:i + 1]
+        shifted = torch.cat([torch.zeros_like(nxt[:, :1]), nxt[:, :-1]], 1)
+        cur = nxt * (1 - pi) + shifted * pi
+        cur[:, -1] = cur[:, -1] + nxt[:, -1] * pi[:, 0]
+        suffix[:, i] = cur
+    ks = torch.arange(K - 1, device=p.device)[None, :]
+
+    def fits(rest, count):
+        total = count[:, None] + ks
+        return (rest[:, :K - 1] * ((total >= lo[:, None]) & (total <= hi[:, None]))).sum(1)
+
+    count = torch.zeros(B, dtype=torch.long, device=p.device)
+    pick = torch.zeros(B, n, dtype=torch.bool, device=p.device)
+    u = torch.rand(B, n, device=p.device, generator=gen, dtype=torch.float64)
+    for i in range(n):
+        rest = suffix[:, i + 1]
+        yes = q[:, i] * fits(rest, count + 1)
+        no = (1 - q[:, i]) * fits(rest, count)
+        take = u[:, i] * (yes + no) < yes
+        pick[:, i] = take
+        count = count + take.long()
+    return pick, fits(suffix[:, 0], torch.zeros_like(count)) > 0
+
+
 def sample_cards(torch, logits, here, lo, hi, greedy: bool, gen=None):
-    """Picks between lo and hi of the present cards: sampled (resampled until the count fits), or the likeliest."""
+    """Picks between lo and hi of the present cards: sampled from the picks' distribution given that the count fits
+    (conditioned_picks: exactly what cards_logp scores), or the likeliest."""
     p = torch.sigmoid(logits.float()) * here
     if greedy:
         pick = (p > 0.5) & here
     else:
-        pick = (torch.rand(p.shape, device=p.device, generator=gen) < p) & here
-        for _ in range(30):
-            n = pick.sum(1)
-            bad = (n < lo) | (n > hi)
-            if not bad.any():
-                break
-            again = (torch.rand(p.shape, device=p.device, generator=gen) < p) & here
-            pick = torch.where(bad[:, None], again, pick)
-    # Rows still outside the range: the likeliest cards fill or trim them.
+        # Only the columns up to the last card present in any row: the rest pick nothing.
+        cols = int(here.any(0).nonzero().max()) + 1 if here.any() else 0
+        pick = torch.zeros_like(here)
+        if cols:
+            got, _ = conditioned_picks(torch, p[:, :cols], lo, hi, gen)
+            pick[:, :cols] = got & here[:, :cols]
+    # Rows outside the range (greedy, or a row no pick could fit): the likeliest cards fill or trim them.
     n = pick.sum(1)
     order = torch.argsort(torch.where(here, p, torch.full_like(p, -1.0)), 1, descending=True)
     rank = torch.empty_like(order)

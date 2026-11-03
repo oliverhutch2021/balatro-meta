@@ -91,6 +91,35 @@ def test_card_picks_are_a_distribution():
         assert ((pick.sum(1) >= 1) & (pick.sum(1) <= 5)).all()
 
 
+def test_sampled_picks_follow_the_probabilities_they_are_scored_by():
+    # PPO's ratio needs the moves drawn from the distribution cards_logp scores. Eight cards each at 0.99 with one to
+    # five to pick: nearly every independent draw picks too many, and a resample-then-fill sampler then takes the
+    # five likeliest almost always (95%, against about 1.8% each for 56 five-card picks).
+    gen = torch.Generator().manual_seed(11)
+    for p, lo, hi in [([0.99] * 8, 1, 5), ([0.5, 0.9, 0.1, 0.7, 0.3, 0.6], 2, 3), ([0.2] * 7, 1, 5)]:
+        n, N = len(p), 60000
+        logits = torch.logit(torch.tensor([p])).expand(N, n).contiguous()
+        here = torch.ones(N, n, dtype=torch.bool)
+        L, H = torch.full((N,), lo), torch.full((N,), hi)
+        pick = tp.sample_cards(torch, logits, here, L, H, False, gen)
+        assert ((pick.sum(1) >= lo) & (pick.sum(1) <= hi)).all()
+        seen = torch.bincount((pick.long() * 2 ** torch.arange(n)).sum(1), minlength=1 << n).double() / N
+        for k in range(1 << n):
+            bits = [(k >> i) & 1 for i in range(n)]
+            if not lo <= sum(bits) <= hi:
+                assert seen[k] == 0
+                continue
+            want = math.exp(float(tp.cards_logp(torch, logits[:1], here[:1], torch.tensor([bits], dtype=torch.bool),
+                                                L[:1], H[:1])))
+            tol = 5 * math.sqrt(want * (1 - want) / N) + 2e-4
+            assert abs(float(seen[k]) - want) < tol, (p, bits, float(seen[k]), want)
+    # Cards not present are never picked, and a row whose few cards can't reach lo is filled with what there is.
+    logits = torch.zeros(2, 6)
+    here = torch.tensor([[1, 1, 1, 0, 0, 0], [1, 0, 0, 0, 0, 0]], dtype=torch.bool)
+    pick = tp.sample_cards(torch, logits, here, torch.tensor([1, 2]), torch.tensor([2, 3]), False, gen)
+    assert not (pick & ~here).any() and 1 <= int(pick[0].sum()) <= 2 and pick[1].tolist() == here[1].tolist()
+
+
 def test_the_network_acts_as_it_judges(moves):
     torch.manual_seed(0)
     data, mov = tp.load_moves(moves, None)
