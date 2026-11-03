@@ -1,0 +1,32 @@
+{
+ "job": "teacher-learned-9",
+ "commit": "3f5813423717757aa2b1a39b87096ca80d70b9b1",
+ "started": "2026-11-03T02:06:09+00:00",
+ "finished": "2026-11-03T03:05:38+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   15.4,
+   16.6,
+   16.7
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 18,
+  "weight-1": 1027,
+  "ensemble-w1": 1280,
+  "ensemble-w1.5": 1244
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "weight-1": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-9.bin --value-weight 1 --runs 5000 --seed 1 --out results/value/teacher9-w1.json",
+  "ensemble-w1": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-9.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin,models/value-9b.bin --value-weight 1 --runs 5000 --seed 1 --out results/value/ensemble9-w1.json",
+  "ensemble-w1.5": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-9.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin,models/value-9b.bin --value-weight 1.5 --runs 5000 --seed 1 --out results/value/ensemble9-w1.5.json"
+ }
+}
