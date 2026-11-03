@@ -154,7 +154,7 @@ def test_a_network_of_an_older_layout_reads_the_start_of_this_engines_input(reco
                        rng.normal(0, 0.1, o).astype(np.float32), k == 0))
         width = o
     blob = tv.export_bmvn(tmp_path / "v1.bin", layers, 1)
-    for seed in ["OLDLAYOUT", "A1B2C3D4"]:
+    for seed in ["OLDLAYT1", "A1B2C3D4"]:
         x = np.array(Game(seed).value_input(), np.float32)
         assert len(x) == VALUE_LEN
         want = tv.forward_np(layers, x[None, :n1])[0]
