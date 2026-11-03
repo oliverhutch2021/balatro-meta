@@ -1,17 +1,17 @@
 {
  "job": "teacher-weights",
- "commit": "ebf1e603d36da3e2cf79565399d1679922ba0861",
- "started": "2026-11-02T20:29:03+00:00",
- "finished": "2026-11-02T23:09:33+00:00",
+ "commit": "9f1b1a23bf9e4e98a5554a3bd05cc330862f4bbf",
+ "started": "2026-11-03T03:10:34+00:00",
+ "finished": "2026-11-03T05:32:48+00:00",
  "machine": {
   "host": "PC",
   "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
   "cpu_threads": 16,
   "ram_gb": 15.2,
   "load_avg_1_5_15": [
-   16.0,
+   16.4,
    16.6,
-   16.8
+   16.7
   ],
   "python": "3.12.3",
   "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
@@ -19,20 +19,20 @@
  },
  "steps": {
   "build": 1,
-  "control": 3144,
+  "control": 2903,
   "vs-round-7": 0,
-  "weight-2.5": 3150,
+  "weight-2.5": 2809,
   "compare-2.5": 0,
-  "weight-4": 3287,
+  "weight-4": 2820,
   "compare-4": 0
  },
  "commands": {
   "build": "make --no-print-directory build",
-  "control": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 1.5 --teacher-options precise --runs 8000 --seed 1 --out results/value/f3-precise-8k-on-ensemble8-w1.5.json",
-  "vs-round-7": "scripts/compare_runs.py results/tune/f2-precise+focus+fair-skip-8k-on-ensemble7-w1.5.json results/value/f3-precise-8k-on-ensemble8-w1.5.json --out results/tune/f3-precise-8k-on-ensemble8-w1.5-vs-round-7.json",
-  "weight-2.5": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise --runs 8000 --seed 1 --out results/tune/f3-precise-8k-w2.5-on-ensemble8-w1.5.json",
-  "compare-2.5": "scripts/compare_runs.py results/value/f3-precise-8k-on-ensemble8-w1.5.json results/tune/f3-precise-8k-w2.5-on-ensemble8-w1.5.json --out results/tune/f3-precise-8k-w2.5-vs-f3-precise-8k-on-ensemble8-w1.5.json",
-  "weight-4": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 4 --teacher-options precise --runs 8000 --seed 1 --out results/tune/f3-precise-8k-w4-on-ensemble8-w1.5.json",
-  "compare-4": "scripts/compare_runs.py results/value/f3-precise-8k-on-ensemble8-w1.5.json results/tune/f3-precise-8k-w4-on-ensemble8-w1.5.json --out results/tune/f3-precise-8k-w4-vs-f3-precise-8k-on-ensemble8-w1.5.json"
+  "control": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-9.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin,models/value-9b.bin --value-weight 1.5 --teacher-options precise --runs 8000 --seed 1 --out results/value/f3-precise-8k-on-ensemble9-w1.5.json",
+  "vs-round-7": "scripts/compare_runs.py results/tune/f2-precise+focus+fair-skip-8k-on-ensemble7-w1.5.json results/value/f3-precise-8k-on-ensemble9-w1.5.json --out results/tune/f3-precise-8k-on-ensemble9-w1.5-vs-round-7.json",
+  "weight-2.5": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-9.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin,models/value-9b.bin --value-weight 2.5 --teacher-options precise --runs 8000 --seed 1 --out results/tune/f3-precise-8k-w2.5-on-ensemble9-w1.5.json",
+  "compare-2.5": "scripts/compare_runs.py results/value/f3-precise-8k-on-ensemble9-w1.5.json results/tune/f3-precise-8k-w2.5-on-ensemble9-w1.5.json --out results/tune/f3-precise-8k-w2.5-vs-f3-precise-8k-on-ensemble9-w1.5.json",
+  "weight-4": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-9.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin,models/value-9b.bin --value-weight 4 --teacher-options precise --runs 8000 --seed 1 --out results/tune/f3-precise-8k-w4-on-ensemble9-w1.5.json",
+  "compare-4": "scripts/compare_runs.py results/value/f3-precise-8k-on-ensemble9-w1.5.json results/tune/f3-precise-8k-w4-on-ensemble9-w1.5.json --out results/tune/f3-precise-8k-w4-vs-f3-precise-8k-on-ensemble9-w1.5.json"
  }
 }
