@@ -63,6 +63,12 @@ def test_the_sign_test_is_exact():
 def test_reports_that_do_not_pair_are_refused():
     with pytest.raises(ValueError, match="seed_base"):
         cr.compare(report("YA", seed_base=1), report("YA", seed_base=2))
+    # A report that doesn't name its seed base played base 1: it pairs with base 1, never with the exam's seeds.
+    with pytest.raises(ValueError, match="seed_base"):
+        cr.compare(report("YA"), report("YA", seed_base=5003))
+    with pytest.raises(ValueError, match="seed_base"):
+        cr.compare(report("YA", seed_base=5003), report("YA"))
+    assert cr.compare(report("YA"), report("YA", seed_base=1))["seeds"] == 2
     with pytest.raises(ValueError, match="run_stages"):
         cr.compare(report(""), report("YA"))
     with pytest.raises(ValueError, match="unknown letters"):

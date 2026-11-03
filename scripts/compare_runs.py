@@ -54,7 +54,12 @@ def sign_test(k: int, n: int) -> float:
 def compare(a: dict, b: dict) -> dict:
     """B against A on the seeds both played."""
     sa, sb = stages(a), stages(b)
-    for key in ("seed_base", "deck", "stake"):
+    # A report without a seed base played base 1 (baseline's default; older reports didn't name it), so it never
+    # pairs with another base's runs (the exam's, a recording's) by passing unchecked.
+    base_a, base_b = a.get("seed_base", 1), b.get("seed_base", 1)
+    if base_a != base_b:
+        raise ValueError(f"the reports differ in seed_base: {base_a!r} and {base_b!r}, so their runs don't pair")
+    for key in ("deck", "stake"):
         if key in a and key in b and a[key] != b[key]:
             raise ValueError(f"the reports differ in {key}: {a[key]!r} and {b[key]!r}, so their runs don't pair")
     n = min(len(sa), len(sb))

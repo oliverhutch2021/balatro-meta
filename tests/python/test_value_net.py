@@ -119,6 +119,23 @@ def test_folding_the_input_scale_into_the_first_layer_changes_nothing():
     np.testing.assert_allclose(got, want, rtol=1e-4, atol=1e-4)
 
 
+def test_the_auc_counts_a_tie_as_half_whatever_order_the_rows_come_in():
+    # Two positions rated alike, one won and one lost: no ranking either way, in either row order.
+    assert tv.auc(np.array([0.5, 0.5]), np.array([0.0, 1.0])) == 0.5
+    assert tv.auc(np.array([0.5, 0.5]), np.array([1.0, 0.0])) == 0.5
+    # Against the definition (every won-lost pair: 1 if the won one is rated higher, 1/2 if alike), many ties.
+    rng = np.random.default_rng(0)
+    for _ in range(200):
+        n = int(rng.integers(2, 30))
+        p, y = rng.integers(0, 4, n) / 3, rng.integers(0, 2, n).astype(float)
+        if y.min() == y.max():
+            assert tv.auc(p, y) is None
+            continue
+        won, lost = p[y == 1], p[y == 0]
+        want = ((won[:, None] > lost[None]).sum() + 0.5 * (won[:, None] == lost[None]).sum()) / (len(won) * len(lost))
+        assert abs(tv.auc(p, y) - want) < 1e-12
+
+
 def test_training_writes_a_network_the_engine_reads(recording, tmp_path):
     pytest.importorskip("torch")
     out, report = tmp_path / "value.bin", tmp_path / "value.json"

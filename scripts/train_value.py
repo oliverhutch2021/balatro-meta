@@ -257,12 +257,15 @@ def bce(p: np.ndarray, y: np.ndarray) -> float:
 
 
 def auc(p: np.ndarray, y: np.ndarray) -> float | None:
+    """The chance a won position is rated above a lost one, a tie counting half (ranks averaged over ties: positions
+    rated alike, as early positions of many runs can be, say nothing either way, whatever order they come in)."""
     pos, neg = int(y.sum()), int(len(y) - y.sum())
     if pos == 0 or neg == 0:
         return None
-    order = np.argsort(p, kind="stable")
-    ranks = np.empty(len(p), np.float64)
-    ranks[order] = np.arange(1, len(p) + 1)
+    _, inverse, counts = np.unique(p, return_inverse=True, return_counts=True)
+    # Distinct values in ascending order: each tie group's ranks run from its start to its end, averaged.
+    start = np.concatenate([[0], np.cumsum(counts)[:-1]])
+    ranks = (start + (counts + 1) / 2.0)[inverse.reshape(-1)]
     return float((ranks[y == 1].sum() - pos * (pos + 1) / 2) / (pos * neg))
 
 

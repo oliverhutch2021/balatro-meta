@@ -999,8 +999,11 @@ function renderAbout() {
 function renderChecks(c) {
   if (!c) { setHTML($('checks'), '<div class="empty">The real-game checks are off (make watch CHECKS=0).</div>'); $('checksub').textContent = ''; return; }
   $('checksub').textContent = c.state === 'running' ? 'hidden game, live' : (c.state || '');
-  const counts = `${num(c.runs)} runs, ${num(c.moves)} moves checked` + (c.stopped_early ? `, ${c.stopped_early} stopped early` : '') +
-    (c.errors ? `, ${c.errors} interrupted` : '');
+  const counts = `${num(c.runs)} runs, ${num(c.moves)} moves checked` +
+    (c.complete != null ? `, ${num(c.complete)} played to the end` : '') +
+    (c.stopped_early ? `, ${c.stopped_early} stopped early` : '') +
+    (c.refused ? `, ${c.refused} refused by the engine` : '') +
+    (c.realigned ? `, hand order set to the engine's ${num(c.realigned)} times` : '') + (c.errors ? `, ${c.errors} interrupted` : '');
   let h;
   if (c.differences) {
     const d = c.last_difference || {};

@@ -244,8 +244,12 @@ class Checker:
         self.started_at = 0.0  # when the hidden game now running first answered
         self.memory_checked = 0.0
         self.last_error: str | None = None  # why the last try to reach the hidden game failed
+        # runs: every run tried; complete: those that agreed to the very end (won or lost in both); stopped_early:
+        # at a move the checks don't support yet; refused: the engine refused a move of its own (a harness or
+        # replay fault, not a rule difference); none of the last two counts as a complete match.
         self.state = {"state": "starting", "message": "Starting the hidden game", "runs": 0, "moves": 0,
-                      "differences": 0, "stopped_early": 0, "errors": 0, "restarts": 0, "last_restart": None,
+                      "complete": 0, "differences": 0, "stopped_early": 0, "refused": 0, "realigned": 0, "errors": 0,
+                      "restarts": 0, "last_restart": None,
                       "memory_mb": None, "up_since": None, "last_difference": None, "current": None, "last": None,
                       "port": port, "updated": time.time()}
 
@@ -402,8 +406,12 @@ class Checker:
             if gs.get("state") in watch.HAND_STATES and e_before["hand"]:
                 perm = hand_permutation(e_before["hand"], game_view(gs)["hand"])
                 if perm is not None and perm != list(range(len(perm))):
+                    # The same cards in another order: set the game's like the engine's, and count it, so an
+                    # ordering difference shows instead of passing unseen.
+                    self.add("realigned")
                     gs = settle(api, api.call("rearrange", {"hand": perm}))
             if not game.step(kind, arg):
+                self.add("refused")
                 return True, f"the engine refused move {step + 1} ({what})"
             gs = settle(api, apply_in_game(api, kind, arg, e_before, game))
             self.wait_idle()
@@ -413,7 +421,10 @@ class Checker:
             self.note(current={"seed": game.seed, "label": label, "move": step})
             if diff:
                 return False, self.mismatch(game, step, what, diff, gs)
+        if not game.over:  # the recorded moves ran out, or the checks were stopped: the run goes on
+            return True, f"stopped after {step} moves, the run not over (ante {game.view()['ante']})"
         v = game.view()
+        self.add("complete")
         return True, ("won the run" if v["won"] else f"run over at ante {v['ante']}") + f" after {step} moves"
 
     def mismatch(self, game, step: int, what: str, diff: list[str], gs: dict) -> str:
