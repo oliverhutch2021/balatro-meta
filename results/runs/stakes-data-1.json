@@ -1,0 +1,42 @@
+{
+ "job": "stakes-data-1",
+ "commit": "ecd28db220eeb047220f957b419b088383b426be",
+ "started": "2026-11-04T05:04:51+00:00",
+ "finished": "2026-11-04T05:06:10+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   4.7,
+   12.0,
+   14.6
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 23,
+  "replay-stake1": 11,
+  "replay-stake2": 4,
+  "replay-stake3": 4,
+  "replay-stake4": 4,
+  "replay-stake5": 11,
+  "replay-stake6": 4,
+  "replay-stake7": 3,
+  "replay-stake8": 15
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "replay-stake1": "cargo run --release -q -p bm-core --example baseline -- --replay ~/.cache/balatro-meta/data/stakes-1-layout2/stake1 --record ~/.cache/balatro-meta/data/stakes-1/stake1 --out results/stakes/replay-1-stake1.json",
+  "replay-stake2": "cargo run --release -q -p bm-core --example baseline -- --replay ~/.cache/balatro-meta/data/stakes-1-layout2/stake2 --record ~/.cache/balatro-meta/data/stakes-1/stake2 --out results/stakes/replay-1-stake2.json",
+  "replay-stake3": "cargo run --release -q -p bm-core --example baseline -- --replay ~/.cache/balatro-meta/data/stakes-1-layout2/stake3 --record ~/.cache/balatro-meta/data/stakes-1/stake3 --out results/stakes/replay-1-stake3.json",
+  "replay-stake4": "cargo run --release -q -p bm-core --example baseline -- --replay ~/.cache/balatro-meta/data/stakes-1-layout2/stake4 --record ~/.cache/balatro-meta/data/stakes-1/stake4 --out results/stakes/replay-1-stake4.json",
+  "replay-stake5": "cargo run --release -q -p bm-core --example baseline -- --replay ~/.cache/balatro-meta/data/stakes-1-layout2/stake5 --record ~/.cache/balatro-meta/data/stakes-1/stake5 --out results/stakes/replay-1-stake5.json",
+  "replay-stake6": "cargo run --release -q -p bm-core --example baseline -- --replay ~/.cache/balatro-meta/data/stakes-1-layout2/stake6 --record ~/.cache/balatro-meta/data/stakes-1/stake6 --out results/stakes/replay-1-stake6.json",
+  "replay-stake7": "cargo run --release -q -p bm-core --example baseline -- --replay ~/.cache/balatro-meta/data/stakes-1-layout2/stake7 --record ~/.cache/balatro-meta/data/stakes-1/stake7 --out results/stakes/replay-1-stake7.json",
+  "replay-stake8": "cargo run --release -q -p bm-core --example baseline -- --replay ~/.cache/balatro-meta/data/stakes-1-layout2/stake8 --record ~/.cache/balatro-meta/data/stakes-1/stake8 --out results/stakes/replay-1-stake8.json"
+ }
+}
