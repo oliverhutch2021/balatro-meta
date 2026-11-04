@@ -481,8 +481,8 @@ def stake_round(n: int, root: Path = ROOT, runs: int = STAKE_RUNS, white: int | 
 
 
 # make boost-night: the champion's judgement, corrected where the runs show it wrong. The stake-aware networks of
-# 4 November (make stakes-night) lost to the champion at every stake but Gold (level): a pair that learns 40,000 to
-# 75,000 runs can't match fourteen networks that learned about 250,000 White runs, and from round 2 each round
+# 4 November (make stakes-night) lost to the champion at every stake but Gold (level): a pair that learns 37,000 to
+# 68,000 runs can't match fourteen networks that learned about 195,000 White runs, and from round 2 each round
 # recorded with the round before's pair, weaker than the champion, so the rounds went in circles (White: 54.2%,
 # 58.8%, 55.9% against its 66.5%). What they showed: the other stakes' runs teach White's play too (the pair that
 # learned all eight stakes won 54.2% at White, one that learned the same White runs alone 41.6%); only rentals are

@@ -647,7 +647,7 @@ cd /mnt/h/balatro-meta && bash .sync/night.sh 2>&1 | tee -a .sync/logs/night.log
 
 What step 25 found (rounds 1 to 3, stopped in round 4): the stake-aware pairs lost to the champion at every stake but
 Gold (level), and at White (54.2%, 58.8%, 55.9% against its 66.5% on the usual 8,000 seeds). A pair that learns
-40,000 to 75,000 runs can't match fourteen networks that learned about 250,000 White runs, and from round 2 each
+37,000 to 68,000 runs can't match fourteen networks that learned about 195,000 White runs, and from round 2 each
 round recorded with the round before's pair, weaker than the champion, so the rounds went in circles. It also found:
 the other stakes' runs teach White's play too (on the same White runs, the pair that learned all eight stakes won
 54.2% at White, a pair that learned White alone 41.6%); only rentals are overrated (never buying them: +0.56 blinds
