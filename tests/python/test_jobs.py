@@ -1079,3 +1079,20 @@ def test_the_late_trials_share_the_doubt_trials_control(tmp_path):
         play = late[f"w{w}-{extra}"]
         assert play[play.index("--teacher-options") + 1] == f"precise,{extra}"
     assert "teacher-late" in jobs.JOBS
+
+
+def test_the_fork_table_reads_every_fork_file_there_is(tmp_path):
+    data = tmp_path / "data"
+    assert jobs.fork_table_steps(data) == []
+    for n in ("forks-quick", "forks-2"):
+        (data / n).mkdir(parents=True)
+        (data / n / "manifest.json").write_text("{}")
+    (data / "forks-1").mkdir()  # not finished
+    steps = jobs.fork_table_steps(data)
+    assert steps[0][0] == "table" and steps[0][1][1:3] == [str(data / "forks-quick"), str(data / "forks-2")]
+    champion_in(tmp_path)
+    night = data / "stakes-1" / "stake1"
+    night.mkdir(parents=True)
+    (night / "manifest.json").write_text(json.dumps({"moves_kept": True, "stake": 1}))
+    table = {n: a for n, a, *_ in jobs.fork_steps("forks-2", jobs.FORK_SECONDS, tmp_path, data)}["table"]
+    assert table[1:4] == [str(data / "forks-quick"), str(data / "forks-2")] + ["--out"]

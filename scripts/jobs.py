@@ -1163,7 +1163,18 @@ def fork_steps(name: str, seconds: int, root: Path = ROOT, data: Path = DATA) ->
                            str(data / name), "--fork-chance", str(FORK_CHANCE), "--fork-copies", str(FORK_COPIES),
                            "--fork-best", str(FORK_BEST), "--fork-play-options", FORK_PLAY, "--fork-antes", "2-6",
                            "--seconds", str(seconds), "--out", f"results/forks/{name}.json"]))
+    steps.append(("table", ["scripts/fork_table.py", *map(str, fork_files(name, data)),
+                            "--out", f"results/forks/{name}-table.json"]))
     return steps
+
+
+def fork_table_steps(data: Path = DATA) -> list[tuple]:
+    """make forks-table (run directly, beside any job): the judge test from every fork file there is."""
+    files = [data / n for n in ["forks-quick", *(f"forks-{k}" for k in range(1, FORK_ROUNDS + 1))]
+             if (data / n / "manifest.json").exists()]
+    if not files:
+        return []
+    return [("table", ["scripts/fork_table.py", *map(str, files), "--out", "results/forks/table.json"])]
 
 
 def fork_net_steps(name: str, root: Path = ROOT, data: Path = DATA) -> list[tuple]:
