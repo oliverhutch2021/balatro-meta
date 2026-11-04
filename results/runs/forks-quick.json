@@ -1,0 +1,28 @@
+{
+ "job": "forks-quick",
+ "commit": "60749a7d3fc2d28db5685451861686e42fed47ba",
+ "started": "2026-11-04T21:47:45+00:00",
+ "finished": "2026-11-04T22:52:37+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   2.2,
+   9.5,
+   13.8
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 1,
+  "fork": 3891
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "fork": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise --replay ~/.cache/balatro-meta/data/stakes-1/stake1 --forks ~/.cache/balatro-meta/data/forks-quick --fork-chance 0.06 --fork-copies 6 --fork-best 3 --fork-antes 2-6 --seconds 3600 --out results/forks/forks-quick.json"
+ }
+}
