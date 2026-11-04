@@ -1,0 +1,31 @@
+{
+ "kind": "comparison",
+ "a": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.0185,
+  "wins": 37,
+  "blinds_beaten": 12.3005,
+  "report": "results/stakes/stake6-2k-f3-precise-rounds8-w2.5.json"
+ },
+ "b": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.0155,
+  "wins": 31,
+  "blinds_beaten": 10.123,
+  "report": "results/stakes/stake6-2k-f3-precise-stakes1-w2.5.json"
+ },
+ "seeds": 2000,
+ "win_rate_diff": -0.003,
+ "win_rate_diff_ci": [
+  -0.010589908616050657,
+  0.004589908616050657
+ ],
+ "only_a_won": 33,
+ "only_b_won": 27,
+ "p_value": 0.5189580031896518,
+ "blinds_beaten_diff": -2.1775,
+ "blinds_beaten_diff_ci": [
+  -2.4278523463913846,
+  -1.9271476536086156
+ ]
+}
