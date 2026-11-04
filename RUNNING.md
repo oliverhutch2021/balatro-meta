@@ -713,14 +713,15 @@ winning position looks like, never which option here was better. And 82% of its 
 5 to 8, without anyone having asked whether those are builds that could never have scored it or play that fell
 short. So, before any more three-hour trials:
 
-1. `make diagnose` (about 15 minutes): round 10's 25,000 runs played again by their moves, one row each: where it
-   ended and by how much it fell short, its build then, and ante by ante its biggest hand, money and x mult jokers.
+1. `make diagnose` (about 10 minutes): the champion's 3,000 White runs of the night of 4 November (the newest
+   recording that kept its moves: round 10's didn't) played again by their moves, one row each: where it ended and
+   by how much it fell short, its build then, and ante by ante its biggest hand, money and x mult jokers.
    Every lost blind is played again from its start by the champion with four times the samples: a blind that
    deeper play beats was lost to play, not to the build (that replay sees the run's own cards: a diagnosis, never
-   the bot's play). `scripts/diagnose.py` prints the tables; `results/diagnose/round10-summary.json`
+   the bot's play). `scripts/diagnose.py` prints the tables; `results/diagnose/night-summary.json`
    keeps them.
 2. `make forks-quick` (about 1.5 hours): forks (`forks.rs`). At a share of the shops entered and packs opened in
-   antes 2 to 6 of round 10's runs, the champion's three best options and doing nothing (and its own choice, if
+   antes 2 to 6 of those runs, the champion's three best options and doing nothing (and its own choice, if
    another) are each played out to the end by the champion on six fair copies that share their seeds across the
    options. Each fork says which option went best here; how often the champion's own choice was that option, and
    what its choices gave away, is the judge test (`results/forks/forks-quick.json`, `forks`): a measure of the judge

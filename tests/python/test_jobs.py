@@ -995,16 +995,26 @@ def test_the_diagnosis_replays_the_newest_recording_with_the_champion_and_tables
     assert [n for n, *_ in jobs.diagnose_steps(tmp_path, data)] == ["build"], "nothing without a recording"
     for n in (9, 10):
         (data / f"value-{n}").mkdir(parents=True)
-        (data / f"value-{n}" / "manifest.json").write_text("{}")
+        (data / f"value-{n}" / "manifest.json").write_text("{}")  # recorded before moves were kept
     (data / "value-11").mkdir()  # no manifest: not finished
-    assert jobs.newest_recording(data) == (10, data / "value-10")
+    assert jobs.replayable_recording(data) is None
+    night = data / "stakes-1" / "stake1"
+    night.mkdir(parents=True)
+    night_manifest = {"moves_kept": True, "stake": 1, "runs": 3000}
+    (night / "manifest.json").write_text(json.dumps(night_manifest))
+    (data / "stakes-1" / "stake2").mkdir()
+    (data / "stakes-1" / "stake2" / "manifest.json").write_text(json.dumps(dict(night_manifest, stake=2)))
+    assert jobs.replayable_recording(data) == ("night", night), "the champion's own White runs, played again by their moves"
     steps = {n: a for n, a, *_ in jobs.diagnose_steps(tmp_path, data)}
     replay = steps["replay"]
-    assert replay[replay.index("--replay") + 1] == str(data / "value-10")
+    assert replay[replay.index("--replay") + 1] == str(night)
     assert replay[replay.index("--value-net") + 1] == jobs.ensemble(8)
     assert replay[replay.index("--deep") + 1] == str(jobs.DEEP_X)
-    assert replay[replay.index("--diagnose") + 1] == "results/diagnose/round10.csv"
-    assert steps["table"][:2] == ["scripts/diagnose.py", "results/diagnose/round10.csv"]
+    assert replay[replay.index("--diagnose") + 1] == "results/diagnose/night.csv"
+    assert steps["table"][:2] == ["scripts/diagnose.py", "results/diagnose/night.csv"]
+    # A round that kept its moves comes first.
+    (data / "value-11" / "manifest.json").write_text(json.dumps({"moves_kept": True, "stake": 1}))
+    assert jobs.replayable_recording(data) == ("round11", data / "value-11")
     assert "diagnose" in jobs.JOBS
 
 
@@ -1014,9 +1024,13 @@ def test_a_fork_round_forks_the_newest_recording_then_trains_a_pair_and_its_cont
     for n in (9, 10):
         (data / f"value-{n}").mkdir(parents=True)
         (data / f"value-{n}" / "manifest.json").write_text("{}")
+    assert [n for n, *_ in jobs.fork_steps("forks-1", jobs.FORK_SECONDS, tmp_path, data)] == ["build"]
+    night = data / "stakes-1" / "stake1"
+    night.mkdir(parents=True)
+    (night / "manifest.json").write_text(json.dumps({"moves_kept": True, "stake": 1}))
     steps = {n: a for n, a, *_ in jobs.fork_steps("forks-1", jobs.FORK_SECONDS, tmp_path, data)}
     f = steps["fork"]
-    assert f[f.index("--replay") + 1] == str(data / "value-10") and f[f.index("--forks") + 1] == str(data / "forks-1")
+    assert f[f.index("--replay") + 1] == str(night) and f[f.index("--forks") + 1] == str(data / "forks-1")
     assert f[f.index("--seconds") + 1] == str(7 * 3600) and f[f.index("--fork-copies") + 1] == str(jobs.FORK_COPIES)
     assert f[f.index("--value-net") + 1] == jobs.ensemble(8) and f[f.index("--teacher-options") + 1] == "precise"
     quick = {n: a for n, a, *_ in jobs.fork_steps("forks-quick", jobs.FORK_QUICK_SECONDS, tmp_path, data)}["fork"]

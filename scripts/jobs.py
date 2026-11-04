@@ -1091,11 +1091,20 @@ def margin_steps(root: Path = ROOT, trials: tuple[str, ...] = MARGIN_TRIALS, run
     return steps
 
 
-def newest_recording(data: Path = DATA) -> tuple[int, Path] | None:
-    """The newest round's recording on this machine (DATA/value-N with its manifest, N highest), if any."""
-    for n in range(LAST_ROUND, 0, -1):
-        if (data / f"value-{n}" / "manifest.json").exists():
-            return n, data / f"value-{n}"
+def replayable_recording(data: Path = DATA) -> tuple[str, Path] | None:
+    """The newest recording of the best teacher's White Stake runs that can be played again by its moves (its
+    manifest says so: recordings keep every move from round 11 on), as (its name, its folder): the newest round's,
+    else the champion's own White runs (champion-2/stake1 when .sync/record-champion.sh made it, else the night of 4
+    November's stakes-1/stake1: 3,000 runs, exploring). None without one."""
+    candidates = [(f"round{n}", data / f"value-{n}") for n in range(LAST_ROUND, 0, -1)]
+    candidates += [("champion-2", data / CHAMPION_2.name / "stake1"), ("night", data / stake_data(1).name / "stake1")]
+    for name, folder in candidates:
+        try:
+            m = json.loads((folder / "manifest.json").read_text())
+        except (OSError, ValueError):
+            continue
+        if m.get("moves_kept") is True and int(m.get("stake") or 1) == 1:
+            return name, folder
     return None
 
 
@@ -1107,30 +1116,31 @@ DEEP_SHARE = 1.0
 
 
 def diagnose_steps(root: Path = ROOT, data: Path = DATA) -> list[tuple]:
-    """make diagnose: `baseline --diagnose` on the newest recording with the champion (best_8k_report: its networks
-    and options play the lost blinds again), then scripts/diagnose.py's tables. Nothing before a champion and a
-    recording."""
+    """make diagnose: `baseline --diagnose` on the newest replayable recording (replayable_recording) with the
+    champion (best_8k_report: its networks and options play the lost blinds again), then scripts/diagnose.py's
+    tables. Nothing before a champion and a recording."""
     steps: list[tuple] = [("build", [*MAKE, "build"])]
-    best, rec = best_8k_report(root), newest_recording(data)
+    best, rec = best_8k_report(root), replayable_recording(data)
     if best is None or rec is None:
         return steps
-    n, folder = rec
-    table = f"results/diagnose/round{n}.csv"
+    name, folder = rec
+    table = f"results/diagnose/{name}.csv"
     steps.append(("replay", [*BASELINE, "--bot", "teacher", *best[1], "--replay", str(folder), "--diagnose", table,
                              "--deep", str(DEEP_X), "--deep-share", str(DEEP_SHARE),
-                             "--out", f"results/diagnose/round{n}.json"]))
-    steps.append(("table", ["scripts/diagnose.py", table, "--out", f"results/diagnose/round{n}-summary.json"]))
+                             "--out", f"results/diagnose/{name}.json"]))
+    steps.append(("table", ["scripts/diagnose.py", table, "--out", f"results/diagnose/{name}-summary.json"]))
     return steps
 
 
 # Forks (crates/bm-core/src/forks.rs): at a share FORK_CHANCE of the shops entered and packs opened in antes 2 to 6
-# of the newest recording's runs (played again by their moves), the champion's FORK_BEST best options and doing
-# nothing (and its own choice and the run's move, if others) are each played out to the end by the champion on
-# FORK_COPIES fair copies that share their seeds across the options. A night of it (FORK_SECONDS) forks about 5,000
-# decisions: 120,000 play-outs. Each fork says which option went best here, where a recording's one result per run
-# never did; and how often the champion's own choice was that option is the judge test, measured in minutes instead
-# of three hours of play. The quick turn (make forks-quick) forks for an hour, for the judge test today.
-FORK_CHANCE = 0.04
+# of the newest replayable recording's runs (played again by their moves; a run enters about 27 of them), the
+# champion's FORK_BEST best options and doing nothing (and its own choice and the run's move, if others) are each
+# played out to the end by the champion on FORK_COPIES fair copies that share their seeds across the options. A
+# night of it (FORK_SECONDS) forks about 5,000 decisions, 120,000 play-outs, spread over the night recording's 3,000
+# runs. Each fork says which option went best here, where a recording's one result per run never did; and how often
+# the champion's own choice was that option is the judge test, measured in minutes instead of three hours of play.
+# The quick turn (make forks-quick) forks for an hour, for the judge test today.
+FORK_CHANCE = 0.06
 FORK_COPIES = 6
 FORK_BEST = 3
 FORK_SECONDS = 7 * 3600
@@ -1139,10 +1149,10 @@ FORK_ROUNDS = 4
 
 
 def fork_steps(name: str, seconds: int, root: Path = ROOT, data: Path = DATA) -> list[tuple]:
-    """The forks job `name` (forks-quick, forks-1...): the champion forks the newest recording's decisions for
-    `seconds`, into DATA/<name>, with its report (the judge test) in results/forks/<name>.json."""
+    """The forks job `name` (forks-quick, forks-1...): the champion forks the newest replayable recording's decisions
+    for `seconds`, into DATA/<name>, with its report (the judge test) in results/forks/<name>.json."""
     steps: list[tuple] = [("build", [*MAKE, "build"])]
-    best, rec = best_8k_report(root), newest_recording(data)
+    best, rec = best_8k_report(root), replayable_recording(data)
     if best is None or rec is None:
         return steps
     _, folder = rec
@@ -1154,17 +1164,15 @@ def fork_steps(name: str, seconds: int, root: Path = ROOT, data: Path = DATA) ->
 
 
 def fork_net_steps(name: str, root: Path = ROOT, data: Path = DATA) -> list[tuple]:
-    """The networks that learn from the forks `name` as well as the newest two recordings' positions (a pair, seeds 1
+    """The networks that learn from the forks `name` as well as the newest two rounds' positions (a pair, seeds 1
     and 2: models/value-<name>.bin and -b), and a control pair that learns the same positions without the forks
     (models/value-<name>-control.bin and -b), so the forks' part shows on the same footing. Each report's judge test
     (`measured.forks`) sets the network, the champion's networks, the teacher's quick look and its own choice against
     the option that went best, on forks kept apart."""
-    rec = newest_recording(data)
-    if rec is None:
+    rounds = [n for n in range(LAST_ROUND, 0, -1) if (data / f"value-{n}" / "manifest.json").exists()][:2]
+    if not rounds:
         return [("setup-gpu", [*MAKE, "setup-gpu"])]
-    n, folder = rec
-    older = [str(data / f"value-{n - 1}")] if n > 1 and (data / f"value-{n - 1}" / "manifest.json").exists() else []
-    positions = [a for d in [*older, str(folder)] for a in ("--data", d)]
+    positions = [a for n in sorted(rounds) for a in ("--data", str(data / f"value-{n}"))]
     steps: list[tuple] = [("setup-gpu", [*MAKE, "setup-gpu"])]
     for suffix, seed in (("", "1"), ("b", "2")):
         steps.append((f"train{suffix}", ["scripts/train_value.py", *positions, "--forks", str(data / name), "--seed",
