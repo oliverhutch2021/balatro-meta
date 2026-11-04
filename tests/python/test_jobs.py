@@ -1096,3 +1096,22 @@ def test_the_fork_table_reads_every_fork_file_there_is(tmp_path):
     (night / "manifest.json").write_text(json.dumps({"moves_kept": True, "stake": 1}))
     table = {n: a for n, a, *_ in jobs.fork_steps("forks-2", jobs.FORK_SECONDS, tmp_path, data)}["table"]
     assert table[1:4] == [str(data / "forks-quick"), str(data / "forks-2")] + ["--out"]
+
+
+def test_forks_now_trains_at_three_pair_weights_and_a_control_on_every_fork_file(tmp_path):
+    data = tmp_path / "data"
+    assert [n for n, *_ in jobs.fork_now_steps(tmp_path, data)] == ["setup-gpu"]
+    for n in (9, 10):
+        (data / f"value-{n}").mkdir(parents=True)
+        (data / f"value-{n}" / "manifest.json").write_text("{}")
+    (data / "forks-quick").mkdir()
+    (data / "forks-quick" / "manifest.json").write_text("{}")
+    (data / "forks-1").mkdir()
+    (data / "forks-1" / "manifest.json").write_text(json.dumps({"partial": True, "chunks": 2}))  # still being made
+    steps = {n: a for n, a, *_ in jobs.fork_now_steps(tmp_path, data)}
+    assert set(steps) == {"setup-gpu", "pw0", "pw0.3", "pw1", "pw3", "table"}
+    a = steps["pw3"]
+    assert [a[i + 1] for i, x in enumerate(a) if x == "--forks"] == [str(data / "forks-quick"), str(data / "forks-1")]
+    assert a[a.index("--pair-weight") + 1] == "3" and a[a.index("--fork-split") + 1] == str(jobs.FORK_SPLIT)
+    assert steps["table"][0] == "scripts/forks_report.py" and len(steps["table"]) == 1 + 4 + 2
+    assert "forks-now" in jobs.JOBS

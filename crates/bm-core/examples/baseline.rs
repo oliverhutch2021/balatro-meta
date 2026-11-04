@@ -1035,6 +1035,41 @@ impl Recorder {
         self.chunks += 1;
         self.rows += n as u64;
         self.runs += runs.len() as u64;
+        if self.forks {
+            // A fork recording can be read while it is still being made (a night of forks, trained on at any hour):
+            // after each chunk, a manifest that says how many chunks are whole so far.
+            self.fork_manifest(" \"partial\": true", true);
+        }
+    }
+
+    /// A fork recording's manifest: the rows' layout and labels, how the forks were made, and `about` (the teacher,
+    /// or that the recording is still being made).
+    fn fork_manifest(&self, about: &str, partial: bool) {
+        let labels: Vec<String> = FORK_LABELS.iter().map(|l| esc(l)).collect();
+        let layouts: Vec<String> = VALUE_LAYOUTS
+            .iter()
+            .map(|&(v, n)| format!("[{v}, {n}]"))
+            .collect();
+        let text = format!(
+            "{{\n \"format\": 1,\n \"kind\": \"forks\",\n \"input\": \"value\",\n \"input_version\": \
+             {VALUE_INPUT_VERSION},\n \"inputs\": {VALUE_LEN},\n \"layouts\": [{}],\n \"runs\": {},\n \
+             \"rows\": {},\n \"chunks\": {},\n \"runs_per_chunk\": {RUNS_PER_CHUNK},\n \"labels\": [{}],\n \
+             \"fork_chance\": {},\n \"fork_antes\": [{}, {}],\n \"fork_best\": {},\n \"fork_copies\": {},\n \
+             \"stake\": {stake},\n{about}\n}}\n",
+            layouts.join(", "),
+            self.runs,
+            self.rows,
+            self.chunks,
+            labels.join(", "),
+            num(FORK_CHANCE_PPM.load(Ordering::Relaxed) as f64 / 1e6),
+            FORK_ANTE_LO.load(Ordering::Relaxed),
+            FORK_ANTE_HI.load(Ordering::Relaxed),
+            FORK_BEST.load(Ordering::Relaxed),
+            FORK_COPIES.load(Ordering::Relaxed),
+            stake = STAKE.load(Ordering::Relaxed),
+        );
+        debug_assert!(partial == about.contains("\"partial\": true"));
+        write_atomic(&self.dir.join("manifest.json"), &text);
     }
 
     /// `offsets`: the value networks the offsets are the log-odds of (`--offsets`), if any.
@@ -1053,30 +1088,7 @@ impl Recorder {
             return;
         }
         if self.forks {
-            let labels: Vec<String> = FORK_LABELS.iter().map(|l| esc(l)).collect();
-            let layouts: Vec<String> = VALUE_LAYOUTS
-                .iter()
-                .map(|&(v, n)| format!("[{v}, {n}]"))
-                .collect();
-            let text = format!(
-                "{{\n \"format\": 1,\n \"kind\": \"forks\",\n \"input\": \"value\",\n \"input_version\": \
-                 {VALUE_INPUT_VERSION},\n \"inputs\": {VALUE_LEN},\n \"layouts\": [{}],\n \"runs\": {},\n \
-                 \"rows\": {},\n \"chunks\": {},\n \"runs_per_chunk\": {RUNS_PER_CHUNK},\n \"labels\": [{}],\n \
-                 \"fork_chance\": {},\n \"fork_antes\": [{}, {}],\n \"fork_best\": {},\n \"fork_copies\": {},\n \
-                 \"stake\": {stake},\n{about}\n}}\n",
-                layouts.join(", "),
-                self.runs,
-                self.rows,
-                self.chunks,
-                labels.join(", "),
-                num(FORK_CHANCE_PPM.load(Ordering::Relaxed) as f64 / 1e6),
-                FORK_ANTE_LO.load(Ordering::Relaxed),
-                FORK_ANTE_HI.load(Ordering::Relaxed),
-                FORK_BEST.load(Ordering::Relaxed),
-                FORK_COPIES.load(Ordering::Relaxed),
-                stake = STAKE.load(Ordering::Relaxed),
-            );
-            write_atomic(&self.dir.join("manifest.json"), &text);
+            self.fork_manifest(about, false);
             return;
         }
         let labels: Vec<String> = LABELS.iter().map(|l| esc(l)).collect();

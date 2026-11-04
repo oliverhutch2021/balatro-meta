@@ -1191,22 +1191,50 @@ def fork_net_steps(name: str, root: Path = ROOT, data: Path = DATA) -> list[tupl
     forks = [a for f in fork_files(name, data) for a in ("--forks", str(f))]
     steps: list[tuple] = [("setup-gpu", [*MAKE, "setup-gpu"])]
     for suffix, seed in (("", "1"), ("b", "2")):
-        steps.append((f"train{suffix}", ["scripts/train_value.py", *positions, *forks, "--seed", seed,
-                                         "--out", f"models/value-{name}{suffix}.bin",
+        steps.append((f"train{suffix}", ["scripts/train_value.py", *positions, *forks, "--fork-split",
+                                         str(FORK_SPLIT), "--seed", seed, "--out", f"models/value-{name}{suffix}.bin",
                                          "--report", f"results/value/value-{name}{suffix}.json"]))
         steps.append((f"control{suffix}", ["scripts/train_value.py", *positions, *forks, "--pair-weight", "0",
-                                           "--seed", seed, "--out", f"models/value-{name}-control{suffix}.bin",
+                                           "--fork-split", str(FORK_SPLIT), "--seed", seed,
+                                           "--out", f"models/value-{name}-control{suffix}.bin",
                                            "--report", f"results/value/value-{name}-control{suffix}.json"]))
     return steps
 
 
 def fork_files(name: str, data: Path = DATA) -> list[Path]:
     """The fork recordings the networks of `name` learn from: the quick turn's and every round's before `name`
-    (those recorded: a manifest there), then `name`'s."""
+    (those recorded: a manifest there, a partial one too, since a fork recording can be read while it is made),
+    then `name`'s. For "forks-now" (make forks-now, between rounds): every fork file there is."""
     order = ["forks-quick", *(f"forks-{k}" for k in range(1, FORK_ROUNDS + 1))]
     upto = order.index(name) if name in order else len(order)
     files = [data / n for n in order[:upto] if (data / n / "manifest.json").exists()]
-    return [*files, data / name]
+    return files if name == "forks-now" else [*files, data / name]
+
+
+# make forks-now: while the night's forks come in, the pair at three pair weights and its control on every fork so
+# far (a night's recording can be read while it is made), the judge test of each on forks kept apart (a fifth of
+# the forks' runs), then one table (scripts/forks_report.py). About 20 minutes on the GPU, beside the forking.
+FORK_SPLIT = 5
+NOW_WEIGHTS = ("0.3", "1", "3")
+
+
+def fork_now_steps(root: Path = ROOT, data: Path = DATA) -> list[tuple]:
+    rounds = [n for n in range(LAST_ROUND, 0, -1) if (data / f"value-{n}" / "manifest.json").exists()][:2]
+    files = fork_files("forks-now", data)
+    if not rounds or not files:
+        return [("setup-gpu", [*MAKE, "setup-gpu"])]
+    positions = [a for n in sorted(rounds) for a in ("--data", str(data / f"value-{n}"))]
+    forks = [a for f in files for a in ("--forks", str(f))]
+    steps: list[tuple] = [("setup-gpu", [*MAKE, "setup-gpu"])]
+    reports = []
+    for w in ("0", *NOW_WEIGHTS):
+        report = f"results/value/value-forks-now-pw{w}.json"
+        reports.append(report)
+        steps.append((f"pw{w}", ["scripts/train_value.py", *positions, *forks, "--pair-weight", w, "--fork-split",
+                                 str(FORK_SPLIT), "--seed", "1", "--out", f"models/value-forks-now-pw{w}.bin",
+                                 "--report", report]))
+    steps.append(("table", ["scripts/forks_report.py", *reports, "--out", "results/forks/now-table.json"]))
+    return steps
 
 
 def fork_play_steps(name: str, root: Path = ROOT, runs: int = BIG_RUNS) -> list[tuple]:
@@ -1444,6 +1472,7 @@ JOBS: dict[str, list[tuple]] = {
     # An hour of forks and the networks that learn from them: the judge test today (results/forks/forks-quick.json,
     # then results/value/value-forks-quick.json's measured.forks).
     "forks-quick": fork_steps("forks-quick", FORK_QUICK_SECONDS),
+    "forks-now": fork_now_steps(),
     "value-net-forks-quick": fork_net_steps("forks-quick"),
     **{name: steps for k in range(1, FORK_ROUNDS + 1) for name, steps in fork_round(k).items()},
     "teacher-inputs": input_steps(),

@@ -545,3 +545,31 @@ def test_the_diagnosis_rows_say_where_each_run_ended_and_whether_deeper_play_bea
         assert s["deeper_play"]["replayed"] == len(replayed)
         text = "\n".join(diagnose.lines(s, forked / "diag.csv"))
         assert "Where the losses are" in text and "Could better play" in text
+
+
+def test_a_fork_recording_still_being_made_reads_the_chunks_its_manifest_counts(forked, tmp_path):
+    partial = tmp_path / "partial"
+    shutil.copytree(forked / "forks", partial)
+    man = json.loads((partial / "manifest.json").read_text())
+    whole = tv.load_data(partial)
+    # As the recorder leaves it after its first chunk: the manifest counts the chunks whole so far; a chunk half
+    # written after that is left alone.
+    (partial / "manifest.json").write_text(json.dumps(dict(man, partial=True, chunks=1)))
+    stem = min(partial.glob("chunk-*-ptr.npy")).name[: -len("-ptr.npy")]
+    for part in ("idx", "val", "ptr"):
+        shutil.copy(partial / f"{stem}-{part}.npy", partial / f"chunk-00009-{part}.npy")
+    data = tv.load_data(partial)
+    assert data.rows == whole.rows == man["rows"]
+    fs = tv.ForkSet(data)
+    j = tv.judge_forks(fs, np.arange(len(fs)))
+    assert j["forks"] == len(fs) and set(j) >= {"chosen", "random", "spread", "options_mean"}
+    assert j["random"]["gain"] == 0.0 and abs(j["random"]["picked_best"] - np.mean(
+        [1 / len(f["options"]) for f in fs.forks])) < 1e-4
+    if "oracle_half_gain" in j:
+        assert -1 <= j["oracle_half_gain"] <= 1
+    # A network judge given as its picks: picking the best by the labels is a perfect judge.
+    best = np.array([int(np.lexsort((-np.arange(len(f["options"])), [o["key"].sum() for o in f["options"]],
+                                     [o["won"].mean() for o in f["options"]]))[-1]) for f in fs.forks])
+    perfect = tv.judge_forks(fs, np.arange(len(fs)), {"network": best})["network"]
+    assert perfect["picked_best"] == 1.0 and perfect["regret"] == 0.0 and perfect["gain"] >= 0
+    assert tv.judge_lines(j)

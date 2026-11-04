@@ -156,6 +156,8 @@ def load_data(folders: Path | list[Path], max_runs: int | None = None, layout: i
                              f"(make teacher-data).")
         manifest = json.loads(man_path.read_text())
         chunks = sorted(p.name[: -len("-ptr.npy")] for p in folder.glob("chunk-*-ptr.npy"))
+        if manifest.get("partial") and len(chunks) >= manifest["chunks"]:
+            chunks = chunks[:manifest["chunks"]]  # still being made: the chunks whole when the manifest was written
         if len(chunks) != manifest["chunks"]:
             raise SystemExit(f"{folder}: the manifest lists {manifest['chunks']} chunks, {len(chunks)} are there.")
         # Sizes first, so the arrays are filled in place (no second copy of the data in memory).
@@ -433,15 +435,87 @@ def fork_batch_loss(torch, net, fb: Batches, fs: ForkSet, ids, mean, scale, devi
     return pair_loss(torch, z, t(opt_of).to(device), n, t(pa).to(device), t(pb).to(device), t(pt).to(device))
 
 
+def judge_forks(fs: ForkSet, ids, extra: dict[str, np.ndarray] | None = None) -> dict:
+    """The judge test on these forks. For each judge (the networks the forks were made with: "ensemble"; the
+    teacher's quick look; the teacher's own choice; the run's move; picking at random; and any `extra` judge, given
+    as its pick for each fork, or -1 for none): how often its choice was the option whose play-outs went best
+    ("picked_best"), what it gave away against that option ("regret": the best is the best of noisy copies, so this
+    is inflated alike for every judge), and its gain over a random option in the play-outs' win rate ("gain": not
+    inflated, since no judge looks at the outcomes). An oracle that picks by the even copies, measured on the odd
+    ones, gives the ceiling a judge that knew half the play-outs would reach ("oracle_half_gain")."""
+    extra = extra or {}
+    judges: dict[str, list[tuple[float, float, float]]] = {}
+    oracle = []
+    spread, options_n = [], []
+    for k, i in enumerate(ids):
+        f = fs.forks[i]
+        opts = f["options"]
+        m = len(opts)
+        won = [o["won"] for o in opts]
+        wr = np.array([w.mean() for w in won])
+        score = np.array([o["key"].sum() for o in opts])
+        best = int(np.lexsort((-np.arange(m), score, wr))[-1])
+        logits = np.array([o["logit"] for o in opts])
+        quick = np.array([o["quick"] for o in opts])
+        picks = {
+            "ensemble": int(np.nanargmax(logits)) if np.isfinite(logits).any() else None,
+            "quick": int(np.nanargmax(quick)) if np.isfinite(quick).any() else None,
+            "chosen": next((j for j, o in enumerate(opts) if o["chosen"]), None),
+            "made": next((j for j, o in enumerate(opts) if o["made"]), None),
+        }
+        for name, arr in extra.items():
+            picks[name] = int(arr[k]) if 0 <= int(arr[k]) < m else None
+        for name, pick in picks.items():
+            if pick is not None:
+                judges.setdefault(name, []).append((float(pick == best), float(wr[best] - wr[pick]),
+                                                    float(wr[pick] - wr.mean())))
+        judges.setdefault("random", []).append((1.0 / m, float(wr[best] - wr.mean()), 0.0))
+        copies = min(len(w) for w in won)
+        if copies >= 2:
+            even = np.array([w[:copies][0::2].mean() for w in won])
+            odd = np.array([w[:copies][1::2].mean() for w in won])
+            oracle.append(float(odd[int(np.argmax(even))] - odd.mean()))
+        spread.append(float(wr.max() - wr.min()))
+        options_n.append(m)
+    out: dict = {"forks": len(ids)}
+    for name in ("network", "ensemble", "quick", "chosen", "made", "random", *extra):
+        rows = judges.get(name)
+        if rows and name not in out:
+            out[name] = {"judged": len(rows), "picked_best": round(float(np.mean([b for b, _, _ in rows])), 4),
+                         "regret": round(float(np.mean([r for _, r, _ in rows])), 4),
+                         "gain": round(float(np.mean([g for _, _, g in rows])), 4)}
+    if oracle:
+        out["oracle_half_gain"] = round(float(np.mean(oracle)), 4)
+    if spread:
+        out["spread"] = {"mean": round(float(np.mean(spread)), 4),
+                         "a_copy_or_more": round(float(np.mean([x > 1e-9 for x in spread])), 4)}
+        out["options_mean"] = round(float(np.mean(options_n)), 2)
+    return out
+
+
+def judge_lines(j: dict) -> list[str]:
+    """The judge test as lines: each judge's picked-best share, regret and gain over random, then the oracle."""
+    out = []
+    for name in ("network", "ensemble", "quick", "chosen", "made", "random"):
+        if name in j:
+            r = j[name]
+            out.append(f"{name:9} picked best {100 * r['picked_best']:5.1f}%   regret {r['regret']:.3f}   gain over "
+                       f"random {r['gain']:+.3f}   ({r['judged']:,} forks)")
+    if "oracle_half_gain" in j:
+        out.append(f"an oracle that saw half the copies gains {j['oracle_half_gain']:+.3f} on the other half")
+    if "spread" in j:
+        out.append(f"the options' win rates differ by {j['spread']['mean']:.3f} on average, by a copy or more at "
+                   f"{100 * j['spread']['a_copy_or_more']:.0f}% of the forks; {j['options_mean']} options a fork")
+    return out
+
+
 def fork_measures(torch, net, fb: Batches, fs: ForkSet, ids, mean, scale, device, batch: int) -> dict:
-    """The judge test on these forks: for each judge, how often the option it rates highest is the one whose
-    play-outs went best, and what its choice gave away in win rate (the best option's win rate less its own):
-    the network, the networks the forks were made with (their log-odds, when they had any), the teacher's quick
-    look, the teacher's own choice, and picking at random. And the network's pairwise loss."""
+    """The judge test on these forks (`judge_forks`) with the network as a judge (the option whose position it
+    rates highest), and the network's pairwise loss."""
     if len(ids) == 0:
         return {"forks": 0}
     net.eval()
-    judges = {"network": [], "ensemble": [], "quick": [], "chosen": [], "random": []}
+    picks = np.full(len(ids), -1, np.int64)
     losses_, n_pairs = 0.0, 0
     with torch.no_grad():
         for k in range(0, len(ids), batch):
@@ -456,28 +530,12 @@ def fork_measures(torch, net, fb: Batches, fs: ForkSet, ids, mean, scale, device
                                            t(pt).to(device))) * len(pa)
                 n_pairs += len(pa)
             at = 0
-            for i in chunk:
-                f = fs.forks[i]
-                m = len(f["options"])
-                wr = np.array([o["won"].mean() for o in f["options"]])
-                score = np.array([o["key"].sum() for o in f["options"]])
-                best = int(np.lexsort((-np.arange(m), score, wr))[-1])
-                picks = {"network": int(np.argmax(v[at:at + m])),
-                         "quick": int(np.nanargmax([o["quick"] for o in f["options"]]))
-                         if np.isfinite([o["quick"] for o in f["options"]]).any() else None,
-                         "chosen": next((k2 for k2, o in enumerate(f["options"]) if o["chosen"]), None)}
-                logits = [o["logit"] for o in f["options"]]
-                picks["ensemble"] = int(np.nanargmax(logits)) if np.isfinite(logits).any() else None
-                for name, pick in picks.items():
-                    if pick is not None:
-                        judges[name].append((pick == best, wr[best] - wr[pick]))
-                judges["random"].append((1.0 / m, wr[best] - wr.mean()))
+            for j, i in enumerate(chunk):
+                m = len(fs.forks[i]["options"])
+                picks[k + j] = int(np.argmax(v[at:at + m]))
                 at += m
-    out = {"forks": len(ids), "pair_bce": round(losses_ / max(n_pairs, 1), 5)}
-    for name, seen in judges.items():
-        if seen:
-            out[name] = {"judged": len(seen), "picked_best": round(float(np.mean([b for b, _ in seen])), 4),
-                         "regret": round(float(np.mean([r for _, r in seen])), 4)}
+    out = judge_forks(fs, ids, {"network": picks})
+    out["pair_bce"] = round(losses_ / max(n_pairs, 1), 5)
     return out
 
 
@@ -829,7 +887,7 @@ def train(a) -> dict:
         fork_data = load_data([Path(d).expanduser() for d in a.forks], layout=data.manifest["input_version"])
         if fork_data.inputs != data.inputs:
             raise SystemExit(f"The forks have {fork_data.inputs} inputs, the positions {data.inputs}.")
-        fs = ForkSet(fork_data, a.split)
+        fs = ForkSet(fork_data, a.fork_split or a.split)
         forks = (Batches(torch, fork_data, device), fs)
         print(f"{len(fs):,} forked decisions ({fork_data.rows:,} positions the options left; {len(fs.ids(0)):,} to "
               f"train on, {len(fs.ids(1)):,} to judge, {len(fs.ids(2)):,} to measure), pair weight {a.pair_weight}",
@@ -929,13 +987,9 @@ def train(a) -> dict:
                                    if "bce_before" in r else f", AUC {r['auc']}"))
     fk = m.get("forks") or {}
     if fk.get("forks"):
-        print(f"  the judge test on {fk['forks']:,} forks kept apart (pairwise loss {fk['pair_bce']}): the option "
-              f"rated highest was the one whose play-outs went best, and what the choice gave away in win rate:")
-        for name in ("network", "ensemble", "quick", "chosen", "random"):
-            if name in fk:
-                j = fk[name]
-                print(f"    {name:9} picked best {100 * j['picked_best']:.1f}%  regret {j['regret']:.3f}  "
-                      f"({j['judged']:,} forks)")
+        print(f"  the judge test on {fk['forks']:,} forks kept apart (pairwise loss {fk['pair_bce']}):")
+        for line in judge_lines(fk):
+            print("   " + line)
     d = m.get("depth") or {}
     if d.get("wins"):
         print(f"  depth after a win ({d['wins']:,} positions of {d['runs']:,} won runs): cross-entropy {d['ce']} "
@@ -974,6 +1028,8 @@ def main() -> None:
                          "decision's options in the order their play-outs went; give it more than once for more")
     ap.add_argument("--pair-weight", type=float, default=1.0, help="the forks' pairwise loss against the positions'")
     ap.add_argument("--fork-batch", type=int, default=16, help="forks in each training step's pairwise batch")
+    ap.add_argument("--fork-split", type=int, help="one fork's run in this many judges, another measures (default: "
+                                                   "--split; fewer forks than positions want a larger share)")
     ap.add_argument("--offset", action="store_true",
                     help="learn a correction to the value networks' log-odds the recordings keep (baseline --offsets)")
     ap.add_argument("--split", type=int, default=SPLIT, help="one run in this many judges, another measures")
