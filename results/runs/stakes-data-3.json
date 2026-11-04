@@ -1,0 +1,42 @@
+{
+ "job": "stakes-data-3",
+ "commit": "fe1d0ef306928fd7d8640bf3d8c65dc375d6798d",
+ "started": "2026-11-04T10:47:50+00:00",
+ "finished": "2026-11-04T12:40:25+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   15.6,
+   16.6,
+   16.9
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 1,
+  "record-stake1": 1903,
+  "record-stake2": 1697,
+  "record-stake3": 1367,
+  "record-stake4": 918,
+  "record-stake5": 400,
+  "record-stake6": 220,
+  "record-stake7": 135,
+  "record-stake8": 114
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "record-stake1": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-stakes-2.bin,models/value-stakes-2b.bin --value-weight 2.5 --teacher-options precise,avoid-rental,explore=0.1,commit=0.25 --runs 6000 --seed 7201 --stake 1 --record ~/.cache/balatro-meta/data/stakes-3/stake1 --out results/stakes/record-3-stake1.json",
+  "record-stake2": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-stakes-2.bin,models/value-stakes-2b.bin --value-weight 2.5 --teacher-options precise,avoid-rental,explore=0.1,commit=0.25 --runs 6000 --seed 7202 --stake 2 --record ~/.cache/balatro-meta/data/stakes-3/stake2 --out results/stakes/record-3-stake2.json",
+  "record-stake3": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-stakes-2.bin,models/value-stakes-2b.bin --value-weight 2.5 --teacher-options precise,avoid-rental,explore=0.1,commit=0.25 --runs 6000 --seed 7203 --stake 3 --record ~/.cache/balatro-meta/data/stakes-3/stake3 --out results/stakes/record-3-stake3.json",
+  "record-stake4": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-stakes-2.bin,models/value-stakes-2b.bin --value-weight 2.5 --teacher-options precise,avoid-rental,explore=0.1,commit=0.25 --runs 5000 --seed 7204 --stake 4 --record ~/.cache/balatro-meta/data/stakes-3/stake4 --out results/stakes/record-3-stake4.json",
+  "record-stake5": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-stakes-2.bin,models/value-stakes-2b.bin --value-weight 2.5 --teacher-options precise,avoid-rental,explore=0.1,commit=0.25 --runs 3000 --seed 7205 --stake 5 --record ~/.cache/balatro-meta/data/stakes-3/stake5 --out results/stakes/record-3-stake5.json",
+  "record-stake6": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-stakes-2.bin,models/value-stakes-2b.bin --value-weight 2.5 --teacher-options precise,avoid-rental,explore=0.1,commit=0.25 --runs 2000 --seed 7206 --stake 6 --record ~/.cache/balatro-meta/data/stakes-3/stake6 --out results/stakes/record-3-stake6.json",
+  "record-stake7": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-stakes-2.bin,models/value-stakes-2b.bin --value-weight 2.5 --teacher-options precise,avoid-rental,explore=0.1,commit=0.25 --runs 1500 --seed 7207 --stake 7 --record ~/.cache/balatro-meta/data/stakes-3/stake7 --out results/stakes/record-3-stake7.json",
+  "record-stake8": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-stakes-2.bin,models/value-stakes-2b.bin --value-weight 2.5 --teacher-options precise,avoid-rental,explore=0.1,commit=0.25 --runs 1500 --seed 7208 --stake 8 --record ~/.cache/balatro-meta/data/stakes-3/stake8 --out results/stakes/record-3-stake8.json"
+ }
+}
