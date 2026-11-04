@@ -60,6 +60,9 @@ pub const OPTIONS: &[&str] = &[
     "avoid-rental",
     "avoid-eternal",
     "avoid-perishable",
+    // With a residual stake correction (`baseline --stake-net`): correct the value at the stakes above White
+    // only, so White's play stays the value networks' own, move for move.
+    "correct-stakes-only",
     // The earlier teacher: fixed joker values and rules in the shop and packs, Tarots on fixed targets,
     // the planner judging rounds by beating the blind only (no value model).
     "classic",

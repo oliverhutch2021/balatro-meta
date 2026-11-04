@@ -172,6 +172,8 @@ pub const PARAMS: &[(&str, f64)] = &[
     // further, not of winning (`learned::reach_chance`; 0: of winning). For the stakes where wins are too rare to
     // tell positions apart.
     ("reach", 0.0),
+    // With a stake correction (`baseline --stake-net`, `learned::StakeMode`): how many times it counts.
+    ("stake-scale", 1.0),
     // The scales of `Scales`, as multiples of the usual samples.
     ("deals-x", 1.0),
     ("quick-x", 1.0),

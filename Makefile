@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night teacher-exam watch watch-mod record-me compare-me
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-night teacher-exam watch watch-mod record-me compare-me
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -178,6 +178,23 @@ stakes-night:  ## Round 1 of the stake-aware networks, the stake trials, then ro
 	@$(MAKE) --no-print-directory stakes-round-1
 	@$(MAKE) --no-print-directory stakes-trials
 	@n=2; while [ $$n -le 12 ] && $(MAKE) --no-print-directory stakes-round-$$n; do git push || true; n=$$((n + 1)); done
+
+boost-data-%:  ## Boost round N, 1/3: the champion's log-odds added to its runs (round 1), or each stake recorded with its best teacher so far
+	$(PY) scripts/jobs.py run boost-data-$* $(JOB_FLAGS)
+
+boost-net-%:  ## Boost round N, 2/3: a residual pair learns what the champion's networks get wrong, at every stake
+	$(PY) scripts/jobs.py run boost-net-$* $(JOB_FLAGS)
+
+boost-play-%:  ## Boost round N, 3/3: the champion with the correction at White (8,000 seeds), then every stake against 3 November
+	$(PY) scripts/jobs.py run boost-play-$* $(JOB_FLAGS)
+
+boost-round-%:  ## Boost round N, the three jobs in a row (round 1 about 3 hours, later rounds about 4)
+	@$(MAKE) --no-print-directory boost-data-$*
+	@$(MAKE) --no-print-directory boost-net-$*
+	@$(MAKE) --no-print-directory boost-play-$*
+
+boost-night:  ## Boost rounds 1, 2, 3... until stopped (Ctrl-C; each finished step is kept)
+	@n=1; while [ $$n -le 12 ] && $(MAKE) --no-print-directory boost-round-$$n; do git push || true; n=$$((n + 1)); done
 
 teacher-exam:  ## The best teacher there is on the exam's 8,000 seeds, used for nothing else: the headline number (about 1.25 hours)
 	$(PY) scripts/jobs.py run teacher-exam $(JOB_FLAGS)

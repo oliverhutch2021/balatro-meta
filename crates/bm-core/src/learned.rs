@@ -26,7 +26,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 
 use crate::blinds::SlotState;
-use crate::observe::{encode_value, screen, VALUE_INPUT_VERSION, VALUE_LAYOUTS, VALUE_LEN};
+use crate::observe::{
+    encode_value, screen, STAKE_PART, VALUE_INPUT_VERSION, VALUE_LAYOUTS, VALUE_LEN,
+};
 use crate::state::{Phase, Run};
 
 /// One dense layer.
@@ -121,6 +123,11 @@ impl Net {
             return Err("no layers".into());
         }
         Ok(Net { layers })
+    }
+
+    /// How many floats of the input the network reads (its layout's: `VALUE_LAYOUTS`).
+    pub fn inputs(&self) -> usize {
+        self.layers[0].inputs
     }
 
     /// The network's outputs for an input of `VALUE_LEN` floats.
@@ -289,6 +296,12 @@ static NET: OnceLock<Vec<Net>> = OnceLock::new();
 /// Load the value network for this process (the teacher uses it from then on). Several paths joined by commas
 /// load an ensemble: the chance of winning is then the mean of the networks' chances.
 pub fn load(path: &str) -> Result<(), String> {
+    NET.set(read_nets(path)?)
+        .map_err(|_| "a value network is already loaded".to_string())
+}
+
+/// The networks of a comma-separated list of weights files.
+fn read_nets(path: &str) -> Result<Vec<Net>, String> {
     let mut nets = Vec::new();
     for p in path.split(',').map(str::trim).filter(|p| !p.is_empty()) {
         let bytes = std::fs::read(p).map_err(|e| format!("{p}: {e}"))?;
@@ -297,8 +310,7 @@ pub fn load(path: &str) -> Result<(), String> {
     if nets.is_empty() {
         return Err(format!("no value network in {path:?}"));
     }
-    NET.set(nets)
-        .map_err(|_| "a value network is already loaded".to_string())
+    Ok(nets)
 }
 
 /// Whether a value network is loaded.
@@ -363,10 +375,18 @@ fn chance(run: &Run, reach: Option<usize>) -> Option<f64> {
         if let Some(p) = SEEN.with(|s| s.borrow().get(&key).copied()) {
             return p;
         }
-        let p = match reach {
+        let from = reach.map(|k| blinds_behind(run) + k);
+        let mut p = match from {
             None => mean_chance(nets, &x),
-            Some(k) => mean_reach(nets, &x, blinds_behind(run) + k),
+            Some(f) => mean_reach(nets, &x, f),
         };
+        if let Some((stake_nets, mode)) = STAKE_NET.get() {
+            // A residual correction learned White's runs too; "correct-stakes-only" keeps White's play the value
+            // networks' own. A delta is nothing at White anyway.
+            if shows_a_stake(&x) || !crate::teacher::on("correct-stakes-only") {
+                p = corrected(p, correction(stake_nets, *mode, &x, from), stake_scale());
+            }
+        }
         SEEN.with(|s| {
             let mut s = s.borrow_mut();
             if s.len() > 8192 {
@@ -453,6 +473,135 @@ fn reach() -> Option<usize> {
     crate::teacher::param("reach")
         .filter(|&k| k >= 1.0)
         .map(|k| k.round() as usize)
+}
+
+// ---- The stake correction ----
+
+/// How a second set of networks (`baseline --stake-net`: networks of input layout 3, which shows the stake)
+/// corrects the value networks' chance, in log-odds. The value networks keep the judgement they learned from
+/// far more runs (White's, so far); the correction only says where the runs show it wrong.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StakeMode {
+    /// Networks that learned the gap between the value networks' log-odds of winning and how runs ended
+    /// (`train_value.py --offset`, on recordings that keep the value networks' log-odds of each position,
+    /// `baseline --offsets`): their first output, the gap, is added. Starting from no gap, they move away from it
+    /// only as far as the runs they judge on bear out, at every stake (White too, unless teacher option
+    /// "correct-stakes-only").
+    Residual,
+    /// Networks that learned the chance of winning at every stake: what the stake changes by their reckoning,
+    /// their log-odds here less their log-odds for the same position at White (the stake's floats off), is added.
+    /// Their own judgement of the position cancels out; nothing at White.
+    Delta,
+}
+
+impl StakeMode {
+    pub fn parse(s: &str) -> Result<StakeMode, String> {
+        match s {
+            "residual" => Ok(StakeMode::Residual),
+            "delta" => Ok(StakeMode::Delta),
+            other => Err(format!(
+                "unknown stake correction {other:?}: residual or delta"
+            )),
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            StakeMode::Residual => "residual",
+            StakeMode::Delta => "delta",
+        }
+    }
+}
+
+static STAKE_NET: OnceLock<(Vec<Net>, StakeMode)> = OnceLock::new();
+
+/// Load the stake correction's networks for this process (several joined by commas: their corrections' mean).
+pub fn load_stake(path: &str, mode: StakeMode) -> Result<(), String> {
+    let nets = read_nets(path)?;
+    check_stake_nets(&nets).map_err(|e| format!("{path}: {e}"))?;
+    STAKE_NET
+        .set((nets, mode))
+        .map_err(|_| "a stake correction is already loaded".to_string())
+}
+
+/// The stake correction loaded, if one is.
+pub fn stake_mode() -> Option<StakeMode> {
+    STAKE_NET.get().map(|(_, m)| *m)
+}
+
+/// A stake correction reads the whole input: a network of an older layout can't see the stake.
+fn check_stake_nets(nets: &[Net]) -> Result<(), String> {
+    match nets.iter().find(|n| n.inputs() != VALUE_LEN) {
+        Some(n) => Err(format!(
+            "a stake correction must read this engine's whole input ({VALUE_LEN} floats, layout \
+             {VALUE_INPUT_VERSION}: the stake), not {} floats",
+            n.inputs()
+        )),
+        None => Ok(()),
+    }
+}
+
+/// Whether an input shows a stake above White (layout 3's rule floats, the last `STAKE_PART`, any on).
+fn shows_a_stake(x: &[f32]) -> bool {
+    x.len() == VALUE_LEN && x[VALUE_LEN - STAKE_PART..].iter().any(|&v| v != 0.0)
+}
+
+/// The same input as at White Stake: the stake's rule floats off, everything else as it is.
+fn at_white(x: &[f32]) -> Vec<f32> {
+    let mut w = x.to_vec();
+    let n = w.len();
+    w[n.saturating_sub(STAKE_PART)..].fill(0.0);
+    w
+}
+
+fn logit(p: f64) -> f64 {
+    let p = p.clamp(1e-9, 1.0 - 1e-9);
+    (p / (1.0 - p)).ln()
+}
+
+/// The correction to add to the value networks' log-odds for this input. `from`: with teacher option `reach`,
+/// the stage to get to (a delta then compares the chances of getting there; a residual corrects the win chance
+/// alone, so it adds nothing, and `baseline` refuses the two together).
+fn correction(nets: &[Net], mode: StakeMode, x: &[f32], from: Option<usize>) -> f64 {
+    match (mode, from) {
+        (StakeMode::Residual, Some(_)) => 0.0,
+        (StakeMode::Residual, None) => INFERENCE.with(|w| {
+            let mut w = w.borrow_mut();
+            w.read(x);
+            nets.iter()
+                .map(|n| n.first_with(&mut w) as f64)
+                .sum::<f64>()
+                / nets.len().max(1) as f64
+        }),
+        (StakeMode::Delta, _) if !shows_a_stake(x) => 0.0,
+        (StakeMode::Delta, from) => {
+            let chance = |x: &[f32]| match from {
+                None => mean_chance(nets, x),
+                Some(f) => mean_reach(nets, x, f),
+            };
+            logit(chance(x)) - logit(chance(&at_white(x)))
+        }
+    }
+}
+
+/// A chance moved by a correction in log-odds, `scale` times; exactly as it was for none.
+fn corrected(p: f64, c: f64, scale: f64) -> f64 {
+    if c == 0.0 || scale == 0.0 {
+        return p;
+    }
+    1.0 / (1.0 + (-(logit(p) + scale * c)).exp())
+}
+
+/// Teacher option `stake-scale=S`: the stake correction counts S times (1 unless set).
+fn stake_scale() -> f64 {
+    crate::teacher::param("stake-scale").unwrap_or(1.0)
+}
+
+/// The loaded value networks' log-odds of winning for an input, as the teacher uses them (the ensemble's mean
+/// chance), without a stake correction: what a residual correction learns on top of (`baseline --offsets`).
+pub fn base_logit(x: &[f32]) -> Option<f32> {
+    let nets = NET.get()?;
+    Some(logit(mean_chance(nets, x)) as f32)
 }
 
 /// The chance of winning by a given network.
@@ -751,6 +900,92 @@ mod tests {
         assert!((mean_chance(&[a.clone(), b.clone()], &x) - (0.5 + 2.0 / 3.0) / 2.0).abs() < 1e-6);
         assert!((mean_chance(&[b], &x) - 2.0 / 3.0).abs() < 1e-6);
         assert!((mean_chance(&[a], &x) - 0.5).abs() < 1e-12);
+    }
+
+    /// A one-layer network of this engine's layout: weights on chosen inputs, the rest 0, and a bias (one
+    /// output: the win logit).
+    fn linear(on: &[(usize, f32)], bias: f32) -> Net {
+        let mut w = vec![0.0; VALUE_LEN];
+        for &(i, v) in on {
+            w[i] = v;
+        }
+        Net::from_bytes(&file(&[(VALUE_LEN, 1, false, w, vec![bias])])).unwrap()
+    }
+
+    /// An input at a stake (its rule floats as `encode_value` sets them) with a few other floats on.
+    fn input_at(stake: u8) -> Vec<f32> {
+        let mut x = vec![0.0; VALUE_LEN];
+        x[3] = 1.0;
+        x[40] = 0.5;
+        for rule in 2..=8u8 {
+            x[VALUE_LEN - STAKE_PART + usize::from(rule) - 2] = f32::from(stake >= rule);
+        }
+        x
+    }
+
+    #[test]
+    fn a_residual_correction_adds_its_networks_log_odds() {
+        let x = input_at(3);
+        let (a, b) = (linear(&[(3, 0.4)], -0.1), linear(&[(40, 1.0)], 0.2));
+        // Outputs 0.3 and 0.7: the mean, 0.5, is added to the value networks' log-odds.
+        let c = correction(&[a.clone(), b], StakeMode::Residual, &x, None);
+        assert!((c - 0.5).abs() < 1e-6, "{c}");
+        let p = 0.25f64;
+        let want = 1.0 / (1.0 + (-((p / (1.0 - p)).ln() + 0.5)).exp());
+        assert!((corrected(p, c, 1.0) - want).abs() < 1e-6);
+        // Twice the scale, twice the shift; none, no change at all.
+        let twice = 1.0 / (1.0 + (-((p / (1.0 - p)).ln() + 1.0)).exp());
+        assert!((corrected(p, c, 2.0) - twice).abs() < 1e-6);
+        assert_eq!(corrected(p, c, 0.0).to_bits(), p.to_bits());
+        // A residual network of output 0 leaves the chance bit for bit as it was.
+        let zero = linear(&[], 0.0);
+        let c0 = correction(&[zero], StakeMode::Residual, &x, None);
+        assert_eq!(c0, 0.0);
+        assert_eq!(corrected(0.3712, c0, 1.0).to_bits(), 0.3712f64.to_bits());
+        // It corrects the win chance only: with teacher option reach it adds nothing.
+        assert_eq!(correction(&[a], StakeMode::Residual, &x, Some(9)), 0.0);
+    }
+
+    #[test]
+    fn a_delta_correction_is_what_the_stake_changes_and_nothing_at_white() {
+        let first = VALUE_LEN - STAKE_PART;
+        // The network's log-odds: 0.8 for the position, -0.6 for Red's rule, -1.1 for Green's.
+        let net = linear(&[(3, 0.8), (first, -0.6), (first + 1, -1.1)], 0.1);
+        let green = input_at(3);
+        let c = correction(std::slice::from_ref(&net), StakeMode::Delta, &green, None);
+        assert!((c - (-1.7)).abs() < 1e-5, "{c}");
+        // Its judgement of the position (0.8, the bias) cancels: the same delta for another position.
+        let mut other = green.clone();
+        other[3] = 0.0;
+        let c2 = correction(std::slice::from_ref(&net), StakeMode::Delta, &other, None);
+        assert!((c2 - c).abs() < 1e-5);
+        // At White: nothing, exactly.
+        let white = input_at(1);
+        assert!(!shows_a_stake(&white) && shows_a_stake(&green));
+        assert_eq!(correction(&[net], StakeMode::Delta, &white, None), 0.0);
+        // The White view turns the stake's floats off and nothing else.
+        let w = at_white(&green);
+        assert_eq!(w[..first], green[..first]);
+        assert!(w[first..].iter().all(|&v| v == 0.0));
+    }
+
+    #[test]
+    fn a_stake_correction_must_see_the_stake() {
+        use crate::observe::VALUE_LEN_1;
+        let old = Net::from_bytes(&file_as(
+            1,
+            VALUE_LEN_1,
+            &[(VALUE_LEN_1, 1, false, vec![0.0; VALUE_LEN_1], vec![0.0])],
+        ))
+        .unwrap();
+        assert!(check_stake_nets(std::slice::from_ref(&old)).is_err());
+        assert!(check_stake_nets(&[linear(&[], 0.0)]).is_ok());
+        assert_eq!(StakeMode::parse("residual"), Ok(StakeMode::Residual));
+        assert_eq!(
+            StakeMode::parse(StakeMode::Delta.name()),
+            Ok(StakeMode::Delta)
+        );
+        assert!(StakeMode::parse("both").is_err());
     }
 
     #[test]

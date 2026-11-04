@@ -121,6 +121,18 @@ def recording_options(root: Path = ROOT) -> list[str]:
 RECORD_WITH_P = 0.1
 
 
+def report_args(r: dict) -> list[str]:
+    """The teacher a report played, as baseline's arguments: its networks, weight and options, and its stake
+    correction if it had one."""
+    options = r.get("teacher_options") or []
+    options = options.split(",") if isinstance(options, str) else list(options)
+    args = ["--value-net", str(r["value_net"]), "--value-weight", f"{float(r['value_weight']):g}"]
+    args += ["--teacher-options", ",".join(options)] if options else []
+    if r.get("stake_net"):
+        args += ["--stake-net", str(r["stake_net"]), "--stake-mode", str(r.get("stake_mode") or "residual")]
+    return args
+
+
 def best_8k(root: Path = ROOT) -> tuple[float, list[str]] | None:
     best = best_8k_report(root)
     return None if best is None else best[:2]
@@ -145,9 +157,7 @@ def best_8k_report(root: Path = ROOT, leave_out: str = "") -> tuple[float, list[
             if runs < 8000 or base != 1 or not r.get("value_net") or any(o.startswith("explore") for o in options):
                 continue
             if (best is None or rate > best[0]) and f.name != leave_out:
-                args = ["--value-net", str(r["value_net"]), "--value-weight", f"{float(r['value_weight']):g}"]
-                best = (rate, args + (["--teacher-options", ",".join(options)] if options else []),
-                        str(f.relative_to(root)))
+                best = (rate, report_args(r), str(f.relative_to(root)))
     return best
 
 
@@ -324,12 +334,9 @@ def baseline_args(root: Path = ROOT, s: int = 1) -> list[str]:
     """The teacher of a stake baseline report, as its arguments (networks, weight, options)."""
     try:
         r = json.loads((root / stake_baseline(s)).read_text())
-    except (OSError, ValueError):
+        return report_args(r)
+    except (OSError, ValueError, KeyError, TypeError):
         return best_recording(root)
-    options = r.get("teacher_options") or []
-    options = options.split(",") if isinstance(options, str) else list(options)
-    args = ["--value-net", str(r["value_net"]), "--value-weight", f"{float(r['value_weight']):g}"]
-    return args + (["--teacher-options", ",".join(options)] if options else [])
 
 
 def stake_trial_name(option: str, s: int) -> str:
@@ -471,6 +478,220 @@ def stake_round(n: int, root: Path = ROOT, runs: int = STAKE_RUNS, white: int | 
     return {f"stakes-data-{n}": record,
             f"stakes-net-{n}": [("setup-gpu", [*MAKE, "setup-gpu"]), *train],
             f"stakes-play-{n}": play}
+
+
+# make boost-night: the champion's judgement, corrected where the runs show it wrong. The stake-aware networks of
+# 4 November (make stakes-night) lost to the champion at every stake but Gold (level): a pair that learns 40,000 to
+# 75,000 runs can't match fourteen networks that learned about 250,000 White runs, and from round 2 each round
+# recorded with the round before's pair, weaker than the champion, so the rounds went in circles (White: 54.2%,
+# 58.8%, 55.9% against its 66.5%). What they showed: the other stakes' runs teach White's play too (the pair that
+# learned all eight stakes won 54.2% at White, one that learned the same White runs alone 41.6%); only rentals are
+# overrated (never buying them: +0.56 blinds beaten at Gold; never buying eternals -1.16 at Black, perishables -0.66
+# at Orange); a stake-aware network wants less say (weight 1.5 beat 2.5 at Green each round).
+# So the champion's networks stay, and a residual pair learns only what they get wrong, at every stake
+# (train_value.py --offset, on recordings that keep the champion's log-odds of each position: baseline
+# --offsets-into), starting at no correction and keeping one only as far as its judging runs bear out. It learns
+# only from the champion's runs or the best teacher's: each round records every stake with the best teacher measured
+# there so far (best_at_stake), so no round learns from a teacher worse than the last.
+CHAMPION_2 = DATA / "champion-2"  # .sync/record-champion.sh: more of the champion's runs (seed bases 8001-8008)
+BOOST_BUDGET = 110_000  # runs one training holds at most (about 90 KB a run on the GPU's 12 GB)
+BOOST_ROUNDS = 12
+DELTA_NETS = ",".join(f"models/value-stakes-{n}{b}.bin" for n in (1, 2, 3) for b in ("", "b"))
+
+
+def residual_nets(n: int) -> str:
+    return f"models/value-residual-{n}.bin,models/value-residual-{n}b.bin"
+
+
+def boost_data(n: int) -> Path:
+    """Round n's own recording (from round 2; round 1 learns the night's, stakes-1, and champion-2)."""
+    return DATA / f"boost-{n}"
+
+
+def recorded_runs(folder: Path, planned: int) -> int:
+    try:
+        return int(json.loads((folder / "manifest.json").read_text())["runs"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return planned
+
+
+def boost_folders(n: int) -> tuple[list[Path], int]:
+    """The recordings round n's correction learns from, oldest first, and how many of the last are the round's own
+    (split to judge and measure): the round's own runs at every stake, then the rounds' before it back to the
+    champion's own (champion-2, then stakes-1), as far as BOOST_BUDGET holds. Round 1's own are the champion's,
+    both recordings; recordings that aren't there (a stake record-champion.sh didn't get to) are left out."""
+    sets = [(boost_data(m), STAKE_RUNS_N) for m in range(n, 1, -1)]
+    sets += [(CHAMPION_2, STAKE_RUNS_N), (stake_data(1), STAKE_RUNS_1)]
+    chosen, total = [], 0
+    for k, (base, sizes) in enumerate(sets):
+        folders = [base / f"stake{s}" for s in range(1, 9)]
+        if n == 1 or k > 0:
+            folders = [f for f in folders if (f / "manifest.json").exists()]
+        runs = sum(recorded_runs(f, sizes[int(f.name[5:])]) for f in folders)
+        if k > (1 if n == 1 else 0) and total + runs > BOOST_BUDGET:
+            break
+        chosen.append(folders)
+        total += runs
+    ordered = [f for group in reversed(chosen) for f in group]
+    own = sum(len(g) for g in chosen[:2]) if n == 1 else len(chosen[0]) if chosen else 0
+    return ordered, max(1, min(own, len(ordered)))
+
+
+def best_at_stake(s: int, root: Path = ROOT) -> tuple[list[str], str | None]:
+    """The ratchet: the teacher to record stake s with, and its report. At White, the best on the first 8,000 usual
+    seeds (best_recording, best_8k). Above it, of every teacher set run by run against 3 November's at that stake
+    (the same 2,000 seeds: results/stakes/stake{s}-*-vs-<baseline>.json), the one that went furthest, if it went
+    clearly further (paired blinds beaten, the 95% interval above 0); else 3 November's, with the avoid- options the
+    trials kept."""
+    if s == 1:
+        best = best_8k_report(root)
+        return (best[1], best[2]) if best else (best_recording(root), None)
+    top = None
+    for f in sorted((root / "results" / "stakes").glob(f"stake{s}-*-vs-{STAKE_BASELINE}.json")):
+        try:
+            c = json.loads(f.read_text())
+            low, diff = float(c["blinds_beaten_diff_ci"][0]), float(c["blinds_beaten_diff"])
+            report = str(c["b"]["report"])
+            args = report_args(json.loads((root / report).read_text()))
+        except (OSError, ValueError, KeyError, TypeError, IndexError):
+            continue
+        if low > 0 and (top is None or diff > top[0]):
+            top = (diff, args, report)
+    if top is not None:
+        return top[1], top[2]
+    args = baseline_args(root, s)
+    kept = stake_options(root)
+    if kept:
+        if "--teacher-options" in args:
+            i = args.index("--teacher-options") + 1
+            args = [*args[:i], ",".join([args[i], *kept]), *args[i + 1:]]
+        else:
+            args = [*args, "--teacher-options", ",".join(kept)]
+    # A kept option tried at this very stake: its trial is the report of the teacher this is.
+    trials = [stake_trial_name(o, st) for o, st in STAKE_TRIALS if st == s and o in kept]
+    return args, f"{trials[0]}.json" if len(trials) == 1 else stake_baseline(s)
+
+
+def with_correction(args: list[str], nets: str, mode: str) -> list[str]:
+    """A teacher's arguments with this stake correction in place of any it had."""
+    out, skip = [], False
+    for a in args:
+        if skip:
+            skip = False
+            continue
+        if a in ("--stake-net", "--stake-mode"):
+            skip = True
+            continue
+        out.append(a)
+    return [*out, "--stake-net", nets, "--stake-mode", mode]
+
+
+def champion_with_kept(root: Path = ROOT) -> list[str]:
+    """The champion of 3 November with the avoid- options the trials kept."""
+    args = baseline_args(root, 1)
+    kept = stake_options(root)
+    if kept:
+        i = args.index("--teacher-options") + 1 if "--teacher-options" in args else None
+        args = [*args, "--teacher-options", ",".join(kept)] if i is None else \
+            [*args[:i], ",".join([args[i], *kept]), *args[i + 1:]]
+    return args
+
+
+def with_weight(args: list[str], w: str) -> list[str]:
+    out = list(args)
+    out[out.index("--value-weight") + 1] = w
+    return out
+
+
+def boost_teacher(n: int, root: Path = ROOT) -> list[str]:
+    """Round n's teacher: the champion (3 November's: its networks, weight and options, with the avoid- options the
+    trials kept), its chance corrected by round n's residual pair."""
+    return with_correction(champion_with_kept(root), residual_nets(n), "residual")
+
+
+def boost_round(n: int, root: Path = ROOT, runs: int = STAKE_RUNS, white: int | None = None
+                ) -> dict[str, list[tuple]]:
+    """Round n of the boost, three jobs. boost-data-n: round 1 adds the champion's log-odds to every position of the
+    champion's own recordings (stakes-1, champion-2); from round 2 each stake records with the best teacher measured
+    there so far (best_at_stake, exploring as round 11 on would; seed bases 9000 + 100 (n - 1) + stake), then adds
+    them too. boost-net-n: the residual pair learns, on those and the rounds' before them (boost_folders), what the
+    champion's networks get wrong. boost-play-n: the champion with the pair's correction at White on the first 8,000
+    usual seeds against the best teacher there, then at every stake above on the 2,000 seeds of 3 November, run by
+    run against that day's teacher and against the best so far; round 1 also tries the delta of the stake-aware
+    pairs of rounds 1 to 3 (their chance at the stake less at White) on the champion."""
+    white = BIG_RUNS if white is None else white
+    champion = baseline_args(root, 1)
+    c_nets = champion[champion.index("--value-net") + 1]
+    w = champion[champion.index("--value-weight") + 1]
+    data: list[tuple] = [("build", [*MAKE, "build"])]
+    if n == 1:
+        # The champion's runs: the night's (stakes-1), and more at every stake (champion-2: recorded here unless
+        # .sync/record-champion.sh did, the same runs).
+        targets = [f for f in (stake_data(1) / f"stake{s}" for s in range(1, 9)) if (f / "manifest.json").exists()]
+        recorder = exploring(baseline_args(root, 1), 11)
+        for s in range(1, 9):
+            dst = CHAMPION_2 / f"stake{s}"
+            if not (dst / "manifest.json").exists():
+                data.append((f"record-champion-stake{s}", [*BASELINE, "--bot", "teacher", *recorder,
+                                                            "--runs", str(STAKE_RUNS_N[s]), "--seed", str(8000 + s),
+                                                            "--stake", str(s), "--record", str(dst),
+                                                            "--out", f"results/stakes/champion-2-stake{s}.json"]))
+            targets.append(dst)
+    else:
+        targets = []
+        for s in range(1, 9):
+            dst = boost_data(n) / f"stake{s}"
+            data.append((f"record-stake{s}", [*BASELINE, "--bot", "teacher", *exploring(best_at_stake(s, root)[0], 11),
+                                              "--runs", str(STAKE_RUNS_N[s]), "--seed", str(9000 + 100 * (n - 1) + s),
+                                              "--stake", str(s), "--record", str(dst),
+                                              "--out", f"results/stakes/boost-record-{n}-stake{s}.json"]))
+            targets.append(dst)
+    for t in targets:
+        label = f"{t.parent.name}-{t.name}"
+        data.append((f"offsets-{label}", [*BASELINE, "--offsets-into", str(t), "--value-net", c_nets,
+                                          "--out", f"results/stakes/offsets-{label}.json"]))
+    folders, newest = boost_folders(n)
+    train = [(f"train{suffix}", ["scripts/train_value.py", *[x for f in folders for x in ("--data", str(f))],
+                                 "--newest", str(newest), "--offset", "--input-layout", STAKE_LAYOUT, "--seed", seed,
+                                 "--out", f"models/value-residual-{n}{suffix}.bin",
+                                 "--report", f"results/value/value-residual-{n}{suffix}.json"])
+             for suffix, seed in (("", "1"), ("b", "2"))]
+    teacher = boost_teacher(n, root)
+    play: list[tuple] = [("build", [*MAKE, "build"])]
+    white_out = f"results/value/f{FORMULA}-precise-{white // 1000}k-w{w}-boost{n}.json"
+    best = best_8k_report(root, leave_out=Path(white_out).name)
+    play.append(("white", [*BASELINE, "--bot", "teacher", *teacher, "--runs", str(white), "--seed", "1",
+                           "--out", white_out]))
+    if best is not None:
+        play.append(("compare-white", ["scripts/compare_runs.py", best[2], white_out, "--out",
+                                       white_out.replace(".json", "-vs-best.json")]))
+    variants = [(f"boost{n}", teacher)]
+    if n == 1:
+        variants.append(("delta-stakes1-3", with_correction(teacher, DELTA_NETS, "delta")))
+    for name, args in variants:
+        for s in range(2, 9):
+            out = f"results/stakes/stake{s}-{runs // 1000}k-f{FORMULA}-precise-{name}-w{w}.json"
+            play += [(f"{name}-stake{s}", [*BASELINE, "--bot", "teacher", *args, "--runs", str(runs), "--seed", "1",
+                                           "--stake", str(s), "--out", out]),
+                     (f"compare-{name}-stake{s}", ["scripts/compare_runs.py", stake_baseline(s), out, "--out",
+                                                   out.replace(".json", f"-vs-{STAKE_BASELINE}.json")])]
+            so_far = best_at_stake(s, root)[1]
+            if so_far and so_far != stake_baseline(s) and so_far != out:
+                play.append((f"compare-{name}-stake{s}-best", ["scripts/compare_runs.py", so_far, out, "--out",
+                                                               out.replace(".json", "-vs-best.json")]))
+    if n == 1:
+        # The stake-aware pairs did better with less say at Green; the champion's networks are as far from what
+        # they learned there. Both at weight 1.5, against 3 November (a clear gain is a candidate for the ratchet).
+        for name, args in (("champion", with_weight(champion_with_kept(root), "1.5")),
+                           (f"boost{n}", with_weight(teacher, "1.5"))):
+            out = f"results/stakes/stake3-{runs // 1000}k-f{FORMULA}-precise-{name}-w1.5.json"
+            play += [(f"{name}-w1.5-stake3", [*BASELINE, "--bot", "teacher", *args, "--runs", str(runs), "--seed",
+                                              "1", "--stake", "3", "--out", out]),
+                     (f"compare-{name}-w1.5-stake3", ["scripts/compare_runs.py", stake_baseline(3), out, "--out",
+                                                      out.replace(".json", f"-vs-{STAKE_BASELINE}.json")])]
+    return {f"boost-data-{n}": data,
+            f"boost-net-{n}": [("setup-gpu", [*MAKE, "setup-gpu"]), *train],
+            f"boost-play-{n}": play}
 
 
 def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
@@ -896,6 +1117,8 @@ JOBS: dict[str, list[tuple]] = {
     # The stake-aware networks, round by round (stake_round): make stakes-night runs round 1, the trials, then
     # rounds 2, 3... until stopped.
     **{name: steps for n in range(1, STAKE_ROUNDS + 1) for name, steps in stake_round(n).items()},
+    # The champion with a residual correction, round by round (boost_round): make boost-night runs them until stopped.
+    **{name: steps for n in range(1, BOOST_ROUNDS + 1) for name, steps in boost_round(n).items()},
     "teacher-stakes": stakes_steps(),
     "teacher-exam": exam_steps(),
 }
@@ -1072,6 +1295,10 @@ def progress_entry(job: str, step: str, argv: list[str], commit: str, root: Path
         name = "Network, copying the teacher" if step == "eval-imitate" else "Network after PPO"
     else:
         name = bot[:1].upper() + bot[1:].removesuffix(" bot")
+    stake_net = arg("--stake-net")
+    if stake_net:  # make boost-night: the champion's chance corrected by a stake-aware pair
+        rr = re.search(r"value-residual-(\d+)b?\.bin", stake_net)
+        name += f" + residual {rr[1]}" if rr else " + stake delta"
     options = arg("--teacher-options")
     if options:
         name += ", " + options.replace(",", ", ")

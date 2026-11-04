@@ -282,3 +282,44 @@ def test_the_teacher_plays_with_a_network(tmp_path):
     final = json.loads(out.read_text())
     assert final["bot"] == "teacher bot with a learned value" and final["runs"] == 2
     assert final["refused_moves"] == 0
+
+
+def test_a_correction_learns_on_the_value_networks_log_odds_and_the_engine_adds_it(recording, tmp_path):
+    # Offsets two ways: kept while recording, and added to a recording made without them: the same.
+    c = tmp_path / "c.bin"
+    tv.export_bmvn(c, random_net(np.random.default_rng(8), [8, 1 + tv.STAGES]), VALUE_INPUT_VERSION)
+    kept = tmp_path / "kept"
+    baseline("--runs", "300", "--threads", "2", "--seed", "5", "--record", str(kept), "--value-net", str(c),
+             "--offsets")
+    added = tmp_path / "added"
+    shutil.copytree(recording, added)
+    baseline("--offsets-into", str(added), "--value-net", str(c), "--threads", "2")
+    for chunk in sorted(kept.glob("chunk-*-off.npy")):
+        assert (np.load(chunk) == np.load(added / chunk.name)).all()
+    assert json.loads((added / "offsets.json").read_text())["rows"] == json.loads(
+        (recording / "manifest.json").read_text())["rows"]
+    data = tv.load_data(added, offsets=True)
+    x = data.dense(np.arange(20))
+    _v, _i, layers = tv.read_bmvn(c.read_bytes())
+    assert np.abs(data.off[:20] - tv.forward_np(layers, x)[:, 0]).max() < 2e-3, "the network's log-odds"
+
+    pytest.importorskip("torch")
+    out, report = tmp_path / "residual.bin", tmp_path / "residual.json"
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "train_value.py"), "--data", str(added),
+                        "--offset", "--out", str(out), "--report", str(report), "--epochs", "2",
+                        "--configs", "16/0.1/1e-4", "--scale-rows", "2000", "--cpu"],
+                       cwd=ROOT, capture_output=True, text=True, check=False, timeout=900)
+    assert r.returncode == 0, r.stdout + r.stderr
+    rep = json.loads(report.read_text())
+    assert rep["residual"]["offset_net"].endswith("c.bin")
+    # No correction is the one to beat: the kept one judges no worse.
+    assert rep["tried"][0]["history"][0]["step"] == 0
+    assert rep["tried"][0]["judging_bce"] <= rep["residual"]["judging_bce_before"] + 1e-9
+    assert rep["measured"]["before"]["rows"] == rep["measured"]["rows"]
+    assert [s["stake"] for s in rep["measured"]["by_stake"]] == [1]
+    # The engine adds it to the value network's chance.
+    played = tmp_path / "played.json"
+    baseline("--bot", "teacher", "--value-net", str(c), "--stake-net", str(out), "--runs", "2", "--threads", "2",
+             "--stake", "3", "--seed", "3", "--out", str(played))
+    final = json.loads(played.read_text())
+    assert final["stake_net"] == str(out) and final["stake_mode"] == "residual" and final["refused_moves"] == 0

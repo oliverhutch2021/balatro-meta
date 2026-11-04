@@ -23,6 +23,14 @@
 //! moves; if one doesn't (the engine's rules changed since), it says which and leaves NEW without a
 //! manifest. The manifest keeps how the runs were played (bot, seed base, networks, options).
 //!
+//! `--offsets` (with `--record` and `--value-net`) also keeps, for every recorded position, the value networks'
+//! log-odds of winning as the teacher uses them (`learned::base_logit`), in `chunk-NNNNN-off.npy`: what a residual
+//! stake correction learns on top of (`train_value.py --offset`). `--offsets-into DIR --value-net NETS` adds them
+//! to a recording made without: its runs are played again by their moves (each must end as recorded, with as many
+//! positions), and only `-off.npy` files and `offsets.json` are written into DIR, nothing else touched.
+//! `--stake-net NETS` (input layout 3) corrects the value networks' chance by the stake (`learned::StakeMode`):
+//! `--stake-mode residual` (the default: networks trained with `--offset`) or `delta`.
+//!
 //! With `BM_WATCH_DIR` set (the job runner sets it), it writes there for the live viewer:
 //! `progress.json` about once a second (runs, runs a second, win rate, final antes, what ended the
 //! runs, the jokers bought and held, the hands played, the best runs so far), and runs to replay in
@@ -216,6 +224,10 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64
                     encode_value(&screen(&run), &mut input);
                 }
                 r.rows.push(&input);
+                if OFFSETS.load(Ordering::Relaxed) {
+                    r.off
+                        .push(learned::base_logit(&input).expect("--offsets needs --value-net"));
+                }
                 r.at.push([
                     step as f32,
                     phase_code(run.phase),
@@ -346,6 +358,9 @@ static RECORD: AtomicBool = AtomicBool::new(false);
 /// The stake every run is played at (`--stake`: 1 White ... 8 Gold).
 static STAKE: AtomicU8 = AtomicU8::new(1);
 
+/// Whether recorded positions keep the value networks' log-odds (`--offsets`, `--offsets-into`).
+static OFFSETS: AtomicBool = AtomicBool::new(false);
+
 /// Runs per chunk of recorded positions.
 const RUNS_PER_CHUNK: u64 = 250;
 
@@ -367,6 +382,8 @@ const LABELS: [&str; 8] = [
 struct Recorded {
     rows: Rows,
     at: Vec<[f32; 4]>,
+    /// With `--offsets`: each position's log-odds of winning by the value networks.
+    off: Vec<f32>,
     /// With `--record-moves`: each position's move (kind, argument) and the kinds it allowed (bits).
     moves: Vec<[i64; 3]>,
 }
@@ -411,6 +428,8 @@ struct Recorder {
     chunks: u64,
     rows: u64,
     runs: u64,
+    /// `--offsets-into`: only each chunk's `-off.npy` (and `offsets.json`), into a recording already there.
+    only_offsets: bool,
 }
 
 impl Recorder {
@@ -432,6 +451,30 @@ impl Recorder {
             chunks: 0,
             rows: 0,
             runs: 0,
+            only_offsets: false,
+        }
+    }
+
+    /// `--offsets-into DIR`: the recording in DIR stays as it is; only the offsets are added beside its chunks.
+    fn offsets_into(dir: PathBuf, target: u64) -> Recorder {
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for e in rd.flatten() {
+                let name = e.file_name().to_string_lossy().into_owned();
+                if (name.starts_with("chunk-") && name.ends_with("-off.npy"))
+                    || name == "offsets.json"
+                {
+                    let _ = std::fs::remove_file(e.path());
+                }
+            }
+        }
+        Recorder {
+            dir,
+            target,
+            open: BTreeMap::new(),
+            chunks: 0,
+            rows: 0,
+            runs: 0,
+            only_offsets: true,
         }
     }
 
@@ -492,6 +535,36 @@ impl Recorder {
         }
         let n = rows.len();
         let name = |part: &str| self.dir.join(format!("chunk-{chunk:05}-{part}"));
+        let off: Vec<f32> = runs
+            .iter()
+            .flat_map(|r| r.rec.off.iter().copied())
+            .collect();
+        let off_file = || {
+            assert_eq!(off.len(), n, "an offset for every recorded position");
+            (
+                "off.npy",
+                npy_bytes("<f4", &[n], &le_bytes(&off, f32::to_le_bytes)),
+            )
+        };
+        if self.only_offsets {
+            // Beside the chunk already there: it must hold as many positions (the runs played again alike).
+            let held = npy_rows(&name("lab.npy"));
+            assert_eq!(
+                held,
+                n,
+                "{}: {held} positions recorded, {n} played again",
+                name("lab.npy").display()
+            );
+            let (part, bytes) = off_file();
+            let path = name(part);
+            let tmp = path.with_extension("tmp");
+            std::fs::write(&tmp, bytes).expect("write offsets");
+            std::fs::rename(&tmp, &path).expect("write offsets");
+            self.chunks += 1;
+            self.rows += n as u64;
+            self.runs += runs.len() as u64;
+            return;
+        }
         let files = [
             (
                 "idx.npy",
@@ -527,6 +600,9 @@ impl Recorder {
             ),
         ];
         let mut files = Vec::from(files);
+        if OFFSETS.load(Ordering::Relaxed) {
+            files.push(off_file());
+        }
         if RECORD_MODE.load(Ordering::Relaxed) == 2 {
             assert_eq!(mov.len(), 3 * n, "a move for every recorded position");
             files.push((
@@ -553,7 +629,21 @@ impl Recorder {
         self.runs += runs.len() as u64;
     }
 
-    fn manifest(&self, about: &str) {
+    /// `offsets`: the value networks the offsets are the log-odds of (`--offsets`), if any.
+    fn manifest(&self, about: &str, offsets: Option<&str>) {
+        if self.only_offsets {
+            let text = format!(
+                "{{\n \"offset_net\": {},\n \"offset_net_hash\": {},\n \"runs\": {},\n \"rows\": {},\n \
+                 \"chunks\": {}\n}}\n",
+                offsets.map_or("null".into(), esc),
+                offsets.map_or("null".into(), |o| esc(&nets_hash(o))),
+                self.runs,
+                self.rows,
+                self.chunks
+            );
+            write_atomic(&self.dir.join("offsets.json"), &text);
+            return;
+        }
         let labels: Vec<String> = LABELS.iter().map(|l| esc(l)).collect();
         let (input, inputs) = if RECORD_MODE.load(Ordering::Relaxed) == 2 {
             ("screen", OBS_LEN)
@@ -571,13 +661,15 @@ impl Recorder {
             "{{\n \"format\": 1,\n \"input\": \"{input}\",\n \"input_version\": {VALUE_INPUT_VERSION},\n \
              \"inputs\": {inputs},\n \"layouts\": [{}],\n \"runs\": {},\n \"rows\": {},\n \"chunks\": {},\n \
              \"runs_per_chunk\": {RUNS_PER_CHUNK},\n \"labels\": [{}],\n \"moves_kept\": {moves_kept},\n \
-             \"stake\": {stake},\n{about}\n}}\n",
+             \"stake\": {stake},\n \"offset_net\": {offset},\n \"offset_net_hash\": {hash},\n{about}\n}}\n",
             layouts.join(", "),
             self.runs,
             self.rows,
             self.chunks,
             labels.join(", "),
             stake = STAKE.load(Ordering::Relaxed),
+            offset = offsets.map_or("null".into(), esc),
+            hash = offsets.map_or("null".into(), |o| esc(&nets_hash(o))),
         );
         write_atomic(&self.dir.join("manifest.json"), &text);
     }
@@ -589,6 +681,8 @@ struct Replayed {
     moves: Vec<(u8, u64)>,
     won: bool,
     end_stage: u32,
+    /// Positions recorded.
+    rows: usize,
 }
 
 /// The data of a `.npy` file this program wrote (version 1.0, its own dtype and shape).
@@ -601,6 +695,46 @@ fn npy_data(path: &Path) -> Vec<u8> {
     );
     let header = u16::from_le_bytes([b[8], b[9]]) as usize;
     b[10 + header..].to_vec()
+}
+
+/// The first dimension of a `.npy` file this program wrote (its rows), read from the header alone.
+fn npy_rows(path: &Path) -> usize {
+    use std::io::Read;
+    let mut f = std::fs::File::open(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let mut head = [0u8; 10];
+    f.read_exact(&mut head)
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    assert!(
+        head.starts_with(b"\x93NUMPY\x01\x00"),
+        "{}: not a .npy file this program wrote",
+        path.display()
+    );
+    let mut header = vec![0u8; u16::from_le_bytes([head[8], head[9]]) as usize];
+    f.read_exact(&mut header)
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let text = String::from_utf8_lossy(&header);
+    let shape = text
+        .split("'shape': (")
+        .nth(1)
+        .unwrap_or_else(|| panic!("{}: no shape in its header", path.display()));
+    shape[..shape.find([',', ')']).expect("a shape")]
+        .trim()
+        .parse()
+        .unwrap_or_else(|_| panic!("{}: its shape isn't a number of rows", path.display()))
+}
+
+/// A short fingerprint of a comma-separated list of network files (FNV-1a over their bytes, in order), so a
+/// recording's offsets can be matched with the networks they came from.
+fn nets_hash(paths: &str) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for p in paths.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        let bytes = std::fs::read(p).unwrap_or_else(|e| panic!("{p}: {e}"));
+        for b in bytes {
+            h = (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        h = (h ^ 0xff).wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{h:016x}")
 }
 
 /// A field's text in one line of `runs.json` (written by `Recorder::write`: one run to a line).
@@ -637,6 +771,8 @@ fn load_replay(dir: &Path) -> (Vec<Replayed>, String, u8) {
                 "value_net",
                 "value_weight",
                 "teacher_options",
+                "stake_net",
+                "stake_mode",
                 "wins",
             ]
             .iter()
@@ -691,6 +827,7 @@ fn load_replay(dir: &Path) -> (Vec<Replayed>, String, u8) {
                 moves,
                 won: field(line, "won") == "true",
                 end_stage: field(line, "end_stage").parse().expect("an end stage"),
+                rows: field(line, "rows").parse().expect("a position count"),
             });
         }
         assert_eq!(at, kinds.len(), "{stem}: every move belongs to a run");
@@ -1097,7 +1234,22 @@ fn main() {
     };
     // `--replay DIR`: the runs of a recording made with `--record`, each played again by its own moves instead of
     // by a bot, so `--record` writes their positions as this code encodes them (a new input, no new search).
-    let replay = opt("--replay").map(|d| load_replay(Path::new(&d)));
+    // `--offsets-into DIR`: DIR's runs played again by their moves, for their positions' offsets alone.
+    let offsets_into = opt("--offsets-into");
+    if offsets_into.is_some()
+        && [opt("--replay"), opt("--record"), opt("--record-moves")]
+            .iter()
+            .any(Option::is_some)
+    {
+        panic!("--offsets-into DIR plays DIR's runs again and writes beside them: no --replay or --record with it");
+    }
+    OFFSETS.store(
+        offsets_into.is_some() || args.iter().any(|a| a == "--offsets"),
+        Ordering::Relaxed,
+    );
+    let replay = opt("--replay")
+        .or_else(|| offsets_into.clone())
+        .map(|d| load_replay(Path::new(&d)));
     // `--stake N` (1 White ... 8 Gold); a replay plays at its recording's.
     let stake: u8 = match &replay {
         Some((_, _, s)) => *s,
@@ -1153,6 +1305,34 @@ fn main() {
         learned::set_weight(w);
         println!("Value network weight: {w}");
     }
+    // `--stake-net NETS`: the value networks' chance corrected by the stake (`--stake-mode residual|delta`).
+    let stake_net = opt("--stake-net");
+    let stake_mode =
+        learned::StakeMode::parse(&opt("--stake-mode").unwrap_or_else(|| "residual".into()))
+            .unwrap_or_else(|e| panic!("{e}"));
+    if let Some(p) = &stake_net {
+        assert!(
+            value_net.is_some(),
+            "--stake-net corrects the chance of --value-net's networks: give both"
+        );
+        let reach = bm_core::teacher::options().iter().any(|o| {
+            o.strip_prefix("reach=")
+                .and_then(|k| k.parse::<f64>().ok())
+                .is_some_and(|k| k >= 1.0)
+        });
+        assert!(
+            !(reach && stake_mode == learned::StakeMode::Residual),
+            "a residual stake correction corrects the win chance; teacher option reach rates by another"
+        );
+        if let Err(e) = learned::load_stake(p, stake_mode) {
+            panic!("{e}");
+        }
+        println!("Stake correction ({}): {p}", stake_mode.name());
+    }
+    assert!(
+        !OFFSETS.load(Ordering::Relaxed) || value_net.is_some(),
+        "offsets are the value networks' log-odds: give --value-net"
+    );
     let bot_label = opt("--bot").unwrap_or_else(|| "greedy".into());
     let (bot, bot_name): (Bot, &str) = match (bot_label.as_str(), value_net.is_some()) {
         ("greedy", _) => (greedy_move, "greedy bot"),
@@ -1168,15 +1348,27 @@ fn main() {
     // How each run ended, in seed order (for paired comparisons), when there aren't too many runs.
     let stages: Option<Mutex<Vec<u8>>> =
         (target <= 50_000).then(|| Mutex::new(vec![b'?'; target as usize]));
-    let (record_dir, mode) = match (opt("--record"), opt("--record-moves")) {
-        (Some(d), None) => (Some(d), 1),
-        (None, Some(d)) => (Some(d), 2),
-        (None, None) => (None, 0),
+    let (record_dir, mode) = match (opt("--record"), opt("--record-moves"), &offsets_into) {
+        (Some(d), None, None) => (Some(d), 1),
+        (None, Some(d), None) => (Some(d), 2),
+        (None, None, Some(d)) => (Some(d.clone()), 1),
+        (None, None, None) => (None, 0),
         _ => panic!("--record or --record-moves, not both"),
     };
+    assert!(
+        !OFFSETS.load(Ordering::Relaxed) || mode == 1,
+        "--offsets keeps the value networks' log-odds of the recorded positions: give --record DIR"
+    );
     RECORD_MODE.store(mode, Ordering::Relaxed);
     RECORD.store(record_dir.is_some(), Ordering::Relaxed);
-    let recorder = record_dir.map(|d| Mutex::new(Recorder::new(PathBuf::from(d), target)));
+    let recorder = record_dir.map(|d| {
+        let d = PathBuf::from(d);
+        Mutex::new(if offsets_into.is_some() {
+            Recorder::offsets_into(d, target)
+        } else {
+            Recorder::new(d, target)
+        })
+    });
     let watch = std::env::var("BM_WATCH_DIR")
         .ok()
         .filter(|s| !s.is_empty())
@@ -1226,6 +1418,7 @@ fn main() {
                                     || s.moves != r.moves.len() as u64
                                     || s.won != r.won
                                     || s.stage != r.end_stage
+                                    || s.recorded.as_ref().is_some_and(|rec| rec.at.len() != r.rows)
                                 {
                                     diverged.lock().unwrap().push(format!(
                                         "run {i} (seed {}): recorded {} moves, {}; replayed {} moves, {}{}",
@@ -1422,16 +1615,24 @@ fn main() {
             Some((_, about, _)) => about.clone(),
             None => format!(
                 " \"bot\": {},\n \"seed_base\": {base},\n \"value_net\": {},\n \"value_weight\": {},\n \
-                 \"teacher_options\": [{}],\n \"wins\": {},\n \"seconds\": {}",
+                 \"teacher_options\": [{}],\n \"stake_net\": {},\n \"stake_mode\": {},\n \"wins\": {},\n \
+                 \"seconds\": {}",
                 esc(bot_name),
                 value_net.as_deref().map_or("null".into(), esc),
                 num(learned::weight()),
                 opts.iter().map(|o| esc(o)).collect::<Vec<_>>().join(", "),
+                stake_net.as_deref().map_or("null".into(), esc),
+                learned::stake_mode().map_or("null".into(), |m| esc(m.name())),
                 t.wins,
                 num(el)
             ),
         };
-        r.manifest(&about);
+        r.manifest(
+            &about,
+            value_net
+                .as_deref()
+                .filter(|_| OFFSETS.load(Ordering::Relaxed)),
+        );
         println!(
             "Recorded {} positions from {} runs in {} chunks: {}",
             r.rows,
@@ -1462,14 +1663,17 @@ fn main() {
     // (scripts/compare_runs.py), and each run's ending in seed order.
     let opts = bm_core::teacher::options();
     let mut tail = format!(
-        ",\n \"seed_base\": {base},\n \"value_net\": {},\n \"value_weight\": {},\n \"teacher_options\": [{}]",
+        ",\n \"seed_base\": {base},\n \"value_net\": {},\n \"value_weight\": {},\n \"teacher_options\": [{}],\n \
+         \"stake_net\": {},\n \"stake_mode\": {}",
         value_net.as_deref().map_or("null".into(), esc),
         if value_net.is_some() {
             num(learned::weight())
         } else {
             "null".into()
         },
-        opts.iter().map(|o| esc(o)).collect::<Vec<_>>().join(", ")
+        opts.iter().map(|o| esc(o)).collect::<Vec<_>>().join(", "),
+        stake_net.as_deref().map_or("null".into(), esc),
+        learned::stake_mode().map_or("null".into(), |m| esc(m.name())),
     );
     if let Some(st) = stages {
         let st = String::from_utf8(st.into_inner().unwrap()).expect("letters");

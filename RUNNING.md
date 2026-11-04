@@ -643,6 +643,34 @@ round 1 (replayed into layout 3 in minutes, two networks, then White and every s
 cd /mnt/h/balatro-meta && bash .sync/night.sh 2>&1 | tee -a .sync/logs/night.log
 ```
 
+## Step 26: the champion, corrected where the stakes show it wrong (round 1 about 5 hours, then 4 a round)
+
+What step 25 found (rounds 1 to 3, stopped in round 4): the stake-aware pairs lost to the champion at every stake but
+Gold (level), and at White (54.2%, 58.8%, 55.9% against its 66.5% on the usual 8,000 seeds). A pair that learns
+40,000 to 75,000 runs can't match fourteen networks that learned about 250,000 White runs, and from round 2 each
+round recorded with the round before's pair, weaker than the champion, so the rounds went in circles. It also found:
+the other stakes' runs teach White's play too (on the same White runs, the pair that learned all eight stakes won
+54.2% at White, a pair that learned White alone 41.6%); only rentals are overrated (never buying them: +0.56 blinds
+beaten at Gold; never buying eternals -1.16 at Black, perishables -0.66 at Orange); a stake-aware network wants less
+say (weight 1.5 beat 2.5 at Green every round); and "reach=6" took a stake-aware pair 0.7 to 1.8 blinds further at
+Green and Purple, but won less at Green.
+
+So the champion keeps its networks, and a residual pair learns only what they get wrong. Each recorded position
+gets the champion's log-odds of winning (`baseline --offsets-into`: its runs played again by their moves, nothing
+else rewritten), and the pair learns the gap between those and how the runs ended (`train_value.py --offset`),
+starting at no gap and keeping one only as far as its judging runs bear out; its report sets the corrected chance
+beside the champion's alone, stake by stake. The engine adds it (`baseline --stake-net`). Round 1 learns the
+champion's own runs: the night's, and about 31,000 more at every stake, most at White to Black, that it records first
+(unless `.sync/record-champion.sh` already did). Then it plays at White against the champion and at every stake
+against 3 November, and tries the other way too: the stake-aware pairs' delta (their chance at the stake less at
+White) on the champion; and at Green, the champion alone and corrected at weight 1.5. From round 2 each stake records with the best teacher measured there so far: the
+one that went clearly furthest against 3 November's on the same seeds, so no round learns from a teacher worse than
+the last.
+
+```
+cd /mnt/h/balatro-meta && make sync && make boost-night
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

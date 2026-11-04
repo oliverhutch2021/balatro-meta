@@ -8,6 +8,12 @@ choice, the shop, open packs) as the value network's input (observe.rs: `encode_
 alone), labelled with how its run ended. The network learns the chance of winning the run from a position
 and, alongside, the blind the run ends at, which gives it more to learn from than the wins alone.
 
+With `--offset` the network learns a correction instead: each recording keeps, beside its positions, the value
+networks' log-odds of winning as the teacher uses them (`baseline --offsets`, or `--offsets-into` for a recording
+made without), and the network's win output is added to them (a residual: what those networks get wrong, at any
+stake). It starts at zero, the value networks' own answer, and is kept only as far as it judges better than them;
+the report sets the two side by side, stake by stake. The engine adds it with `baseline --stake-net`.
+
 Runs are split, not positions (a run's positions share its ending, so a network could learn a run by heart):
 one run in twenty (by its number) judges training, which stops when those runs stop improving; another one in
 twenty is kept apart to measure the chosen network. A few network sizes and regularisations are tried and the
@@ -49,10 +55,19 @@ class Data:
     newest one's."""
 
     def __init__(self, idx: np.ndarray, val: np.ndarray, ptr: np.ndarray, lab: np.ndarray, manifest: dict,
-                 source: np.ndarray | None = None, manifests: list[dict] | None = None):
+                 source: np.ndarray | None = None, manifests: list[dict] | None = None,
+                 off: np.ndarray | None = None, offset_net: str | None = None):
         self.idx, self.val, self.ptr, self.lab, self.manifest = idx, val, ptr, lab, manifest
         self.source = np.zeros(len(lab), np.int8) if source is None else source
         self.manifests = [manifest] if manifests is None else manifests
+        # With offsets: each row's log-odds of winning by the value networks they name (offset_net).
+        self.off, self.offset_net = off, offset_net
+
+    @property
+    def stakes(self) -> np.ndarray:
+        """Each row's stake (1 White ... 8 Gold), its recording's."""
+        by_source = np.array([int(m.get("stake") or 1) for m in self.manifests], np.int8)
+        return by_source[self.source]
 
     @property
     def rows(self) -> int:
@@ -89,11 +104,22 @@ def layouts(manifest: dict) -> dict[int, int]:
     return {int(v): int(n) for v, n in pairs}
 
 
-def load_data(folders: Path | list[Path], max_runs: int | None = None, layout: int | None = None) -> Data:
+def offset_source(folder: Path, manifest: dict) -> tuple[str, str] | None:
+    """The value networks a recording's offsets come from, (paths, fingerprint): `baseline --offsets` names them in
+    the manifest, `--offsets-into` in offsets.json. None if it has none."""
+    extra = folder / "offsets.json"
+    about = json.loads(extra.read_text()) if extra.exists() else manifest
+    net, fingerprint = about.get("offset_net"), about.get("offset_net_hash")
+    return None if not net or not fingerprint else (str(net), str(fingerprint))
+
+
+def load_data(folders: Path | list[Path], max_runs: int | None = None, layout: int | None = None,
+              offsets: bool = False) -> Data:
     """Every chunk of one or more recordings, each in run order (the recorder writes chunks of whole runs, sorted),
     the newest last. `layout`: the input layout to read the rows in (a newer recording's rows cut to its floats); by
     default the newest every recording holds, so recordings of rounds before and after a new layout train together
-    as before, and a network of the new layout comes only from recordings that hold it."""
+    as before, and a network of the new layout comes only from recordings that hold it. `offsets`: each row's
+    log-odds by the value networks too (`-off.npy`); every recording must have them, from the same networks."""
     folders = [folders] if isinstance(folders, (str, Path)) else list(folders)
     parts = []
     for folder in folders:
@@ -115,6 +141,19 @@ def load_data(folders: Path | list[Path], max_runs: int | None = None, layout: i
             keep = max(1, math.ceil(max_runs / manifest["runs_per_chunk"]))
             chunks, sizes = chunks[:keep], sizes[:keep]
         parts.append((folder, manifest, chunks, sizes))
+    offset_net = None
+    if offsets:
+        sources = {}
+        for folder, manifest, chunks, _ in parts:
+            src = offset_source(folder, manifest)
+            missing = [c for c in chunks if not (folder / f"{c}-off.npy").exists()]
+            if src is None or missing:
+                raise SystemExit(f"{folder} has no offsets{f' for {missing[0]}' if missing else ''}: run "
+                                 f"`baseline --offsets-into {folder} --value-net NETS` first.")
+            sources[src[1]] = src[0]
+        if len(sources) != 1:
+            raise SystemExit(f"The recordings' offsets come from different networks: {sorted(sources.values())}.")
+        offset_net = next(iter(sources.values()))
     shared = set.intersection(*(set(layouts(m)) for _, m, _, _ in parts))
     version = max(shared, default=None) if layout is None else layout
     if version is None or version not in shared:
@@ -139,6 +178,7 @@ def load_data(folders: Path | list[Path], max_runs: int | None = None, layout: i
     ptr = np.empty(n_rows + 1, np.int64)
     lab = np.empty((n_rows, len(first["labels"])), np.float32)
     source = np.empty(n_rows, np.int8)
+    off = np.empty(n_rows, np.float32) if offsets else None
     ptr[0] = 0
     r0 = z0 = 0
     for k, (folder, manifest, chunks, sizes) in enumerate(parts):
@@ -156,6 +196,11 @@ def load_data(folders: Path | list[Path], max_runs: int | None = None, layout: i
             val[z0:z0 + nz] = cv
             ptr[r0 + 1:r0 + nr + 1] = cp[1:] + z0
             lab[r0:r0 + nr] = np.load(folder / f"{c}-lab.npy")
+            if off is not None:
+                co = np.load(folder / f"{c}-off.npy")
+                if co.shape != (nr,):
+                    raise SystemExit(f"{folder}/{c}: {len(co)} offsets for {nr} positions.")
+                off[r0:r0 + nr] = co
             r0, z0 = r0 + nr, z0 + nz
         if max_runs is not None and r0 > start:
             # Rows are in run order, so the first runs are a prefix; the next recording is written after it.
@@ -164,9 +209,10 @@ def load_data(folders: Path | list[Path], max_runs: int | None = None, layout: i
         source[start:r0] = k
         lab[start:r0, RUN] += RUN_OFFSET * (len(parts) - 1 - k)
     idx, val, ptr, lab, source = idx[:z0], val[:z0], ptr[:r0 + 1], lab[:r0], source[:r0]
+    off = None if off is None else off[:r0]
     if len(lab) and (idx.min() < 0 or idx.max() >= first["inputs"]):
         raise SystemExit(f"{parts[-1][0]}: an input index is out of range.")
-    return Data(idx, val, ptr, lab, first, source, [m for _, m, _, _ in parts])
+    return Data(idx, val, ptr, lab, first, source, [m for _, m, _, _ in parts], off, offset_net)
 
 
 def split(runs: np.ndarray, parts: int = SPLIT) -> np.ndarray:
@@ -213,30 +259,41 @@ def make_net(torch, inputs: int, hidden: list[int], dropout: float, input_dropou
 
 
 class Batches:
-    """Dense batches built from the sparse rows on the training device."""
+    """Dense batches built from the sparse rows on the training device. Positions too many for the GPU beside the
+    training stay in memory, each batch built there and sent over (slower, the same numbers)."""
 
     def __init__(self, torch, data: Data, device):
         self.torch, self.device, self.inputs = torch, device, data.inputs
         t = torch.from_numpy
-        self.idx = t(data.idx).to(device)
-        self.val = t(data.val).to(device)
-        self.ptr = t(data.ptr).to(device)
         self.lab = t(data.lab).to(device)
+        self.off = None if data.off is None else t(data.off).to(device)
+        try:
+            self.store = device
+            self.idx, self.val, self.ptr = (t(a).to(device) for a in (data.idx, data.val, data.ptr))
+        except RuntimeError:  # torch.cuda.OutOfMemoryError
+            if device.type != "cuda":
+                raise
+            self.idx = self.val = self.ptr = None
+            torch.cuda.empty_cache()
+            print("The positions don't fit on the GPU beside the training: kept in memory, batches sent over.",
+                  flush=True)
+            self.store = torch.device("cpu")
+            self.idx, self.val, self.ptr = (t(a) for a in (data.idx, data.val, data.ptr))
 
     def x(self, rows):
         """The dense inputs of these rows (a LongTensor of row numbers on the device)."""
         torch = self.torch
+        rows = rows.to(self.store)
         start = self.ptr[rows]
         n = self.ptr[rows + 1] - start
         total = int(n.sum())
-        out = torch.zeros((len(rows), self.inputs), dtype=torch.float32, device=self.device)
-        if total == 0:
-            return out
-        row_of = torch.repeat_interleave(torch.arange(len(rows), device=self.device), n)
-        first = torch.repeat_interleave(torch.cumsum(n, 0) - n, n)
-        flat = torch.repeat_interleave(start, n) + torch.arange(total, device=self.device) - first
-        out[row_of, self.idx[flat].long()] = self.val[flat].float()
-        return out
+        out = torch.zeros((len(rows), self.inputs), dtype=torch.float32, device=self.store)
+        if total:
+            row_of = torch.repeat_interleave(torch.arange(len(rows), device=self.store), n)
+            first = torch.repeat_interleave(torch.cumsum(n, 0) - n, n)
+            flat = torch.repeat_interleave(start, n) + torch.arange(total, device=self.store) - first
+            out[row_of, self.idx[flat].long()] = self.val[flat].float()
+        return out.to(self.device)
 
 
 def input_scale(torch, b: Batches, rows, batch: int):
@@ -256,9 +313,12 @@ def input_scale(torch, b: Batches, rows, batch: int):
     return mean.float(), scale.float()
 
 
-def losses(torch, out, lab, aux: float):
+def losses(torch, out, lab, aux: float, off=None):
+    """Per row: the win loss, and the loss trained on (with the ending stage's). With offsets the win output is a
+    correction to them."""
     f = torch.nn.functional
-    win = f.binary_cross_entropy_with_logits(out[:, 0], lab[:, WON], reduction="none")
+    z = out[:, 0] if off is None else out[:, 0] + off
+    win = f.binary_cross_entropy_with_logits(z, lab[:, WON], reduction="none")
     stage = f.cross_entropy(out[:, 1:], lab[:, END_STAGE].long(), reduction="none")
     return win, win + aux * stage
 
@@ -272,6 +332,12 @@ def predict(torch, net, b: Batches, rows, mean, scale, batch: int) -> np.ndarray
             x = (b.x(rows[k:k + batch]) - mean) * scale
             outs.append(net(x).float().cpu())
     return torch.cat(outs).numpy() if outs else np.zeros((0, 1 + STAGES), np.float32)
+
+
+def win_chance(out: np.ndarray, off: np.ndarray | None) -> np.ndarray:
+    """The chance of winning from the network's outputs (and the rows' offsets, if it learned a correction)."""
+    z = out[:, 0].astype(np.float64)
+    return sigmoid(z if off is None else z + off.astype(np.float64))
 
 
 # ---- Measures ----
@@ -332,6 +398,24 @@ def report_measures(p: np.ndarray, lab: np.ndarray, rates: np.ndarray) -> dict:
             "bce": round(bce(p, y), 5), "bce_by_stage_alone": round(bce(base, y), 5),
             "brier": round(float(np.mean((p - y) ** 2)), 5), "auc": None if a is None else round(a, 4),
             "by_ante": by_ante, "calibration": calib}
+
+
+def by_stake(p: np.ndarray, lab: np.ndarray, stakes: np.ndarray, before: np.ndarray | None = None) -> list[dict]:
+    """The measures stake by stake (`before`: the value networks' own chances, with offsets, beside them)."""
+    out = []
+    for st in sorted(set(stakes.tolist())):
+        m = stakes == st
+        y = lab[m, WON]
+        a = auc(p[m], y)
+        row = {"stake": int(st), "rows": int(m.sum()), "runs": len(np.unique(lab[m, RUN])),
+               "won": round(float(y.mean()), 4), "predicted": round(float(p[m].mean()), 4),
+               "bce": round(bce(p[m], y), 5), "auc": None if a is None else round(a, 4)}
+        if before is not None:
+            b = auc(before[m], y)
+            row.update({"predicted_before": round(float(before[m].mean()), 4),
+                        "bce_before": round(bce(before[m], y), 5), "auc_before": None if b is None else round(b, 4)})
+        out.append(row)
+    return out
 
 
 # ---- The engine's format ----
@@ -421,6 +505,12 @@ def fit(torch, b: Batches, lab: np.ndarray, train_rows, judge_rows, mean, scale,
     torch.manual_seed(a.seed)
     in_drop = a.input_dropout if cfg.get("input_dropout") is None else cfg["input_dropout"]
     net = make_net(torch, b.inputs, cfg["hidden"], cfg["dropout"], in_drop).to(device)
+    residual = b.off is not None
+    if residual:
+        # A correction starts at none: the value networks' own answer.
+        with torch.no_grad():
+            net[-1].weight[0].zero_()
+            net[-1].bias[0].zero_()
     decay = [p for n, p in net.named_parameters() if n.endswith("weight")]
     rest = [p for n, p in net.named_parameters() if not n.endswith("weight")]
     opt = torch.optim.AdamW([{"params": decay, "weight_decay": cfg["weight_decay"]},
@@ -435,12 +525,20 @@ def fit(torch, b: Batches, lab: np.ndarray, train_rows, judge_rows, mean, scale,
     best = (math.inf, 0, None)
     history, stale, step, seen, loss_sum = [], 0, 0, 0, 0.0
     y = lab[judge_rows, WON]
+    judge_off = None if not residual else b.off[ju].cpu().numpy()
+    if residual:
+        # No correction is the one to beat: kept unless training judges better.
+        out = predict(torch, net, b, ju, mean, scale, a.batch * 4)
+        judged = bce(win_chance(out, judge_off), y)
+        best = (judged, 0, {k2: v.detach().clone() for k2, v in net.state_dict().items()})
+        history.append({"step": 0, "epoch": 0.0, "train_loss": None, "judging_bce": round(judged, 5)})
     while step < total_steps and stale < a.patience:
         perm = tr[torch.randperm(len(tr), generator=gen).to(device)]
         for k in range(0, len(perm), a.batch):
             net.train()
             rows = perm[k:k + a.batch]
-            _, loss = losses(torch, net((b.x(rows) - mean) * scale), b.lab[rows], a.aux)
+            _, loss = losses(torch, net((b.x(rows) - mean) * scale), b.lab[rows], a.aux,
+                             None if b.off is None else b.off[rows])
             opt.zero_grad(set_to_none=True)
             loss.mean().backward()
             opt.step()
@@ -450,7 +548,7 @@ def fit(torch, b: Batches, lab: np.ndarray, train_rows, judge_rows, mean, scale,
             seen += len(rows)
             if step % every == 0 or step == total_steps:
                 out = predict(torch, net, b, ju, mean, scale, a.batch * 4)
-                judged = bce(sigmoid(out[:, 0].astype(np.float64)), y)
+                judged = bce(win_chance(out, judge_off), y)
                 history.append({"step": step, "epoch": round(step / per_epoch, 2),
                                 "train_loss": round(loss_sum / max(seen, 1), 5), "judging_bce": round(judged, 5)})
                 loss_sum, seen = 0.0, 0
@@ -471,7 +569,7 @@ def train(a) -> dict:
     t0 = time.time()
     rng = np.random.default_rng(a.seed)
     folders = [Path(d).expanduser() for d in a.data]
-    data = load_data(folders, a.max_runs, a.input_layout)
+    data = load_data(folders, a.max_runs, a.input_layout, offsets=a.offset)
     man = data.manifest
     if data.rows == 0:
         raise SystemExit("The recording has no positions.")
@@ -500,6 +598,11 @@ def train(a) -> dict:
     jl = data.lab[judge_rows]
     judge_base = bce(rates[jl[:, STAGE].astype(int).clip(0, 23)], jl[:, WON])
     print(f"Judging runs: BCE {judge_base:.4f} knowing only the stage.", flush=True)
+    judge_before = None
+    if data.off is not None:
+        judge_before = bce(sigmoid(data.off[judge_rows].astype(np.float64)), jl[:, WON])
+        print(f"Judging runs: BCE {judge_before:.4f} by the value networks the correction is for "
+              f"({shown(data.offset_net)}).", flush=True)
     tried = []
     best = None
     for cfg in parse_configs(a.configs):
@@ -513,8 +616,13 @@ def train(a) -> dict:
 
     # Measures on the runs kept apart, against what knowing only how far the run has got predicts.
     out = predict(torch, net, b, torch.from_numpy(test_rows).to(device), mean, scale, a.batch * 4)
-    p = sigmoid(out[:, 0].astype(np.float64))
+    test_off = None if data.off is None else data.off[test_rows]
+    p = win_chance(out, test_off)
     measures = report_measures(p, data.lab[test_rows], rates)
+    before = None if test_off is None else sigmoid(test_off.astype(np.float64))
+    measures["by_stake"] = by_stake(p, data.lab[test_rows], data.stakes[test_rows], before)
+    if before is not None:
+        measures["before"] = report_measures(before, data.lab[test_rows], rates)
 
     # The engine's format, read back and checked.
     layers = folded_layers(net, mean, scale)
@@ -542,6 +650,9 @@ def train(a) -> dict:
                                                                        "value_net", "value_weight")}}
                              for d, m in zip(a.data[:-1], data.manifests[:-1])],
         "inputs": data.inputs, "input_version": version, "chosen": cfg, "tried": tried,
+        "residual": None if data.off is None else {
+            "offset_net": shown(data.offset_net), "judging_bce_before": round(judge_before, 5),
+            "note": "the network's win output is a correction to these networks' log-odds (baseline --stake-net)"},
         "judging_bce_by_stage_alone": round(judge_base, 5),
         "input_dropout": a.input_dropout, "aux_weight": a.aux, "lr": a.lr, "batch": a.batch, "seed": a.seed,
         "runs": {"train": runs[0], "judge": runs[1], "measure": runs[2]},
@@ -558,9 +669,15 @@ def train(a) -> dict:
     print(f"Chosen: {cfg['hidden']} dropout {cfg['dropout']} decay {cfg['weight_decay']}. On the {runs[2]:,} runs "
           f"kept apart: BCE {m['bce']} (knowing only the stage: {m['bce_by_stage_alone']}), AUC {m['auc']}, "
           f"Brier {m['brier']}; {secs / 60:.1f} min.")
+    if "before" in m:
+        print(f"The value networks alone on the same runs: BCE {m['before']['bce']}, AUC {m['before']['auc']}.")
     for r in m["by_ante"]:
         print(f"  ante {r['ante']}: {r['rows']:,} positions, won {r['won']:.3f}, predicted {r['predicted']:.3f}, "
               f"AUC within the ante {r['auc_within_ante']}")
+    for r in m["by_stake"]:
+        print(f"  stake {r['stake']}: {r['rows']:,} positions, won {r['won']:.3f}, predicted {r['predicted']:.3f}, "
+              f"BCE {r['bce']}" + (f" (alone {r['bce_before']}), AUC {r['auc']} (alone {r['auc_before']})"
+                                   if "bce_before" in r else f", AUC {r['auc']}"))
     print(f"Network: {path} ({len(blob):,} bytes), checked against "
           f"{'the engine' if engine_diff is not None else 'its own reading of the file'}.")
     return report
@@ -588,6 +705,8 @@ def main() -> None:
                     help="the input layout to train on (default: the newest every recording holds)")
     ap.add_argument("--newest", type=int, default=1,
                     help="how many of the last recordings are the newest (split to judge and measure; default 1)")
+    ap.add_argument("--offset", action="store_true",
+                    help="learn a correction to the value networks' log-odds the recordings keep (baseline --offsets)")
     ap.add_argument("--split", type=int, default=SPLIT, help="one run in this many judges, another measures")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--cpu", action="store_true", help="train on the CPU even with a GPU")

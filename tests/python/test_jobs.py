@@ -712,3 +712,140 @@ def test_round_1_encodes_the_night_recording_afresh_when_it_is_there(tmp_path, m
     assert steps["replay-stake3"][steps["replay-stake3"].index("--replay") + 1] == str(night / "stake3")
     assert steps["replay-stake3"][steps["replay-stake3"].index("--record") + 1] == str(jobs.stake_data(1) / "stake3")
     assert "record-stake3" not in steps and "record-stake5" in steps, "a stake not recorded yet is recorded here"
+
+
+CHAMPION = "models/value-1.bin,models/value-1b.bin"
+
+
+def _data_tree(tmp_path, monkeypatch, champion2=range(1, 8)):
+    """A data folder with the night's recording at every stake and record-champion.sh's at `champion2`."""
+    data = tmp_path / "data"
+    monkeypatch.setattr(jobs, "DATA", data)
+    monkeypatch.setattr(jobs, "CHAMPION_2", data / "champion-2")
+    for base, stakes, sizes in ((data / "stakes-1", range(1, 9), jobs.STAKE_RUNS_1),
+                                (data / "champion-2", champion2, jobs.STAKE_RUNS_N)):
+        for s in stakes:
+            (base / f"stake{s}").mkdir(parents=True)
+            (base / f"stake{s}" / "manifest.json").write_text(json.dumps({"runs": sizes[s], "stake": s}))
+    for s in range(1, 9):
+        _stake_report(tmp_path, s, net=CHAMPION)
+    return data
+
+
+def test_boost_round_1_adds_the_champions_log_odds_and_learns_what_its_networks_get_wrong(tmp_path, monkeypatch):
+    data = _data_tree(tmp_path, monkeypatch)
+    r = jobs.boost_round(1, tmp_path)
+    steps = {n: a for n, a, *_ in r["boost-data-1"]}
+    offsets = [a for n, a in steps.items() if n.startswith("offsets-")]
+    assert len(offsets) == 16, "every stake of the night's runs and of champion-2"
+    for a in offsets:
+        assert a[a.index("--value-net") + 1] == CHAMPION and "--record" not in a and "--replay" not in a
+        assert not a[a.index("--out") + 1].startswith("/")
+    assert {a[a.index("--offsets-into") + 1] for a in offsets} == \
+        {str(data / base / f"stake{s}") for base in ("stakes-1", "champion-2") for s in range(1, 9)}
+    # The one stake record-champion.sh didn't get to is recorded here, by the champion, exploring.
+    assert [n for n in steps if n.startswith("record-")] == ["record-champion-stake8"]
+    rec = steps["record-champion-stake8"]
+    assert rec[rec.index("--seed") + 1] == "8008" and rec[rec.index("--value-net") + 1] == CHAMPION
+    assert jobs.EXPLORE in rec[rec.index("--teacher-options") + 1]
+    names = list(steps)
+    assert names.index("record-champion-stake8") < names.index("offsets-champion-2-stake8")
+    train = {n: a for n, a, *_ in r["boost-net-1"]}["train"]
+    assert train.count("--data") == 15 and "--offset" in train, "(built before champion-2's stake 8 is recorded)"
+    assert train[train.index("--newest") + 1] == "15", "all of them the champion's own runs: all judge"
+    assert train[train.index("--input-layout") + 1] == "3"
+    play = {n: a for n, a, *_ in r["boost-play-1"]}
+    assert [n for n, *_ in r["boost-play-1"]][1] == "white", "White first"
+    t = play["boost1-stake3"]
+    assert t[t.index("--value-net") + 1] == CHAMPION and t[t.index("--value-weight") + 1] == "2.5"
+    assert t[t.index("--stake-net") + 1] == jobs.residual_nets(1) and t[t.index("--stake-mode") + 1] == "residual"
+    d = play["delta-stakes1-3-stake6"]
+    assert d[d.index("--stake-net") + 1] == jobs.DELTA_NETS and d[d.index("--stake-mode") + 1] == "delta"
+    assert d.count("--stake-net") == 1
+    for s in range(2, 9):
+        assert play[f"compare-boost1-stake{s}"][1] == jobs.stake_baseline(s)
+    assert "boost1-stake1" not in play
+    # At Green both at weight 1.5 too: the champion alone and corrected.
+    for name in ("champion", "boost1"):
+        g = play[f"{name}-w1.5-stake3"]
+        assert g[g.index("--value-weight") + 1] == "1.5" and g[g.index("--stake") + 1] == "3"
+        assert ("--stake-net" in g) == (name == "boost1")
+        assert play[f"compare-{name}-w1.5-stake3"][1] == jobs.stake_baseline(3)
+    assert {f"boost-{k}-{n}" for k in ("data", "net", "play") for n in (1, 2)} <= set(jobs.JOBS)
+    # The Progress panel names the correction.
+    out = tmp_path / t[-1]
+    out.write_text(json.dumps({"kind": "baseline", "runs": 2000, "bot": "teacher bot with a learned value",
+                               "stake": "Green Stake"}))
+    e = jobs.progress_entry("boost-play-1", "boost1-stake3", t, "HEAD", root=tmp_path)
+    assert "+ residual 1" in e["name"] and e["name"].endswith("Green Stake")
+
+
+def test_the_ratchet_records_each_stake_with_the_best_teacher_measured_there(tmp_path, monkeypatch):
+    _data_tree(tmp_path, monkeypatch)
+    stakes = tmp_path / "results" / "stakes"
+    # At Green the champion with round 1's correction went clearly further than 3 November's teacher; at Black
+    # not clearly.
+    for s, low in ((3, 0.12), (4, -0.05)):
+        report = f"results/stakes/stake{s}-2k-f3-precise-boost1-w2.5.json"
+        (tmp_path / report).write_text(json.dumps({"kind": "baseline", "runs": 2000, "value_net": CHAMPION,
+                                                   "value_weight": 2.5, "teacher_options": ["precise"],
+                                                   "stake_net": jobs.residual_nets(1), "stake_mode": "residual"}))
+        (stakes / f"stake{s}-2k-f3-precise-boost1-w2.5-vs-{jobs.STAKE_BASELINE}.json").write_text(json.dumps(
+            {"blinds_beaten_diff": low + 0.2, "blinds_beaten_diff_ci": [low, low + 0.4], "b": {"report": report}}))
+    # Never buying rentals won its trial at Gold.
+    (tmp_path / f"{jobs.stake_trial_name('avoid-rental', 8)}-vs.json").write_text(
+        json.dumps({"blinds_beaten_diff_ci": [0.3, 0.7]}))
+    green, green_report = jobs.best_at_stake(3, tmp_path)
+    assert green[green.index("--stake-net") + 1] == jobs.residual_nets(1) and green_report.endswith("boost1-w2.5.json")
+    black, black_report = jobs.best_at_stake(4, tmp_path)
+    assert "--stake-net" not in black and black_report == jobs.stake_baseline(4)
+    gold, gold_report = jobs.best_at_stake(8, tmp_path)
+    assert gold[gold.index("--teacher-options") + 1] == "precise,avoid-rental"
+    assert gold_report == f"{jobs.stake_trial_name('avoid-rental', 8)}.json"
+    r = jobs.boost_round(2, tmp_path)
+    data = {n: a for n, a, *_ in r["boost-data-2"]}
+    rec = data["record-stake3"]
+    assert rec[rec.index("--stake-net") + 1] == jobs.residual_nets(1), "Green records with its best teacher"
+    assert jobs.EXPLORE in rec[rec.index("--teacher-options") + 1]
+    assert "--stake-net" not in data["record-stake4"]
+    seeds = {a[a.index("--seed") + 1] for n, a in data.items() if n.startswith("record-")}
+    assert seeds == {str(9100 + s) for s in range(1, 9)}
+    names = [n for n, *_ in r["boost-data-2"]]
+    assert names.index("offsets-boost-2-stake3") > names.index("record-stake8"), "the champion's log-odds added after"
+    play = {n: a for n, a, *_ in r["boost-play-2"]}
+    assert play["compare-boost2-stake3-best"][1] == green_report, "also against the best so far"
+    assert play["compare-boost2-stake8-best"][1] == gold_report
+    assert "compare-boost2-stake4-best" not in play
+    t = play["boost2-stake5"]
+    assert t[t.index("--teacher-options") + 1] == "precise,avoid-rental"
+    assert t[t.index("--stake-net") + 1] == jobs.residual_nets(2) and t.count("--stake-net") == 1
+
+
+def test_a_round_learns_its_own_runs_and_the_newest_before_them_within_the_budget(tmp_path, monkeypatch):
+    data = _data_tree(tmp_path, monkeypatch, champion2=range(1, 9))
+    for m in (2, 3):
+        for s in range(1, 9):
+            (data / f"boost-{m}" / f"stake{s}").mkdir(parents=True)
+            (data / f"boost-{m}" / f"stake{s}" / "manifest.json").write_text(
+                json.dumps({"runs": jobs.STAKE_RUNS_N[s]}))
+    folders, newest = jobs.boost_folders(2)
+    assert [f.parent.name for f in folders[::8]] == ["stakes-1", "champion-2", "boost-2"] and newest == 8
+    folders, newest = jobs.boost_folders(3)
+    assert sum(jobs.STAKE_RUNS_N.values()) * 3 <= jobs.BOOST_BUDGET < sum(jobs.STAKE_RUNS_N.values()) * 3 + \
+        sum(jobs.STAKE_RUNS_1.values())
+    assert [f.parent.name for f in folders[::8]] == ["champion-2", "boost-2", "boost-3"], "the night's left out"
+    assert folders[-1] == data / "boost-3" / "stake8" and newest == 8
+
+
+def test_a_report_with_a_stake_correction_names_it_in_its_teacher(tmp_path):
+    folder = tmp_path / "results" / "value"
+    folder.mkdir(parents=True)
+    (folder / f"f{jobs.FORMULA}-precise-8k-w2.5-boost1.json").write_text(json.dumps(
+        {"kind": "baseline", "runs": 8000, "seed_base": 1, "win_rate": 0.68, "value_net": CHAMPION,
+         "value_weight": 2.5, "teacher_options": ["precise"], "stake_net": jobs.residual_nets(1),
+         "stake_mode": "residual"}))
+    rate, args = jobs.best_8k(tmp_path)
+    assert rate == 0.68 and args[args.index("--stake-net") + 1] == jobs.residual_nets(1)
+    assert args[args.index("--stake-mode") + 1] == "residual"
+    assert jobs.with_correction(args, "x.bin", "delta")[-4:] == ["--stake-net", "x.bin", "--stake-mode", "delta"]
+    assert jobs.with_correction(args, "x.bin", "delta").count("--stake-net") == 1
