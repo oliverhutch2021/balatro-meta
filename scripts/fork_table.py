@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import train_value as tv  # noqa: E402
+import train_value as tv
 
 JUDGES = ("ensemble", "quick", "chosen", "made", "random")
 
@@ -49,7 +49,7 @@ def judge_table(fs: tv.ForkSet, ids: np.ndarray) -> dict:
             if pick is not None:
                 seen[name].append((float(pick == best), float(wr[best] - wr[pick])))
         seen["random"].append((1.0 / m, float(wr[best] - wr.mean())))
-    out = {"forks": int(len(ids))}
+    out = {"forks": len(ids)}
     for name, rows in seen.items():
         if rows:
             out[name] = {"judged": len(rows), "picked_best": round(float(np.mean([b for b, _ in rows])), 4),
