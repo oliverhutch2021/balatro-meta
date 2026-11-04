@@ -168,6 +168,10 @@ pub const PARAMS: &[(&str, f64)] = &[
     // Recordings only (teacher.rs `committed`): the chance that a run commits from ante 3 to one hand type, its
     // Planets taken and bought as the focus's (whole-build exploration).
     ("commit", 0.0),
+    // With a learned value: the learned term rates a position by the networks' chance of getting this many blinds
+    // further, not of winning (`learned::reach_chance`; 0: of winning). For the stakes where wins are too rare to
+    // tell positions apart.
+    ("reach", 0.0),
     // The scales of `Scales`, as multiples of the usual samples.
     ("deals-x", 1.0),
     ("quick-x", 1.0),

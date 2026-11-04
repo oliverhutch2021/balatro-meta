@@ -612,6 +612,37 @@ stake's own rules against the game (a difference it finds is a finding about the
 cd /mnt/h/balatro-meta && make teacher-stakes
 ```
 
+## Step 25: networks that know the stake, all night (until you stop it)
+
+The best teacher's results of 3 November at every stake (2,000 seeds each): 66.8% won at White, 52.0% Red, 19.7%
+Green, 11.35% Black, 8.8% Blue, 1.85% Purple, 0.9% Orange, 0.15% Gold. Blinds beaten fell most at Green (3.2: blinds
+grow faster), Gold (2.4: rentals), Purple (1.7) and Red (1.5). Its networks learned White's runs alone: they never
+saw a stake, and the trainer leaves out inputs that never vary, so they never read a joker's eternal, perishable or
+rental mark either (always off at White). Eternals cost it 1.15 blinds; the teacher without networks lost none.
+
+So the networks now read the stake as its rules in force (input layout 3: one float for each stake's rule, Red's to
+Gold's, so Gold is Orange with rentals and a rule learned at one stake holds above it) and learn runs at every
+stake, most where a run's result is least certain (White and Red, Green, Black), where a run teaches the most.
+Each round is judged at White first, on the usual 8,000 seeds against the best teacher there: harder stakes are
+worth learning from only if they make the play better all round. Round 1 also trains a control pair on its White
+runs alone and sets the two pairs against each other at White, run by run: the direct test of whether learning the
+other stakes too helps White's play or hurts it. Then every stake on the 2,000 seeds of 3
+November, run by run. `make stakes-trials` (after round 1) tries, on the teacher of 3 November, never buying
+eternal (at Black), perishable (Orange) or rental (Gold) jokers: one its stake does clearly better without is one
+the value overrates, and the rounds after keep that option. It also tries "reach=6" at Green and Purple: the learned
+term from the networks' chance of getting 6 blinds further, not of winning (a network that knows the stake rates
+nearly every Purple-to-Gold position under the 1% floor of its win chance, where that term tells the choices apart
+by nothing).
+
+`.sync/night.sh` records round 1 at once on the code you have (the best teacher, exploring; about 3 hours), every
+move kept, then takes up the code that makes the rest when `.sync/night-ready` appears and runs `make stakes-night`:
+round 1 (replayed into layout 3 in minutes, two networks, then White and every stake: about 2.5 hours), the trials
+(35 minutes), then rounds 2, 3... (about 4.5 hours each) until you stop it. Each finished step is committed.
+
+```
+cd /mnt/h/balatro-meta && bash .sync/night.sh 2>&1 | tee -a .sync/logs/night.log
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

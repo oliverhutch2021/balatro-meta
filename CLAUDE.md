@@ -64,7 +64,9 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   `observe::VALUE_LAYOUTS`, only ever add floats at the end, so a network
   of an older layout loads and reads the start of today's input, and
   `train_value.py --input-layout` reads a newer recording as an older
-  layout), `explain.rs` (the teacher's plan in
+  layout; layout 3 adds the stake as its rules in force; teacher option
+  `reach=K` rates positions by the networks' ending-stage head, the chance
+  of getting K blinds further, for stakes where wins are too rare), `explain.rs` (the teacher's plan in
   words, for the viewer),
   `planner.rs` (the teacher's rounds: which hand to build, tried on fair
   copies; digging; taking value from a round it can already win),

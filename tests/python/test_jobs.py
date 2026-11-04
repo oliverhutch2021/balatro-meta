@@ -598,3 +598,117 @@ def test_committed_results_name_no_computer_and_no_home_folder(monkeypatch):
     monkeypatch.delenv("BM_HOST", raising=False)
     import importlib
     assert importlib.reload(jobs).machine()["host"] == "PC"
+
+
+def _stake_report(root, s, net="models/value-1.bin,models/value-1b.bin", w=2.5, options=("precise",)):
+    p = root / jobs.stake_baseline(s)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"kind": "baseline", "runs": 2000, "win_rate": 0.1, "value_net": net,
+                             "value_weight": w, "teacher_options": list(options)}))
+
+
+def test_the_stake_trials_change_one_thing_on_the_teacher_of_3_november(tmp_path):
+    for s in range(1, 9):
+        _stake_report(tmp_path, s)
+    steps = {n: a for n, a, *_ in jobs.stake_trials_steps(tmp_path)}
+    for option, s in jobs.STAKE_TRIALS:
+        play = steps[f"{jobs.file_safe(option)}-stake{s}"]
+        assert play[play.index("--stake") + 1] == str(s) and play[play.index("--seed") + 1] == "1"
+        assert play[play.index("--value-net") + 1] == "models/value-1.bin,models/value-1b.bin"
+        assert play[play.index("--teacher-options") + 1] == f"precise,{option}", "that day's options, and the trial's"
+        compare = steps[f"compare-{jobs.file_safe(option)}-stake{s}"]
+        assert compare[1] == jobs.stake_baseline(s) and compare[2] == play[play.index("--out") + 1]
+    assert "stakes-trials" in jobs.JOBS
+
+
+def test_an_avoid_option_is_kept_only_when_its_stake_went_clearly_further(tmp_path):
+    (tmp_path / "results" / "stakes").mkdir(parents=True)
+    def trial(option, s, low):
+        p = tmp_path / f"{jobs.stake_trial_name(option, s)}-vs.json"
+        p.write_text(json.dumps({"blinds_beaten_diff_ci": [low, low + 0.4]}))
+    trial("avoid-rental", 8, 0.05)
+    trial("avoid-eternal", 4, -0.1)
+    trial("reach=6", 3, 0.3)  # reach changes White's play too: never taken up from a trial
+    assert jobs.stake_options(tmp_path) == ["avoid-rental"]
+    t = jobs.stake_teacher(3, tmp_path, explore=True)
+    assert t[t.index("--value-net") + 1] == "models/value-stakes-3.bin,models/value-stakes-3b.bin"
+    assert t[t.index("--teacher-options") + 1] == f"precise,avoid-rental,{jobs.EXPLORE},{jobs.COMMIT}"
+
+
+def test_a_stake_round_learns_every_stake_and_is_judged_at_white_first(tmp_path):
+    for s in range(1, 9):
+        _stake_report(tmp_path, s)
+    folder = tmp_path / "results" / "value"
+    folder.mkdir(parents=True, exist_ok=True)
+    best = folder / f"f{jobs.FORMULA}-precise-8k-w2.5-on-ensemble8.json"
+    best.write_text(json.dumps({"kind": "baseline", "runs": 8000, "seed_base": 1, "win_rate": 0.66,
+                                "value_net": "models/value-8.bin", "value_weight": 2.5,
+                                "teacher_options": ["precise"]}))
+    r1, r2 = jobs.stake_round(1, tmp_path), jobs.stake_round(2, tmp_path)
+    data1 = {n: a for n, a, *_ in r1["stakes-data-1"]}
+    data2 = {n: a for n, a, *_ in r2["stakes-data-2"]}
+    bases = set()
+    for s in range(1, 9):
+        # No night recording here: round 1 records at once with the best teacher, exploring.
+        rec = data1[f"record-stake{s}"]
+        assert rec[rec.index("--stake") + 1] == str(s)
+        assert rec[rec.index("--record") + 1] == str(jobs.stake_data(1) / f"stake{s}")
+        assert rec[rec.index("--runs") + 1] == str(jobs.STAKE_RUNS_1[s])
+        assert jobs.EXPLORE in rec[rec.index("--teacher-options") + 1]
+        rec2 = data2[f"record-stake{s}"]
+        assert rec2[rec2.index("--value-net") + 1] == jobs.stake_nets(1), "round 2 records with round 1's pair"
+        assert rec2[rec2.index("--runs") + 1] == str(jobs.STAKE_RUNS_N[s])
+        assert not rec2[rec2.index("--out") + 1].startswith("/"), "reports stay in the repo, without the home"
+        bases |= {rec[rec.index("--seed") + 1], rec2[rec2.index("--seed") + 1]}
+    assert len(bases) == 16 and not bases & {"1", str(jobs.EXAM_SEED)}, "fresh seeds for every recording"
+    assert sum(jobs.STAKE_RUNS_N[s] for s in (1, 2, 3, 4)) > 2 * sum(jobs.STAKE_RUNS_N[s] for s in (5, 6, 7, 8))
+    train = {n: a for n, a, *_ in r2["stakes-net-2"]}["train"]
+    folders = [train[i + 1] for i, a in enumerate(train) if a == "--data"]
+    assert folders == [str(jobs.stake_data(m) / f"stake{s}") for m in (1, 2) for s in range(1, 9)]
+    assert train[train.index("--newest") + 1] == "8" and train[train.index("--input-layout") + 1] == "3"
+    play = r2["stakes-play-2"]
+    names = [n for n, *_ in play]
+    assert names[1:3] == ["white", "compare-white"], "White first: the round's test"
+    white = {n: a for n, a, *_ in play}["white"]
+    assert white[white.index("--runs") + 1] == "8000" and "--stake" not in white
+    assert {n: a for n, a, *_ in play}["compare-white"][1] == str(best.relative_to(tmp_path))
+    steps = {n: a for n, a, *_ in play}
+    for s in range(1, 9):
+        assert steps[f"compare-stake-{s}"][1] == jobs.stake_baseline(s)
+        assert steps[f"compare-stake-{s}-round"][2] == steps[f"stake-{s}"][-1]
+    assert "reach=6" in steps["reach-stake6"][steps["reach-stake6"].index("--teacher-options") + 1]
+    # Round 1 also has a control for White: a pair that learned the round's White runs alone.
+    net1 = {n: a for n, a, *_ in r1["stakes-net-1"]}
+    assert net1["train-white"].count("--data") == 1
+    assert net1["train-white"][net1["train-white"].index("--data") + 1] == str(jobs.stake_data(1) / "stake1")
+    play1 = {n: a for n, a, *_ in r1["stakes-play-1"]}
+    only = play1["white-only"]
+    assert only[only.index("--value-net") + 1] == "models/value-stakes-1-white.bin,models/value-stakes-1-whiteb.bin"
+    assert play1["compare-white-only"][1] == only[-1] and play1["compare-white-only"][2] == play1["white"][-1]
+    assert "white-only" not in steps and "train-white" not in {n for n, *_ in r2["stakes-net-2"]}
+    (tmp_path / only[-1]).write_text(json.dumps({"kind": "baseline", "runs": 8000, "bot": "teacher bot"}))
+    e = jobs.progress_entry("stakes-play-1", "white-only", only, "HEAD", root=tmp_path)
+    assert e["name"].startswith("White-only values 1 \u00d72.5")
+    assert {f"stakes-{k}-{n}" for k in ("data", "net", "play") for n in (1, 2)} <= set(jobs.JOBS)
+    # The Progress panel names the pair by its round, and leaves replays out.
+    out = tmp_path / steps["stake-5"][-1]
+    out.write_text(json.dumps({"kind": "baseline", "runs": 2000, "bot": "teacher bot with a learned value",
+                               "stake": "Blue Stake"}))
+    e = jobs.progress_entry("stakes-play-2", "stake-5", steps["stake-5"], "HEAD", root=tmp_path)
+    assert e["name"].startswith("Stake-aware values 2 ×2.5") and e["name"].endswith("Blue Stake")
+    rep = tmp_path / "results" / "stakes" / "replay-1-stake1.json"
+    rep.write_text(json.dumps({"kind": "baseline", "runs": 3000, "bot": "replayed runs"}))
+    assert jobs.progress_entry("stakes-data-1", "replay-stake1", ["--out", str(rep.relative_to(tmp_path))],
+                               "HEAD", root=tmp_path) is None
+
+
+def test_round_1_encodes_the_night_recording_afresh_when_it_is_there(tmp_path, monkeypatch):
+    night = tmp_path / "night"
+    for s in (3, 4):
+        (night / f"stake{s}").mkdir(parents=True)
+        (night / f"stake{s}" / "manifest.json").write_text("{}")
+    monkeypatch.setattr(jobs, "NIGHT_RECORDING", night)
+    steps = {n: a for n, a, *_ in jobs.stake_round(1, tmp_path)["stakes-data-1"]}
+    assert steps["replay-stake3"][steps["replay-stake3"].index("--replay") + 1] == str(night / "stake3")
+    assert steps["replay-stake3"][steps["replay-stake3"].index("--record") + 1] == str(jobs.stake_data(1) / "stake3")
+    assert "record-stake3" not in steps and "record-stake5" in steps, "a stake not recorded yet is recorded here"

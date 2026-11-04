@@ -25,6 +25,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 
+use crate::blinds::SlotState;
 use crate::observe::{encode_value, screen, VALUE_INPUT_VERSION, VALUE_LAYOUTS, VALUE_LEN};
 use crate::state::{Phase, Run};
 
@@ -158,6 +159,66 @@ impl Net {
     }
 
     fn first_with(&self, w: &mut Inference) -> f32 {
+        let last = self.hidden_with(w);
+        let mut out = last.bias[0];
+        if self.layers.len() == 1 {
+            for &(i, v) in &w.input {
+                if i >= last.inputs {
+                    break;
+                }
+                out += v * last.weights[i * last.outputs];
+            }
+        } else {
+            for (i, &v) in w.current.iter().enumerate().take(last.inputs) {
+                if v != 0.0 {
+                    out += v * last.weights[i * last.outputs];
+                }
+            }
+        }
+        if last.relu {
+            out.max(0.0)
+        } else {
+            out
+        }
+    }
+
+    /// Every output (the win logit, then the ending stage's logits) into `out`, with the inference buffers, in
+    /// `forward`'s order of arithmetic.
+    fn all_with(&self, w: &mut Inference, out: &mut Vec<f32>) {
+        let last = self.hidden_with(w);
+        out.clone_from(&last.bias);
+        let mut add = |i: usize, v: f32| {
+            for (o, weight) in out
+                .iter_mut()
+                .zip(&last.weights[i * last.outputs..][..last.outputs])
+            {
+                *o += v * weight;
+            }
+        };
+        if self.layers.len() == 1 {
+            for &(i, v) in &w.input {
+                if i >= last.inputs {
+                    break;
+                }
+                add(i, v);
+            }
+        } else {
+            for (i, &v) in w.current.iter().enumerate().take(last.inputs) {
+                if v != 0.0 {
+                    add(i, v);
+                }
+            }
+        }
+        if last.relu {
+            for o in out.iter_mut() {
+                *o = o.max(0.0);
+            }
+        }
+    }
+
+    /// The hidden layers on the input `w` holds, their last activations left in `w.current`; the last layer,
+    /// for the caller to apply.
+    fn hidden_with(&self, w: &mut Inference) -> &Layer {
         let (last, hidden) = self
             .layers
             .split_last()
@@ -198,26 +259,7 @@ impl Net {
             }
             std::mem::swap(&mut w.current, &mut w.next);
         }
-        let mut out = last.bias[0];
-        if hidden.is_empty() {
-            for &(i, v) in &w.input {
-                if i >= last.inputs {
-                    break;
-                }
-                out += v * last.weights[i * last.outputs];
-            }
-        } else {
-            for (i, &v) in w.current.iter().enumerate().take(last.inputs) {
-                if v != 0.0 {
-                    out += v * last.weights[i * last.outputs];
-                }
-            }
-        }
-        if last.relu {
-            out.max(0.0)
-        } else {
-            out
-        }
+        last
     }
 }
 
@@ -306,15 +348,25 @@ fn input_key(x: &[f32]) -> u64 {
 
 /// The chance of winning the run from this position, by the loaded network (None if none is loaded).
 pub fn win_chance(run: &Run) -> Option<f64> {
+    chance(run, None)
+}
+
+/// The loaded networks' chance from this position of winning (`reach` None), or of getting at least `reach`
+/// blinds further than it is (`reach_chance`), remembered by the input for the searches' repeats.
+fn chance(run: &Run, reach: Option<usize>) -> Option<f64> {
     let nets = NET.get()?;
     Some(INPUT.with(|x| {
         let mut x = x.borrow_mut();
         encode_value(&screen(run), &mut x);
-        let key = input_key(&x);
+        let key =
+            input_key(&x) ^ reach.map_or(0, |k| (k as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15));
         if let Some(p) = SEEN.with(|s| s.borrow().get(&key).copied()) {
             return p;
         }
-        let p = mean_chance(nets, &x);
+        let p = match reach {
+            None => mean_chance(nets, &x),
+            Some(k) => mean_reach(nets, &x, blinds_behind(run) + k),
+        };
         SEEN.with(|s| {
             let mut s = s.borrow_mut();
             if s.len() > 8192 {
@@ -342,6 +394,67 @@ fn mean_chance(nets: &[Net], x: &[f32]) -> f64 {
     })
 }
 
+/// Blinds behind the run: 3 for each ante before this one, and this ante's beaten or skipped (0 to 23), as the
+/// recordings' `stage` counts them (`baseline --record`).
+pub fn blinds_behind(run: &Run) -> usize {
+    let done = run
+        .slots
+        .iter()
+        .filter(|s| matches!(s, SlotState::Defeated | SlotState::Skipped))
+        .count();
+    (run.ante.clamp(1, 8) as usize - 1) * 3 + done
+}
+
+/// The chance a network's ending-stage outputs give of the run ending at stage `from` or later (0 to 23: lost at
+/// that blind, so every blind before it beaten; 24: won): the softmax's share from `from` on. A network without
+/// them (one output) gives its win chance.
+fn reach_of(out: &[f32], from: usize) -> f64 {
+    if out.len() < 2 {
+        return 1.0 / (1.0 + (-(out[0] as f64)).exp());
+    }
+    let logits = &out[1..];
+    let top = logits.iter().fold(f32::NEG_INFINITY, |m, &v| m.max(v)) as f64;
+    let (mut all, mut later) = (0.0, 0.0);
+    for (stage, &v) in logits.iter().enumerate() {
+        let e = (v as f64 - top).exp();
+        all += e;
+        if stage >= from.min(logits.len() - 1) {
+            later += e;
+        }
+    }
+    later / all
+}
+
+/// An ensemble's chance of ending at stage `from` or later: the mean of its networks'.
+fn mean_reach(nets: &[Net], x: &[f32], from: usize) -> f64 {
+    INFERENCE.with(|w| {
+        let mut w = w.borrow_mut();
+        w.read(x);
+        let mut out = Vec::new();
+        nets.iter()
+            .map(|n| {
+                n.all_with(&mut w, &mut out);
+                reach_of(&out, from)
+            })
+            .sum::<f64>()
+            / nets.len().max(1) as f64
+    })
+}
+
+/// Teacher option `reach=K` (K of 1 or more): the learned term rates a position by the networks' chance of getting
+/// at least K blinds further, not of winning. From Purple Stake up a network that knows the stake rates nearly
+/// every position under `FLOOR`'s 1% to win, so the log of its win chance is the same everywhere and tells the
+/// choices apart by nothing; the chance of beating the next few blinds stays far from 0 and 1 at every stake.
+pub fn reach_chance(run: &Run) -> Option<f64> {
+    chance(run, reach())
+}
+
+fn reach() -> Option<usize> {
+    crate::teacher::param("reach")
+        .filter(|&k| k >= 1.0)
+        .map(|k| k.round() as usize)
+}
+
 /// The chance of winning by a given network.
 pub fn chance_with(net: &Net, run: &Run) -> f64 {
     INPUT.with(|x| {
@@ -351,13 +464,14 @@ pub fn chance_with(net: &Net, run: &Run) -> f64 {
     })
 }
 
-/// What the loaded network adds to a position's value: the weighted log of its chance of winning (None if
-/// no network is loaded, or the position is not one it learned).
+/// What the loaded network adds to a position's value: the weighted log of its chance of winning (with teacher
+/// option `reach=K`, of getting K blinds further) (None if no network is loaded, or the position is not one it
+/// learned).
 pub fn term(run: &Run) -> Option<f64> {
     if !values_here(run) {
         return None;
     }
-    let p = win_chance(run)?;
+    let p = chance(run, reach())?;
     Some(weight() * (p + FLOOR).ln())
 }
 
@@ -640,6 +754,21 @@ mod tests {
     }
 
     #[test]
+    fn the_reach_chance_is_the_share_of_endings_from_a_stage_on() {
+        // 25 equal ending logits: each ending 1 in 25.
+        let out = vec![0.3f32; 26];
+        assert!((reach_of(&out, 0) - 1.0).abs() < 1e-12);
+        assert!((reach_of(&out, 20) - 5.0 / 25.0).abs() < 1e-12);
+        // Further than the last blind: a win.
+        assert!((reach_of(&out, 40) - 1.0 / 25.0).abs() < 1e-12);
+        // A network with the win logit alone gives its win chance.
+        assert!((reach_of(&[0.0], 5) - 0.5).abs() < 1e-12);
+        let mut skewed = vec![0.0f32; 26];
+        skewed[1 + 24] = 3.0f32.ln();
+        assert!((reach_of(&skewed, 24) - 3.0 / 27.0).abs() < 1e-6);
+    }
+
+    #[test]
     fn win_only_inference_is_bit_identical_across_shapes_and_reused_buffers() {
         let mut nets = Vec::new();
         for widths in [vec![26], vec![64, 26], vec![128, 64, 26], vec![3, 7, 1]] {
@@ -675,6 +804,12 @@ mod tests {
                 .collect();
             for net in &nets {
                 assert_eq!(net.first_output(&x).to_bits(), net.forward(&x)[0].to_bits());
+                let mut w = Inference::default();
+                w.read(&x);
+                let mut out = Vec::new();
+                net.all_with(&mut w, &mut out);
+                let bits = |v: &[f32]| v.iter().map(|o| o.to_bits()).collect::<Vec<_>>();
+                assert_eq!(bits(&out), bits(&net.forward(&x)));
             }
             let full_mean = nets
                 .iter()

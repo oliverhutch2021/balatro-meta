@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes teacher-exam watch watch-mod record-me compare-me
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night teacher-exam watch watch-mod record-me compare-me
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -156,6 +156,28 @@ teacher-inputs:  ## Round 11's networks on the deck card by card against the tot
 
 teacher-stakes:  ## The best teacher at every stake, White to Gold, 2,000 seeds each (about 1.5 hours)
 	$(PY) scripts/jobs.py run teacher-stakes $(JOB_FLAGS)
+
+stakes-trials:  ## The best teacher of 3 November without eternal, perishable or rental jokers, and with "reach=6", each at its stake (about 35 minutes)
+	$(PY) scripts/jobs.py run stakes-trials $(JOB_FLAGS)
+
+stakes-data-%:  ## Stake-aware round N, 1/3: runs at every stake recorded (round 1: .sync/night.sh's, encoded in layout 3)
+	$(PY) scripts/jobs.py run stakes-data-$* $(JOB_FLAGS)
+
+stakes-net-%:  ## Stake-aware round N, 2/3: two networks learn layout 3 from the round's runs and the round before's
+	$(PY) scripts/jobs.py run stakes-net-$* $(JOB_FLAGS)
+
+stakes-play-%:  ## Stake-aware round N, 3/3: the pair at White on 8,000 seeds, then at every stake against 3 November (about 2 hours)
+	$(PY) scripts/jobs.py run stakes-play-$* $(JOB_FLAGS)
+
+stakes-round-%:  ## Stake-aware round N, the three jobs in a row
+	@$(MAKE) --no-print-directory stakes-data-$*
+	@$(MAKE) --no-print-directory stakes-net-$*
+	@$(MAKE) --no-print-directory stakes-play-$*
+
+stakes-night:  ## Round 1 of the stake-aware networks, the stake trials, then rounds 2, 3... until stopped (Ctrl-C; each finished step is kept)
+	@$(MAKE) --no-print-directory stakes-round-1
+	@$(MAKE) --no-print-directory stakes-trials
+	@n=2; while [ $$n -le 12 ] && $(MAKE) --no-print-directory stakes-round-$$n; do git push || true; n=$$((n + 1)); done
 
 teacher-exam:  ## The best teacher there is on the exam's 8,000 seeds, used for nothing else: the headline number (about 1.25 hours)
 	$(PY) scripts/jobs.py run teacher-exam $(JOB_FLAGS)

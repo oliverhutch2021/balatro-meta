@@ -54,6 +54,12 @@ type Scored = (Vec<usize>, f64);
 /// Options, each off until switched on by name (the baseline job's `--teacher-options`), for A/B tests on
 /// the same seeds: a candidate change is tried behind an option, and becomes the teacher if it wins more.
 pub const OPTIONS: &[&str] = &[
+    // Trials of the stakes' jokers (`avoided`): never buy or take a joker that is rental (Gold Stake), eternal
+    // (Black Stake on) or perishable (Orange Stake on). If a stake's runs go further without them, the value
+    // overrates them.
+    "avoid-rental",
+    "avoid-eternal",
+    "avoid-perishable",
     // The earlier teacher: fixed joker values and rules in the shop and packs, Tarots on fixed targets,
     // the planner judging rounds by beating the blind only (no value model).
     "classic",
@@ -2157,7 +2163,7 @@ fn pack_options(run: &Run, quick: bool) -> Vec<Vec<(MoveKind, u64)>> {
     for (i, c) in p.cards.iter().enumerate() {
         match c {
             PackCard::Joker(j) => {
-                if joker_room(run, j.edition) {
+                if joker_room(run, j.edition) && !avoided(j) {
                     out.push(vec![(MoveKind::PackChoose, i as u64)]);
                 }
             }
@@ -2178,6 +2184,13 @@ fn pack_options(run: &Run, quick: bool) -> Vec<Vec<(MoveKind, u64)>> {
         }
     }
     out
+}
+
+/// A joker the teacher's options say never to buy or take (`avoid-rental`, `avoid-eternal`, `avoid-perishable`).
+fn avoided(j: &crate::jokers::Joker) -> bool {
+    (j.rental && on("avoid-rental"))
+        || (j.eternal && on("avoid-eternal"))
+        || (j.perishable && on("avoid-perishable"))
 }
 
 /// Ways to give joker slot room to a joker taken by `take`: at once if there's room, else after selling
@@ -2209,6 +2222,7 @@ fn shop_buys(run: &Run, vs: u64) -> Vec<Vec<(MoveKind, u64)>> {
             continue;
         }
         match &r.item {
+            RowItem::Joker(j) if avoided(j) => {}
             RowItem::Joker(j) => {
                 out.extend(joker_entries(run, vs, j.edition, (MoveKind::Buy, i as u64)))
             }
@@ -3153,6 +3167,54 @@ mod tests {
         let kinds: Vec<JokerKind> = run.jokers.iter().map(|j| j.kind).collect();
         assert!(kinds.contains(&JokerKind::AncientJoker), "{kinds:?}");
         assert!(kinds.contains(&JokerKind::Bloodstone), "{kinds:?}");
+    }
+
+    #[test]
+    fn the_avoid_options_leave_out_the_jokers_with_their_sticker() {
+        use crate::jokers::Joker;
+        use crate::shop::RowSlot;
+        let mut run = Run::new(RunConfig::at_stake("AVOIDSTK", 8));
+        let mut step = 0;
+        while run.phase != Phase::Shop {
+            let (k, a) = teacher_move(&run, step);
+            apply(&mut run, k, a).unwrap();
+            step += 1;
+        }
+        run.money = 30;
+        let marked = |f: fn(&mut Joker)| {
+            let mut j = Joker::new(JokerKind::Bloodstone, 9100);
+            f(&mut j);
+            RowSlot {
+                item: RowItem::Joker(j),
+                cost: 5,
+                couponed: false,
+            }
+        };
+        let shop = run.shop.as_mut().unwrap();
+        shop.row = vec![
+            marked(|j| j.rental = true),
+            marked(|j| j.eternal = true),
+            marked(|j| {
+                j.perishable = true;
+                j.perish_tally = 5;
+            }),
+            marked(|_| {}),
+        ];
+        let buys = |opts: &[&str]| -> Vec<u64> {
+            with_options(opts, || {
+                shop_buys(&run, 0)
+                    .iter()
+                    .filter_map(|m| m.iter().find(|(k, _)| *k == MoveKind::Buy).map(|&(_, i)| i))
+                    .collect()
+            })
+        };
+        assert_eq!(buys(&[]), [0, 1, 2, 3]);
+        assert_eq!(buys(&["avoid-rental"]), [1, 2, 3]);
+        assert_eq!(buys(&["avoid-eternal", "avoid-perishable"]), [0, 3]);
+        assert_eq!(
+            buys(&["avoid-rental", "avoid-eternal", "avoid-perishable"]),
+            [3]
+        );
     }
 
     #[test]

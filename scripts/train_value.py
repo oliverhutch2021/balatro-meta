@@ -129,8 +129,9 @@ def load_data(folders: Path | list[Path], max_runs: int | None = None, layout: i
     for folder, manifest, _, _ in parts:
         if manifest.get("labels") != first.get("labels"):
             raise SystemExit(f"{folder}: its labels differ from the newest recording's, so they can't be mixed.")
-    if len(parts) > 9:
-        raise SystemExit("At most 9 recordings at once.")
+    # Run numbers are kept apart by RUN_OFFSET a recording, in float32 labels (whole numbers exact below 2^24).
+    if len(parts) > 16:
+        raise SystemExit("At most 16 recordings at once.")
     n_rows = sum(r for _, _, _, sizes in parts for r, _ in sizes)
     n_nz = sum(z for _, _, _, sizes in parts for _, z in sizes)
     idx = np.empty(n_nz, np.int16)  # the inputs number fewer than 32,768
@@ -474,9 +475,12 @@ def train(a) -> dict:
     man = data.manifest
     if data.rows == 0:
         raise SystemExit("The recording has no positions.")
-    # The newest recording's runs are split to train on, judge training and measure; older recordings' runs are
-    # all trained on (more positions to learn from), so the measures are the newest teacher's alone.
-    newest = data.source == len(folders) - 1
+    # The newest recording's runs (with --newest K, the last K recordings': a round recorded at several stakes,
+    # one recording each) are split to train on, judge training and measure; older recordings' runs are all
+    # trained on (more positions to learn from), so the measures are the newest teacher's alone.
+    if not 1 <= a.newest <= len(folders):
+        raise SystemExit(f"--newest {a.newest}: between 1 and the {len(folders)} recordings given.")
+    newest = data.source >= len(folders) - a.newest
     part = np.where(newest, split(data.lab[:, RUN], a.split), 0)
     train_rows, judge_rows, test_rows = (np.flatnonzero(part == k) for k in range(3))
     if min(len(train_rows), len(judge_rows), len(test_rows)) == 0:
@@ -582,6 +586,8 @@ def main() -> None:
     ap.add_argument("--max-runs", type=int, help="use only the first runs of the recording")
     ap.add_argument("--input-layout", type=int,
                     help="the input layout to train on (default: the newest every recording holds)")
+    ap.add_argument("--newest", type=int, default=1,
+                    help="how many of the last recordings are the newest (split to judge and measure; default 1)")
     ap.add_argument("--split", type=int, default=SPLIT, help="one run in this many judges, another measures")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--cpu", action="store_true", help="train on the CPU even with a GPU")

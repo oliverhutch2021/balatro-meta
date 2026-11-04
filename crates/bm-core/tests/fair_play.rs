@@ -212,7 +212,7 @@ fn the_value_input_counts_the_jokers_by_kind() {
 #[test]
 fn the_value_input_tells_which_cards_carry_which_upgrades() {
     use bm_core::card::{Enhancement, Rank, Seal, Suit};
-    use bm_core::observe::{DECK_COMBOS, VALUE_LEN_1};
+    use bm_core::observe::{DECK_COMBOS, VALUE_LEN_1, VALUE_LEN_2};
     let base = Run::new(RunConfig::new("COMBOS01"));
     let find = |r: &Run, s: Suit, k: Rank| {
         *r.deck
@@ -259,8 +259,8 @@ fn the_value_input_tells_which_cards_carry_which_upgrades() {
     assert_eq!(xc[..VALUE_LEN_1], xd[..VALUE_LEN_1]);
     assert_ne!(xc, xd);
     // Each card in the deck is counted once in each of the four tables.
-    let tail: f32 = xa[VALUE_LEN_1..].iter().sum();
-    assert_eq!(VALUE_LEN - VALUE_LEN_1, DECK_COMBOS);
+    let tail: f32 = xa[VALUE_LEN_1..VALUE_LEN_2].iter().sum();
+    assert_eq!(VALUE_LEN_2 - VALUE_LEN_1, DECK_COMBOS);
     assert_eq!(tail, 4.0 * base.deck.len() as f32);
 }
 
@@ -653,4 +653,32 @@ fn the_teacher_moves_the_same_on_a_fair_copy_of_any_position() {
         }
     }
     assert!(checked > 100, "only {checked} positions checked");
+}
+
+#[test]
+fn the_value_input_shows_the_stake_as_the_rules_in_force() {
+    use bm_core::observe::{STAKE_PART, VALUE_LEN_2};
+    let part = |stake: u8| {
+        let mut x = Vec::new();
+        encode_value(
+            &screen(&Run::new(RunConfig::at_stake("STAKEIN1", stake))),
+            &mut x,
+        );
+        assert_eq!(x.len(), VALUE_LEN);
+        x[VALUE_LEN_2..].to_vec()
+    };
+    assert_eq!(STAKE_PART, 7);
+    // White brings no rule; each stake above it keeps the rules below and adds its own.
+    assert!(part(1).iter().all(|&v| v == 0.0));
+    assert_eq!(part(3), [1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    assert_eq!(part(8), [1.0; 7]);
+    for stake in 2..=8u8 {
+        let (lower, this) = (part(stake - 1), part(stake));
+        let added: Vec<usize> = (0..7).filter(|&i| this[i] != lower[i]).collect();
+        assert_eq!(
+            added,
+            [usize::from(stake) - 2],
+            "stake {stake} adds its own rule alone"
+        );
+    }
 }

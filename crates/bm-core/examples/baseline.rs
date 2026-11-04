@@ -44,7 +44,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use bm_core::blinds::{BlindKind, SlotState};
+use bm_core::blinds::BlindKind;
 use bm_core::bots::greedy_move;
 use bm_core::env::{apply, legal_kinds, run_seed, MoveKind};
 use bm_core::joker_data::{JokerKind, N_JOKERS};
@@ -388,12 +388,7 @@ fn phase_code(p: Phase) -> f32 {
 
 /// Blinds behind the run: 3 per ante before this one, and this ante's beaten or skipped (0 to 23).
 fn stage_now(run: &Run) -> f32 {
-    let done = run
-        .slots
-        .iter()
-        .filter(|s| matches!(s, SlotState::Defeated | SlotState::Skipped))
-        .count();
-    ((run.ante.clamp(1, 8) - 1) * 3) as f32 + done as f32
+    learned::blinds_behind(run) as f32
 }
 
 /// One finished run's recording, waiting for the rest of its chunk.

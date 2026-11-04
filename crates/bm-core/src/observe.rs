@@ -89,6 +89,8 @@ pub type HandRow = (i32, f64, f64, u32, u32);
 /// Everything the player can see.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Screen {
+    /// The stake the run is played at (1 White ... 8 Gold): chosen at the start, shown all run.
+    pub stake: u8,
     pub phase: Phase,
     pub ante: i32,
     pub round: i32,
@@ -307,6 +309,7 @@ pub fn screen(run: &Run) -> Screen {
                 None
             });
     Screen {
+        stake: run.cfg.stake,
         phase: run.phase,
         ante: run.ante,
         round: run.round,
@@ -770,24 +773,35 @@ pub fn obs_layout() -> Vec<(&'static str, usize, usize, usize)> {
 /// Length of layout 1 of the value input: `encode`'s floats and the jokers counted by kind.
 pub const VALUE_LEN_1: usize = OBS_LEN + 3 * N_JOKERS;
 
-/// Length of the value network's input (`encode_value`): layout 1, then the deck by whole cards (layout 2).
-pub const VALUE_LEN: usize = VALUE_LEN_1 + DECK_COMBOS;
+/// Length of layout 2: layout 1, then the deck by whole cards.
+pub const VALUE_LEN_2: usize = VALUE_LEN_1 + DECK_COMBOS;
+
+/// What layout 3 adds (`stake_part`): the rules in force, one for each stake from Red to Gold.
+pub const STAKE_PART: usize = 7;
+
+/// Length of the value network's input (`encode_value`): layout 2, then the stake's rules (layout 3).
+pub const VALUE_LEN: usize = VALUE_LEN_2 + STAKE_PART;
 
 /// The value input's layout version: bumped whenever `encode` or
 /// `encode_value` changes what a float means, so a network trained on one
 /// layout is refused by another (`learned.rs`).
-pub const VALUE_INPUT_VERSION: u32 = 2;
+pub const VALUE_INPUT_VERSION: u32 = 3;
 
 /// Every layout a network may have been trained on, (version, floats). Each one's floats are the first floats of
 /// the next one's, meaning the same, so a network of an older layout reads the start of this engine's input and
 /// plays as it always did (`learned.rs`): a new layout only adds floats at the end. A layout that changed what an
 /// existing float means would start a new list.
-pub const VALUE_LAYOUTS: [(u32, usize); 2] = [(1, VALUE_LEN_1), (VALUE_INPUT_VERSION, VALUE_LEN)];
+pub const VALUE_LAYOUTS: [(u32, usize); 3] = [
+    (1, VALUE_LEN_1),
+    (2, VALUE_LEN_2),
+    (VALUE_INPUT_VERSION, VALUE_LEN),
+];
 
 /// What the value network reads: `encode`'s floats, then the jokers held, in
 /// the shop and in an open pack as counts by kind (`encode` gives a joker's
 /// kind as one number, which a plain network can't take apart), then (layout
-/// 2) the deck counted by whole cards (`Screen::deck_combos`).
+/// 2) the deck counted by whole cards (`Screen::deck_combos`), then (layout 3)
+/// the stake's rules in force (`stake_part`).
 pub fn encode_value(s: &Screen, out: &mut Vec<f32>) {
     encode(s, out);
     let base = out.len();
@@ -812,7 +826,19 @@ pub fn encode_value(s: &Screen, out: &mut Vec<f32>) {
     }
     debug_assert_eq!(out.len(), VALUE_LEN_1);
     out.extend(s.deck_combos.iter().map(|&c| f32::from(c)));
+    debug_assert_eq!(out.len(), VALUE_LEN_2);
+    stake_part(s, out);
     debug_assert_eq!(out.len(), VALUE_LEN);
+}
+
+/// Layout 3's floats: the stake as the rules in force, one float for each stake's rule from Red's to Gold's (1 when
+/// the run's stake is that one or higher; White shows none). Each stake keeps every rule below it, so a stake read
+/// this way is the rules it brings: Gold is Orange with rental jokers, and what a network learns of a rule at one
+/// stake holds at every stake above it. (Each joker's eternal, perishable and rental marks are in `encode` already;
+/// the networks of layouts 1 and 2, learned on White's runs alone, never saw one change, so their training left
+/// those floats out.)
+fn stake_part(s: &Screen, out: &mut Vec<f32>) {
+    out.extend((2..=8u8).map(|rule| f32::from(s.stake >= rule)));
 }
 
 /// The joker kinds in the screen's order, as embedding tokens (for a
