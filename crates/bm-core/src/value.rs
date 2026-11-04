@@ -168,6 +168,12 @@ pub const PARAMS: &[(&str, f64)] = &[
     // Recordings only (teacher.rs `committed`): the chance that a run commits from ante 3 to one hand type, its
     // Planets taken and bought as the focus's (whole-build exploration).
     ("commit", 0.0),
+    // The ensemble's disagreement (learned.rs `chance`): its chance of winning moved by this many standard
+    // deviations of its networks' chances, down ("doubt", for playing: an option the networks disagree about is
+    // trusted less, so picking the best of many options picks fewer of their mistakes) or up ("hope", for
+    // recordings: exploring where they disagree).
+    ("doubt", 0.0),
+    ("hope", 0.0),
     // With a learned value: the learned term rates a position by the networks' chance of getting this many blinds
     // further, not of winning (`learned::reach_chance`; 0: of winning). For the stakes where wins are too rare to
     // tell positions apart.

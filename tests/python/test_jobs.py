@@ -900,3 +900,31 @@ def test_the_quick_table_shows_the_training_and_every_stake(tmp_path):
     assert "BCE 0.4000 (alone 0.5000: +20.0%)" in text
     assert "+0.70 [+0.20, +1.20]: clearly better" in text
     assert "White   not played yet" in text and "Gold    not played yet" in text
+
+
+def test_the_doubt_trials_play_the_champion_again_and_set_each_against_it(tmp_path):
+    f = jobs.FORMULA
+    (tmp_path / "models").mkdir()
+    for n in range(1, 9):
+        for name in (f"value-{n}.bin", f"value-{n}b.bin"):
+            (tmp_path / "models" / name).write_bytes(b"BMVN")
+    tune = tmp_path / "results" / "tune"
+    tune.mkdir(parents=True)
+    (tmp_path / "results" / "value").mkdir()
+    assert [n for n, *_ in jobs.doubt_steps(tmp_path)] == ["build"], "nothing to doubt before an 8,000-seed champion"
+    (tune / f"f{f}-precise-8k-w2.5-on-ensemble8-w1.5.json").write_text(json.dumps(
+        {"kind": "baseline", "runs": 8000, "win_rate": 0.6646, "seed_base": 1, "value_net": jobs.ensemble(8),
+         "value_weight": 2.5, "teacher_options": ["precise"]}))
+    steps = {n: a for n, a, *_ in jobs.doubt_steps(tmp_path)}
+    champ = steps["champion"]
+    assert champ[champ.index("--value-weight") + 1] == "2.5" and champ[champ.index("--teacher-options") + 1] == "precise"
+    control = champ[champ.index("--out") + 1]
+    assert control == f"results/tune/f{f}-precise-8k-w2.5-again-on-ensemble8-w1.5.json"
+    for w, extra in jobs.DOUBT_TRIALS:
+        play = steps[f"w{w}-{extra}"]
+        assert play[play.index("--value-weight") + 1] == w
+        assert play[play.index("--teacher-options") + 1] == f"precise,{extra}"
+        assert play[play.index("--value-net") + 1] == jobs.ensemble(8)
+        cmp = steps[f"compare-w{w}-{extra}"]
+        assert cmp[1] == control and cmp[2] == play[play.index("--out") + 1]
+    assert "teacher-doubt" in jobs.JOBS

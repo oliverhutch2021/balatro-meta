@@ -976,6 +976,53 @@ def weight_steps(root: Path = ROOT, weights: tuple[str, ...] = WEIGHT_TRIALS, ru
     return steps
 
 
+# make teacher-doubt: the networks' disagreement as the brake. More say for the networks helped up to weight 4 and then
+# fell away (66.1% at 4, 63% at 8, 53.8% at 16 for round 10's): picking the best of many options with a judge that
+# errs picks its errors, and the formula is what holds that back. The ensemble's networks disagree most where they
+# know least, so teacher option "doubt=k" moves its chance down by k standard deviations of theirs: options they
+# disagree about count less. If that is the brake, the networks can take more say (weight 4 with doubt beating the
+# champion's 2.5 without). Each against the champion played again on today's code, run by run on the same seeds.
+DOUBT_TRIALS = (("2.5", "doubt=1"), ("4", "doubt=1"), ("4", "doubt=2"))
+
+
+def doubt_steps(root: Path = ROOT, trials: tuple[tuple[str, str], ...] = DOUBT_TRIALS,
+                runs: int = BIG_RUNS) -> list[tuple]:
+    """make teacher-doubt: the teacher that won most of the first `runs` usual seeds (best_8k) played again, then at
+    each (weight, option) of `trials`, each set run by run against it."""
+    steps: list[tuple] = [("build", [*MAKE, "build"])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    _, args, report = best
+    args = list(args)
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
+    w0 = args[args.index("--value-weight") + 1] if "--value-weight" in args else "1"
+    nets_stem = Path(report).stem.split("-on-")[-1]
+    tag, size = f"f{FORMULA}", f"{runs // 1000}k"
+
+    def with_(w: str, o: str) -> list[str]:
+        a = list(args)
+        a[a.index("--value-weight") + 1] = w
+        if "--teacher-options" in a:
+            a[a.index("--teacher-options") + 1] = o
+        else:
+            a += ["--teacher-options", o]
+        return a
+    control = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w0}-again-on-{nets_stem}.json"
+    if not (root / control).exists():
+        steps.append(("champion", [*BASELINE, "--bot", "teacher", *with_(w0, opts), "--runs", str(runs), "--seed",
+                                   "1", "--out", control]))
+    for w, extra in trials:
+        o = f"{opts},{extra}"
+        out = f"results/tune/{tag}-{file_safe(o)}-{size}-w{w}-on-{nets_stem}.json"
+        if not (root / out).exists():
+            steps.append((f"w{w}-{extra}", [*BASELINE, "--bot", "teacher", *with_(w, o), "--runs", str(runs),
+                                            "--seed", "1", "--out", out]))
+        steps.append((f"compare-w{w}-{extra}", ["scripts/compare_runs.py", control, out, "--out",
+                                                f"results/tune/{Path(out).stem}-vs-{Path(control).stem}.json"]))
+    return steps
+
+
 def control_steps(root: Path = ROOT) -> list[tuple]:
     """make teacher-control: the precise teacher on the best learned value there is (best_learned: after a round, its
     networks if they won most) on the first 2,000 usual seeds, the control later trials are set against, and set run
@@ -1156,6 +1203,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-big": big_steps(),
     "teacher-weights": weight_steps(),
     "teacher-weights-high": weight_steps(weights=HIGH_WEIGHT_TRIALS, against=HIGH_AGAINST),
+    "teacher-doubt": doubt_steps(),
     "teacher-inputs": input_steps(),
     "stakes-trials": stake_trials_steps(),
     "boost-quick": quick_steps(),

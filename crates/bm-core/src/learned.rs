@@ -370,13 +370,19 @@ fn chance(run: &Run, reach: Option<usize>) -> Option<f64> {
     Some(INPUT.with(|x| {
         let mut x = x.borrow_mut();
         encode_value(&screen(run), &mut x);
-        let key =
-            input_key(&x) ^ reach.map_or(0, |k| (k as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+        let key = input_key(&x)
+            ^ reach.map_or(0, |k| (k as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15))
+            ^ disagreement_lean().to_bits().rotate_left(17);
         if let Some(p) = SEEN.with(|s| s.borrow().get(&key).copied()) {
             return p;
         }
         let from = reach.map(|k| blinds_behind(run) + k);
+        let lean = disagreement_lean();
         let mut p = match from {
+            None if lean != 0.0 && nets.len() > 1 => {
+                let (mean, spread) = mean_and_spread(nets, &x);
+                (mean + lean * spread).clamp(0.0, 1.0)
+            }
             None => mean_chance(nets, &x),
             Some(f) => mean_reach(nets, &x, f),
         };
@@ -412,6 +418,29 @@ fn mean_chance(nets: &[Net], x: &[f32]) -> f64 {
             .sum::<f64>()
             / nets.len().max(1) as f64
     })
+}
+
+/// An ensemble's mean chance and how far its networks disagree about it (the standard deviation of their
+/// chances).
+fn mean_and_spread(nets: &[Net], x: &[f32]) -> (f64, f64) {
+    INFERENCE.with(|w| {
+        let mut w = w.borrow_mut();
+        w.read(x);
+        let ps: Vec<f64> = nets
+            .iter()
+            .map(|n| 1.0 / (1.0 + (-(n.first_with(&mut w) as f64)).exp()))
+            .collect();
+        let n = ps.len().max(1) as f64;
+        let mean = ps.iter().sum::<f64>() / n;
+        let var = ps.iter().map(|p| (p - mean) * (p - mean)).sum::<f64>() / n;
+        (mean, var.sqrt())
+    })
+}
+
+/// Teacher options `doubt=k` and `hope=k`: how many standard deviations of the networks' chances the
+/// ensemble's chance of winning moves, down for doubt, up for hope (0 unless set: the plain mean).
+fn disagreement_lean() -> f64 {
+    crate::teacher::param("hope").unwrap_or(0.0) - crate::teacher::param("doubt").unwrap_or(0.0)
 }
 
 /// Blinds behind the run: 3 for each ante before this one, and this ante's beaten or skipped (0 to 23), as the
@@ -900,6 +929,33 @@ mod tests {
         assert!((mean_chance(&[a.clone(), b.clone()], &x) - (0.5 + 2.0 / 3.0) / 2.0).abs() < 1e-6);
         assert!((mean_chance(&[b], &x) - 2.0 / 3.0).abs() < 1e-6);
         assert!((mean_chance(&[a], &x) - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn doubt_and_hope_move_the_chance_by_the_networks_disagreement() {
+        let n = VALUE_LEN;
+        let bias =
+            |b: f32| Net::from_bytes(&file(&[(n, 1, false, vec![0.0; n], vec![b])])).unwrap();
+        let x = vec![0.0f32; n];
+        // Chances 1/2 and 2/3: mean 7/12, spread 1/12.
+        let nets = [bias(0.0), bias(2.0f32.ln())];
+        let (mean, spread) = mean_and_spread(&nets, &x);
+        assert!((mean - 7.0 / 12.0).abs() < 1e-6 && (spread - 1.0 / 12.0).abs() < 1e-6);
+        assert_eq!(
+            mean.to_bits(),
+            mean_chance(&nets, &x).to_bits(),
+            "the same mean as before"
+        );
+        assert_eq!(disagreement_lean(), 0.0, "off unless asked");
+        let lean = |opts: &[&str]| crate::teacher::with_options(opts, disagreement_lean);
+        assert_eq!(lean(&["doubt=1"]), -1.0);
+        assert_eq!(lean(&["hope=0.5"]), 0.5);
+        assert_eq!(lean(&["doubt=2", "hope=0.5"]), -1.5);
+        let (m, s) = mean_and_spread(&nets[..1], &x);
+        assert!(
+            (m - 0.5).abs() < 1e-12 && s == 0.0,
+            "one network: no disagreement"
+        );
     }
 
     /// A one-layer network of this engine's layout: weights on chosen inputs, the rest 0, and a bias (one
