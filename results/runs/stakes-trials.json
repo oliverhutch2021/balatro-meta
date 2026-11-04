@@ -1,0 +1,46 @@
+{
+ "job": "stakes-trials",
+ "commit": "23277f639978e5ad99d719fbb49343a1230bcd42",
+ "started": "2026-11-04T07:20:32+00:00",
+ "finished": "2026-11-04T07:41:40+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   16.0,
+   15.9,
+   15.8
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 1,
+  "avoid-eternal-stake4": 330,
+  "compare-avoid-eternal-stake4": 0,
+  "avoid-perishable-stake7": 181,
+  "compare-avoid-perishable-stake7": 0,
+  "avoid-rental-stake8": 161,
+  "compare-avoid-rental-stake8": 0,
+  "reach-6-stake3": 374,
+  "compare-reach-6-stake3": 0,
+  "reach-6-stake6": 220,
+  "compare-reach-6-stake6": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "avoid-eternal-stake4": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,avoid-eternal --runs 2000 --seed 1 --stake 4 --out results/stakes/stake4-2k-f3-precise-rounds8-w2.5-avoid-eternal.json",
+  "compare-avoid-eternal-stake4": "scripts/compare_runs.py results/stakes/stake4-2k-f3-precise-rounds8-w2.5.json results/stakes/stake4-2k-f3-precise-rounds8-w2.5-avoid-eternal.json --out results/stakes/stake4-2k-f3-precise-rounds8-w2.5-avoid-eternal-vs.json",
+  "avoid-perishable-stake7": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,avoid-perishable --runs 2000 --seed 1 --stake 7 --out results/stakes/stake7-2k-f3-precise-rounds8-w2.5-avoid-perishable.json",
+  "compare-avoid-perishable-stake7": "scripts/compare_runs.py results/stakes/stake7-2k-f3-precise-rounds8-w2.5.json results/stakes/stake7-2k-f3-precise-rounds8-w2.5-avoid-perishable.json --out results/stakes/stake7-2k-f3-precise-rounds8-w2.5-avoid-perishable-vs.json",
+  "avoid-rental-stake8": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,avoid-rental --runs 2000 --seed 1 --stake 8 --out results/stakes/stake8-2k-f3-precise-rounds8-w2.5-avoid-rental.json",
+  "compare-avoid-rental-stake8": "scripts/compare_runs.py results/stakes/stake8-2k-f3-precise-rounds8-w2.5.json results/stakes/stake8-2k-f3-precise-rounds8-w2.5-avoid-rental.json --out results/stakes/stake8-2k-f3-precise-rounds8-w2.5-avoid-rental-vs.json",
+  "reach-6-stake3": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,reach=6 --runs 2000 --seed 1 --stake 3 --out results/stakes/stake3-2k-f3-precise-rounds8-w2.5-reach-6.json",
+  "compare-reach-6-stake3": "scripts/compare_runs.py results/stakes/stake3-2k-f3-precise-rounds8-w2.5.json results/stakes/stake3-2k-f3-precise-rounds8-w2.5-reach-6.json --out results/stakes/stake3-2k-f3-precise-rounds8-w2.5-reach-6-vs.json",
+  "reach-6-stake6": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,reach=6 --runs 2000 --seed 1 --stake 6 --out results/stakes/stake6-2k-f3-precise-rounds8-w2.5-reach-6.json",
+  "compare-reach-6-stake6": "scripts/compare_runs.py results/stakes/stake6-2k-f3-precise-rounds8-w2.5.json results/stakes/stake6-2k-f3-precise-rounds8-w2.5-reach-6.json --out results/stakes/stake6-2k-f3-precise-rounds8-w2.5-reach-6-vs.json"
+ }
+}
