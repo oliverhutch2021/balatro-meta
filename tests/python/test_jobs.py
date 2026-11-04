@@ -635,7 +635,10 @@ def test_an_avoid_option_is_kept_only_when_its_stake_went_clearly_further(tmp_pa
     assert t[t.index("--teacher-options") + 1] == f"precise,avoid-rental,{jobs.EXPLORE},{jobs.COMMIT}"
 
 
-def test_a_stake_round_learns_every_stake_and_is_judged_at_white_first(tmp_path):
+def test_a_stake_round_learns_every_stake_and_is_judged_at_white_first(tmp_path, monkeypatch):
+    # Away from this machine's own data: no night recording to replay here.
+    monkeypatch.setattr(jobs, "DATA", tmp_path / "data")
+    monkeypatch.setattr(jobs, "NIGHT_RECORDING", tmp_path / "data" / "stakes-1-layout2")
     for s in range(1, 9):
         _stake_report(tmp_path, s)
     folder = tmp_path / "results" / "value"
