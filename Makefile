@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late diagnose forks-quick forks-night
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -156,6 +156,30 @@ teacher-doubt:  ## The champion again, then with its networks' disagreement as t
 
 teacher-margin:  ## After round 11: its networks at the champion's weight, aiming for wins with 3 or 6 blinds to spare (margin=K), 8,000 seeds each (about 2.5 hours)
 	$(PY) scripts/jobs.py run teacher-margin $(JOB_FLAGS)
+
+teacher-late:  ## The champion with three times the samples from ante 6 (late-x=3), and from ante 5, 8,000 seeds each against the champion (about 5 hours)
+	$(PY) scripts/jobs.py run teacher-late $(JOB_FLAGS)
+
+diagnose:  ## Where the champion's runs are lost and why: the newest recording replayed, a quarter of the lost blinds played again with deeper search (about 15 minutes)
+	$(PY) scripts/jobs.py run diagnose $(JOB_FLAGS)
+
+forks-quick:  ## An hour of forks (the champion's options at recorded decisions, each played out), then the networks that learn from them: the judge test today (about 1.5 hours)
+	$(PY) scripts/jobs.py run forks-quick $(JOB_FLAGS)
+	$(PY) scripts/jobs.py run value-net-forks-quick $(JOB_FLAGS)
+
+forks-%:  ## Forks round N, 1/3: a night of forks (7 hours)
+	$(PY) scripts/jobs.py run forks-$* $(JOB_FLAGS)
+
+value-net-forks-%:  ## Forks round N, 2/3: the pair that learns the forks, and its control (about 40 minutes)
+	$(PY) scripts/jobs.py run value-net-forks-$* $(JOB_FLAGS)
+
+teacher-forks-%:  ## Forks round N, 3/3: the pair against its control, and the champion with the pair against the champion, 8,000 seeds each (about 5 hours)
+	$(PY) scripts/jobs.py run teacher-forks-$* $(JOB_FLAGS)
+
+forks-night:  ## Forks round 1, the three jobs in a row (about 13 hours)
+	@$(MAKE) --no-print-directory forks-1
+	@$(MAKE) --no-print-directory value-net-forks-1
+	@$(MAKE) --no-print-directory teacher-forks-1
 
 teacher-inputs:  ## Round 11's networks on the deck card by card against the totals, on the same runs, 8,000 seeds (about 2.5 hours)
 	$(PY) scripts/jobs.py run teacher-inputs $(JOB_FLAGS)

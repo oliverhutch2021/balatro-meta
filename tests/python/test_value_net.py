@@ -5,6 +5,7 @@ read the same by both, and the teacher playing with one (`--value-net`).
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -436,3 +437,111 @@ def test_training_on_a_recording_that_played_on_writes_the_depth_outputs(recordi
     x = tv.load_data(recording).dense(np.arange(3))
     got = np.array([value_net_forward(out.read_bytes(), row.tolist()) for row in x], np.float32)
     np.testing.assert_allclose(got, tv.forward_np(layers, x), rtol=1e-4, atol=1e-4)
+
+
+@pytest.fixture(scope="module")
+def forked(tmp_path_factory, endless):
+    """A light-teacher recording's first runs played again with forks and a diagnosis."""
+    d = tmp_path_factory.mktemp("forked")
+    baseline("--bot", "teacher", "--teacher-options", "light", "--replay", str(endless / "on"), "--runs", "4",
+             "--forks", str(d / "forks"), "--fork-chance", "0.25", "--fork-copies", "2", "--fork-best", "2",
+             "--diagnose", str(d / "diag.csv"), "--deep", "2", "--deep-share", "1", "--threads", "4",
+             "--out", str(d / "forks.json"))
+    return d
+
+
+def test_a_fork_plays_the_teachers_options_out_on_shared_copies_and_keeps_what_each_left(forked):
+    man = json.loads((forked / "forks" / "manifest.json").read_text())
+    assert man["kind"] == "forks" and man["labels"] == tv.FORK_LABELS and man["fork_copies"] == 2
+    report = json.loads((forked / "forks.json").read_text())
+    f = report["forks"]
+    assert f["forked"] >= 1 and f["copies"] == 2 and 0 <= f["chosen_best"] <= 1 and f["mean_regret"] >= 0
+    data = tv.load_data(forked / "forks")
+    lab = data.lab
+    assert lab.shape == (f["playouts"], len(tv.FORK_LABELS)) and data.inputs == VALUE_LEN
+    assert set(np.unique(lab[:, tv.F_PHASE])) <= {3.0, 5.0}, "forks are at shops and open packs"
+    assert ((lab[:, tv.F_ANTE] >= 2) & (lab[:, tv.F_ANTE] <= 6)).all()
+    assert ((lab[:, tv.F_WON] == 1) == (lab[:, tv.F_END_STAGE] == 24)).all()
+    assert np.isnan(lab[:, tv.F_LOGIT]).all(), "no networks loaded: no log-odds"
+    fs = tv.ForkSet(data)
+    assert len(fs) == f["forked"]
+    for fork in fs.forks:
+        opts = fork["options"]
+        assert 2 <= len(opts) <= 5 and sum(o["chosen"] for o in opts) == 1 and sum(o["made"] for o in opts) == 1
+        assert all(len(o["rows"]) == 2 for o in opts) and len(fork["pairs"]) == len(opts) * (len(opts) - 1) // 2
+        assert all(0 <= t <= 1 for _, _, t in fork["pairs"])
+        # Every option's copies left different positions from the others' (another move was made).
+        x = data.dense(np.concatenate([o["rows"] for o in opts]))
+        assert len({tuple(np.flatnonzero(r)) + tuple(r[np.flatnonzero(r)]) for r in x}) >= 2
+    # The report's judge test agrees with the labels.
+    chosen_best = np.mean([int(next(k for k, o in enumerate(fk["options"]) if o["chosen"]) == np.lexsort(
+        (-np.arange(len(fk["options"])), [o["key"].sum() for o in fk["options"]],
+         [o["won"].mean() for o in fk["options"]]))[-1]) for fk in fs.forks])
+    assert abs(chosen_best - f["chosen_best"]) < 1e-6
+    rows, opt_of, n, pa, pb, pt = fs.batch(np.arange(len(fs)))
+    assert len(rows) == len(opt_of) == lab.shape[0] and n == sum(len(fk["options"]) for fk in fs.forks)
+    assert len(pa) == len(pb) == len(pt) == sum(len(fk["pairs"]) for fk in fs.forks)
+
+
+def test_the_pairwise_loss_pulls_the_better_options_value_up():
+    torch = pytest.importorskip("torch")
+    opt_of = torch.tensor([0, 0, 1, 1, 2])  # three options, two copies each but the last
+    pa, pb = torch.tensor([0, 0]), torch.tensor([1, 2])
+    z = torch.zeros(5, requires_grad=True)
+    loss = tv.pair_loss(torch, z, opt_of, 3, pa, pb, torch.tensor([1.0, 0.5]))
+    assert abs(loss.item() - math.log(2)) < 1e-6, "no difference yet: log 2 a pair"
+    loss.backward()
+    g = z.grad
+    assert g[0] < 0 and g[1] < 0 and g[2] > 0 and g[3] > 0 and abs(float(g[4])) < 1e-7, \
+        "option 0 beat 1 on every copy: 0 up, 1 down; it tied with 2, which is left alone"
+    assert abs(float(tv.option_values(torch, torch.tensor([1.0, 3.0, 5.0, 7.0, 9.0]), opt_of, 3)[1]) - 6.0) < 1e-6
+
+
+def test_training_on_forks_reports_the_judge_test(recording, forked, tmp_path):
+    pytest.importorskip("torch")
+    out, report = tmp_path / "value.bin", tmp_path / "value.json"
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "train_value.py"), "--data", str(recording),
+                        "--forks", str(forked / "forks"), "--out", str(out), "--report", str(report), "--epochs", "1",
+                        "--configs", "16/0.1/1e-4", "--scale-rows", "2000", "--cpu", "--fork-batch", "2"],
+                       cwd=ROOT, capture_output=True, text=True, check=False, timeout=900)
+    assert r.returncode == 0, r.stdout + r.stderr
+    rep = json.loads(report.read_text())
+    assert rep["forks"]["forked"] >= 1 and rep["forks"]["pair_weight"] == 1.0
+    judge = rep["measured"]["forks"]
+    if judge["forks"]:
+        for name in ("network", "chosen", "random"):
+            assert 0 <= judge[name]["picked_best"] <= 1 and judge[name]["regret"] >= -1e-9
+        assert "ensemble" not in judge, "no networks made these forks"
+    assert rep["check"]["engine"] is not None and rep["check"]["engine"] < 1e-3
+    assert any("judging_pairs" in h for h in rep["tried"][0]["history"])
+
+
+def test_the_diagnosis_rows_say_where_each_run_ended_and_whether_deeper_play_beat_the_blind(forked):
+    import csv
+    rows = list(csv.DictReader((forked / "diag.csv").open()))
+    assert len(rows) == 4 and list(rows[0]) == [c for c in (forked / "diag.csv").read_text().splitlines()[0].split(",")]
+    report = json.loads((forked / "forks.json").read_text())
+    assert report["deep"]["samples_x"] == 2
+    replayed = [r for r in rows if r["deep_won"] != "-1"]
+    assert len(replayed) == report["deep"]["lost_blinds_replayed"] == sum(r["won"] == "0" for r in rows)
+    assert sum(r["deep_won"] == "1" for r in replayed) == report["deep"]["beaten"]
+    for r in rows:
+        if r["won"] == "1":
+            assert r["lost_to"] == "" and r["closeness"] == "1.000" and r["deep_won"] == "-1"
+            assert all(float(r[f"ante_best_{a}"]) > 0 for a in range(1, 9))
+        else:
+            assert 0 <= float(r["closeness"]) < 1 and float(r["needed"]) > 0 and r["lost_to"]
+            assert float(r["deep_needed"]) == float(r["needed"])
+            ante = int(r["ante"])
+            assert float(r[f"ante_best_{ante}"]) >= float(r["blind_best"]) >= 0
+            assert all(float(r[f"ante_best_{a}"]) == 0 for a in range(ante + 1, 9)), "antes never reached"
+    import importlib
+    sys.path.insert(0, str(ROOT / "scripts"))
+    diagnose = importlib.import_module("diagnose")
+    s = diagnose.summarise(rows)
+    assert s["runs"] == 4 and s["wins"] + s["losses"] == 4
+    if s["losses"]:
+        assert abs(sum(s["by_blind"].values()) - 1) < 1e-3 and abs(sum(s["shortfall"].values()) - 1) < 1e-3
+        assert s["deeper_play"]["replayed"] == len(replayed)
+        text = "\n".join(diagnose.lines(s, forked / "diag.csv"))
+        assert "Where the losses are" in text and "Could better play" in text

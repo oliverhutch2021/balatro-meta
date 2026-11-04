@@ -31,6 +31,21 @@
 //! `--stake-net NETS` (input layout 3) corrects the value networks' chance by the stake (`learned::StakeMode`):
 //! `--stake-mode residual` (the default: networks trained with `--offset`) or `delta`.
 //!
+//! `--forks DIR` (with `--bot teacher`, usually on a `--replay`) forks decisions as the runs go (`forks.rs`): at a
+//! share `--fork-chance` (0.1) of the shops entered and packs opened in antes `--fork-antes` (2-6), the teacher's
+//! `--fork-best` (3) best options and doing nothing (and its own choice and the run's move, if others) are each
+//! played out to the end by the teacher on `--fork-copies` (6) fair copies that share their seeds across the
+//! options. DIR gets the positions the options leave and how each play-out ended, in the recording's chunks
+//! (`chunk-NNNNN-{idx,val,ptr,lab}.npy`, `FORK_LABELS`), for `train_value.py --forks`; the report says how often
+//! the teacher's own choice was the option that went best and what its choices gave away (`forks`).
+//!
+//! `--diagnose OUT.csv` (usually on a `--replay`, with the teacher's networks) writes one row per run about how
+//! it went: where it ended and by how much it fell short, its build then, and ante by ante its biggest hand, money
+//! and x mult jokers; for a share `--deep-share` (0.25) of the lost runs, the blind they lost is played again from
+//! its start by the teacher with `--deep` (4) times the usual samples, to tell a build that couldn't have scored it
+//! from play that fell short (`scripts/diagnose.py` reads the table). A diagnosis, never the bot's play or its
+//! training: that replay sees the run's own cards.
+//!
 //! With `BM_WATCH_DIR` set (the job runner sets it), it writes there for the live viewer:
 //! `progress.json` about once a second (runs, runs a second, win rate, final antes, what ended the
 //! runs, the jokers bought and held, the hands played, the best runs so far), and runs to replay in
@@ -55,6 +70,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use bm_core::blinds::BlindKind;
 use bm_core::bots::greedy_move;
 use bm_core::env::{apply, legal_kinds, run_seed, MoveKind};
+use bm_core::forks::{fork, Fork};
 use bm_core::joker_data::{JokerKind, N_JOKERS};
 use bm_core::learned::{self, le_bytes, npy_bytes, Rows};
 use bm_core::observe::{
@@ -108,6 +124,10 @@ struct RunSummary {
     /// `--endless`, for a win: blinds beaten after the win before the run was lost (0 to `ENDLESS_DEPTH`; that
     /// many if it reached `ENDLESS_LAST_ANTE`'s end).
     endless: Option<u32>,
+    /// `--forks`: the decisions forked, with the step each was at.
+    forks: Vec<(u64, Fork)>,
+    /// `--diagnose`: the run's row of the table.
+    diagnosis: Option<String>,
 }
 
 impl RunSummary {
@@ -220,12 +240,42 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64
     let endless = ENDLESS.load(Ordering::Relaxed);
     // `--endless`: the run at its win and what the summary had counted by then (the reports count up to the win).
     let mut at_win: Option<(Run, WinCounts)> = None;
+    let forking = FORKS.load(Ordering::Relaxed);
+    let diagnose = DIAGNOSE.load(Ordering::Relaxed);
+    // `--diagnose`: the run at the start of the blind it is in, its biggest hand in that blind, and ante by ante its
+    // biggest hand, its money and its x mult jokers as the ante began.
+    let mut diag = diagnose.then(Diagnosis::default);
+    let mut prev_phase = run.phase;
     let mut step = 0u64;
     while run.phase != Phase::GameOver
         && !run.won
         && step < MAX_STEPS
         && !(at_win.is_some() && run.ante > ENDLESS_LAST_ANTE)
     {
+        if let Some(d) = diag.as_mut() {
+            d.ante_begins(&run);
+        }
+        if forking
+            && at_win.is_none()
+            && (run.phase == Phase::Shop || run.phase == Phase::Pack)
+            && prev_phase != run.phase
+            && fork_here(&run, salt, step)
+        {
+            let made = script.and_then(|m| m.get(step as usize)).map(|&(k, a)| {
+                (
+                    MoveKind::from_index(i64::from(k)).expect("a recorded move's kind"),
+                    a,
+                )
+            });
+            let (best, copies) = (
+                FORK_BEST.load(Ordering::Relaxed) as usize,
+                FORK_COPIES.load(Ordering::Relaxed) as usize,
+            );
+            if let Some(f) = fork(&run, made, salt << 12 | step, best, copies) {
+                s.forks.push((step, f));
+            }
+        }
+        prev_phase = run.phase;
         let keep_this = match s.recorded.as_mut() {
             Some(r) if at_win.is_none() && (moves || learned::values_here(&run)) => {
                 if moves {
@@ -314,6 +364,14 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64
                 run.round_chips
             };
             s.best_hand = s.best_hand.max(scored);
+            if let Some(d) = diag.as_mut() {
+                d.hand_scored(&run, scored);
+            }
+        }
+        if k == MoveKind::SelectBlind && run.phase == Phase::Round {
+            if let Some(d) = diag.as_mut() {
+                d.blind_begins(&run);
+            }
         }
         if let Some(r) = s.record.as_mut() {
             r.push((k as u8, a));
@@ -367,8 +425,179 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64
     if DETAIL.load(Ordering::Relaxed) {
         s.detail = Some(detail_row(&run, &s));
     }
+    if let Some(d) = diag {
+        s.diagnosis = Some(d.row(&run, &s, salt));
+    }
     s
 }
+
+/// Whether to fork the decision at this step of this run (`--fork-chance`): by a hash, so a run forks the same
+/// decisions on any thread.
+fn fork_here(run: &Run, salt: u64, step: u64) -> bool {
+    let (lo, hi) = (
+        FORK_ANTE_LO.load(Ordering::Relaxed),
+        FORK_ANTE_HI.load(Ordering::Relaxed),
+    );
+    if run.ante < i32::from(lo) || run.ante > i32::from(hi) {
+        return false;
+    }
+    let h = (salt.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ step.wrapping_mul(0xC2B2_AE3D_27D4_EB4F))
+        .rotate_left(23)
+        .wrapping_mul(0xD6E8_FEB8_6659_FD93);
+    (h % 1_000_000) < FORK_CHANCE_PPM.load(Ordering::Relaxed)
+}
+
+/// `--diagnose`: what a run's row of the table is built from as the run goes.
+#[derive(Default)]
+struct Diagnosis {
+    /// The run as the blind it is in began (the blind it loses is played again from here, `--deep`).
+    blind_start: Option<Run>,
+    /// The biggest hand of the blind it is in.
+    blind_best: f64,
+    /// By ante (1 to 8): the biggest hand, and money, x mult jokers and jokers as the ante began.
+    ante_best: [f64; 9],
+    ante_money: [i64; 9],
+    ante_xmult: [u8; 9],
+    ante_jokers: [u8; 9],
+    seen_ante: i32,
+}
+
+/// Jokers whose x mult is above one now (a scaling joker counts once it has grown).
+fn xmult_jokers(run: &Run) -> usize {
+    run.jokers.iter().filter(|j| j.x_mult > 1.0).count()
+}
+
+impl Diagnosis {
+    fn ante_begins(&mut self, run: &Run) {
+        if run.ante > self.seen_ante && (1..=8).contains(&run.ante) {
+            self.seen_ante = run.ante;
+            let a = run.ante as usize;
+            self.ante_money[a] = run.money;
+            self.ante_xmult[a] = xmult_jokers(run) as u8;
+            self.ante_jokers[a] = run.jokers.len() as u8;
+        }
+    }
+
+    fn blind_begins(&mut self, run: &Run) {
+        self.blind_start = Some(run.clone());
+        self.blind_best = 0.0;
+    }
+
+    fn hand_scored(&mut self, run: &Run, scored: f64) {
+        self.blind_best = self.blind_best.max(scored);
+        if (1..=8).contains(&run.ante) {
+            let a = run.ante as usize;
+            self.ante_best[a] = self.ante_best[a].max(scored);
+        }
+    }
+
+    /// The lost blind played again from its start by the teacher with `DEEP` times the usual samples (the run's
+    /// own cards: a diagnosis of the play, never the bot's play): whether it beat the blind, and its biggest hand.
+    fn deep(&self, salt: u64) -> Option<(bool, f64)> {
+        let x = DEEP_X.load(Ordering::Relaxed) as f64 / 100.0;
+        let start = self.blind_start.as_ref()?;
+        if x <= 1.0 {
+            return None;
+        }
+        let s = bm_core::value::scales();
+        let scaled = bm_core::value::Scales {
+            full: s.full * x,
+            quick: s.quick * x,
+            looks: s.looks * x,
+            rounds: s.rounds * x,
+        };
+        bm_core::value::with_scales(scaled, || {
+            bm_core::teacher::new_run();
+            let mut run = start.clone();
+            let mut best = 0.0f64;
+            let mut step = 0u64;
+            while run.phase == Phase::Round && step < 400 {
+                let (k, a) = teacher_move(&run, (salt ^ 0xDEE9) << 20 | step);
+                let before = run.round_chips;
+                if apply(&mut run, k, a).is_err() {
+                    break;
+                }
+                if k == MoveKind::Play {
+                    let scored = if run.round_chips >= before {
+                        run.round_chips - before
+                    } else {
+                        run.round_chips
+                    };
+                    best = best.max(scored);
+                }
+                step += 1;
+            }
+            bm_core::teacher::new_run();
+            Some((
+                run.phase != Phase::GameOver && run.phase != Phase::Round,
+                best,
+            ))
+        })
+    }
+
+    fn row(&self, run: &Run, s: &RunSummary, salt: u64) -> String {
+        let needed = run.blind.as_ref().map_or(0.0, |b| b.chips);
+        let (main, _) = HandType::ALL
+            .iter()
+            .map(|&h| (h, run.hand_levels.get(h).played))
+            .max_by_key(|&(h, n)| (n, std::cmp::Reverse(h as usize)))
+            .unwrap_or((HandType::HighCard, 0));
+        let xmult_total: f64 = run
+            .jokers
+            .iter()
+            .filter(|j| j.x_mult > 1.0)
+            .map(|j| j.x_mult)
+            .product();
+        let deep = if s.won {
+            None
+        } else {
+            let share = DEEP_SHARE_PPM.load(Ordering::Relaxed);
+            let h = salt.wrapping_mul(0x9E37_79B9_7F4A_7C15).rotate_left(31) % 1_000_000;
+            (h < share).then(|| self.deep(salt)).flatten()
+        };
+        let by_ante = |f: &dyn Fn(usize) -> String| (1..=8).map(f).collect::<Vec<_>>().join(",");
+        format!(
+            "{},{},{},{},{},{},{:.3},{:.0},{:.0},{:.0},{},{},{},{},{},{:.3},{},{},{},{},{:.0},{},{},{},{},{},{},{:.0}",
+            s.seed,
+            salt,
+            u8::from(s.won),
+            s.end,
+            s.lost_to,
+            s.stage,
+            s.closeness,
+            needed,
+            run.round_chips,
+            self.blind_best,
+            run.hands_left,
+            run.discards_left,
+            run.money,
+            run.jokers.len(),
+            xmult_jokers(run),
+            xmult_total,
+            main.name(),
+            run.hand_levels.get(main).level,
+            run.playing_cards.len(),
+            run.hand_size_real,
+            s.best_hand,
+            by_ante(&|a| format!("{:.0}", self.ante_best[a])),
+            by_ante(&|a| self.ante_money[a].to_string()),
+            by_ante(&|a| self.ante_xmult[a].to_string()),
+            by_ante(&|a| self.ante_jokers[a].to_string()),
+            deep.map_or("-1".to_string(), |(w, _)| u8::from(w).to_string()),
+            deep.map_or(-1.0, |(_, b)| b),
+            needed
+        )
+    }
+}
+
+/// The header of `--diagnose`'s table (`Diagnosis::row`).
+const DIAGNOSIS_HEADER: &str = "seed,run,won,ante,lost_to,stage,closeness,needed,scored,blind_best,hands_left,\
+discards_left,money_end,n_jokers,n_xmult,xmult_total,main_hand,main_level,deck,hand_size,best_hand,\
+ante_best_1,ante_best_2,ante_best_3,ante_best_4,ante_best_5,ante_best_6,ante_best_7,ante_best_8,\
+ante_money_1,ante_money_2,ante_money_3,ante_money_4,ante_money_5,ante_money_6,ante_money_7,ante_money_8,\
+ante_xmult_1,ante_xmult_2,ante_xmult_3,ante_xmult_4,ante_xmult_5,ante_xmult_6,ante_xmult_7,ante_xmult_8,\
+ante_jokers_1,ante_jokers_2,ante_jokers_3,ante_jokers_4,ante_jokers_5,ante_jokers_6,ante_jokers_7,ante_jokers_8,\
+deep_won,deep_best,deep_needed";
 
 /// What a run's summary had counted when it won, so an endless run's reports count only up to its win.
 struct WinCounts {
@@ -429,6 +658,41 @@ fn endless_depth(run: &Run) -> u32 {
 
 /// Whether runs keep a `--runs-csv` row.
 static DETAIL: AtomicBool = AtomicBool::new(false);
+/// `--forks DIR`: fork decisions as the runs go (forks.rs), and how (`--fork-chance` in parts per million,
+/// `--fork-antes`, `--fork-best`, `--fork-copies`).
+static FORKS: AtomicBool = AtomicBool::new(false);
+static FORK_CHANCE_PPM: AtomicU64 = AtomicU64::new(100_000);
+static FORK_ANTE_LO: AtomicU8 = AtomicU8::new(2);
+static FORK_ANTE_HI: AtomicU8 = AtomicU8::new(6);
+static FORK_BEST: AtomicU64 = AtomicU64::new(3);
+static FORK_COPIES: AtomicU64 = AtomicU64::new(6);
+/// `--diagnose OUT.csv`: a row about every run; `--deep X` (times 100) the samples the lost blind is played again
+/// with, for a share `--deep-share` (parts per million) of the lost runs.
+static DIAGNOSE: AtomicBool = AtomicBool::new(false);
+static DEEP_X: AtomicU64 = AtomicU64::new(400);
+static DEEP_SHARE_PPM: AtomicU64 = AtomicU64::new(250_000);
+
+/// The columns of a fork recording's `lab.npy` (f32), one row per option and copy: the run and step the fork was
+/// at, the fork's number in its run, the option's number and how many there were, the copy's number, the ante and
+/// phase, whether the option was the teacher's own choice and the run's move, the quick value the teacher gave it,
+/// how the play-out ended (won, and the blinds behind the run), and the loaded networks' log-odds for the position
+/// it left (NaN without networks).
+const FORK_LABELS: [&str; 14] = [
+    "run",
+    "step",
+    "fork",
+    "option",
+    "options",
+    "copy",
+    "ante",
+    "phase",
+    "chosen",
+    "made",
+    "quick",
+    "won",
+    "end_stage",
+    "logit",
+];
 
 /// `--endless`: a won run plays on, as the game's Endless mode lets a player, until it loses or finishes ante
 /// `ENDLESS_LAST_ANTE`; how far it got is a win's measure (`RunSummary::endless`, the recordings' `endless` label).
@@ -479,6 +743,38 @@ struct Recorded {
     off: Vec<f32>,
     /// With `--record-moves`: each position's move (kind, argument) and the kinds it allowed (bits).
     moves: Vec<[i64; 3]>,
+    /// In a fork recording (`--forks`): each row's labels (`FORK_LABELS`), one row per option and copy.
+    fork_lab: Vec<[f32; FORK_LABELS.len()]>,
+}
+
+/// A run's forks as rows for the recorder: the positions the options left, each labelled.
+fn fork_rows(run: u64, s: &RunSummary) -> Recorded {
+    let mut rec = Recorded::default();
+    for (n, (step, f)) in s.forks.iter().enumerate() {
+        for (i, o) in f.options.iter().enumerate() {
+            for (c, (row, end)) in o.rows.iter().zip(&o.ends).enumerate() {
+                rec.rows.push(row);
+                let logit = learned::base_logit(row).unwrap_or(f32::NAN);
+                rec.fork_lab.push([
+                    run as f32,
+                    *step as f32,
+                    n as f32,
+                    i as f32,
+                    f.options.len() as f32,
+                    c as f32,
+                    f.ante as f32,
+                    phase_code(f.phase),
+                    f32::from(u8::from(o.chosen)),
+                    f32::from(u8::from(o.made)),
+                    o.quick as f32,
+                    f32::from(u8::from(end.won)),
+                    end.stage as f32,
+                    logit,
+                ]);
+            }
+        }
+    }
+    rec
 }
 
 /// What `--record` keeps: 1 the positions the teacher values, 2 every move.
@@ -526,6 +822,8 @@ struct Recorder {
     runs: u64,
     /// `--offsets-into`: only each chunk's `-off.npy` (and `offsets.json`), into a recording already there.
     only_offsets: bool,
+    /// `--forks`: the rows are forked options' positions, labelled with `FORK_LABELS`; no moves kept.
+    forks: bool,
 }
 
 impl Recorder {
@@ -548,6 +846,7 @@ impl Recorder {
             rows: 0,
             runs: 0,
             only_offsets: false,
+            forks: false,
         }
     }
 
@@ -571,6 +870,7 @@ impl Recorder {
             rows: 0,
             runs: 0,
             only_offsets: true,
+            forks: false,
         }
     }
 
@@ -607,6 +907,9 @@ impl Recorder {
             }
             kinds.extend(r.moves.iter().map(|&(k, _)| k));
             args.extend(r.moves.iter().map(|&(_, a)| a));
+            for fl in &r.rec.fork_lab {
+                lab.extend_from_slice(fl);
+            }
             for at in &r.rec.at {
                 lab.extend_from_slice(&[
                     r.run as f32,
@@ -631,6 +934,12 @@ impl Recorder {
             ));
         }
         let n = rows.len();
+        let labels = if self.forks {
+            FORK_LABELS.len()
+        } else {
+            LABELS.len()
+        };
+        assert_eq!(lab.len(), n * labels, "labels for every row");
         let name = |part: &str| self.dir.join(format!("chunk-{chunk:05}-{part}"));
         let off: Vec<f32> = runs
             .iter()
@@ -689,7 +998,7 @@ impl Recorder {
             ),
             (
                 "lab.npy",
-                npy_bytes("<f4", &[n, LABELS.len()], &le_bytes(&lab, f32::to_le_bytes)),
+                npy_bytes("<f4", &[n, labels], &le_bytes(&lab, f32::to_le_bytes)),
             ),
             (
                 "runs.json",
@@ -700,7 +1009,9 @@ impl Recorder {
         if OFFSETS.load(Ordering::Relaxed) {
             files.push(off_file());
         }
-        if RECORD_MODE.load(Ordering::Relaxed) == 2 {
+        if self.forks {
+            // Forked options' positions: no moves to keep.
+        } else if RECORD_MODE.load(Ordering::Relaxed) == 2 {
             assert_eq!(mov.len(), 3 * n, "a move for every recorded position");
             files.push((
                 "mov.npy",
@@ -739,6 +1050,33 @@ impl Recorder {
                 self.chunks
             );
             write_atomic(&self.dir.join("offsets.json"), &text);
+            return;
+        }
+        if self.forks {
+            let labels: Vec<String> = FORK_LABELS.iter().map(|l| esc(l)).collect();
+            let layouts: Vec<String> = VALUE_LAYOUTS
+                .iter()
+                .map(|&(v, n)| format!("[{v}, {n}]"))
+                .collect();
+            let text = format!(
+                "{{\n \"format\": 1,\n \"kind\": \"forks\",\n \"input\": \"value\",\n \"input_version\": \
+                 {VALUE_INPUT_VERSION},\n \"inputs\": {VALUE_LEN},\n \"layouts\": [{}],\n \"runs\": {},\n \
+                 \"rows\": {},\n \"chunks\": {},\n \"runs_per_chunk\": {RUNS_PER_CHUNK},\n \"labels\": [{}],\n \
+                 \"fork_chance\": {},\n \"fork_antes\": [{}, {}],\n \"fork_best\": {},\n \"fork_copies\": {},\n \
+                 \"stake\": {stake},\n{about}\n}}\n",
+                layouts.join(", "),
+                self.runs,
+                self.rows,
+                self.chunks,
+                labels.join(", "),
+                num(FORK_CHANCE_PPM.load(Ordering::Relaxed) as f64 / 1e6),
+                FORK_ANTE_LO.load(Ordering::Relaxed),
+                FORK_ANTE_HI.load(Ordering::Relaxed),
+                FORK_BEST.load(Ordering::Relaxed),
+                FORK_COPIES.load(Ordering::Relaxed),
+                stake = STAKE.load(Ordering::Relaxed),
+            );
+            write_atomic(&self.dir.join("manifest.json"), &text);
             return;
         }
         let labels: Vec<String> = LABELS.iter().map(|l| esc(l)).collect();
@@ -1000,6 +1338,16 @@ struct Totals {
     endless_wins: u64,
     endless_blinds: u64,
     endless_hist: [u64; ENDLESS_DEPTH as usize + 1],
+    /// `--forks`: decisions forked, those where the teacher's own choice went best (and where the run's move did),
+    /// what its choices gave away in win rate, and the play-outs made.
+    forks: u64,
+    fork_agree: u64,
+    fork_made_agree: u64,
+    fork_regret: f64,
+    fork_playouts: u64,
+    /// `--diagnose`: lost blinds played again with deeper search, and how many were beaten.
+    deep: u64,
+    deep_won: u64,
 }
 
 impl Totals {
@@ -1025,6 +1373,13 @@ impl Totals {
             endless_wins: 0,
             endless_blinds: 0,
             endless_hist: [0; ENDLESS_DEPTH as usize + 1],
+            forks: 0,
+            fork_agree: 0,
+            fork_made_agree: 0,
+            fork_regret: 0.0,
+            fork_playouts: 0,
+            deep: 0,
+            deep_won: 0,
         }
     }
 
@@ -1060,6 +1415,27 @@ impl Totals {
             self.endless_wins += 1;
             self.endless_blinds += u64::from(d);
             self.endless_hist[d.min(ENDLESS_DEPTH) as usize] += 1;
+        }
+        for (_, f) in &s.forks {
+            self.forks += 1;
+            let best = f.best();
+            self.fork_agree += u64::from(f.chosen() == Some(best));
+            self.fork_made_agree += u64::from(f.options.iter().position(|o| o.made) == Some(best));
+            self.fork_regret += f.regret().unwrap_or(0.0);
+            self.fork_playouts += (f.options.len() * f.copies) as u64;
+        }
+        if let Some(d) = &s.diagnosis {
+            // The row ends ",deep_won,deep_best,deep_needed": deep_won is -1 when the blind wasn't played again.
+            let mut tail = d.rsplit(',');
+            let (_, _, won) = (tail.next(), tail.next(), tail.next());
+            match won {
+                Some("1") => {
+                    self.deep += 1;
+                    self.deep_won += 1;
+                }
+                Some("0") => self.deep += 1,
+                _ => {}
+            }
         }
     }
 
@@ -1098,6 +1474,13 @@ impl Totals {
         for (a, b) in self.endless_hist.iter_mut().zip(o.endless_hist) {
             *a += b;
         }
+        self.forks += o.forks;
+        self.fork_agree += o.fork_agree;
+        self.fork_made_agree += o.fork_made_agree;
+        self.fork_regret += o.fork_regret;
+        self.fork_playouts += o.fork_playouts;
+        self.deep += o.deep;
+        self.deep_won += o.deep_won;
     }
 
     fn mean_ante(&self) -> f64 {
@@ -1258,6 +1641,37 @@ fn report_json(r: &Report) -> String {
         r.best,
         hist.join(", "),
     );
+    if FORKS.load(Ordering::Relaxed) {
+        // The judge test: how often the teacher's own choice was the option whose play-outs went best, and what
+        // its choices gave away.
+        let end = o.rfind("\n}").expect("the report ends with its brace");
+        let n = t.forks.max(1) as f64;
+        o.replace_range(
+            end..,
+            &format!(
+                ",\n \"forks\": {{\"forked\": {}, \"playouts\": {}, \"copies\": {}, \"chosen_best\": {}, \
+                 \"made_best\": {}, \"mean_regret\": {}}}\n}}\n",
+                t.forks,
+                t.fork_playouts,
+                FORK_COPIES.load(Ordering::Relaxed),
+                num(t.fork_agree as f64 / n),
+                num(t.fork_made_agree as f64 / n),
+                num(t.fork_regret / n)
+            ),
+        );
+    }
+    if DIAGNOSE.load(Ordering::Relaxed) {
+        let end = o.rfind("\n}").expect("the report ends with its brace");
+        o.replace_range(
+            end..,
+            &format!(
+                ",\n \"deep\": {{\"lost_blinds_replayed\": {}, \"beaten\": {}, \"samples_x\": {}}}\n}}\n",
+                t.deep,
+                t.deep_won,
+                num(DEEP_X.load(Ordering::Relaxed) as f64 / 100.0)
+            ),
+        );
+    }
     if ENDLESS.load(Ordering::Relaxed) {
         // How strong the wins were: blinds beaten after the win, on average and by number.
         let end = o.rfind("\n}").expect("the report ends with its brace");
@@ -1458,6 +1872,43 @@ fn main() {
     // A/B tests on the same seeds.
     let runs_csv = opt("--runs-csv");
     DETAIL.store(runs_csv.is_some(), Ordering::Relaxed);
+    // `--diagnose OUT.csv`: a row about every run, the lost blind played again with `--deep` times the samples for
+    // a share `--deep-share` of the lost runs.
+    let diagnose = opt("--diagnose");
+    DIAGNOSE.store(diagnose.is_some(), Ordering::Relaxed);
+    if let Some(x) = opt("--deep") {
+        let x: f64 = x
+            .parse()
+            .expect("--deep takes a number (times the usual samples)");
+        DEEP_X.store((x * 100.0).round() as u64, Ordering::Relaxed);
+    }
+    if let Some(x) = opt("--deep-share") {
+        let x: f64 = x.parse().expect("--deep-share takes a share, 0 to 1");
+        DEEP_SHARE_PPM.store((x.clamp(0.0, 1.0) * 1e6).round() as u64, Ordering::Relaxed);
+    }
+    // `--forks DIR`: decisions forked as the runs go (forks.rs), each option played out by the teacher.
+    let forks_dir = opt("--forks");
+    FORKS.store(forks_dir.is_some(), Ordering::Relaxed);
+    if let Some(x) = opt("--fork-chance") {
+        let x: f64 = x.parse().expect("--fork-chance takes a share, 0 to 1");
+        FORK_CHANCE_PPM.store((x.clamp(0.0, 1.0) * 1e6).round() as u64, Ordering::Relaxed);
+    }
+    if let Some(a) = opt("--fork-antes") {
+        let (lo, hi) = a.split_once('-').expect("--fork-antes takes LO-HI, as 2-6");
+        FORK_ANTE_LO.store(lo.parse().expect("an ante"), Ordering::Relaxed);
+        FORK_ANTE_HI.store(hi.parse().expect("an ante"), Ordering::Relaxed);
+    }
+    if let Some(n) = opt("--fork-best") {
+        FORK_BEST.store(
+            n.parse().expect("--fork-best takes a count"),
+            Ordering::Relaxed,
+        );
+    }
+    if let Some(n) = opt("--fork-copies") {
+        let n: u64 = n.parse().expect("--fork-copies takes a count");
+        assert!(n >= 1, "--fork-copies: at least one copy");
+        FORK_COPIES.store(n, Ordering::Relaxed);
+    }
     if let Some(o) = opt("--teacher-options") {
         let names: Vec<String> = o
             .split(',')
@@ -1520,6 +1971,10 @@ fn main() {
         ("teacher", true) => (teacher_move, "teacher bot with a learned value"),
         (other, _) => panic!("unknown bot {other:?}: greedy or teacher"),
     };
+    assert!(
+        !(FORKS.load(Ordering::Relaxed) || diagnose.is_some()) || bot_label == "teacher",
+        "--forks and --diagnose play options out with the teacher: give --bot teacher"
+    );
     let bot_name = if replay.is_some() {
         "replayed runs"
     } else {
@@ -1554,6 +2009,12 @@ fn main() {
             Recorder::new(d, target)
         })
     });
+    let fork_recorder = forks_dir.map(|d| {
+        let mut r = Recorder::new(PathBuf::from(d), target);
+        r.forks = true;
+        Mutex::new(r)
+    });
+    let diagnoses: Mutex<Vec<String>> = Mutex::new(Vec::new());
     let watch = std::env::var("BM_WATCH_DIR")
         .ok()
         .filter(|s| !s.is_empty())
@@ -1620,6 +2081,21 @@ fn main() {
                         };
                         if let Some(d) = s.detail.take() {
                             details.lock().unwrap().push(d);
+                        }
+                        if let Some(d) = s.diagnosis.clone() {
+                            diagnoses.lock().unwrap().push(d);
+                        }
+                        if let Some(r) = &fork_recorder {
+                            r.lock().unwrap().add(RecordedRun {
+                                run: i,
+                                seed: s.seed.clone(),
+                                won: s.won,
+                                end_stage: s.stage,
+                                end_ante: s.end,
+                                endless: -1.0,
+                                rec: fork_rows(i, &s),
+                                moves: Vec::new(),
+                            });
                         }
                         if let Some(st) = &stages {
                             st.lock().unwrap()[i as usize] = b'A' + s.stage.min(24) as u8;
@@ -1830,6 +2306,39 @@ fn main() {
             r.dir.display()
         );
     }
+    if let Some(r) = fork_recorder {
+        let mut r = r.into_inner().unwrap();
+        r.finish();
+        let opts = bm_core::teacher::options();
+        let about = format!(
+            " \"bot\": {},\n \"seed_base\": {base},\n \"value_net\": {},\n \"value_weight\": {},\n \
+             \"teacher_options\": [{}],\n \"replayed_from\": {},\n \"forks\": {},\n \"chosen_best\": {},\n \
+             \"made_best\": {},\n \"mean_regret\": {},\n \"seconds\": {}",
+            esc(bot_name),
+            value_net.as_deref().map_or("null".into(), esc),
+            num(learned::weight()),
+            opts.iter().map(|o| esc(o)).collect::<Vec<_>>().join(", "),
+            opt("--replay").map_or("null".into(), |d| esc(&d)),
+            t.forks,
+            num(t.fork_agree as f64 / t.forks.max(1) as f64),
+            num(t.fork_made_agree as f64 / t.forks.max(1) as f64),
+            num(t.fork_regret / t.forks.max(1) as f64),
+            num(el)
+        );
+        r.manifest(&about, None);
+        println!(
+            "Forked {} decisions ({} play-outs) from {} runs: {} rows in {} chunks: {}. The teacher's own choice went \
+             best at {:.1}%, giving away {:.3} in win rate on average.",
+            t.forks,
+            t.fork_playouts,
+            r.runs,
+            r.rows,
+            r.chunks,
+            r.dir.display(),
+            100.0 * t.fork_agree as f64 / t.forks.max(1) as f64,
+            t.fork_regret / t.forks.max(1) as f64
+        );
+    }
     let history = vec![(
         el,
         t.runs,
@@ -1893,6 +2402,29 @@ fn main() {
         text.push('\n');
         std::fs::write(&p, text).expect("write the runs table");
         println!("Runs table: {p}");
+    }
+    if let Some(p) = diagnose {
+        let mut rows = diagnoses.into_inner().unwrap();
+        rows.sort_by_key(|r| {
+            r.split(',')
+                .nth(1)
+                .and_then(|n| n.parse::<u64>().ok())
+                .unwrap_or(0)
+        });
+        let mut text = String::from(DIAGNOSIS_HEADER);
+        for r in rows {
+            text.push('\n');
+            text.push_str(&r);
+        }
+        text.push('\n');
+        if let Some(dir) = Path::new(&p).parent() {
+            std::fs::create_dir_all(dir).expect("make the results folder");
+        }
+        std::fs::write(&p, text).expect("write the diagnosis");
+        println!(
+            "Diagnosis: {p} ({} lost blinds played again with deeper search, {} beaten)",
+            t.deep, t.deep_won
+        );
     }
     assert_eq!(t.refused, 0, "the bot made a move the engine refused");
 }

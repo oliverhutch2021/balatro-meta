@@ -14,6 +14,16 @@ made without), and the network's win output is added to them (a residual: what t
 stake). It starts at zero, the value networks' own answer, and is kept only as far as it judges better than them;
 the report sets the two side by side, stake by stake. The engine adds it with `baseline --stake-net`.
 
+With `--forks DIR` (what `baseline --forks` writes: at forked decisions, the positions the teacher's options
+leave, each played out to the end on fair copies that the options share) the network also learns to put a
+decision's options in the right order: for each pair of options at a fork, the difference of its win logits
+between their positions (each the mean over the option's copies) is trained towards the share of copies where the
+first option's play-out ended better (a soft pairwise loss, `--pair-weight` times the positions' loss). That is the
+comparison the teacher asks of it, learned from several outcomes per option where a recording gives one per run.
+Forks are split by run like positions; on the forks kept apart, the report sets the network's choice (the option
+it rates highest) against the one whose play-outs went best, beside the teacher's own choice, its quick look and
+the networks the forks were made with (`measured.forks`: the judge test).
+
 Runs are split, not positions (a run's positions share its ending, so a network could learn a run by heart):
 one run in twenty (by its number) judges training, which stops when those runs stop improving; another one in
 twenty is kept apart to measure the chosen network. A few network sizes and regularisations are tried and the
@@ -52,6 +62,11 @@ ENDLESS = 8
 DEPTH = 13
 # Labels every recording has: newer recordings may add columns after them.
 BASE_LABELS = 8
+# The columns of a fork recording's lab.npy (examples/baseline.rs: FORK_LABELS), one row per option and copy.
+(F_RUN, F_STEP, F_FORK, F_OPTION, F_OPTIONS, F_COPY, F_ANTE, F_PHASE, F_CHOSEN, F_MADE, F_QUICK, F_WON, F_END_STAGE,
+ F_LOGIT) = range(14)
+FORK_LABELS = ["run", "step", "fork", "option", "options", "copy", "ante", "phase", "chosen", "made", "quick", "won",
+               "end_stage", "logit"]
 
 
 # ---- Data ----
@@ -180,6 +195,9 @@ def load_data(folders: Path | list[Path], max_runs: int | None = None, layout: i
     # Labels: every recording's are the first columns of the longest's (columns were only ever added at the end);
     # a recording without one reads -1 there (not known).
     names = max((list(m.get("labels") or []) for _, m, _, _ in parts), key=len)
+    kinds = {m.get("kind") or "positions" for _, m, _, _ in parts}
+    if len(kinds) != 1:
+        raise SystemExit(f"Positions and forks can't be mixed ({sorted(kinds)}).")
     for folder, manifest, _, _ in parts:
         own = list(manifest.get("labels") or [])
         if own != names[:len(own)] or len(own) < BASE_LABELS:
@@ -318,6 +336,149 @@ class Batches:
             flat = torch.repeat_interleave(start, n) + torch.arange(total, device=self.store) - first
             out[row_of, self.idx[flat].long()] = self.val[flat].float()
         return out.to(self.device)
+
+
+class ForkSet:
+    """Forked decisions (`baseline --forks`): for each fork, its options' rows (one per copy) and how each copy's
+    play-out ended, and for each pair of options the share of copies where the first ended better (the pair's
+    target). Forks are split by their run like positions (0 to train on, 1 to judge, 2 to measure)."""
+
+    def __init__(self, data: Data, parts: int = SPLIT):
+        self.data = data
+        lab = data.lab
+        if lab.shape[1] < len(FORK_LABELS):
+            raise SystemExit("Not a fork recording (baseline --forks).")
+        key = np.stack([data.source.astype(np.int64), lab[:, F_RUN].astype(np.int64), lab[:, F_FORK].astype(np.int64)],
+                       1)
+        _, first, inverse = np.unique(key, axis=0, return_index=True, return_inverse=True)
+        inverse = inverse.reshape(-1)
+        order = np.argsort(inverse, kind="stable")
+        self.forks: list[dict] = []
+        start = 0
+        for g in range(len(first)):
+            end = start + int((inverse == g).sum())
+            rows = order[start:end]
+            start = end
+            opts = lab[rows, F_OPTION].astype(int)
+            options = []
+            for o in np.unique(opts):
+                r = rows[opts == o]
+                r = r[np.argsort(lab[r, F_COPY], kind="stable")]
+                won = lab[r, F_WON]
+                options.append({"rows": r, "won": won, "key": np.where(won > 0.5, 24.0, lab[r, F_END_STAGE]),
+                                "chosen": bool(lab[r[0], F_CHOSEN] > 0.5), "made": bool(lab[r[0], F_MADE] > 0.5),
+                                "quick": float(lab[r[0], F_QUICK]), "logit": finite_mean(lab[r, F_LOGIT])})
+            if len(options) < 2:
+                continue
+            pairs = []
+            for i in range(len(options)):
+                for j in range(i + 1, len(options)):
+                    ki, kj = options[i]["key"], options[j]["key"]
+                    n = min(len(ki), len(kj))
+                    t = float(np.mean((ki[:n] > kj[:n]) + 0.5 * (ki[:n] == kj[:n])))
+                    pairs.append((i, j, t))
+            self.forks.append({"run": int(lab[rows[0], F_RUN]), "ante": int(lab[rows[0], F_ANTE]),
+                               "options": options, "pairs": pairs})
+        runs = np.array([f["run"] for f in self.forks], np.int64)
+        self.part = split(runs, parts) if len(runs) else np.zeros(0, np.int64)
+
+    def __len__(self) -> int:
+        return len(self.forks)
+
+    def ids(self, part: int) -> np.ndarray:
+        return np.flatnonzero(self.part == part)
+
+    def batch(self, ids) -> tuple[np.ndarray, np.ndarray, int, np.ndarray, np.ndarray, np.ndarray]:
+        """These forks' rows, each row's option (numbered through the batch), how many options, and the pairs
+        (first option, second option, target share)."""
+        rows, opt_of, pa, pb, pt = [], [], [], [], []
+        n = 0
+        for i in ids:
+            f = self.forks[i]
+            for k, o in enumerate(f["options"]):
+                rows.append(o["rows"])
+                opt_of.append(np.full(len(o["rows"]), n + k, np.int64))
+            for a_, b_, t in f["pairs"]:
+                pa.append(n + a_)
+                pb.append(n + b_)
+                pt.append(t)
+            n += len(f["options"])
+        return (np.concatenate(rows), np.concatenate(opt_of), n, np.array(pa, np.int64), np.array(pb, np.int64),
+                np.array(pt, np.float32))
+
+
+def finite_mean(x: np.ndarray) -> float:
+    """The mean of the finite values (NaN if none)."""
+    x = x[np.isfinite(x)]
+    return float(x.mean()) if len(x) else float("nan")
+
+
+def option_values(torch, z, opt_of, n: int):
+    """Each option's value: the mean of its copies' win logits."""
+    counts = torch.zeros(n, device=z.device).index_add_(0, opt_of, torch.ones_like(z))
+    return torch.zeros(n, device=z.device).index_add_(0, opt_of, z) / counts.clamp(min=1)
+
+
+def pair_loss(torch, z, opt_of, n: int, pa, pb, pt):
+    """The soft pairwise loss over a batch of forks: the difference of two options' values trained towards the
+    share of copies where the first ended better."""
+    v = option_values(torch, z, opt_of, n)
+    return torch.nn.functional.binary_cross_entropy_with_logits(v[pa] - v[pb], pt)
+
+
+def fork_batch_loss(torch, net, fb: Batches, fs: ForkSet, ids, mean, scale, device):
+    rows, opt_of, n, pa, pb, pt = fs.batch(ids)
+    t = torch.from_numpy
+    z = net((fb.x(t(rows).to(device)) - mean) * scale)[:, 0]
+    return pair_loss(torch, z, t(opt_of).to(device), n, t(pa).to(device), t(pb).to(device), t(pt).to(device))
+
+
+def fork_measures(torch, net, fb: Batches, fs: ForkSet, ids, mean, scale, device, batch: int) -> dict:
+    """The judge test on these forks: for each judge, how often the option it rates highest is the one whose
+    play-outs went best, and what its choice gave away in win rate (the best option's win rate less its own):
+    the network, the networks the forks were made with (their log-odds, when they had any), the teacher's quick
+    look, the teacher's own choice, and picking at random. And the network's pairwise loss."""
+    if len(ids) == 0:
+        return {"forks": 0}
+    net.eval()
+    judges = {"network": [], "ensemble": [], "quick": [], "chosen": [], "random": []}
+    losses_, n_pairs = 0.0, 0
+    with torch.no_grad():
+        for k in range(0, len(ids), batch):
+            chunk = ids[k:k + batch]
+            rows, opt_of, n, pa, pb, pt = fs.batch(chunk)
+            t = torch.from_numpy
+            z = net((fb.x(t(rows).to(device)) - mean) * scale)[:, 0]
+            opt_of_t = t(opt_of).to(device)
+            v = option_values(torch, z, opt_of_t, n).cpu().numpy()
+            if len(pa):
+                losses_ += float(pair_loss(torch, z, opt_of_t, n, t(pa).to(device), t(pb).to(device),
+                                           t(pt).to(device))) * len(pa)
+                n_pairs += len(pa)
+            at = 0
+            for i in chunk:
+                f = fs.forks[i]
+                m = len(f["options"])
+                wr = np.array([o["won"].mean() for o in f["options"]])
+                score = np.array([o["key"].sum() for o in f["options"]])
+                best = int(np.lexsort((-np.arange(m), score, wr))[-1])
+                picks = {"network": int(np.argmax(v[at:at + m])),
+                         "quick": int(np.nanargmax([o["quick"] for o in f["options"]]))
+                         if np.isfinite([o["quick"] for o in f["options"]]).any() else None,
+                         "chosen": next((k2 for k2, o in enumerate(f["options"]) if o["chosen"]), None)}
+                logits = [o["logit"] for o in f["options"]]
+                picks["ensemble"] = int(np.nanargmax(logits)) if np.isfinite(logits).any() else None
+                for name, pick in picks.items():
+                    if pick is not None:
+                        judges[name].append((pick == best, wr[best] - wr[pick]))
+                judges["random"].append((1.0 / m, wr[best] - wr.mean()))
+                at += m
+    out = {"forks": len(ids), "pair_bce": round(losses_ / max(n_pairs, 1), 5)}
+    for name, seen in judges.items():
+        if seen:
+            out[name] = {"judged": len(seen), "picked_best": round(float(np.mean([b for b, _ in seen])), 4),
+                         "regret": round(float(np.mean([r for _, r in seen])), 4)}
+    return out
 
 
 def input_scale(torch, b: Batches, rows, batch: int):
@@ -551,8 +712,10 @@ def engine_forward():
 
 # ---- Training ----
 
-def fit(torch, b: Batches, lab: np.ndarray, train_rows, judge_rows, mean, scale, cfg: dict, a, device):
-    """Train one network; keep it as it was when the judging runs scored best."""
+def fit(torch, b: Batches, lab: np.ndarray, train_rows, judge_rows, mean, scale, cfg: dict, a, device,
+        forks: tuple[Batches, ForkSet] | None = None):
+    """Train one network; keep it as it was when the judging runs scored best (with forks, their pairwise loss on
+    the judging forks counts too, at the pair weight)."""
     torch.manual_seed(a.seed)
     in_drop = a.input_dropout if cfg.get("input_dropout") is None else cfg["input_dropout"]
     net = make_net(torch, b.inputs, cfg["hidden"], cfg["dropout"], in_drop, depth=b.depth).to(device)
@@ -577,12 +740,25 @@ def fit(torch, b: Batches, lab: np.ndarray, train_rows, judge_rows, mean, scale,
     history, stale, step, seen, loss_sum = [], 0, 0, 0, 0.0
     y = lab[judge_rows, WON]
     judge_off = None if not residual else b.off[ju].cpu().numpy()
+    fork_train = forks[1].ids(0) if forks is not None else np.zeros(0, np.int64)
+    fork_judge = forks[1].ids(1) if forks is not None else np.zeros(0, np.int64)
+    fork_rng = np.random.default_rng(a.seed)
+
+    def judge() -> tuple[float, float, float | None]:
+        """The judging runs' BCE, and with forks the judging forks' pairwise loss, weighed in."""
+        out = predict(torch, net, b, ju, mean, scale, a.batch * 4)
+        pos = bce(win_chance(out, judge_off), y)
+        if forks is None or len(fork_judge) == 0:
+            return pos, pos, None
+        pairs = fork_measures(torch, net, forks[0], forks[1], fork_judge, mean, scale, device, 64)["pair_bce"]
+        return pos + a.pair_weight * pairs, pos, pairs
+
     if residual:
         # No correction is the one to beat: kept unless training judges better.
-        out = predict(torch, net, b, ju, mean, scale, a.batch * 4)
-        judged = bce(win_chance(out, judge_off), y)
+        judged, pos, pairs = judge()
         best = (judged, 0, {k2: v.detach().clone() for k2, v in net.state_dict().items()})
-        history.append({"step": 0, "epoch": 0.0, "train_loss": None, "judging_bce": round(judged, 5)})
+        history.append({"step": 0, "epoch": 0.0, "train_loss": None, "judging_bce": round(pos, 5),
+                        "judging_pairs": pairs})
     while step < total_steps and stale < a.patience:
         perm = tr[torch.randperm(len(tr), generator=gen).to(device)]
         for k in range(0, len(perm), a.batch):
@@ -590,18 +766,23 @@ def fit(torch, b: Batches, lab: np.ndarray, train_rows, judge_rows, mean, scale,
             rows = perm[k:k + a.batch]
             _, loss = losses(torch, net((b.x(rows) - mean) * scale), b.lab[rows], a.aux,
                              None if b.off is None else b.off[rows])
+            total = loss.mean()
+            if forks is not None and len(fork_train):
+                ids = fork_rng.choice(fork_train, size=min(a.fork_batch, len(fork_train)), replace=False)
+                total = total + a.pair_weight * fork_batch_loss(torch, net, forks[0], forks[1], ids, mean, scale,
+                                                                device)
             opt.zero_grad(set_to_none=True)
-            loss.mean().backward()
+            total.backward()
             opt.step()
             sched.step()
             step += 1
             loss_sum += float(loss.detach().sum())
             seen += len(rows)
             if step % every == 0 or step == total_steps:
-                out = predict(torch, net, b, ju, mean, scale, a.batch * 4)
-                judged = bce(win_chance(out, judge_off), y)
+                judged, pos, pairs = judge()
                 history.append({"step": step, "epoch": round(step / per_epoch, 2),
-                                "train_loss": round(loss_sum / max(seen, 1), 5), "judging_bce": round(judged, 5)})
+                                "train_loss": round(loss_sum / max(seen, 1), 5), "judging_bce": round(pos, 5),
+                                "judging_pairs": None if pairs is None else round(pairs, 5)})
                 loss_sum, seen = 0.0, 0
                 if judged < best[0] - 1e-5:
                     best = (judged, step, {k2: v.detach().clone() for k2, v in net.state_dict().items()})
@@ -643,6 +824,16 @@ def train(a) -> dict:
     print(f"{data.rows:,} positions from {total_runs:,} runs{older} ({runs[0]:,} to train on, {runs[1]:,} to judge "
           f"training, {runs[2]:,} to measure); {data.inputs} inputs; {dev_name}", flush=True)
     b = Batches(torch, data, device)
+    forks = None
+    if a.forks:
+        fork_data = load_data([Path(d).expanduser() for d in a.forks], layout=data.manifest["input_version"])
+        if fork_data.inputs != data.inputs:
+            raise SystemExit(f"The forks have {fork_data.inputs} inputs, the positions {data.inputs}.")
+        fs = ForkSet(fork_data, a.split)
+        forks = (Batches(torch, fork_data, device), fs)
+        print(f"{len(fs):,} forked decisions ({fork_data.rows:,} positions the options left; {len(fs.ids(0)):,} to "
+              f"train on, {len(fs.ids(1)):,} to judge, {len(fs.ids(2)):,} to measure), pair weight {a.pair_weight}",
+              flush=True)
     sample = torch.from_numpy(rng.permutation(train_rows)[:a.scale_rows]).to(device)
     mean, scale = input_scale(torch, b, sample, a.batch)
     rates = stage_rates(data.lab[train_rows])
@@ -657,10 +848,11 @@ def train(a) -> dict:
     tried = []
     best = None
     for cfg in parse_configs(a.configs):
-        net, judged, epoch, history = fit(torch, b, data.lab, train_rows, judge_rows, mean, scale, cfg, a, device)
+        net, judged, epoch, history = fit(torch, b, data.lab, train_rows, judge_rows, mean, scale, cfg, a, device,
+                                          forks)
         tried.append({**cfg, "judging_bce": round(judged, 5), "best_epoch": round(epoch, 2), "history": history})
-        print(f"{cfg['hidden']} dropout {cfg['dropout']} decay {cfg['weight_decay']}: judging BCE {judged:.4f} "
-              f"at epoch {epoch:.1f}", flush=True)
+        print(f"{cfg['hidden']} dropout {cfg['dropout']} decay {cfg['weight_decay']}: judging "
+              f"{'loss' if forks else 'BCE'} {judged:.4f} at epoch {epoch:.1f}", flush=True)
         if best is None or judged < best[1]:
             best = (net, judged, cfg)
     net, _, cfg = best
@@ -676,6 +868,8 @@ def train(a) -> dict:
         measures["before"] = report_measures(before, data.lab[test_rows], rates)
     if out.shape[1] > 1 + STAGES:
         measures["depth"] = depth_measures(out, data.lab[test_rows])
+    if forks is not None:
+        measures["forks"] = fork_measures(torch, net, forks[0], forks[1], forks[1].ids(2), mean, scale, device, 64)
 
     # The engine's format, read back and checked.
     layers = folded_layers(net, mean, scale)
@@ -703,6 +897,8 @@ def train(a) -> dict:
                                                                        "value_net", "value_weight")}}
                              for d, m in zip(a.data[:-1], data.manifests[:-1])],
         "inputs": data.inputs, "input_version": version, "chosen": cfg, "tried": tried,
+        "forks": None if forks is None else {"data": [shown(d) for d in a.forks], "forked": len(forks[1]),
+                                             "pair_weight": a.pair_weight, "fork_batch": a.fork_batch},
         "residual": None if data.off is None else {
             "offset_net": shown(data.offset_net), "judging_bce_before": round(judge_before, 5),
             "note": "the network's win output is a correction to these networks' log-odds (baseline --stake-net)"},
@@ -731,6 +927,15 @@ def train(a) -> dict:
         print(f"  stake {r['stake']}: {r['rows']:,} positions, won {r['won']:.3f}, predicted {r['predicted']:.3f}, "
               f"BCE {r['bce']}" + (f" (alone {r['bce_before']}), AUC {r['auc']} (alone {r['auc_before']})"
                                    if "bce_before" in r else f", AUC {r['auc']}"))
+    fk = m.get("forks") or {}
+    if fk.get("forks"):
+        print(f"  the judge test on {fk['forks']:,} forks kept apart (pairwise loss {fk['pair_bce']}): the option "
+              f"rated highest was the one whose play-outs went best, and what the choice gave away in win rate:")
+        for name in ("network", "ensemble", "quick", "chosen", "random"):
+            if name in fk:
+                j = fk[name]
+                print(f"    {name:9} picked best {100 * j['picked_best']:.1f}%  regret {j['regret']:.3f}  "
+                      f"({j['judged']:,} forks)")
     d = m.get("depth") or {}
     if d.get("wins"):
         print(f"  depth after a win ({d['wins']:,} positions of {d['runs']:,} won runs): cross-entropy {d['ce']} "
@@ -764,6 +969,11 @@ def main() -> None:
                     help="the input layout to train on (default: the newest every recording holds)")
     ap.add_argument("--newest", type=int, default=1,
                     help="how many of the last recordings are the newest (split to judge and measure; default 1)")
+    ap.add_argument("--forks", action="append",
+                    help="a fork recording (baseline --forks DIR): the network also learns to put each forked "
+                         "decision's options in the order their play-outs went; give it more than once for more")
+    ap.add_argument("--pair-weight", type=float, default=1.0, help="the forks' pairwise loss against the positions'")
+    ap.add_argument("--fork-batch", type=int, default=16, help="forks in each training step's pairwise batch")
     ap.add_argument("--offset", action="store_true",
                     help="learn a correction to the value networks' log-odds the recordings keep (baseline --offsets)")
     ap.add_argument("--split", type=int, default=SPLIT, help="one run in this many judges, another measures")

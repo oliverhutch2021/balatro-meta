@@ -704,6 +704,45 @@ Three jobs in a row, each a fresh idea against the same plateau:
 cd /mnt/h/balatro-meta && make sync && make test && make teacher-doubt && make learned-11 && make teacher-weights && make teacher-margin
 ```
 
+## Step 28: a rethink: diagnose first, then train on decisions (today 1.5 hours, then a night)
+
+Where step 27's thinking went wrong, and what changes. The bot takes the best of many options by a judge that
+errs, so a more accurate judge (the stake correction: far better calibrated) still played worse: the maximum picks
+the judge's mistakes. Its networks learn from one result per run, two hundred decisions back, so they learn what a
+winning position looks like, never which option here was better. And 82% of its losses come at bosses, 70% at antes
+5 to 8, without anyone having asked whether those are builds that could never have scored it or play that fell
+short. So, before any more three-hour trials:
+
+1. `make diagnose` (about 15 minutes): round 10's 25,000 runs played again by their moves, one row each: where it
+   ended and by how much it fell short, its build then, and ante by ante its biggest hand, money and x mult jokers.
+   Every lost blind is played again from its start by the champion with four times the samples: a blind that
+   deeper play beats was lost to play, not to the build (that replay sees the run's own cards: a diagnosis, never
+   the bot's play). `scripts/diagnose.py` prints the tables; `results/diagnose/round10-summary.json`
+   keeps them.
+2. `make forks-quick` (about 1.5 hours): forks (`forks.rs`). At a share of the shops entered and packs opened in
+   antes 2 to 6 of round 10's runs, the champion's three best options and doing nothing (and its own choice, if
+   another) are each played out to the end by the champion on six fair copies that share their seeds across the
+   options. Each fork says which option went best here; how often the champion's own choice was that option, and
+   what its choices gave away, is the judge test (`results/forks/forks-quick.json`, `forks`): a measure of the judge
+   that takes minutes instead of three hours of play. Then a pair of networks learns from the forks as well as the
+   positions (`train_value.py --forks`: for each pair of options the difference of the network's win logits is
+   trained towards the share of copies where the first went better), beside a control pair that learns the same
+   positions without them; each report's `measured.forks` sets the network, the champion's networks, the quick look
+   and the champion's own choice against the option that went best, on forks kept apart.
+
+```
+cd /mnt/h/balatro-meta && make sync && make test && make diagnose && make forks-quick
+```
+
+Tonight, `make forks-night` (about 13 hours): seven hours of forks (about 5,000 decisions, 120,000 play-outs), the
+pair and its control, then on 8,000 seeds the pair against its control and the champion with the pair against the
+champion. `make teacher-late` (about 5 hours) tries the other half of the thought: three times the samples from
+ante 6 (and from ante 5), where the runs are lost; it can run after the forks or on another night.
+
+```
+cd /mnt/h/balatro-meta && make forks-night && make teacher-late
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

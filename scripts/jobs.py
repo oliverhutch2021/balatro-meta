@@ -996,7 +996,24 @@ DOUBT_TRIALS = (("2.5", "doubt=1"), ("4", "doubt=1"), ("4", "doubt=2"))
 def doubt_steps(root: Path = ROOT, trials: tuple[tuple[str, str], ...] = DOUBT_TRIALS,
                 runs: int = BIG_RUNS) -> list[tuple]:
     """make teacher-doubt: the teacher that won most of the first `runs` usual seeds (best_8k) played again, then at
-    each (weight, option) of `trials`, each set run by run against it."""
+    each (weight, option) of `trials`, each set run by run against it (champion_trials)."""
+    return champion_trials(root, trials, runs)
+
+
+# make teacher-late: more care where the runs are lost. 70% of the champion's losses come at antes 5 to 8, and it
+# thinks as hard about ante 1's shop as ante 7's. "late-x=3" triples every count behind its decisions (deals, sample
+# contents, tries in rounds) from ante 6 ("late-from"), at about 1.5 times the time a run takes. Against the champion
+# played again, run by run.
+LATE_TRIALS = (("2.5", "late-x=3"), ("2.5", "late-x=3,late-from=5"))
+
+
+def late_steps(root: Path = ROOT) -> list[tuple]:
+    return champion_trials(root, LATE_TRIALS, BIG_RUNS)
+
+
+def champion_trials(root: Path, trials: tuple[tuple[str, str], ...], runs: int) -> list[tuple]:
+    """The teacher that won most of the first `runs` usual seeds (best_8k) played again on today's code (once: the
+    control every such trial shares), then at each (weight, option) of `trials`, each set run by run against it."""
     steps: list[tuple] = [("build", [*MAKE, "build"])]
     best = best_8k_report(root)
     if best is None:
@@ -1072,6 +1089,140 @@ def margin_steps(root: Path = ROOT, trials: tuple[str, ...] = MARGIN_TRIALS, run
         steps.append((f"compare-{extra}", ["scripts/compare_runs.py", control, out, "--out",
                                            f"results/tune/{Path(out).stem}-vs-{Path(control).stem}.json"]))
     return steps
+
+
+def newest_recording(data: Path = DATA) -> tuple[int, Path] | None:
+    """The newest round's recording on this machine (DATA/value-N with its manifest, N highest), if any."""
+    for n in range(LAST_ROUND, 0, -1):
+        if (data / f"value-{n}" / "manifest.json").exists():
+            return n, data / f"value-{n}"
+    return None
+
+
+# make diagnose: where the champion's runs are lost, and why, from the newest recording (its runs played again by
+# their moves, in minutes). Every lost blind is played again from its start by the champion with four times the usual
+# samples (a blind is a second or so): a blind that deeper play beats was lost to play, not to the build.
+DEEP_X = 4
+DEEP_SHARE = 1.0
+
+
+def diagnose_steps(root: Path = ROOT, data: Path = DATA) -> list[tuple]:
+    """make diagnose: `baseline --diagnose` on the newest recording with the champion (best_8k_report: its networks
+    and options play the lost blinds again), then scripts/diagnose.py's tables. Nothing before a champion and a
+    recording."""
+    steps: list[tuple] = [("build", [*MAKE, "build"])]
+    best, rec = best_8k_report(root), newest_recording(data)
+    if best is None or rec is None:
+        return steps
+    n, folder = rec
+    table = f"results/diagnose/round{n}.csv"
+    steps.append(("replay", [*BASELINE, "--bot", "teacher", *best[1], "--replay", str(folder), "--diagnose", table,
+                             "--deep", str(DEEP_X), "--deep-share", str(DEEP_SHARE),
+                             "--out", f"results/diagnose/round{n}.json"]))
+    steps.append(("table", ["scripts/diagnose.py", table, "--out", f"results/diagnose/round{n}-summary.json"]))
+    return steps
+
+
+# Forks (crates/bm-core/src/forks.rs): at a share FORK_CHANCE of the shops entered and packs opened in antes 2 to 6
+# of the newest recording's runs (played again by their moves), the champion's FORK_BEST best options and doing
+# nothing (and its own choice and the run's move, if others) are each played out to the end by the champion on
+# FORK_COPIES fair copies that share their seeds across the options. A night of it (FORK_SECONDS) forks about 5,000
+# decisions: 120,000 play-outs. Each fork says which option went best here, where a recording's one result per run
+# never did; and how often the champion's own choice was that option is the judge test, measured in minutes instead
+# of three hours of play. The quick turn (make forks-quick) forks for an hour, for the judge test today.
+FORK_CHANCE = 0.04
+FORK_COPIES = 6
+FORK_BEST = 3
+FORK_SECONDS = 7 * 3600
+FORK_QUICK_SECONDS = 3600
+FORK_ROUNDS = 4
+
+
+def fork_steps(name: str, seconds: int, root: Path = ROOT, data: Path = DATA) -> list[tuple]:
+    """The forks job `name` (forks-quick, forks-1...): the champion forks the newest recording's decisions for
+    `seconds`, into DATA/<name>, with its report (the judge test) in results/forks/<name>.json."""
+    steps: list[tuple] = [("build", [*MAKE, "build"])]
+    best, rec = best_8k_report(root), newest_recording(data)
+    if best is None or rec is None:
+        return steps
+    _, folder = rec
+    steps.append(("fork", [*BASELINE, "--bot", "teacher", *best[1], "--replay", str(folder), "--forks",
+                           str(data / name), "--fork-chance", str(FORK_CHANCE), "--fork-copies", str(FORK_COPIES),
+                           "--fork-best", str(FORK_BEST), "--fork-antes", "2-6", "--seconds", str(seconds),
+                           "--out", f"results/forks/{name}.json"]))
+    return steps
+
+
+def fork_net_steps(name: str, root: Path = ROOT, data: Path = DATA) -> list[tuple]:
+    """The networks that learn from the forks `name` as well as the newest two recordings' positions (a pair, seeds 1
+    and 2: models/value-<name>.bin and -b), and a control pair that learns the same positions without the forks
+    (models/value-<name>-control.bin and -b), so the forks' part shows on the same footing. Each report's judge test
+    (`measured.forks`) sets the network, the champion's networks, the teacher's quick look and its own choice against
+    the option that went best, on forks kept apart."""
+    rec = newest_recording(data)
+    if rec is None:
+        return [("setup-gpu", [*MAKE, "setup-gpu"])]
+    n, folder = rec
+    older = [str(data / f"value-{n - 1}")] if n > 1 and (data / f"value-{n - 1}" / "manifest.json").exists() else []
+    positions = [a for d in [*older, str(folder)] for a in ("--data", d)]
+    steps: list[tuple] = [("setup-gpu", [*MAKE, "setup-gpu"])]
+    for suffix, seed in (("", "1"), ("b", "2")):
+        steps.append((f"train{suffix}", ["scripts/train_value.py", *positions, "--forks", str(data / name), "--seed",
+                                         seed, "--out", f"models/value-{name}{suffix}.bin",
+                                         "--report", f"results/value/value-{name}{suffix}.json"]))
+        steps.append((f"control{suffix}", ["scripts/train_value.py", *positions, "--forks", str(data / name),
+                                           "--pair-weight", "0", "--seed", seed,
+                                           "--out", f"models/value-{name}-control{suffix}.bin",
+                                           "--report", f"results/value/value-{name}-control{suffix}.json"]))
+    return steps
+
+
+def fork_play_steps(name: str, root: Path = ROOT, runs: int = BIG_RUNS) -> list[tuple]:
+    """How the fork-trained pair plays: on the first `runs` usual seeds, run by run, the fork pair alone against the
+    control pair alone (both at the champion's weight: the forks' part in play), and the champion's networks with the
+    fork pair added against the champion played again (champion_trials' control)."""
+    steps: list[tuple] = [("build", [*MAKE, "build"])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    _, args, report = best
+    args = list(args)
+    w = args[args.index("--value-weight") + 1] if "--value-weight" in args else "2.5"
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
+    nets = args[args.index("--value-net") + 1]
+    nets_stem = Path(report).stem.split("-on-")[-1]
+    tag, size = f"f{FORMULA}", f"{runs // 1000}k"
+    pair = f"models/value-{name}.bin,models/value-{name}b.bin"
+    control_pair = f"models/value-{name}-control.bin,models/value-{name}-controlb.bin"
+
+    def play(label: str, value_net: str, out: str) -> tuple:
+        return (label, [*BASELINE, "--bot", "teacher", "--value-net", value_net, "--value-weight", w,
+                        "--teacher-options", opts, "--runs", str(runs), "--seed", "1", "--out", out])
+    alone = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-on-{name}.json"
+    control = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-on-{name}-control.json"
+    steps.append(play("pair", pair, alone))
+    steps.append(play("control-pair", control_pair, control))
+    steps.append(("compare-pairs", ["scripts/compare_runs.py", control, alone, "--out",
+                                    f"results/tune/{Path(alone).stem}-vs-{Path(control).stem}.json"]))
+    champion = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-again-on-{nets_stem}.json"
+    if not (root / champion).exists():
+        steps.append(play("champion", nets, champion))
+    joined = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-on-{nets_stem}+{name}.json"
+    steps.append(play("champion-with-pair", f"{nets},{pair}", joined))
+    steps.append(("compare-with-champion", ["scripts/compare_runs.py", champion, joined, "--out",
+                                            f"results/tune/{Path(joined).stem}-vs-{Path(champion).stem}.json"]))
+    return steps
+
+
+def fork_round(k: int, root: Path = ROOT, data: Path = DATA) -> dict[str, list[tuple]]:
+    """Round k of the forks, three jobs (make forks-night runs them in a row): forks-k (a night of forks),
+    value-net-forks-k (the pair and its control), teacher-forks-k (how they play)."""
+    name = f"forks-{k}"
+    return {
+        name: fork_steps(name, FORK_SECONDS, root, data),
+        f"value-net-{name}": fork_net_steps(name, root, data),
+        f"teacher-{name}": fork_play_steps(name, root),
+    }
 
 
 def control_steps(root: Path = ROOT) -> list[tuple]:
@@ -1256,6 +1407,13 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-weights-high": weight_steps(weights=HIGH_WEIGHT_TRIALS, against=HIGH_AGAINST),
     "teacher-doubt": doubt_steps(),
     "teacher-margin": margin_steps(),
+    "teacher-late": late_steps(),
+    "diagnose": diagnose_steps(),
+    # An hour of forks and the networks that learn from them: the judge test today (results/forks/forks-quick.json,
+    # then results/value/value-forks-quick.json's measured.forks).
+    "forks-quick": fork_steps("forks-quick", FORK_QUICK_SECONDS),
+    "value-net-forks-quick": fork_net_steps("forks-quick"),
+    **{name: steps for k in range(1, FORK_ROUNDS + 1) for name, steps in fork_round(k).items()},
     "teacher-inputs": input_steps(),
     "stakes-trials": stake_trials_steps(),
     "boost-quick": quick_steps(),

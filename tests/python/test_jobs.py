@@ -972,3 +972,88 @@ def test_the_margin_trials_play_the_newest_endless_networks_at_the_champions_wei
     (tmp_path / control).write_text("{}")
     assert "without" not in {name for name, *_ in jobs.margin_steps(tmp_path)}
     assert "teacher-margin" in jobs.JOBS
+
+
+def champion_in(tmp_path) -> None:
+    """An 8,000-seed champion report and the networks it names, as best_8k_report finds them."""
+    (tmp_path / "models").mkdir(exist_ok=True)
+    for n in range(1, 9):
+        for name in (f"value-{n}.bin", f"value-{n}b.bin"):
+            (tmp_path / "models" / name).write_bytes(b"BMVN")
+    tune = tmp_path / "results" / "tune"
+    tune.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "results" / "value").mkdir(exist_ok=True)
+    (tune / f"f{jobs.FORMULA}-precise-8k-w2.5-on-ensemble8-w1.5.json").write_text(json.dumps(
+        {"kind": "baseline", "runs": 8000, "win_rate": 0.6646, "seed_base": 1, "value_net": jobs.ensemble(8),
+         "value_weight": 2.5, "teacher_options": ["precise"]}))
+
+
+def test_the_diagnosis_replays_the_newest_recording_with_the_champion_and_tables_it(tmp_path):
+    data = tmp_path / "data"
+    assert [n for n, *_ in jobs.diagnose_steps(tmp_path, data)] == ["build"], "nothing without a champion"
+    champion_in(tmp_path)
+    assert [n for n, *_ in jobs.diagnose_steps(tmp_path, data)] == ["build"], "nothing without a recording"
+    for n in (9, 10):
+        (data / f"value-{n}").mkdir(parents=True)
+        (data / f"value-{n}" / "manifest.json").write_text("{}")
+    (data / "value-11").mkdir()  # no manifest: not finished
+    assert jobs.newest_recording(data) == (10, data / "value-10")
+    steps = {n: a for n, a, *_ in jobs.diagnose_steps(tmp_path, data)}
+    replay = steps["replay"]
+    assert replay[replay.index("--replay") + 1] == str(data / "value-10")
+    assert replay[replay.index("--value-net") + 1] == jobs.ensemble(8)
+    assert replay[replay.index("--deep") + 1] == str(jobs.DEEP_X)
+    assert replay[replay.index("--diagnose") + 1] == "results/diagnose/round10.csv"
+    assert steps["table"][:2] == ["scripts/diagnose.py", "results/diagnose/round10.csv"]
+    assert "diagnose" in jobs.JOBS
+
+
+def test_a_fork_round_forks_the_newest_recording_then_trains_a_pair_and_its_control_and_plays_them(tmp_path):
+    data = tmp_path / "data"
+    champion_in(tmp_path)
+    for n in (9, 10):
+        (data / f"value-{n}").mkdir(parents=True)
+        (data / f"value-{n}" / "manifest.json").write_text("{}")
+    steps = {n: a for n, a, *_ in jobs.fork_steps("forks-1", jobs.FORK_SECONDS, tmp_path, data)}
+    f = steps["fork"]
+    assert f[f.index("--replay") + 1] == str(data / "value-10") and f[f.index("--forks") + 1] == str(data / "forks-1")
+    assert f[f.index("--seconds") + 1] == str(7 * 3600) and f[f.index("--fork-copies") + 1] == str(jobs.FORK_COPIES)
+    assert f[f.index("--value-net") + 1] == jobs.ensemble(8) and f[f.index("--teacher-options") + 1] == "precise"
+    quick = {n: a for n, a, *_ in jobs.fork_steps("forks-quick", jobs.FORK_QUICK_SECONDS, tmp_path, data)}["fork"]
+    assert quick[quick.index("--seconds") + 1] == "3600" and quick[quick.index("--forks") + 1] == str(data / "forks-quick")
+    nets = {n: a for n, a, *_ in jobs.fork_net_steps("forks-1", tmp_path, data)}
+    assert set(nets) == {"setup-gpu", "train", "trainb", "control", "controlb"}
+    train = nets["train"]
+    assert [train[i + 1] for i, x in enumerate(train) if x == "--data"] == [str(data / "value-9"), str(data / "value-10")]
+    assert train[train.index("--forks") + 1] == str(data / "forks-1") and "--pair-weight" not in train
+    assert train[train.index("--out") + 1] == "models/value-forks-1.bin"
+    control = nets["controlb"]
+    assert control[control.index("--pair-weight") + 1] == "0" and control[control.index("--seed") + 1] == "2"
+    assert control[control.index("--out") + 1] == "models/value-forks-1-controlb.bin"
+    play = {n: a for n, a, *_ in jobs.fork_play_steps("forks-1", tmp_path)}
+    pair, ctl = play["pair"], play["control-pair"]
+    assert pair[pair.index("--value-net") + 1] == "models/value-forks-1.bin,models/value-forks-1b.bin"
+    assert ctl[ctl.index("--value-net") + 1] == "models/value-forks-1-control.bin,models/value-forks-1-controlb.bin"
+    assert pair[pair.index("--value-weight") + 1] == "2.5" and pair[pair.index("--runs") + 1] == "8000"
+    cmp = play["compare-pairs"]
+    assert cmp[1] == ctl[ctl.index("--out") + 1] and cmp[2] == pair[pair.index("--out") + 1]
+    with_ = play["champion-with-pair"]
+    assert with_[with_.index("--value-net") + 1] == f"{jobs.ensemble(8)},models/value-forks-1.bin,models/value-forks-1b.bin"
+    champ = play["champion"]
+    assert champ[champ.index("--out") + 1] == f"results/tune/f{jobs.FORMULA}-precise-8k-w2.5-again-on-ensemble8-w1.5.json"
+    (tmp_path / champ[champ.index("--out") + 1]).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / champ[champ.index("--out") + 1]).write_text("{}")
+    assert "champion" not in {n for n, *_ in jobs.fork_play_steps("forks-1", tmp_path)}
+    for name in ("forks-1", "value-net-forks-1", "teacher-forks-1", "forks-quick", "value-net-forks-quick"):
+        assert name in jobs.JOBS
+
+
+def test_the_late_trials_share_the_doubt_trials_control(tmp_path):
+    champion_in(tmp_path)
+    late = {n: a for n, a, *_ in jobs.late_steps(tmp_path)}
+    doubt = {n: a for n, a, *_ in jobs.doubt_steps(tmp_path)}
+    assert late["champion"] == doubt["champion"]
+    for w, extra in jobs.LATE_TRIALS:
+        play = late[f"w{w}-{extra}"]
+        assert play[play.index("--teacher-options") + 1] == f"precise,{extra}"
+    assert "teacher-late" in jobs.JOBS

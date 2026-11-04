@@ -75,6 +75,17 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   the 25 stage logits, from those wins alone) and teacher option `margin=K`
   reads: the chance of winning with K blinds to spare (`make
   teacher-margin`); the learned term is off past ante 8;
+  `late-x`/`late-from`: every count behind a decision scaled from that ante,
+  `make teacher-late`; forks, `forks.rs`: a decision forked, the teacher's
+  options each played out to the end on fair copies that share their seeds,
+  `baseline --forks DIR`, what each option left and how its play-outs ended,
+  which `train_value.py --forks` learns pairwise (the options' order) and
+  reports as the judge test, `measured.forks`: the network, the champion's
+  networks, the quick look and the teacher's own choice against the option
+  that went best; `make forks-quick`, `make forks-night`; `baseline
+  --diagnose` and `scripts/diagnose.py`, `make diagnose`: where the runs are
+  lost and why, a share of the lost blinds played again with deeper search, a
+  diagnosis, never play or training;
   `StakeMode`: `baseline --stake-net` corrects the value networks' log-odds,
   a residual pair trained with `train_value.py --offset` on recordings that
   keep their log-odds, `baseline --offsets`/`--offsets-into`, or a stake

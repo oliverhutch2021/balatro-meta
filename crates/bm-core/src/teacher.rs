@@ -2527,6 +2527,34 @@ fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
             return m;
         }
     }
+    let options = shop_option_list(run, shop, vs);
+    if let Some(m) = choose_against(run, None, vs, options) {
+        return m;
+    }
+    // Leaving: first set the jokers for what happens as the shop closes and the blind starts (or for
+    // scoring, when nothing happens then).
+    let want = exit_order(run, vs).unwrap_or_else(|| joker_order(run));
+    let Some(m) = move_towards(run, &want) else {
+        return (MoveKind::LeaveShop, 0);
+    };
+    let ids: Vec<u64> = want.iter().map(|&i| run.jokers[i].sort_id).collect();
+    LEAVING.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.len() > 64 {
+            c.clear();
+        }
+        c.insert(key, ids);
+    });
+    m
+}
+
+/// A shop's options with their quick values, as `value_shop_move` weighs them: buys, vouchers, held consumables
+/// used or sold, sales, packs (by sample contents) and a reroll (by sample shops).
+fn shop_option_list(
+    run: &Run,
+    shop: &crate::shop::Shop,
+    vs: u64,
+) -> Vec<((MoveKind, u64), f64, Judge)> {
     let afford = |cost: i64| cost <= 0 || cost <= run.spendable();
     let mut lists = shop_buys(run, vs);
     for (i, v) in shop.vouchers.iter().enumerate() {
@@ -2604,24 +2632,43 @@ fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
             options.push(((MoveKind::Reroll, 0), q, Judge::Rerolled(samples, again)));
         }
     }
-    if let Some(m) = choose_against(run, None, vs, options) {
-        return m;
-    }
-    // Leaving: first set the jokers for what happens as the shop closes and the blind starts (or for
-    // scoring, when nothing happens then).
-    let want = exit_order(run, vs).unwrap_or_else(|| joker_order(run));
-    let Some(m) = move_towards(run, &want) else {
-        return (MoveKind::LeaveShop, 0);
-    };
-    let ids: Vec<u64> = want.iter().map(|&i| run.jokers[i].sort_id).collect();
-    LEAVING.with(|c| {
-        let mut c = c.borrow_mut();
-        if c.len() > 64 {
-            c.clear();
+    options
+}
+
+/// The options the teacher would weigh here, each as its moves, the best first by its quick value: the `n` best of
+/// a shop's (a pack or a reroll as its one move: its contents come when it is opened) or of an open pack's, then
+/// doing nothing (leaving the shop, skipping the pack). Elsewhere, none. Nothing hidden is used; what the options
+/// lead to is then found by playing each out on fair copies (`forks`).
+pub fn candidates(run: &Run, salt: u64, n: usize) -> Vec<Vec<(MoveKind, u64)>> {
+    let vs = value_salt(run, salt);
+    let (judged, nothing) = match run.phase {
+        Phase::Shop => {
+            let Some(shop) = run.shop.as_ref() else {
+                return Vec::new();
+            };
+            (shop_option_list(run, shop, vs), (MoveKind::LeaveShop, 0))
         }
-        c.insert(key, ids);
-    });
-    m
+        Phase::Pack => {
+            let lists = pack_options(run, false)
+                .into_iter()
+                .filter(|m| m[0].0 != MoveKind::PackSkip)
+                .collect();
+            (judged_moves(run, vs, lists), (MoveKind::PackSkip, 0))
+        }
+        _ => return Vec::new(),
+    };
+    let mut judged: Vec<_> = judged.into_iter().filter(|o| o.1.is_finite()).collect();
+    judged.sort_by(|a, b| b.1.total_cmp(&a.1));
+    judged.truncate(n);
+    let mut out: Vec<Vec<(MoveKind, u64)>> = judged
+        .into_iter()
+        .map(|(first, _, judge)| match judge {
+            Judge::Moves(m) => m,
+            Judge::Sampled(_) | Judge::Rerolled(..) => vec![first],
+        })
+        .collect();
+    out.push(vec![nothing]);
+    out
 }
 
 /// The least gain worth skipping a blind for (a skip gives up its reward and a shop, and faces the next
@@ -2813,8 +2860,28 @@ pub fn new_run() {
     crate::value::clear_caches();
 }
 
-/// The teacher's move.
+/// The teacher's move. From ante "late-from" (6), with "late-x" above 1, every count behind its decisions is
+/// scaled by that much (`value::Scales`, rounds included): the late antes are where most runs are lost, and a
+/// decision there has fewer to come after it.
 pub fn teacher_move(run: &Run, salt: u64) -> (MoveKind, u64) {
+    let late = param("late-x").unwrap_or(1.0);
+    if late > 1.0 && f64::from(run.ante) >= param("late-from").unwrap_or(LATE_FROM) {
+        let s = crate::value::scales();
+        let scaled = crate::value::Scales {
+            full: s.full * late,
+            quick: s.quick * late,
+            looks: s.looks * late,
+            rounds: s.rounds * late,
+        };
+        return crate::value::with_scales(scaled, || plain_move(run, salt));
+    }
+    plain_move(run, salt)
+}
+
+/// The ante "late-x" scales the teacher's counts from, unless "late-from" sets another.
+const LATE_FROM: f64 = 6.0;
+
+fn plain_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     let by_value = by_value();
     match run.phase {
         Phase::BlindSelect if by_value => value_blind_move(run, salt),
@@ -3745,6 +3812,59 @@ mod tests {
             None,
             "forgotten at the next run's start"
         );
+    }
+
+    #[test]
+    fn the_late_antes_get_more_samples_with_late_x_and_the_scales_are_restored_after() {
+        use crate::value::{scales, Scales};
+        let usual = scales();
+        // A probe the teacher runs inside its scaled move: `scales()` as a decision in the late antes sees it.
+        thread_local! { static SEEN: std::cell::Cell<Option<Scales>> = const { std::cell::Cell::new(None) }; }
+        // A real run at its first shop (the teacher's move there is judged by value).
+        new_run();
+        let mut run = Run::new(RunConfig::new("LATE1"));
+        let mut step = 0;
+        while run.phase != Phase::Shop && step < 400 {
+            let (k, a) = with_options(&["light"], || teacher_move(&run, step));
+            apply(&mut run, k, a).expect("legal");
+            step += 1;
+        }
+        assert!(run.phase == Phase::Shop && run.ante < 6);
+        with_options(&["light", "late-x=3"], || {
+            let m = teacher_move(&run, 1);
+            assert!(crate::env::apply(&mut run.clone(), m.0, m.1).is_ok());
+            assert_eq!(
+                scales(),
+                Scales::all(0.5),
+                "restored (and this ante isn't late)"
+            );
+            let mut late = run.clone();
+            late.ante = 6;
+            let m = teacher_move(&late, 1);
+            assert!(crate::env::apply(&mut late.clone(), m.0, m.1).is_ok());
+            assert_eq!(
+                scales(),
+                Scales::all(0.5),
+                "restored after the scaled decision"
+            );
+            crate::value::with_scales(
+                Scales {
+                    full: 1.5,
+                    quick: 1.5,
+                    looks: 1.5,
+                    rounds: 3.0,
+                },
+                || SEEN.with(|c| c.set(Some(scales()))),
+            );
+            assert_eq!(SEEN.with(|c| c.get()).map(|s| s.rounds), Some(3.0));
+        });
+        with_options(&["late-x=2", "late-from=3"], || {
+            let mut r = run.clone();
+            r.ante = 3;
+            let m = teacher_move(&r, 1);
+            assert!(crate::env::apply(&mut r.clone(), m.0, m.1).is_ok());
+        });
+        assert_eq!(scales(), usual);
     }
 
     #[test]

@@ -177,6 +177,10 @@ pub const PARAMS: &[(&str, f64)] = &[
     // With networks that learned how far wins go on (`baseline --endless`): the learned term rates a position by
     // the chance of winning with this many blinds to spare (`learned::margin`; 0: of winning).
     ("margin", 0.0),
+    // From ante "late-from", every count behind the teacher's decisions scaled by "late-x" (teacher.rs
+    // `teacher_move`; 1: as usual): more care where most runs are lost.
+    ("late-x", 1.0),
+    ("late-from", 6.0),
     // With a learned value: the learned term rates a position by the networks' chance of getting this many blinds
     // further, not of winning (`learned::reach_chance`; 0: of winning). For the stakes where wins are too rare to
     // tell positions apart.
