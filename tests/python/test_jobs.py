@@ -1031,7 +1031,7 @@ def test_a_fork_round_forks_the_newest_recording_then_trains_a_pair_and_its_cont
     steps = {n: a for n, a, *_ in jobs.fork_steps("forks-1", jobs.FORK_SECONDS, tmp_path, data)}
     f = steps["fork"]
     assert f[f.index("--replay") + 1] == str(night) and f[f.index("--forks") + 1] == str(data / "forks-1")
-    assert f[f.index("--seconds") + 1] == str(7 * 3600) and f[f.index("--fork-copies") + 1] == str(jobs.FORK_COPIES)
+    assert f[f.index("--seconds") + 1] == str(9 * 3600) and f[f.index("--fork-copies") + 1] == str(jobs.FORK_COPIES)
     assert f[f.index("--value-net") + 1] == jobs.ensemble(8) and f[f.index("--teacher-options") + 1] == "precise"
     quick = {n: a for n, a, *_ in jobs.fork_steps("forks-quick", jobs.FORK_QUICK_SECONDS, tmp_path, data)}["fork"]
     assert quick[quick.index("--seconds") + 1] == "3600" and quick[quick.index("--forks") + 1] == str(data / "forks-quick")
@@ -1039,7 +1039,15 @@ def test_a_fork_round_forks_the_newest_recording_then_trains_a_pair_and_its_cont
     assert set(nets) == {"setup-gpu", "train", "trainb", "control", "controlb"}
     train = nets["train"]
     assert [train[i + 1] for i, x in enumerate(train) if x == "--data"] == [str(data / "value-9"), str(data / "value-10")]
-    assert train[train.index("--forks") + 1] == str(data / "forks-1") and "--pair-weight" not in train
+    assert [train[i + 1] for i, x in enumerate(train) if x == "--forks"] == [str(data / "forks-1")]
+    assert "--pair-weight" not in train
+    assert f[f.index("--fork-play-options") + 1] == "light" and f[f.index("--fork-best") + 1] == str(jobs.FORK_BEST)
+    # The quick turn's forks, once there, train with the round's.
+    (data / "forks-quick").mkdir()
+    (data / "forks-quick" / "manifest.json").write_text("{}")
+    again = {n: a for n, a, *_ in jobs.fork_net_steps("forks-1", tmp_path, data)}["train"]
+    assert [again[i + 1] for i, x in enumerate(again) if x == "--forks"] == [str(data / "forks-quick"), str(data / "forks-1")]
+    assert jobs.fork_files("forks-quick", data) == [data / "forks-quick"]
     assert train[train.index("--out") + 1] == "models/value-forks-1.bin"
     control = nets["controlb"]
     assert control[control.index("--pair-weight") + 1] == "0" and control[control.index("--seed") + 1] == "2"

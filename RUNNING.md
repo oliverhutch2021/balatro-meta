@@ -735,9 +735,11 @@ short. So, before any more three-hour trials:
 cd /mnt/h/balatro-meta && make sync && make test && make diagnose && make forks-quick
 ```
 
-Tonight, `make forks-night` (about 13 hours): seven hours of forks (about 5,000 decisions, 120,000 play-outs), the
-pair and its control, then on 8,000 seeds the pair against its control and the champion with the pair against the
-champion. `make teacher-late` (about 5 hours) tries the other half of the thought: three times the samples from
+Tonight, if the quick judge test says the forks tell the options apart, `make forks-night` (about 15 hours): nine
+hours of forks (about 7,000 decisions at four copies, the two best options and doing nothing, the play-outs at the
+lighter shop budget: a fork costs a dozen full games), the pair and its control, then on 8,000 seeds the pair against
+its control and the champion with the pair against the champion. The fork files add up: each round's networks learn
+from every fork file so far. `make teacher-late` (about 5 hours) tries the other half of the thought: three times the samples from
 ante 6 (and from ante 5), where the runs are lost; it can run after the forks or on another night.
 
 ```

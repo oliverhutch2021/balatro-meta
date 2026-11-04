@@ -167,7 +167,7 @@ forks-quick:  ## An hour of forks (the champion's options at recorded decisions,
 	$(PY) scripts/jobs.py run forks-quick $(JOB_FLAGS)
 	$(PY) scripts/jobs.py run value-net-forks-quick $(JOB_FLAGS)
 
-forks-%:  ## Forks round N, 1/3: a night of forks (7 hours)
+forks-%:  ## Forks round N, 1/3: a night of forks (9 hours)
 	$(PY) scripts/jobs.py run forks-$* $(JOB_FLAGS)
 
 value-net-forks-%:  ## Forks round N, 2/3: the pair that learns the forks, and its control (about 40 minutes)
@@ -176,7 +176,7 @@ value-net-forks-%:  ## Forks round N, 2/3: the pair that learns the forks, and i
 teacher-forks-%:  ## Forks round N, 3/3: the pair against its control, and the champion with the pair against the champion, 8,000 seeds each (about 5 hours)
 	$(PY) scripts/jobs.py run teacher-forks-$* $(JOB_FLAGS)
 
-forks-night:  ## Forks round 1, the three jobs in a row (about 13 hours)
+forks-night:  ## Forks round 1, the three jobs in a row (about 15 hours)
 	@$(MAKE) --no-print-directory forks-1
 	@$(MAKE) --no-print-directory value-net-forks-1
 	@$(MAKE) --no-print-directory teacher-forks-1

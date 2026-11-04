@@ -35,7 +35,7 @@
 //! share `--fork-chance` (0.1) of the shops entered and packs opened in antes `--fork-antes` (2-6), the teacher's
 //! `--fork-best` (3) best options and doing nothing (and its own choice and the run's move, if others) are each
 //! played out to the end by the teacher on `--fork-copies` (6) fair copies that share their seeds across the
-//! options. DIR gets the positions the options leave and how each play-out ended, in the recording's chunks
+//! options (`--fork-play-options light`: the play-outs with that option added, the same for every option). DIR gets the positions the options leave and how each play-out ended, in the recording's chunks
 //! (`chunk-NNNNN-{idx,val,ptr,lab}.npy`, `FORK_LABELS`), for `train_value.py --forks`; the report says how often
 //! the teacher's own choice was the option that went best and what its choices gave away (`forks`).
 //!
@@ -1920,6 +1920,18 @@ fn main() {
         }
         println!("Teacher options: {}", names.join(", "));
     }
+    // `--fork-play-options a,b`: options the forks' play-outs add to those (lighter play-outs, say).
+    if let Some(o) = opt("--fork-play-options") {
+        let names: Vec<String> = o
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .collect();
+        if let Err(e) = bm_core::forks::set_play_options(&names) {
+            panic!("{e}");
+        }
+        println!("Fork play-outs add: {}", names.join(", "));
+    }
     let details: Mutex<Vec<String>> = Mutex::new(Vec::new());
     // `--replay`: runs that went another way than recorded.
     let diverged: Mutex<Vec<String>> = Mutex::new(Vec::new());
@@ -2231,6 +2243,23 @@ fn main() {
                 }
                 if last_line.elapsed() >= Duration::from_secs(10) || done {
                     last_line = Instant::now();
+                    if FORKS.load(Ordering::Relaxed) {
+                        // Forking: the forks made and their pace, and the time cap when there is one.
+                        let cap = deadline.map_or(String::new(), |d| {
+                            format!(
+                                ", {:.0} of {:.0} minutes",
+                                el / 60.0,
+                                d.as_secs_f64() / 60.0
+                            )
+                        });
+                        println!(
+                            "{} runs, {} forks ({} play-outs, {:.1} s a fork){cap}",
+                            snapshot.runs,
+                            snapshot.forks,
+                            snapshot.fork_playouts,
+                            el / snapshot.forks.max(1) as f64
+                        );
+                    }
                     println!(
                         "{} runs ({:.0} a second): mean final ante {:.2}, {} wins ({:.3}%)",
                         snapshot.runs,

@@ -122,9 +122,33 @@ impl Fork {
     }
 }
 
+/// Teacher options the play-outs add to the ones in force (`set_play_options`: "light", say, for play-outs at
+/// half the shop budget; every option of a fork gets the same continuation, so the comparison stays fair).
+static PLAY_OPTIONS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+
+/// Set the options the play-outs add (once, before any fork). An unknown option is an error.
+pub fn set_play_options(names: &[String]) -> Result<(), String> {
+    let mut all = crate::teacher::options();
+    all.extend(names.iter().cloned());
+    crate::teacher::check_options(&all)?;
+    PLAY_OPTIONS
+        .set(all)
+        .map_err(|_| "the play-outs' options are already set".to_string())
+}
+
 /// The teacher plays this run to its end (or `MAX_STEPS` moves), forgetting first what it remembered of the
 /// run it was in, so a play-out is the same on any thread.
-pub fn play_out(mut run: Run, salt: u64) -> Outcome {
+pub fn play_out(run: Run, salt: u64) -> Outcome {
+    match PLAY_OPTIONS.get() {
+        Some(names) => {
+            let names: Vec<&str> = names.iter().map(String::as_str).collect();
+            crate::teacher::with_options(&names, || play_out_plain(run, salt))
+        }
+        None => play_out_plain(run, salt),
+    }
+}
+
+fn play_out_plain(mut run: Run, salt: u64) -> Outcome {
     new_run();
     let mut step = 0u64;
     while run.phase != Phase::GameOver && !run.won && step < MAX_STEPS {

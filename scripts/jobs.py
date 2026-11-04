@@ -1133,17 +1133,20 @@ def diagnose_steps(root: Path = ROOT, data: Path = DATA) -> list[tuple]:
 
 
 # Forks (crates/bm-core/src/forks.rs): at a share FORK_CHANCE of the shops entered and packs opened in antes 2 to 6
-# of the newest replayable recording's runs (played again by their moves; a run enters about 27 of them), the
+# of the newest replayable recording's runs (played again by their moves; a run enters about 40 of them), the
 # champion's FORK_BEST best options and doing nothing (and its own choice and the run's move, if others) are each
-# played out to the end by the champion on FORK_COPIES fair copies that share their seeds across the options. A
-# night of it (FORK_SECONDS) forks about 5,000 decisions, 120,000 play-outs, spread over the night recording's 3,000
-# runs. Each fork says which option went best here, where a recording's one result per run never did; and how often
-# the champion's own choice was that option is the judge test, measured in minutes instead of three hours of play.
-# The quick turn (make forks-quick) forks for an hour, for the judge test today.
+# played out to the end by the champion on FORK_COPIES fair copies that share their seeds across the options, the
+# play-outs at the lighter shop budget (FORK_PLAY: the same for every option, so the comparison is fair). A fork
+# costs about a dozen full games; a night of it (FORK_SECONDS) forks about 7,000 decisions over the night recording's
+# 3,000 runs. Each fork says which option went best here, where a recording's one result per run never did; and how
+# often the champion's own choice was that option is the judge test, measured in minutes instead of three hours of
+# play. The quick turn (make forks-quick) forks for an hour, for the judge test today. The fork files add up: every
+# round's train together (fork_files).
 FORK_CHANCE = 0.06
-FORK_COPIES = 6
-FORK_BEST = 3
-FORK_SECONDS = 7 * 3600
+FORK_COPIES = 4
+FORK_BEST = 2
+FORK_PLAY = "light"
+FORK_SECONDS = 9 * 3600
 FORK_QUICK_SECONDS = 3600
 FORK_ROUNDS = 4
 
@@ -1158,8 +1161,8 @@ def fork_steps(name: str, seconds: int, root: Path = ROOT, data: Path = DATA) ->
     _, folder = rec
     steps.append(("fork", [*BASELINE, "--bot", "teacher", *best[1], "--replay", str(folder), "--forks",
                            str(data / name), "--fork-chance", str(FORK_CHANCE), "--fork-copies", str(FORK_COPIES),
-                           "--fork-best", str(FORK_BEST), "--fork-antes", "2-6", "--seconds", str(seconds),
-                           "--out", f"results/forks/{name}.json"]))
+                           "--fork-best", str(FORK_BEST), "--fork-play-options", FORK_PLAY, "--fork-antes", "2-6",
+                           "--seconds", str(seconds), "--out", f"results/forks/{name}.json"]))
     return steps
 
 
@@ -1173,16 +1176,26 @@ def fork_net_steps(name: str, root: Path = ROOT, data: Path = DATA) -> list[tupl
     if not rounds:
         return [("setup-gpu", [*MAKE, "setup-gpu"])]
     positions = [a for n in sorted(rounds) for a in ("--data", str(data / f"value-{n}"))]
+    # Every fork file there is, this one last (the quick turn's and the rounds' before: they add up).
+    forks = [a for f in fork_files(name, data) for a in ("--forks", str(f))]
     steps: list[tuple] = [("setup-gpu", [*MAKE, "setup-gpu"])]
     for suffix, seed in (("", "1"), ("b", "2")):
-        steps.append((f"train{suffix}", ["scripts/train_value.py", *positions, "--forks", str(data / name), "--seed",
-                                         seed, "--out", f"models/value-{name}{suffix}.bin",
+        steps.append((f"train{suffix}", ["scripts/train_value.py", *positions, *forks, "--seed", seed,
+                                         "--out", f"models/value-{name}{suffix}.bin",
                                          "--report", f"results/value/value-{name}{suffix}.json"]))
-        steps.append((f"control{suffix}", ["scripts/train_value.py", *positions, "--forks", str(data / name),
-                                           "--pair-weight", "0", "--seed", seed,
-                                           "--out", f"models/value-{name}-control{suffix}.bin",
+        steps.append((f"control{suffix}", ["scripts/train_value.py", *positions, *forks, "--pair-weight", "0",
+                                           "--seed", seed, "--out", f"models/value-{name}-control{suffix}.bin",
                                            "--report", f"results/value/value-{name}-control{suffix}.json"]))
     return steps
+
+
+def fork_files(name: str, data: Path = DATA) -> list[Path]:
+    """The fork recordings the networks of `name` learn from: the quick turn's and every round's before `name`
+    (those recorded: a manifest there), then `name`'s."""
+    order = ["forks-quick", *(f"forks-{k}" for k in range(1, FORK_ROUNDS + 1))]
+    upto = order.index(name) if name in order else len(order)
+    files = [data / n for n in order[:upto] if (data / n / "manifest.json").exists()]
+    return [*files, data / name]
 
 
 def fork_play_steps(name: str, root: Path = ROOT, runs: int = BIG_RUNS) -> list[tuple]:
