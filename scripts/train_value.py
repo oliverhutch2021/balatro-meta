@@ -943,7 +943,10 @@ def train(a) -> dict:
     engine = engine_forward()
     engine_diff = None
     if engine is not None:
-        e = np.array([engine(blob, row.tolist())[0] for row in x[:64]], np.float32)
+        # The engine's input is today's layout; a network of an older one reads its start, so the rows are padded.
+        from balatro_meta._engine import VALUE_LEN
+        pad = max(0, VALUE_LEN - x.shape[1])
+        e = np.array([engine(blob, [*row.tolist(), *([0.0] * pad)])[0] for row in x[:64]], np.float32)
         engine_diff = float(np.max(np.abs(e - got[:64]))) if len(e) else 0.0
         if engine_diff > 1e-3:
             raise SystemExit(f"The engine reads the network differently (by {engine_diff}).")

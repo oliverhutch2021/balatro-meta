@@ -573,3 +573,16 @@ def test_a_fork_recording_still_being_made_reads_the_chunks_its_manifest_counts(
     perfect = tv.judge_forks(fs, np.arange(len(fs)), {"network": best})["network"]
     assert perfect["picked_best"] == 1.0 and perfect["regret"] == 0.0 and perfect["gain"] >= 0
     assert tv.judge_lines(j)
+
+
+def test_training_as_an_older_layout_still_checks_against_the_engine(recording, tmp_path):
+    pytest.importorskip("torch")
+    out, report = tmp_path / "v1.bin", tmp_path / "v1.json"
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "train_value.py"), "--data", str(recording),
+                        "--input-layout", "1", "--out", str(out), "--report", str(report), "--epochs", "1",
+                        "--configs", "16/0.1/1e-4", "--scale-rows", "2000", "--cpu"],
+                       cwd=ROOT, capture_output=True, text=True, check=False, timeout=900)
+    assert r.returncode == 0, r.stdout + r.stderr
+    rep = json.loads(report.read_text())
+    assert rep["inputs"] < VALUE_LEN and rep["input_version"] == 1
+    assert rep["check"]["engine"] is not None and rep["check"]["engine"] < 1e-3
