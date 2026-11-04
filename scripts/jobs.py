@@ -694,6 +694,50 @@ def boost_round(n: int, root: Path = ROOT, runs: int = STAKE_RUNS, white: int | 
             f"boost-play-{n}": play}
 
 
+# make boost-quick: one quick turn of the correction, to build on while someone watches (about 25 minutes): the
+# champion's log-odds added to the night's runs (stakes-1: 37,000 of the champion's runs at every stake; skipped once
+# there), one residual network trained on them, then the champion with it at White on the first 1,000 usual seeds
+# (against the best teacher's 8,000, run by run on those) and at every stake above on the first 500 (against 3
+# November's). 500 seeds tell a stake's blinds beaten to about +-0.55, enough to see a big gain or loss; a small
+# one is confirmed on 2,000 (make boost-night's sizes). Each turn's files are named by QUICK (results/quick/), so
+# turns stay side by side; scripts/quick_table.py prints a turn's table.
+QUICK = "quick1"
+QUICK_WHITE = 1000
+QUICK_RUNS = 500
+
+
+def quick_steps(root: Path = ROOT, tag: str = QUICK, white: int = QUICK_WHITE, runs: int = QUICK_RUNS
+                ) -> list[tuple]:
+    champion = baseline_args(root, 1)
+    c_nets = champion[champion.index("--value-net") + 1]
+    steps: list[tuple] = [("build", [*MAKE, "build"])]
+    folders = [f for f in (stake_data(1) / f"stake{s}" for s in range(1, 9)) if (f / "manifest.json").exists()]
+    for f in folders:
+        steps.append((f"offsets-{f.name}", [*BASELINE, "--offsets-into", str(f), "--value-net", c_nets,
+                                            "--out", f"results/quick/offsets-{f.name}.json"]))
+    net = f"models/value-residual-{tag}.bin"
+    steps += [("setup-gpu", [*MAKE, "setup-gpu"]),
+              ("train", ["scripts/train_value.py", *[x for f in folders for x in ("--data", str(f))],
+                         "--newest", str(max(1, len(folders))), "--offset", "--input-layout", STAKE_LAYOUT,
+                         "--seed", "1", "--out", net, "--report", f"results/quick/residual-{tag}.json"])]
+    teacher = with_correction(champion_with_kept(root), net, "residual")
+    white_out = f"results/quick/white-{tag}.json"
+    steps.append(("white", [*BASELINE, "--bot", "teacher", *teacher, "--runs", str(white), "--seed", "1",
+                            "--out", white_out]))
+    best = best_8k_report(root)
+    if best is not None:
+        steps.append(("compare-white", ["scripts/compare_runs.py", best[2], white_out, "--out",
+                                        white_out.replace(".json", "-vs-best.json")]))
+    for s in range(2, 9):
+        out = f"results/quick/stake{s}-{tag}.json"
+        steps += [(f"stake-{s}", [*BASELINE, "--bot", "teacher", *teacher, "--runs", str(runs), "--seed", "1",
+                                  "--stake", str(s), "--out", out]),
+                  (f"compare-stake-{s}", ["scripts/compare_runs.py", stake_baseline(s), out, "--out",
+                                          out.replace(".json", "-vs-3nov.json")])]
+    steps.append(("table", ["scripts/quick_table.py", tag]))
+    return steps
+
+
 def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
     """Round n (3 or later) of the learned value, three jobs. teacher-data-n: the best teacher there is (the round and
     weight that won most, with "precise" unless its trial found it no better: recording_options; from round 4, the
@@ -1114,6 +1158,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-weights-high": weight_steps(weights=HIGH_WEIGHT_TRIALS, against=HIGH_AGAINST),
     "teacher-inputs": input_steps(),
     "stakes-trials": stake_trials_steps(),
+    "boost-quick": quick_steps(),
     # The stake-aware networks, round by round (stake_round): make stakes-night runs round 1, the trials, then
     # rounds 2, 3... until stopped.
     **{name: steps for n in range(1, STAKE_ROUNDS + 1) for name, steps in stake_round(n).items()},
@@ -1297,7 +1342,7 @@ def progress_entry(job: str, step: str, argv: list[str], commit: str, root: Path
         name = bot[:1].upper() + bot[1:].removesuffix(" bot")
     stake_net = arg("--stake-net")
     if stake_net:  # make boost-night: the champion's chance corrected by a stake-aware pair
-        rr = re.search(r"value-residual-(\d+)b?\.bin", stake_net)
+        rr = re.search(r"value-residual-([a-z]*\d+)b?\.bin", stake_net)
         name += f" + residual {rr[1]}" if rr else " + stake delta"
     options = arg("--teacher-options")
     if options:

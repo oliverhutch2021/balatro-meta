@@ -723,6 +723,34 @@ fn npy_rows(path: &Path) -> usize {
         .unwrap_or_else(|_| panic!("{}: its shape isn't a number of rows", path.display()))
 }
 
+/// Whether a recording holds every position's offsets by these networks already (`--offsets-into` wrote them:
+/// `offsets.json` names their fingerprint and as many positions as the manifest).
+fn offsets_there(dir: &Path, nets: &str) -> bool {
+    let (Ok(about), Ok(manifest)) = (
+        std::fs::read_to_string(dir.join("offsets.json")),
+        std::fs::read_to_string(dir.join("manifest.json")),
+    ) else {
+        return false;
+    };
+    let line = |text: &str, key: &str| {
+        text.lines()
+            .find(|l| l.trim_start().starts_with(&format!("\"{key}\": ")))
+            .map(|l| field(l, key).trim_matches('"').to_string())
+    };
+    let chunks = std::fs::read_dir(dir).map_or(0, |rd| {
+        rd.flatten()
+            .filter(|e| {
+                let n = e.file_name().to_string_lossy().into_owned();
+                n.starts_with("chunk-") && n.ends_with("-off.npy")
+            })
+            .count()
+    });
+    line(&about, "offset_net_hash") == Some(nets_hash(nets))
+        && line(&about, "rows").is_some()
+        && line(&about, "rows") == line(&manifest, "rows")
+        && line(&manifest, "chunks").and_then(|c| c.parse::<usize>().ok()) == Some(chunks)
+}
+
 /// A short fingerprint of a comma-separated list of network files (FNV-1a over their bytes, in order), so a
 /// recording's offsets can be matched with the networks they came from.
 fn nets_hash(paths: &str) -> String {
@@ -1242,6 +1270,12 @@ fn main() {
             .any(Option::is_some)
     {
         panic!("--offsets-into DIR plays DIR's runs again and writes beside them: no --replay or --record with it");
+    }
+    if let (Some(d), Some(nets)) = (&offsets_into, opt("--value-net")) {
+        if offsets_there(Path::new(d), &nets) {
+            println!("{d} has these networks' offsets already (offsets.json): nothing to do.");
+            return;
+        }
     }
     OFFSETS.store(
         offsets_into.is_some() || args.iter().any(|a| a == "--offsets"),

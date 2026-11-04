@@ -667,9 +667,18 @@ White) on the champion; and at Green, the champion alone and corrected at weight
 one that went clearly furthest against 3 November's on the same seeds, so no round learns from a teacher worse than
 the last.
 
+Start with quick turns, to build on while you watch: `make boost-quick` (about 25 minutes) adds the champion's
+log-odds to the night's runs (once), trains one correction network on them, and plays the champion with it at White
+on the first 1,000 seeds and at every other stake on the first 500, run by run against the champion's own games;
+its last step prints the turn's table (`scripts/quick_table.py`). 500 seeds tell a stake's blinds beaten to about
++-0.55: big gains and losses show, small ones need the 2,000 of `make boost-night`.
+
 ```
-cd /mnt/h/balatro-meta && make sync && make boost-night
+cd /mnt/h/balatro-meta && make sync && make test && make boost-quick
 ```
+
+Each new turn Claude sends is `make sync && make boost-quick FORCE=1`. When a turn wins, `make boost-night` confirms it
+on the full sizes and goes on with the ratchet.
 
 ## Later steps
 

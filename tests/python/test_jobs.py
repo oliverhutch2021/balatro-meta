@@ -849,3 +849,51 @@ def test_a_report_with_a_stake_correction_names_it_in_its_teacher(tmp_path):
     assert args[args.index("--stake-mode") + 1] == "residual"
     assert jobs.with_correction(args, "x.bin", "delta")[-4:] == ["--stake-net", "x.bin", "--stake-mode", "delta"]
     assert jobs.with_correction(args, "x.bin", "delta").count("--stake-net") == 1
+
+
+def test_a_quick_turn_trains_on_the_nights_runs_and_screens_every_stake(tmp_path, monkeypatch):
+    data = _data_tree(tmp_path, monkeypatch)
+    steps = {n: a for n, a in jobs.quick_steps(tmp_path)}
+    offsets = [n for n in steps if n.startswith("offsets-")]
+    assert len(offsets) == 8, "the night's runs alone: no recording"
+    assert not any(n.startswith("record") for n in steps)
+    train = steps["train"]
+    assert [train[i + 1] for i, a in enumerate(train) if a == "--data"] == \
+        [str(data / "stakes-1" / f"stake{s}") for s in range(1, 9)]
+    assert "--offset" in train and train[train.index("--newest") + 1] == "8"
+    assert train[train.index("--out") + 1] == f"models/value-residual-{jobs.QUICK}.bin"
+    white = steps["white"]
+    assert white[white.index("--runs") + 1] == str(jobs.QUICK_WHITE) and "--stake" not in white
+    assert white[white.index("--stake-net") + 1] == f"models/value-residual-{jobs.QUICK}.bin"
+    for s in range(2, 9):
+        play = steps[f"stake-{s}"]
+        assert play[play.index("--runs") + 1] == str(jobs.QUICK_RUNS) and play[play.index("--seed") + 1] == "1"
+        out = play[play.index("--out") + 1]
+        assert out.startswith("results/quick/"), "a screen never counts in the ratchet (results/stakes)"
+        assert steps[f"compare-stake-{s}"][1] == jobs.stake_baseline(s)
+    assert list(steps)[-1] == "table" and "boost-quick" in jobs.JOBS
+    # The Progress panel names the turn's correction.
+    p = tmp_path / steps["stake-3"][-1]
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"kind": "baseline", "runs": 500, "bot": "teacher bot with a learned value",
+                             "stake": "Green Stake"}))
+    e = jobs.progress_entry("boost-quick", "stake-3", steps["stake-3"], "HEAD", root=tmp_path)
+    assert f"+ residual {jobs.QUICK}" in e["name"]
+
+
+def test_the_quick_table_shows_the_training_and_every_stake(tmp_path):
+    import quick_table
+    q = tmp_path / "results" / "quick"
+    q.mkdir(parents=True)
+    by = [{"stake": 3, "rows": 1000, "runs": 50, "won": 0.2, "predicted": 0.21, "bce": 0.40, "auc": 0.8,
+           "predicted_before": 0.5, "bce_before": 0.5, "auc_before": 0.78}]
+    (q / "residual-t.json").write_text(json.dumps({"measured": {"runs": 400, "bce": 0.4, "auc": 0.8, "by_stake": by,
+                                                                "before": {"bce": 0.5, "auc": 0.78}}}))
+    c = {"seeds": 500, "a": {"win_rate": 0.2, "blinds_beaten": 16.0}, "b": {"win_rate": 0.24, "blinds_beaten": 16.7},
+         "win_rate_diff": 0.04, "win_rate_diff_ci": [0.01, 0.07], "blinds_beaten_diff": 0.7,
+         "blinds_beaten_diff_ci": [0.2, 1.2]}
+    (q / "stake3-t-vs-3nov.json").write_text(json.dumps(c))
+    text = quick_table.table("t", tmp_path)
+    assert "BCE 0.4000 (alone 0.5000: +20.0%)" in text
+    assert "+0.70 [+0.20, +1.20]: clearly better" in text
+    assert "White   not played yet" in text and "Gold    not played yet" in text
