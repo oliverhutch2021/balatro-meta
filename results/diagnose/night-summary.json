@@ -1,0 +1,186 @@
+{
+ "runs": 3000,
+ "wins": 1840,
+ "losses": 1160,
+ "win_rate": 0.6133,
+ "by_blind": {
+  "boss": 0.8155,
+  "big": 0.1388,
+  "small": 0.0457
+ },
+ "by_ante": {
+  "1": 0.0241,
+  "2": 0.0336,
+  "3": 0.0552,
+  "4": 0.1198,
+  "5": 0.2,
+  "6": 0.1397,
+  "7": 0.1526,
+  "8": 0.275
+ },
+ "by_boss": {
+  "Violet Vessel": 0.1241,
+  "The Wall": 0.0897,
+  "The Needle": 0.0595,
+  "Crimson Heart": 0.0569,
+  "The Eye": 0.0388,
+  "The Mouth": 0.0371,
+  "Amber Acorn": 0.0293,
+  "Verdant Leaf": 0.0284,
+  "The Manacle": 0.0267,
+  "The Water": 0.0259,
+  "Cerulean Bell": 0.025,
+  "The Serpent": 0.025
+ },
+ "shortfall": {
+  "under a quarter": 0.0164,
+  "a quarter to a half": 0.1112,
+  "a half to 80%": 0.431,
+  "80% or more: a near miss": 0.4414
+ },
+ "closeness_by_boss": {
+  "Violet Vessel": 0.692,
+  "The Wall": 0.745,
+  "The Needle": 0.73,
+  "Crimson Heart": 0.812,
+  "The Eye": 0.727,
+  "The Mouth": 0.719,
+  "Amber Acorn": 0.796,
+  "Verdant Leaf": 0.715
+ },
+ "deeper_play": {
+  "replayed": 1160,
+  "beaten": 0.3621,
+  "by_shortfall": {
+   "under a quarter": 0.2632,
+   "a quarter to a half": 0.2403,
+   "a half to 80%": 0.27,
+   "80% or more: a near miss": 0.4863
+  },
+  "by_ante": {
+   "1": 0.6071,
+   "2": 0.5641,
+   "3": 0.5156,
+   "4": 0.5036,
+   "5": 0.3276,
+   "6": 0.3642,
+   "7": 0.3955,
+   "8": 0.2288
+  },
+  "by_boss": {
+   "Violet Vessel": 0.1042,
+   "The Wall": 0.2308,
+   "The Needle": 0.2174,
+   "Crimson Heart": 0.3636,
+   "The Eye": 0.3556,
+   "The Mouth": 0.5116,
+   "Amber Acorn": 0.4412,
+   "Verdant Leaf": 0.3636
+  }
+ },
+ "at_the_loss": {
+  "money_unspent_median": 22.0,
+  "money_20_or_more": 0.5534,
+  "xmult_jokers": {
+   "0": 0.619,
+   "1": 0.3172,
+   "2": 0.0603,
+   "3+": 0.0034
+  },
+  "main_level_median": 3.0,
+  "deck_median": 53.0,
+  "hands_left_median": 0.0
+ },
+ "by_ante_curves": {
+  "biggest_hand_median": {
+   "winners": [
+    672.0,
+    2191.5,
+    4460.0,
+    8782.5,
+    17071.5,
+    30834.0,
+    56920.0,
+    94531.5
+   ],
+   "late_losers": [
+    660.0,
+    2184.0,
+    4320.0,
+    7840.0,
+    13860.0,
+    23569.5,
+    37523.0,
+    64368.0
+   ]
+  },
+  "money_median": {
+   "winners": [
+    4.0,
+    5.0,
+    11.0,
+    20.0,
+    29.0,
+    36.0,
+    41.0,
+    46.0
+   ],
+   "late_losers": [
+    4.0,
+    5.0,
+    10.0,
+    16.0,
+    23.0,
+    27.0,
+    29.0,
+    33.0
+   ]
+  },
+  "xmult_jokers_mean": {
+   "winners": [
+    0.0,
+    0.043,
+    0.107,
+    0.239,
+    0.401,
+    0.551,
+    0.694,
+    0.81
+   ],
+   "late_losers": [
+    0.0,
+    0.031,
+    0.085,
+    0.165,
+    0.261,
+    0.357,
+    0.462,
+    0.599
+   ]
+  },
+  "jokers_mean": {
+   "winners": [
+    0.0,
+    2.52,
+    4.388,
+    4.888,
+    4.996,
+    5.047,
+    5.066,
+    5.083
+   ],
+   "late_losers": [
+    0.0,
+    2.33,
+    4.17,
+    4.762,
+    4.935,
+    5.0,
+    5.016,
+    4.994
+   ]
+  }
+ },
+ "late_losers_fall_behind_at_ante": null,
+ "table": "results/diagnose/night.csv"
+}
