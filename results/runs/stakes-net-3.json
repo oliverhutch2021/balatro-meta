@@ -1,0 +1,30 @@
+{
+ "job": "stakes-net-3",
+ "commit": "1445e08d9b8eacc2c73ee73116e941968d1ec4d2",
+ "started": "2026-11-04T12:40:36+00:00",
+ "finished": "2026-11-04T12:46:54+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   1.4,
+   5.6,
+   11.6
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "setup-gpu": 11,
+  "train": 199,
+  "trainb": 168
+ },
+ "commands": {
+  "setup-gpu": "make --no-print-directory setup-gpu",
+  "train": "scripts/train_value.py --data ~/.cache/balatro-meta/data/stakes-2/stake1 --data ~/.cache/balatro-meta/data/stakes-2/stake2 --data ~/.cache/balatro-meta/data/stakes-2/stake3 --data ~/.cache/balatro-meta/data/stakes-2/stake4 --data ~/.cache/balatro-meta/data/stakes-2/stake5 --data ~/.cache/balatro-meta/data/stakes-2/stake6 --data ~/.cache/balatro-meta/data/stakes-2/stake7 --data ~/.cache/balatro-meta/data/stakes-2/stake8 --data ~/.cache/balatro-meta/data/stakes-3/stake1 --data ~/.cache/balatro-meta/data/stakes-3/stake2 --data ~/.cache/balatro-meta/data/stakes-3/stake3 --data ~/.cache/balatro-meta/data/stakes-3/stake4 --data ~/.cache/balatro-meta/data/stakes-3/stake5 --data ~/.cache/balatro-meta/data/stakes-3/stake6 --data ~/.cache/balatro-meta/data/stakes-3/stake7 --data ~/.cache/balatro-meta/data/stakes-3/stake8 --newest 8 --input-layout 3 --seed 1 --out models/value-stakes-3.bin --report results/value/value-stakes-3.json",
+  "trainb": "scripts/train_value.py --data ~/.cache/balatro-meta/data/stakes-2/stake1 --data ~/.cache/balatro-meta/data/stakes-2/stake2 --data ~/.cache/balatro-meta/data/stakes-2/stake3 --data ~/.cache/balatro-meta/data/stakes-2/stake4 --data ~/.cache/balatro-meta/data/stakes-2/stake5 --data ~/.cache/balatro-meta/data/stakes-2/stake6 --data ~/.cache/balatro-meta/data/stakes-2/stake7 --data ~/.cache/balatro-meta/data/stakes-2/stake8 --data ~/.cache/balatro-meta/data/stakes-3/stake1 --data ~/.cache/balatro-meta/data/stakes-3/stake2 --data ~/.cache/balatro-meta/data/stakes-3/stake3 --data ~/.cache/balatro-meta/data/stakes-3/stake4 --data ~/.cache/balatro-meta/data/stakes-3/stake5 --data ~/.cache/balatro-meta/data/stakes-3/stake6 --data ~/.cache/balatro-meta/data/stakes-3/stake7 --data ~/.cache/balatro-meta/data/stakes-3/stake8 --newest 8 --input-layout 3 --seed 2 --out models/value-stakes-3b.bin --report results/value/value-stakes-3b.json"
+ }
+}
