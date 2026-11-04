@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -153,6 +153,9 @@ teacher-weights-high:  ## The newest networks at weights 8 and 16 on 8,000 seeds
 
 teacher-doubt:  ## The champion again, then with its networks' disagreement as the brake (doubt=k) at weights 2.5 and 4, 8,000 seeds each (about 3 hours)
 	$(PY) scripts/jobs.py run teacher-doubt $(JOB_FLAGS)
+
+teacher-margin:  ## After round 11: its networks at the champion's weight, aiming for wins with 3 or 6 blinds to spare (margin=K), 8,000 seeds each (about 2.5 hours)
+	$(PY) scripts/jobs.py run teacher-margin $(JOB_FLAGS)
 
 teacher-inputs:  ## Round 11's networks on the deck card by card against the totals, on the same runs, 8,000 seeds (about 2.5 hours)
 	$(PY) scripts/jobs.py run teacher-inputs $(JOB_FLAGS)

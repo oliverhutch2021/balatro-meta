@@ -174,6 +174,9 @@ pub const PARAMS: &[(&str, f64)] = &[
     // recordings: exploring where they disagree).
     ("doubt", 0.0),
     ("hope", 0.0),
+    // With networks that learned how far wins go on (`baseline --endless`): the learned term rates a position by
+    // the chance of winning with this many blinds to spare (`learned::margin`; 0: of winning).
+    ("margin", 0.0),
     // With a learned value: the learned term rates a position by the networks' chance of getting this many blinds
     // further, not of winning (`learned::reach_chance`; 0: of winning). For the stakes where wins are too rare to
     // tell positions apart.

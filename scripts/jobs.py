@@ -206,6 +206,12 @@ EXPLORE_FROM = 7
 # habits.
 COMMIT = "commit=0.25"
 COMMIT_FROM = 10
+# From round 11 a won run plays on into Endless, to ante 12 (baseline --endless), and its positions up to the win are
+# labelled with how many blinds it beat after it as well (0 to 12): a win with a build that clears ante 10 is a better
+# win than one that scrapes through ante 8, which a win alone can't tell. The networks learn it as a second head
+# (train_value.py: depth outputs, learned from those wins alone), and teacher option "margin=K" rates a position by
+# its chance of winning with K blinds to spare (make teacher-margin). Positions after the win are never recorded.
+ENDLESS_FROM = 11
 
 
 def exploring(args: list[str], n: int) -> list[str]:
@@ -745,15 +751,17 @@ def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
     base 101 (n + 1): 404, 505, ...) and records every position it values. value-net-n: the round's
     network learns from them and from the round before's recording (more positions; only round n's runs judge and
     measure it). teacher-learned-n: the teacher plays the usual 5,000 seeds with it at weights 1 and 2, without
-    options, to set against the earlier rounds on the same footing."""
+    options, to set against the earlier rounds on the same footing. From ENDLESS_FROM the recording's wins play on
+    into Endless, so its networks also learn how far a win would have gone."""
     data = DATA / f"value-{n}"
+    endless = ["--endless"] if n >= ENDLESS_FROM else []
     return {
         f"teacher-data-{n}": [
             ("build", [*MAKE, "build"]),
             ("record", [*BASELINE, "--bot", "teacher",
                         *exploring(best_recording(root) if n >= 4
                                    else [*learned_value_args(root), *recording_options(root)], n),
-                        "--runs", "25000", "--seed", str(101 * (n + 1)), "--record", str(data),
+                        "--runs", "25000", "--seed", str(101 * (n + 1)), *endless, "--record", str(data),
                         "--out", f"results/value/record-{n}.json"]),
         ],
         f"value-net-{n}": [
@@ -1023,6 +1031,49 @@ def doubt_steps(root: Path = ROOT, trials: tuple[tuple[str, str], ...] = DOUBT_T
     return steps
 
 
+# make teacher-margin: aim for wins with blinds to spare. 82% of the champion's losses on the exam's seeds came at a
+# boss, most at antes 5 to 8: runs it rated as won until a boss they couldn't take. Teacher option "margin=K" rates a
+# position by the chance of winning and then beating K more blinds in Endless (the networks' win chance times their
+# depth head's share at K or more), so a build that only just wins counts for less than one with room to spare. K = 3
+# asks for ante 9 cleared, K = 6 for ante 10. Only networks from ENDLESS_FROM on have the depth head; the others' win
+# chances are used as they are.
+MARGIN_TRIALS = ("margin=3", "margin=6")
+
+
+def margin_steps(root: Path = ROOT, trials: tuple[str, ...] = MARGIN_TRIALS, runs: int = BIG_RUNS) -> list[tuple]:
+    """make teacher-margin: the champion's weight and options (best_8k_report) on the newest round's networks that
+    learned how far a win goes on (all rounds' together, from ENDLESS_FROM), without and with each of `trials`, on
+    the first `runs` usual seeds, each set run by run against it without. The run without is make teacher-weights'
+    at that weight on those networks when it has played (same name), else it is played first. Nothing to do before
+    those networks exist."""
+    steps: list[tuple] = [("build", [*MAKE, "build"])]
+    best = best_8k_report(root)
+    newest = next((n for n in range(LAST_ROUND, ENDLESS_FROM - 1, -1)
+                   if all((root / m).exists() for m in ensemble(n).split(","))), None)
+    if best is None or newest is None:
+        return steps
+    args = best[1]
+    w = args[args.index("--value-weight") + 1] if "--value-weight" in args else "1.5"
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
+    opts = ",".join(o for o in opts.split(",") if o and not o.startswith("margin=")) or "precise"
+    tag, size, stem = f"f{FORMULA}", f"{runs // 1000}k", f"ensemble{newest}-w1.5"
+
+    def play(o: str, out: str) -> list[str]:
+        return [*BASELINE, "--bot", "teacher", "--value-net", ensemble(newest), "--value-weight", w,
+                "--teacher-options", o, "--runs", str(runs), "--seed", "1", "--out", out]
+    control = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-on-{stem}.json"
+    if not (root / control).exists():
+        steps.append(("without", play(opts, control)))
+    for extra in trials:
+        o = f"{opts},{extra}"
+        out = f"results/tune/{tag}-{file_safe(o)}-{size}-w{w}-on-{stem}.json"
+        if not (root / out).exists():
+            steps.append((extra, play(o, out)))
+        steps.append((f"compare-{extra}", ["scripts/compare_runs.py", control, out, "--out",
+                                           f"results/tune/{Path(out).stem}-vs-{Path(control).stem}.json"]))
+    return steps
+
+
 def control_steps(root: Path = ROOT) -> list[tuple]:
     """make teacher-control: the precise teacher on the best learned value there is (best_learned: after a round, its
     networks if they won most) on the first 2,000 usual seeds, the control later trials are set against, and set run
@@ -1204,6 +1255,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-weights": weight_steps(),
     "teacher-weights-high": weight_steps(weights=HIGH_WEIGHT_TRIALS, against=HIGH_AGAINST),
     "teacher-doubt": doubt_steps(),
+    "teacher-margin": margin_steps(),
     "teacher-inputs": input_steps(),
     "stakes-trials": stake_trials_steps(),
     "boost-quick": quick_steps(),

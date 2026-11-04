@@ -105,6 +105,9 @@ struct RunSummary {
     recorded: Option<Recorded>,
     /// `--replay`: the recorded moves ran out before the run ended.
     unfinished: bool,
+    /// `--endless`, for a win: blinds beaten after the win before the run was lost (0 to `ENDLESS_DEPTH`; that
+    /// many if it reached `ENDLESS_LAST_ANTE`'s end).
+    endless: Option<u32>,
 }
 
 impl RunSummary {
@@ -214,10 +217,17 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64
     };
     let mut input = Vec::with_capacity(VALUE_LEN);
     let moves = RECORD_MODE.load(Ordering::Relaxed) == 2;
+    let endless = ENDLESS.load(Ordering::Relaxed);
+    // `--endless`: the run at its win and what the summary had counted by then (the reports count up to the win).
+    let mut at_win: Option<(Run, WinCounts)> = None;
     let mut step = 0u64;
-    while run.phase != Phase::GameOver && !run.won && step < MAX_STEPS {
+    while run.phase != Phase::GameOver
+        && !run.won
+        && step < MAX_STEPS
+        && !(at_win.is_some() && run.ante > ENDLESS_LAST_ANTE)
+    {
         let keep_this = match s.recorded.as_mut() {
-            Some(r) if moves || learned::values_here(&run) => {
+            Some(r) if at_win.is_none() && (moves || learned::values_here(&run)) => {
                 if moves {
                     encode(&screen(&run), &mut input);
                 } else {
@@ -309,10 +319,21 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64
             r.push((k as u8, a));
         }
         step += 1;
+        if endless && run.won && at_win.is_none() {
+            // Played on: the win is kept as it stands, the run aims for the next showdown ante.
+            at_win = Some((run.clone(), WinCounts::of(&s)));
+            run.won = false;
+            run.win_ante = ENDLESS_WIN_ANTE;
+        }
     }
     s.seed = seed;
-    s.won = run.won;
     s.moves = step;
+    if let Some((won_run, counts)) = at_win {
+        s.endless = Some(endless_depth(&run));
+        counts.restore(&mut s);
+        run = won_run;
+    }
+    s.won = run.won;
     s.end = if run.won {
         9
     } else {
@@ -349,8 +370,79 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64
     s
 }
 
+/// What a run's summary had counted when it won, so an endless run's reports count only up to its win.
+struct WinCounts {
+    blinds_beaten: u64,
+    rerolls: u64,
+    skips: u64,
+    packs: u64,
+    vouchers: u64,
+    bought: usize,
+    hands: [u64; 12],
+    best_hand: f64,
+}
+
+impl WinCounts {
+    fn of(s: &RunSummary) -> WinCounts {
+        WinCounts {
+            blinds_beaten: s.blinds_beaten,
+            rerolls: s.rerolls,
+            skips: s.skips,
+            packs: s.packs,
+            vouchers: s.vouchers,
+            bought: s.bought.len(),
+            hands: s.hands,
+            best_hand: s.best_hand,
+        }
+    }
+
+    fn restore(self, s: &mut RunSummary) {
+        s.blinds_beaten = self.blinds_beaten;
+        s.rerolls = self.rerolls;
+        s.skips = self.skips;
+        s.packs = self.packs;
+        s.vouchers = self.vouchers;
+        s.bought.truncate(self.bought);
+        s.hands = self.hands;
+        s.best_hand = self.best_hand;
+    }
+}
+
+/// How far an endless run got after its win: the blinds it beat from ante 9 on (the one it lost at not counted),
+/// or all of them through `ENDLESS_LAST_ANTE`.
+fn endless_depth(run: &Run) -> u32 {
+    if run.ante > ENDLESS_LAST_ANTE {
+        return ENDLESS_DEPTH;
+    }
+    let ante = (run.ante.max(9) - 9) as u32 * 3;
+    let here = if run.phase == Phase::GameOver {
+        run.blind.as_ref().map_or(0, |b| match b.kind {
+            BlindKind::Small => 0,
+            BlindKind::Big => 1,
+            BlindKind::Boss(_) => 2,
+        })
+    } else {
+        learned::blinds_behind(run) as u32 % 3
+    };
+    (ante + here).min(ENDLESS_DEPTH)
+}
+
 /// Whether runs keep a `--runs-csv` row.
 static DETAIL: AtomicBool = AtomicBool::new(false);
+
+/// `--endless`: a won run plays on, as the game's Endless mode lets a player, until it loses or finishes ante
+/// `ENDLESS_LAST_ANTE`; how far it got is a win's measure (`RunSummary::endless`, the recordings' `endless` label).
+/// The win is counted as before, and everything the reports count stops at it; the positions recorded are the
+/// win's own. A replay of an endless recording plays on the same way.
+static ENDLESS: AtomicBool = AtomicBool::new(false);
+/// The last ante an endless run plays (the blinds grow about 5x, 13x and 40x from ante 9 to 12: few runs get
+/// that far).
+const ENDLESS_LAST_ANTE: i32 = 12;
+/// The most blinds a win can beat after it (antes 9 to 12).
+const ENDLESS_DEPTH: u32 = (ENDLESS_LAST_ANTE as u32 - 8) * 3;
+/// The ante a won run aims for once it plays on: the game's next showdown boss comes at ante 16 (the boss rules
+/// keep it there), and the teacher's formula plans for the blinds up to it.
+const ENDLESS_WIN_ANTE: i32 = 16;
 
 /// Whether runs keep their valued positions (`--record`).
 static RECORD: AtomicBool = AtomicBool::new(false);
@@ -365,7 +457,7 @@ static OFFSETS: AtomicBool = AtomicBool::new(false);
 const RUNS_PER_CHUNK: u64 = 250;
 
 /// The columns of a chunk's `lab.npy` (f32), one row per position.
-const LABELS: [&str; 8] = [
+const LABELS: [&str; 9] = [
     "run",
     "step",
     "phase",
@@ -374,6 +466,7 @@ const LABELS: [&str; 8] = [
     "won",
     "end_stage",
     "end_ante",
+    "endless",
 ];
 
 /// A run's valued positions: the network's input, and where in the run each was (step, phase, ante,
@@ -415,6 +508,9 @@ struct RecordedRun {
     won: bool,
     end_stage: u32,
     end_ante: usize,
+    /// `--endless`: how far a win got after it (`RunSummary::endless`); -1 when not known (a loss, or a recording
+    /// that didn't play on).
+    endless: f32,
     rec: Recorded,
     /// Every move of the run (kind, argument): with the seed they play the run again (`--replay`).
     moves: Vec<(u8, u64)>,
@@ -521,6 +617,7 @@ impl Recorder {
                     f32::from(u8::from(r.won)),
                     r.end_stage as f32,
                     r.end_ante as f32,
+                    r.endless,
                 ]);
             }
             list.push(format!(
@@ -661,6 +758,7 @@ impl Recorder {
             "{{\n \"format\": 1,\n \"input\": \"{input}\",\n \"input_version\": {VALUE_INPUT_VERSION},\n \
              \"inputs\": {inputs},\n \"layouts\": [{}],\n \"runs\": {},\n \"rows\": {},\n \"chunks\": {},\n \
              \"runs_per_chunk\": {RUNS_PER_CHUNK},\n \"labels\": [{}],\n \"moves_kept\": {moves_kept},\n \
+             \"endless\": {endless},\n \"endless_last_ante\": {ENDLESS_LAST_ANTE},\n \
              \"stake\": {stake},\n \"offset_net\": {offset},\n \"offset_net_hash\": {hash},\n{about}\n}}\n",
             layouts.join(", "),
             self.runs,
@@ -668,6 +766,7 @@ impl Recorder {
             self.chunks,
             labels.join(", "),
             stake = STAKE.load(Ordering::Relaxed),
+            endless = ENDLESS.load(Ordering::Relaxed),
             offset = offsets.map_or("null".into(), esc),
             hash = offsets.map_or("null".into(), |o| esc(&nets_hash(o))),
         );
@@ -869,6 +968,12 @@ fn load_replay(dir: &Path) -> (Vec<Replayed>, String, u8) {
         .lines()
         .find(|l| l.starts_with(" \"stake\": "))
         .map_or(1, |l| field(l, "stake").parse().expect("a stake number"));
+    if manifest
+        .lines()
+        .any(|l| l.trim().trim_end_matches(',') == "\"endless\": true")
+    {
+        ENDLESS.store(true, Ordering::Relaxed);
+    }
     (runs, about, stake)
 }
 
@@ -891,6 +996,10 @@ struct Totals {
     packs: u64,
     vouchers: u64,
     jokers_bought: u64,
+    /// `--endless`: wins that played on, the blinds they beat after winning, and how many beat each number.
+    endless_wins: u64,
+    endless_blinds: u64,
+    endless_hist: [u64; ENDLESS_DEPTH as usize + 1],
 }
 
 impl Totals {
@@ -913,6 +1022,9 @@ impl Totals {
             packs: 0,
             vouchers: 0,
             jokers_bought: 0,
+            endless_wins: 0,
+            endless_blinds: 0,
+            endless_hist: [0; ENDLESS_DEPTH as usize + 1],
         }
     }
 
@@ -944,6 +1056,11 @@ impl Totals {
         self.packs += s.packs;
         self.vouchers += s.vouchers;
         self.jokers_bought += s.bought.len() as u64;
+        if let Some(d) = s.endless {
+            self.endless_wins += 1;
+            self.endless_blinds += u64::from(d);
+            self.endless_hist[d.min(ENDLESS_DEPTH) as usize] += 1;
+        }
     }
 
     fn merge(&mut self, o: &Totals) {
@@ -976,6 +1093,11 @@ impl Totals {
         self.packs += o.packs;
         self.vouchers += o.vouchers;
         self.jokers_bought += o.jokers_bought;
+        self.endless_wins += o.endless_wins;
+        self.endless_blinds += o.endless_blinds;
+        for (a, b) in self.endless_hist.iter_mut().zip(o.endless_hist) {
+            *a += b;
+        }
     }
 
     fn mean_ante(&self) -> f64 {
@@ -1136,6 +1258,23 @@ fn report_json(r: &Report) -> String {
         r.best,
         hist.join(", "),
     );
+    if ENDLESS.load(Ordering::Relaxed) {
+        // How strong the wins were: blinds beaten after the win, on average and by number.
+        let end = o.rfind("\n}").expect("the report ends with its brace");
+        let mean = if t.endless_wins > 0 {
+            num(t.endless_blinds as f64 / t.endless_wins as f64)
+        } else {
+            "null".into()
+        };
+        o.replace_range(
+            end..,
+            &format!(
+                ",\n \"endless\": true,\n \"endless_last_ante\": {ENDLESS_LAST_ANTE},\n \"endless_blinds_per_win\": {mean},\n \
+                 \"endless_hist\": {:?}\n}}\n",
+                t.endless_hist
+            ),
+        );
+    }
     o
 }
 
@@ -1296,6 +1435,13 @@ fn main() {
         "--stake takes 1 (White) to 8 (Gold), not {stake}"
     );
     STAKE.store(stake, Ordering::Relaxed);
+    if args.iter().any(|a| a == "--endless") {
+        assert!(
+            replay.is_none(),
+            "--endless: a replay plays on as its recording did"
+        );
+        ENDLESS.store(true, Ordering::Relaxed);
+    }
     let runs_wanted: Option<u64> = opt("--runs").and_then(|s| s.replace('_', "").parse().ok());
     let target: u64 = match &replay {
         Some((runs, _, _)) => runs_wanted.map_or(runs.len() as u64, |n| n.min(runs.len() as u64)),
@@ -1382,6 +1528,11 @@ fn main() {
     // How each run ended, in seed order (for paired comparisons), when there aren't too many runs.
     let stages: Option<Mutex<Vec<u8>>> =
         (target <= 50_000).then(|| Mutex::new(vec![b'?'; target as usize]));
+    // `--endless`: how far each win got after it, in seed order (A for no blind further ... M for all twelve; a
+    // dash for a loss), for paired comparisons of how strong the wins are.
+    let endless_marks: Option<Mutex<Vec<u8>>> = (target <= 50_000
+        && ENDLESS.load(Ordering::Relaxed))
+    .then(|| Mutex::new(vec![b'?'; target as usize]));
     let (record_dir, mode) = match (opt("--record"), opt("--record-moves"), &offsets_into) {
         (Some(d), None, None) => (Some(d), 1),
         (None, Some(d), None) => (Some(d), 2),
@@ -1473,6 +1624,9 @@ fn main() {
                         if let Some(st) = &stages {
                             st.lock().unwrap()[i as usize] = b'A' + s.stage.min(24) as u8;
                         }
+                        if let Some(em) = &endless_marks {
+                            em.lock().unwrap()[i as usize] = s.endless.map_or(b'-', |d| b'A' + d as u8);
+                        }
                         if let (Some(rec), Some(r)) = (s.recorded.take(), &recorder) {
                             r.lock().unwrap().add(RecordedRun {
                                 run: i,
@@ -1480,6 +1634,7 @@ fn main() {
                                 won: s.won,
                                 end_stage: s.stage,
                                 end_ante: s.end,
+                                endless: s.endless.map_or(-1.0, |d| d as f32),
                                 rec,
                                 moves: s.record.clone().unwrap_or_default(),
                             });
@@ -1712,6 +1867,10 @@ fn main() {
     if let Some(st) = stages {
         let st = String::from_utf8(st.into_inner().unwrap()).expect("letters");
         tail += &format!(",\n \"run_stages\": {}", esc(&st));
+    }
+    if let Some(em) = endless_marks {
+        let em = String::from_utf8(em.into_inner().unwrap()).expect("letters");
+        tail += &format!(",\n \"run_endless\": {}", esc(&em));
     }
     let end = text.rfind("\n}").expect("the report ends with its brace");
     text.replace_range(end.., &format!("{tail}\n}}\n"));

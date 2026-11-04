@@ -125,6 +125,11 @@ impl Net {
         Ok(Net { layers })
     }
 
+    /// How many outputs it has (the win logit, the ending stage's, and maybe the depth outputs).
+    pub fn outputs(&self) -> usize {
+        self.layers.last().map_or(0, |l| l.outputs)
+    }
+
     /// How many floats of the input the network reads (its layout's: `VALUE_LAYOUTS`).
     pub fn inputs(&self) -> usize {
         self.layers[0].inputs
@@ -372,7 +377,8 @@ fn chance(run: &Run, reach: Option<usize>) -> Option<f64> {
         encode_value(&screen(run), &mut x);
         let key = input_key(&x)
             ^ reach.map_or(0, |k| (k as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15))
-            ^ disagreement_lean().to_bits().rotate_left(17);
+            ^ disagreement_lean().to_bits().rotate_left(17)
+            ^ margin().map_or(0, |k| (k as u64 + 7).wrapping_mul(0xC2B2_AE3D_27D4_EB4F));
         if let Some(p) = SEEN.with(|s| s.borrow().get(&key).copied()) {
             return p;
         }
@@ -386,6 +392,11 @@ fn chance(run: &Run, reach: Option<usize>) -> Option<f64> {
             None => mean_chance(nets, &x),
             Some(f) => mean_reach(nets, &x, f),
         };
+        if let (None, Some(k)) = (from, margin()) {
+            if let Some(q) = mean_depth_tail(nets, &x, k) {
+                p *= q;
+            }
+        }
         if let Some((stake_nets, mode)) = STAKE_NET.get() {
             // A residual correction learned White's runs too; "correct-stakes-only" keeps White's play the value
             // networks' own. A delta is nothing at White anyway.
@@ -461,7 +472,7 @@ fn reach_of(out: &[f32], from: usize) -> f64 {
     if out.len() < 2 {
         return 1.0 / (1.0 + (-(out[0] as f64)).exp());
     }
-    let logits = &out[1..];
+    let logits = &out[1..out.len().min(1 + STAGES)];
     let top = logits.iter().fold(f32::NEG_INFINITY, |m, &v| m.max(v)) as f64;
     let (mut all, mut later) = (0.0, 0.0);
     for (stage, &v) in logits.iter().enumerate() {
@@ -472,6 +483,55 @@ fn reach_of(out: &[f32], from: usize) -> f64 {
         }
     }
     later / all
+}
+
+/// The ending stage's outputs after the win logit: lost at blind 0 to 23, or won.
+const STAGES: usize = 25;
+
+/// A network's chance, if it has the depth outputs (trained on recordings that played their wins on into Endless,
+/// `baseline --endless`: the logits of how many blinds a win beats after it, after the ending stage's), that a win
+/// from here beats at least `k` blinds after it. None for a network without them.
+fn depth_tail(out: &[f32], k: usize) -> Option<f64> {
+    let depth = out.get(1 + STAGES..).filter(|d| !d.is_empty())?;
+    let top = depth.iter().fold(f32::NEG_INFINITY, |m, &v| m.max(v)) as f64;
+    let (mut all, mut deep) = (0.0, 0.0);
+    for (d, &v) in depth.iter().enumerate() {
+        let e = (v as f64 - top).exp();
+        all += e;
+        if d >= k {
+            deep += e;
+        }
+    }
+    Some(deep / all)
+}
+
+/// The mean over the networks that have the depth outputs of their chance that a win goes at least `k` blinds on
+/// (None if none has them).
+fn mean_depth_tail(nets: &[Net], x: &[f32], k: usize) -> Option<f64> {
+    INFERENCE.with(|w| {
+        let mut w = w.borrow_mut();
+        w.read(x);
+        let mut out = Vec::new();
+        let tails: Vec<f64> = nets
+            .iter()
+            .filter(|n| n.outputs() > 1 + STAGES)
+            .filter_map(|n| {
+                n.all_with(&mut w, &mut out);
+                depth_tail(&out, k)
+            })
+            .collect();
+        (!tails.is_empty()).then(|| tails.iter().sum::<f64>() / tails.len() as f64)
+    })
+}
+
+/// Teacher option `margin=K` (K of 1 or more): the learned term rates a position by the chance of winning with K
+/// blinds to spare: the networks' chance of winning times their chance (those with the depth outputs) that the win
+/// then beats K more blinds. Two thirds of White's runs end in the same "won", so a barely-won run and a strong
+/// one look alike to the win chance alone; the spare blinds are the headroom that beats the big last bosses.
+fn margin() -> Option<usize> {
+    crate::teacher::param("margin")
+        .filter(|&k| k >= 1.0)
+        .map(|k| k.round() as usize)
 }
 
 /// An ensemble's chance of ending at stage `from` or later: the mean of its networks'.
@@ -646,7 +706,8 @@ pub fn chance_with(net: &Net, run: &Run) -> f64 {
 /// option `reach=K`, of getting K blinds further) (None if no network is loaded, or the position is not one it
 /// learned).
 pub fn term(run: &Run) -> Option<f64> {
-    if !values_here(run) {
+    // Positions past ante 8 (a won run playing on, `baseline --endless`) are not ones the networks learned.
+    if !values_here(run) || run.ante > 8 {
         return None;
     }
     let p = chance(run, reach())?;
@@ -929,6 +990,39 @@ mod tests {
         assert!((mean_chance(&[a.clone(), b.clone()], &x) - (0.5 + 2.0 / 3.0) / 2.0).abs() < 1e-6);
         assert!((mean_chance(&[b], &x) - 2.0 / 3.0).abs() < 1e-6);
         assert!((mean_chance(&[a], &x) - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn the_depth_outputs_say_how_far_a_win_goes_on_and_leave_the_stages_alone() {
+        let n = VALUE_LEN;
+        // One layer: the win logit 0, the 25 stage logits all 0 but "won" (24) at ln 3, then 13 depth logits: depths
+        // 0 and 1 at ln 2, the rest at 0 (so depth 0: 2/15, 1: 2/15, each other: 1/15).
+        let mut bias = vec![0.0f32; 1 + STAGES + 13];
+        bias[1 + 24] = 3f32.ln();
+        bias[1 + STAGES] = 2f32.ln();
+        bias[1 + STAGES + 1] = 2f32.ln();
+        let outs = bias.len();
+        let net = Net::from_bytes(&file(&[(n, outs, false, vec![0.0; n * outs], bias)])).unwrap();
+        assert_eq!(net.outputs(), 1 + STAGES + 13);
+        let x = vec![0.0f32; n];
+        let out = net.forward(&x);
+        // Stages: 24 logits at 0 and "won" at ln 3 → reaching the win: 3/27; the depth logits don't count.
+        assert!((reach_of(&out, 24) - 3.0 / 27.0).abs() < 1e-6);
+        assert!((depth_tail(&out, 0).unwrap() - 1.0).abs() < 1e-9);
+        assert!((depth_tail(&out, 1).unwrap() - 13.0 / 15.0).abs() < 1e-6);
+        assert!((depth_tail(&out, 2).unwrap() - 11.0 / 15.0).abs() < 1e-6);
+        // A network without them: none.
+        let old =
+            Net::from_bytes(&file(&[(n, 26, false, vec![0.0; n * 26], vec![0.0; 26])])).unwrap();
+        assert_eq!(depth_tail(&old.forward(&x), 1), None);
+        assert_eq!(mean_depth_tail(std::slice::from_ref(&old), &x, 1), None);
+        let mixed = mean_depth_tail(&[old, net], &x, 2).unwrap();
+        assert!(
+            (mixed - 11.0 / 15.0).abs() < 1e-6,
+            "only the networks that have them"
+        );
+        assert_eq!(margin(), None, "off unless asked");
+        assert_eq!(crate::teacher::with_options(&["margin=3"], margin), Some(3));
     }
 
     #[test]

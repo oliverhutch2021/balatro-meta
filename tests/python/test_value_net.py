@@ -323,3 +323,116 @@ def test_a_correction_learns_on_the_value_networks_log_odds_and_the_engine_adds_
              "--stake", "3", "--seed", "3", "--out", str(played))
     final = json.loads(played.read_text())
     assert final["stake_net"] == str(out) and final["stake_mode"] == "residual" and final["refused_moves"] == 0
+
+
+@pytest.fixture(scope="module")
+def endless(tmp_path_factory):
+    """Eight light-teacher runs whose wins play on into Endless (seed base 7: one win, four blinds beyond it)."""
+    d = tmp_path_factory.mktemp("endless")
+    baseline("--bot", "teacher", "--teacher-options", "light", "--runs", "8", "--threads", "4", "--seed", "7",
+             "--endless", "--record", str(d / "on"), "--out", str(d / "on.json"))
+    return d
+
+
+def test_a_win_that_plays_on_labels_its_positions_with_the_blinds_beaten_after_it(endless, tmp_path):
+    on = endless / "on"
+    man = json.loads((on / "manifest.json").read_text())
+    assert man["endless"] is True and man["labels"][tv.ENDLESS] == "endless" and len(man["labels"]) == 9
+    report = json.loads((endless / "on.json").read_text())
+    assert report["endless"] is True and report["wins"] >= 1
+    data = tv.load_data(on)
+    lab = data.lab
+    for r in json.loads(next(on.glob("chunk-*-runs.json")).read_text()):
+        rows = lab[lab[:, tv.RUN] == r["run"]]
+        depth = set(rows[:, tv.ENDLESS].tolist())
+        if rows[0, tv.WON] == 1:
+            assert len(depth) == 1 and 0 <= depth.pop() <= tv.DEPTH - 1
+            assert (rows[:, tv.END_STAGE] == 24).all(), "a win stays a win: ante 8's boss is where it ended"
+        else:
+            assert depth == {-1.0}
+    hist = report["endless_hist"]
+    won = lab[lab[:, tv.WON] == 1]
+    assert sum(hist) == report["wins"] == len(np.unique(won[:, tv.RUN]))
+    assert report["endless_blinds_per_win"] == pytest.approx(
+        sum(k * n for k, n in enumerate(hist)) / sum(hist), abs=1e-6)
+    # Playing on changes nothing before the win: the same seeds without it record the same positions.
+    baseline("--bot", "teacher", "--teacher-options", "light", "--runs", "8", "--threads", "4", "--seed", "7",
+             "--record", str(tmp_path / "off"))
+    off = tv.load_data(tmp_path / "off")
+    assert off.rows == data.rows and not off.depth and (off.lab[:, tv.ENDLESS] == -1).all()
+    np.testing.assert_array_equal(off.lab[:, :tv.ENDLESS], lab[:, :tv.ENDLESS])
+    rows = np.arange(0, data.rows, 7)
+    np.testing.assert_array_equal(off.dense(rows), data.dense(rows))
+    # A recording from before the column (round 10's: eight labels) mixes with it and reads "not known" there.
+    older = tmp_path / "older"
+    shutil.copytree(tmp_path / "off", older)
+    for c in older.glob("chunk-*-lab.npy"):
+        np.save(c, np.load(c)[:, :tv.BASE_LABELS])
+    om = json.loads((older / "manifest.json").read_text())
+    om["labels"] = om["labels"][:tv.BASE_LABELS]
+    (older / "manifest.json").write_text(json.dumps(om))
+    both = tv.load_data([older, on])
+    assert both.depth and both.lab.shape[1] == 9 and (both.lab[both.source == 0, tv.ENDLESS] == -1).all()
+    np.testing.assert_array_equal(both.lab[both.source == 1], lab)
+    # A replay of its moves plays the wins on again and labels them the same.
+    baseline("--replay", str(on), "--record", str(tmp_path / "again"), "--threads", "2")
+    np.testing.assert_array_equal(tv.load_data(tmp_path / "again").lab, lab)
+
+
+def test_the_depth_outputs_learn_only_from_wins_that_played_on():
+    torch = pytest.importorskip("torch")
+    n = 6
+    out = torch.zeros(n, 1 + tv.STAGES + tv.DEPTH)
+    lab = torch.full((n, 9), -1.0)
+    lab[:, tv.WON] = torch.tensor([1.0, 1.0, 0.0, 1.0, 0.0, 1.0])
+    lab[:, tv.END_STAGE] = torch.tensor([24.0, 24.0, 10.0, 24.0, 3.0, 24.0])
+    lab[:, tv.ENDLESS] = torch.tensor([4.0, 0.0, -1.0, -1.0, -1.0, 12.0])  # row 3: a win from a recording that stopped
+    _win, total = tv.losses(torch, out, lab, 1.0)
+    out2 = out.clone()
+    out2[:, 1 + tv.STAGES + 4] = 5.0  # sure of depth 4 everywhere
+    _win, total2 = tv.losses(torch, out2, lab, 1.0)
+    changed = (total2 - total).abs() > 1e-6
+    assert changed.tolist() == [True, True, False, False, False, True]
+    assert total2[0] < total[0] and total2[1] > total[1]
+    # A network without the depth outputs, or labels without the column, trains as before.
+    _w, plain = tv.losses(torch, out[:, :1 + tv.STAGES], lab, 1.0)
+    _w, short = tv.losses(torch, out, lab[:, :tv.BASE_LABELS], 1.0)
+    assert torch.allclose(plain, short) and torch.allclose(plain[[2, 3, 4]], total[[2, 3, 4]])
+
+
+def test_the_depth_measures_set_the_outputs_against_the_depths_found():
+    rng = np.random.default_rng(3)
+    n = 400
+    lab = np.full((n, 9), -1.0, np.float32)
+    lab[:, tv.RUN] = np.arange(n) // 4
+    lab[:, tv.WON] = (rng.random(n) < 0.6).astype(np.float32)
+    d = rng.integers(0, 7, n)
+    lab[:, tv.ENDLESS] = np.where(lab[:, tv.WON] == 1, d, -1)
+    sure = np.zeros((n, 1 + tv.STAGES + tv.DEPTH), np.float32)
+    sure[np.arange(n), 1 + tv.STAGES + d] = 20.0
+    m = tv.depth_measures(sure, lab)
+    wins = lab[:, tv.WON] == 1
+    assert m["wins"] == int(wins.sum()) and m["ce"] < 1e-3 < m["ce_by_frequency_alone"]
+    assert m["mean_expected"] == pytest.approx(d[wins].mean(), abs=1e-3) == m["mean_found"]
+    assert m["three_or_more_found"] == pytest.approx((d[wins] >= 3).mean(), abs=1e-4)
+    flat = np.zeros_like(sure)
+    assert tv.depth_measures(flat, lab)["ce"] == pytest.approx(np.log(tv.DEPTH), abs=1e-4)
+    assert tv.depth_measures(sure, lab[:, :tv.BASE_LABELS]) == {"wins": 0}
+
+
+def test_training_on_a_recording_that_played_on_writes_the_depth_outputs(recording, endless, tmp_path):
+    pytest.importorskip("torch")
+    out, report = tmp_path / "value.bin", tmp_path / "value.json"
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "train_value.py"), "--data", str(recording),
+                        "--data", str(endless / "on"), "--out", str(out), "--report", str(report), "--epochs", "1",
+                        "--configs", "16/0.1/1e-4", "--scale-rows", "2000", "--cpu"],
+                       cwd=ROOT, capture_output=True, text=True, check=False, timeout=900)
+    assert r.returncode == 0, r.stdout + r.stderr
+    rep = json.loads(report.read_text())
+    assert rep["check"]["engine"] is not None and rep["check"]["engine"] < 1e-3
+    assert "depth" in rep["measured"]
+    _version, _inputs, layers = tv.read_bmvn(out.read_bytes())
+    assert layers[-1][0].shape[0] == 1 + tv.STAGES + tv.DEPTH
+    x = tv.load_data(recording).dense(np.arange(3))
+    got = np.array([value_net_forward(out.read_bytes(), row.tolist()) for row in x], np.float32)
+    np.testing.assert_allclose(got, tv.forward_np(layers, x), rtol=1e-4, atol=1e-4)

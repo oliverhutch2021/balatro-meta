@@ -67,6 +67,14 @@ truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
   layout; layout 3 adds the stake as its rules in force; teacher option
   `reach=K` rates positions by the networks' ending-stage head, the chance
   of getting K blinds further, for stakes where wins are too rare;
+  `doubt=k`/`hope=k` move an ensemble's chance down/up by k standard
+  deviations of its members' (their disagreement); `baseline --endless`
+  plays each win on to ante 12 and labels its positions with the blinds
+  beaten after it ("endless", 0-12; positions after the win are never
+  recorded), which `train_value.py` learns as a depth head (13 outputs after
+  the 25 stage logits, from those wins alone) and teacher option `margin=K`
+  reads: the chance of winning with K blinds to spare (`make
+  teacher-margin`); the learned term is off past ante 8;
   `StakeMode`: `baseline --stake-net` corrects the value networks' log-odds,
   a residual pair trained with `train_value.py --offset` on recordings that
   keep their log-odds, `baseline --offsets`/`--offsets-into`, or a stake

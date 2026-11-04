@@ -928,3 +928,47 @@ def test_the_doubt_trials_play_the_champion_again_and_set_each_against_it(tmp_pa
         cmp = steps[f"compare-w{w}-{extra}"]
         assert cmp[1] == control and cmp[2] == play[play.index("--out") + 1]
     assert "teacher-doubt" in jobs.JOBS
+
+
+def test_from_round_11_the_recorded_wins_play_on_into_endless():
+    rec = {n: a for n, a, *_ in jobs.JOBS["teacher-data-10"]}["record"]
+    assert "--endless" not in rec
+    for n in range(jobs.ENDLESS_FROM, jobs.LAST_ROUND + 1):
+        rec = {name: a for name, a, *_ in jobs.JOBS[f"teacher-data-{n}"]}["record"]
+        assert "--endless" in rec and rec[rec.index("--seed") + 1] == str(101 * (n + 1))
+
+
+def test_the_margin_trials_play_the_newest_endless_networks_at_the_champions_weight(tmp_path):
+    f = jobs.FORMULA
+    models = tmp_path / "models"
+    models.mkdir()
+    for n in range(1, jobs.ENDLESS_FROM):
+        for name in (f"value-{n}.bin", f"value-{n}b.bin"):
+            (models / name).write_bytes(b"BMVN")
+    tune = tmp_path / "results" / "tune"
+    tune.mkdir(parents=True)
+    (tmp_path / "results" / "value").mkdir()
+    (tune / f"f{f}-precise-8k-w2.5-on-ensemble8-w1.5.json").write_text(json.dumps(
+        {"kind": "baseline", "runs": 8000, "win_rate": 0.6646, "seed_base": 1, "value_net": jobs.ensemble(8),
+         "value_weight": 2.5, "teacher_options": ["precise"]}))
+    assert [n for n, *_ in jobs.margin_steps(tmp_path)] == ["build"], "nothing before networks with a depth head"
+    n = jobs.ENDLESS_FROM
+    for name in (f"value-{n}.bin", f"value-{n}b.bin"):
+        (models / name).write_bytes(b"BMVN")
+    steps = {name: a for name, a, *_ in jobs.margin_steps(tmp_path)}
+    without = steps["without"]
+    assert without[without.index("--value-net") + 1] == jobs.ensemble(n)
+    assert without[without.index("--value-weight") + 1] == "2.5"
+    assert without[without.index("--teacher-options") + 1] == "precise"
+    control = without[without.index("--out") + 1]
+    # The same name as make teacher-weights' run at that weight on those networks: played once, not twice.
+    assert control == f"results/tune/f{f}-precise-8k-w2.5-on-ensemble{n}-w1.5.json"
+    for extra in jobs.MARGIN_TRIALS:
+        play = steps[extra]
+        assert play[play.index("--teacher-options") + 1] == f"precise,{extra}"
+        assert play[play.index("--value-net") + 1] == jobs.ensemble(n)
+        cmp = steps[f"compare-{extra}"]
+        assert cmp[1] == control and cmp[2] == play[play.index("--out") + 1]
+    (tmp_path / control).write_text("{}")
+    assert "without" not in {name for name, *_ in jobs.margin_steps(tmp_path)}
+    assert "teacher-margin" in jobs.JOBS

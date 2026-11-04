@@ -45,6 +45,13 @@ CONFIGS = "256,128/0.5/1e-3/0.5; 512,256/0.5/1e-3/0.5; 128,64/0.3/1e-3/0.3; 64/0
 
 # The columns of each chunk's lab.npy (examples/baseline.rs: LABELS).
 RUN, STEP, PHASE, ANTE, STAGE, WON, END_STAGE, END_ANTE = range(8)
+# Recordings made with `baseline --endless` add a ninth column: for a win, the blinds it beat after winning (0 to
+# DEPTH - 1, how strong the win was); -1 where not known (a loss, or a recording that didn't play on). Older
+# recordings have eight columns and read as unknown.
+ENDLESS = 8
+DEPTH = 13
+# Labels every recording has: newer recordings may add columns after them.
+BASE_LABELS = 8
 
 
 # ---- Data ----
@@ -62,6 +69,11 @@ class Data:
         self.manifests = [manifest] if manifests is None else manifests
         # With offsets: each row's log-odds of winning by the value networks they name (offset_net).
         self.off, self.offset_net = off, offset_net
+
+    @property
+    def depth(self) -> bool:
+        """Whether any recording played its wins on into Endless (so the network learns how strong a win is)."""
+        return any(m.get("endless") for m in self.manifests)
 
     @property
     def stakes(self) -> np.ndarray:
@@ -165,9 +177,15 @@ def load_data(folders: Path | list[Path], max_runs: int | None = None, layout: i
     inputs = sizes_of.pop()
     first = dict(parts[-1][1], inputs=inputs, input_version=version,
                  layouts=[[v, n] for v, n in sorted(layouts(parts[-1][1]).items()) if v <= version])
+    # Labels: every recording's are the first columns of the longest's (columns were only ever added at the end);
+    # a recording without one reads -1 there (not known).
+    names = max((list(m.get("labels") or []) for _, m, _, _ in parts), key=len)
     for folder, manifest, _, _ in parts:
-        if manifest.get("labels") != first.get("labels"):
-            raise SystemExit(f"{folder}: its labels differ from the newest recording's, so they can't be mixed.")
+        own = list(manifest.get("labels") or [])
+        if own != names[:len(own)] or len(own) < BASE_LABELS:
+            raise SystemExit(f"{folder}: its labels ({own}) don't start the others' ({names}), so they can't be "
+                             f"mixed.")
+    first["labels"] = names
     # Run numbers are kept apart by RUN_OFFSET a recording, in float32 labels (whole numbers exact below 2^24).
     if len(parts) > 16:
         raise SystemExit("At most 16 recordings at once.")
@@ -195,7 +213,9 @@ def load_data(folders: Path | list[Path], max_runs: int | None = None, layout: i
             idx[z0:z0 + nz] = ci
             val[z0:z0 + nz] = cv
             ptr[r0 + 1:r0 + nr + 1] = cp[1:] + z0
-            lab[r0:r0 + nr] = np.load(folder / f"{c}-lab.npy")
+            cl = np.load(folder / f"{c}-lab.npy")
+            lab[r0:r0 + nr, :cl.shape[1]] = cl
+            lab[r0:r0 + nr, cl.shape[1]:] = -1.0
             if off is not None:
                 co = np.load(folder / f"{c}-off.npy")
                 if co.shape != (nr,):
@@ -248,13 +268,16 @@ def need_torch():
     return torch
 
 
-def make_net(torch, inputs: int, hidden: list[int], dropout: float, input_dropout: float = 0.0):
+def make_net(torch, inputs: int, hidden: list[int], dropout: float, input_dropout: float = 0.0,
+             depth: bool = False):
+    """Outputs: the win logit, the ending stage's STAGES logits, and with `depth` how far a win goes on after it
+    (DEPTH logits, learned only from the wins of recordings that played on)."""
     nn = torch.nn
     layers, width = [nn.Dropout(input_dropout)], inputs
     for h in hidden:
         layers += [nn.Linear(width, h), nn.ReLU(), nn.Dropout(dropout)]
         width = h
-    layers.append(nn.Linear(width, 1 + STAGES))
+    layers.append(nn.Linear(width, 1 + STAGES + (DEPTH if depth else 0)))
     return nn.Sequential(*layers)
 
 
@@ -264,6 +287,7 @@ class Batches:
 
     def __init__(self, torch, data: Data, device):
         self.torch, self.device, self.inputs = torch, device, data.inputs
+        self.depth = data.depth
         t = torch.from_numpy
         self.lab = t(data.lab).to(device)
         self.off = None if data.off is None else t(data.off).to(device)
@@ -314,13 +338,18 @@ def input_scale(torch, b: Batches, rows, batch: int):
 
 
 def losses(torch, out, lab, aux: float, off=None):
-    """Per row: the win loss, and the loss trained on (with the ending stage's). With offsets the win output is a
-    correction to them."""
+    """Per row: the win loss, and the loss trained on (with the ending stage's, and for a network with the depth
+    outputs, a win's depth where its recording played on). With offsets the win output is a correction to them."""
     f = torch.nn.functional
     z = out[:, 0] if off is None else out[:, 0] + off
     win = f.binary_cross_entropy_with_logits(z, lab[:, WON], reduction="none")
-    stage = f.cross_entropy(out[:, 1:], lab[:, END_STAGE].long(), reduction="none")
-    return win, win + aux * stage
+    stage = f.cross_entropy(out[:, 1:1 + STAGES], lab[:, END_STAGE].long(), reduction="none")
+    total = win + aux * stage
+    if out.shape[1] > 1 + STAGES and lab.shape[1] > ENDLESS:
+        known = (lab[:, WON] > 0.5) & (lab[:, ENDLESS] >= 0)
+        depth = f.cross_entropy(out[:, 1 + STAGES:], lab[:, ENDLESS].clamp(0, DEPTH - 1).long(), reduction="none")
+        total = total + aux * torch.where(known, depth, torch.zeros_like(depth))
+    return win, total
 
 
 def predict(torch, net, b: Batches, rows, mean, scale, batch: int) -> np.ndarray:
@@ -332,6 +361,28 @@ def predict(torch, net, b: Batches, rows, mean, scale, batch: int) -> np.ndarray
             x = (b.x(rows[k:k + batch]) - mean) * scale
             outs.append(net(x).float().cpu())
     return torch.cat(outs).numpy() if outs else np.zeros((0, 1 + STAGES), np.float32)
+
+
+def depth_measures(out: np.ndarray, lab: np.ndarray) -> dict:
+    """How well the depth outputs tell a strong win from a weak one, on the kept-apart wins whose recording played
+    on: the cross-entropy against knowing only how often each depth comes up, the mean depth expected and found,
+    and the chance of three blinds or more after the win, expected and found."""
+    known = (lab[:, WON] > 0.5) & (lab[:, ENDLESS] >= 0) if lab.shape[1] > ENDLESS else np.zeros(len(lab), bool)
+    if not known.any():
+        return {"wins": 0}
+    z = out[known, 1 + STAGES:].astype(np.float64)
+    z -= z.max(1, keepdims=True)
+    q = np.exp(z)
+    q /= q.sum(1, keepdims=True)
+    d = lab[known, ENDLESS].astype(int).clip(0, DEPTH - 1)
+    freq = np.bincount(d, minlength=DEPTH) / len(d)
+    ce = float(-np.mean(np.log(q[np.arange(len(d)), d] + 1e-12)))
+    ce_freq = float(-np.mean(np.log(freq[d] + 1e-12)))
+    levels = np.arange(DEPTH)
+    return {"wins": int(known.sum()), "runs": len(np.unique(lab[known, RUN])), "ce": round(ce, 5),
+            "ce_by_frequency_alone": round(ce_freq, 5), "mean_expected": round(float((q * levels).sum(1).mean()), 3),
+            "mean_found": round(float(d.mean()), 3), "three_or_more_expected": round(float(q[:, 3:].sum(1).mean()), 4),
+            "three_or_more_found": round(float((d >= 3).mean()), 4)}
 
 
 def win_chance(out: np.ndarray, off: np.ndarray | None) -> np.ndarray:
@@ -504,7 +555,7 @@ def fit(torch, b: Batches, lab: np.ndarray, train_rows, judge_rows, mean, scale,
     """Train one network; keep it as it was when the judging runs scored best."""
     torch.manual_seed(a.seed)
     in_drop = a.input_dropout if cfg.get("input_dropout") is None else cfg["input_dropout"]
-    net = make_net(torch, b.inputs, cfg["hidden"], cfg["dropout"], in_drop).to(device)
+    net = make_net(torch, b.inputs, cfg["hidden"], cfg["dropout"], in_drop, depth=b.depth).to(device)
     residual = b.off is not None
     if residual:
         # A correction starts at none: the value networks' own answer.
@@ -623,6 +674,8 @@ def train(a) -> dict:
     measures["by_stake"] = by_stake(p, data.lab[test_rows], data.stakes[test_rows], before)
     if before is not None:
         measures["before"] = report_measures(before, data.lab[test_rows], rates)
+    if out.shape[1] > 1 + STAGES:
+        measures["depth"] = depth_measures(out, data.lab[test_rows])
 
     # The engine's format, read back and checked.
     layers = folded_layers(net, mean, scale)
@@ -678,6 +731,12 @@ def train(a) -> dict:
         print(f"  stake {r['stake']}: {r['rows']:,} positions, won {r['won']:.3f}, predicted {r['predicted']:.3f}, "
               f"BCE {r['bce']}" + (f" (alone {r['bce_before']}), AUC {r['auc']} (alone {r['auc_before']})"
                                    if "bce_before" in r else f", AUC {r['auc']}"))
+    d = m.get("depth") or {}
+    if d.get("wins"):
+        print(f"  depth after a win ({d['wins']:,} positions of {d['runs']:,} won runs): cross-entropy {d['ce']} "
+              f"(knowing only how often each depth comes: {d['ce_by_frequency_alone']}), blinds after the win "
+              f"expected {d['mean_expected']}, found {d['mean_found']}; three or more expected "
+              f"{d['three_or_more_expected']}, found {d['three_or_more_found']}")
     print(f"Network: {path} ({len(blob):,} bytes), checked against "
           f"{'the engine' if engine_diff is not None else 'its own reading of the file'}.")
     return report

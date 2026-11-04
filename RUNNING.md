@@ -680,6 +680,30 @@ cd /mnt/h/balatro-meta && make sync && make test && make boost-quick
 Each new turn Claude sends is `make sync && make boost-quick FORCE=1`. When a turn wins, `make boost-night` confirms it
 on the full sizes and goes on with the ratchet.
 
+## Step 27: the networks' doubt, then round 11 plays its wins on into Endless (about 12 hours)
+
+What `make boost-quick` found: the correction made the champion's chance far better calibrated at the hard stakes
+(BCE 0.37 against 0.66 on runs kept apart) but no better at telling positions apart (AUC lower at six stakes of
+eight), and it played worse at every stake (blinds beaten clearly fewer from Red to Gold). A lower chance makes the
+learned term, w ln(p + 0.01), steeper, so the corrected networks get more say just where they know least: the same
+fall as weight 16 at White. So no `make boost-night` for now.
+
+Three jobs in a row, each a fresh idea against the same plateau:
+
+1. `make teacher-doubt` (about 3 hours): the champion's networks disagree most where they know least; "doubt=k"
+   counts an option down by k standard deviations of their chances, the brake that may let them take more say.
+2. `make learned-11` (about 4 hours): round 11, its runs recorded by the best teacher there is (the doubt trial's,
+   if it won). Each won run plays on into Endless to ante 12, and its positions learn how many blinds it beat after
+   the win: one result for about 200 decisions says little about which were good; how strong the win was says more.
+   Its networks learn that as a second head.
+3. `make teacher-weights` then `make teacher-margin` (about 5 hours): round 11's networks at weights 1.5, 2.5 and
+   4, then at the champion's weight aiming for wins with 3 or 6 blinds to spare ("margin=K"). 82% of losses come
+   at a boss: a teacher that wants room to spare may build stronger before the bosses arrive.
+
+```
+cd /mnt/h/balatro-meta && make sync && make test && make teacher-doubt && make learned-11 && make teacher-weights && make teacher-margin
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a
