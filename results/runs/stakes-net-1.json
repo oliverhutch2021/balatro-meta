@@ -1,0 +1,34 @@
+{
+ "job": "stakes-net-1",
+ "commit": "57d2c88620d32b5572e15b600fea35a753b035aa",
+ "started": "2026-11-04T05:06:19+00:00",
+ "finished": "2026-11-04T05:08:33+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   1.3,
+   7.8,
+   12.6
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "setup-gpu": 15,
+  "train": 60,
+  "trainb": 42,
+  "train-white": 8,
+  "train-whiteb": 8
+ },
+ "commands": {
+  "setup-gpu": "make --no-print-directory setup-gpu",
+  "train": "scripts/train_value.py --data ~/.cache/balatro-meta/data/stakes-1/stake1 --data ~/.cache/balatro-meta/data/stakes-1/stake2 --data ~/.cache/balatro-meta/data/stakes-1/stake3 --data ~/.cache/balatro-meta/data/stakes-1/stake4 --data ~/.cache/balatro-meta/data/stakes-1/stake5 --data ~/.cache/balatro-meta/data/stakes-1/stake6 --data ~/.cache/balatro-meta/data/stakes-1/stake7 --data ~/.cache/balatro-meta/data/stakes-1/stake8 --newest 8 --input-layout 3 --seed 1 --out models/value-stakes-1.bin --report results/value/value-stakes-1.json",
+  "trainb": "scripts/train_value.py --data ~/.cache/balatro-meta/data/stakes-1/stake1 --data ~/.cache/balatro-meta/data/stakes-1/stake2 --data ~/.cache/balatro-meta/data/stakes-1/stake3 --data ~/.cache/balatro-meta/data/stakes-1/stake4 --data ~/.cache/balatro-meta/data/stakes-1/stake5 --data ~/.cache/balatro-meta/data/stakes-1/stake6 --data ~/.cache/balatro-meta/data/stakes-1/stake7 --data ~/.cache/balatro-meta/data/stakes-1/stake8 --newest 8 --input-layout 3 --seed 2 --out models/value-stakes-1b.bin --report results/value/value-stakes-1b.json",
+  "train-white": "scripts/train_value.py --data ~/.cache/balatro-meta/data/stakes-1/stake1 --input-layout 3 --seed 1 --out models/value-stakes-1-white.bin --report results/value/value-stakes-1-white.json",
+  "train-whiteb": "scripts/train_value.py --data ~/.cache/balatro-meta/data/stakes-1/stake1 --input-layout 3 --seed 2 --out models/value-stakes-1-whiteb.bin --report results/value/value-stakes-1-whiteb.json"
+ }
+}
