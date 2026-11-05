@@ -1,0 +1,34 @@
+{
+ "job": "value-net-forks-1",
+ "commit": "a1a3adcf23df0f798d9c73aa6a2a15779ee4392d",
+ "started": "2026-11-05T02:12:29+00:00",
+ "finished": "2026-11-05T02:35:58+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   0.9,
+   1.0,
+   4.0
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "setup-gpu": 13,
+  "train": 350,
+  "control": 368,
+  "trainb": 384,
+  "controlb": 293
+ },
+ "commands": {
+  "setup-gpu": "make --no-print-directory setup-gpu",
+  "train": "scripts/train_value.py --data ~/.cache/balatro-meta/data/value-9 --data ~/.cache/balatro-meta/data/value-10 --forks ~/.cache/balatro-meta/data/forks-quick --forks ~/.cache/balatro-meta/data/forks-1 --fork-split 5 --seed 1 --out models/value-forks-1.bin --report results/value/value-forks-1.json",
+  "control": "scripts/train_value.py --data ~/.cache/balatro-meta/data/value-9 --data ~/.cache/balatro-meta/data/value-10 --forks ~/.cache/balatro-meta/data/forks-quick --forks ~/.cache/balatro-meta/data/forks-1 --pair-weight 0 --fork-split 5 --seed 1 --out models/value-forks-1-control.bin --report results/value/value-forks-1-control.json",
+  "trainb": "scripts/train_value.py --data ~/.cache/balatro-meta/data/value-9 --data ~/.cache/balatro-meta/data/value-10 --forks ~/.cache/balatro-meta/data/forks-quick --forks ~/.cache/balatro-meta/data/forks-1 --fork-split 5 --seed 2 --out models/value-forks-1b.bin --report results/value/value-forks-1b.json",
+  "controlb": "scripts/train_value.py --data ~/.cache/balatro-meta/data/value-9 --data ~/.cache/balatro-meta/data/value-10 --forks ~/.cache/balatro-meta/data/forks-quick --forks ~/.cache/balatro-meta/data/forks-1 --pair-weight 0 --fork-split 5 --seed 2 --out models/value-forks-1-controlb.bin --report results/value/value-forks-1-controlb.json"
+ }
+}
