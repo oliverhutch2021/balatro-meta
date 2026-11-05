@@ -1,7 +1,8 @@
 # Balatro Meta: notes for Claude
 
-Find the strategies that win Balatro most often. The plan is the source of
-truth: https://claude.ai/artifact/GiEZz9CFZnAtdoEPBLkSFA
+Find the strategies that win Balatro most often. The plan (a document kept
+outside the repo) is the source of truth; RUNNING.md records each step and
+what it found.
 
 ## Non-negotiables
 
@@ -162,8 +163,14 @@ consumables, card creation with its streams, and the seals that make
 consumables. Per-frame joker values (Joker Stencil, Swashbuckler, Throwback,
 the deck tallies) are refreshed just before each hand is scored
 (`Run::refresh_frame_values`). The real-game check (phase 3) runs in the
-background of `make watch`; no rule difference found so far. Open questions are
-the UNSURE sections of the notes. Now: the teacher's learned value (expert
+background of `make watch` and saves each difference to `.sync/watch/mismatches/`
+(60 since 29 October; `make recheck`, `scripts/recheck.py`, replays them on
+today's engine: on 5 November 25 fixed, 35 open: 17 scores one chip apart, a
+rounding difference to find; 2 larger scoring gaps; 9 card-debuff flags under
+bosses; 3 hands dealt after an Arcana pack; 2 cash-outs a dollar or two apart;
+2 rounds the engine ends and the game doesn't). The checks keep a tally of runs
+and moves compared in `results/checks.json` (from 5 November). Open questions are the UNSURE sections
+of the notes. Now: the teacher's learned value (expert
 iteration: record, train, play with it, repeat) and `make train` (the network:
 imitation of the teacher, then PPO on the GPU), shown by `make watch` like the
 baseline.
@@ -175,6 +182,6 @@ baseline.
 
 ## Workflow
 
-Claude writes code in the cloud; the user's PC (WSL2 Ubuntu, 16 threads,
-RTX 4070 Ti 12 GB) runs heavy jobs. The cloud cannot push to GitHub:
+Claude writes code in the cloud; the user's PC (WSL2 Ubuntu, 16 threads, a
+12 GB GPU) runs heavy jobs. The cloud cannot push to GitHub:
 Claude leaves `.sync/claude.bundle`, the user runs `make sync` and pushes.

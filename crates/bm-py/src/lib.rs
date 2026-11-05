@@ -479,6 +479,12 @@ impl Game {
         self.moves.clone()
     }
 
+    /// The stake the run is played at (1 White ... 8 Gold).
+    #[getter]
+    fn stake(&self) -> u8 {
+        self.run.cfg.stake
+    }
+
     #[getter]
     fn over(&self) -> bool {
         self.run.phase == Phase::GameOver || self.run.won

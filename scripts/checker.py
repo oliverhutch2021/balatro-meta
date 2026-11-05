@@ -228,11 +228,32 @@ class HiddenGame:
                 pass  # still open: next time
 
 
+# The counts the running tally keeps across sessions (results/checks.json).
+TALLIED = ("runs", "moves", "complete", "differences", "stopped_early", "refused", "realigned")
+TALLY = ROOT / "results" / "checks.json"
+
+
+def load_tally(path: Path | None) -> dict:
+    """The tally so far, or a fresh one: counts of what the checks compared, when they began keeping count, and
+    how many sessions of `make watch` it covers."""
+    fresh = {"since": time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()), "sessions": 0,
+             **{k: 0 for k in TALLIED}}
+    if path is None:
+        return fresh
+    try:
+        t = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return fresh
+    return {**fresh, **{k: int(t.get(k) or 0) for k in TALLIED}, "since": t.get("since") or fresh["since"],
+            "sessions": int(t.get("sessions") or 0)}
+
+
 class Checker:
-    """Replays runs in the hidden game and in the engine together, comparing after every move."""
+    """Replays runs in the hidden game and in the engine together, comparing after every move. Keeps a tally of
+    what it compared across sessions (`tally_path`, results/checks.json by default when the viewer starts it)."""
 
     def __init__(self, jobs=None, port: int = CHECK_PORT, launch: bool = True, api: Api | None = None,
-                 files: ModFiles | None = None, say=print) -> None:
+                 files: ModFiles | None = None, say=print, tally_path: Path | None = None) -> None:
         self.jobs = jobs  # the viewer's JobFiles: where saved runs come from
         self.port = port
         self.launch_allowed = launch
@@ -255,6 +276,12 @@ class Checker:
                       "restarts": 0, "last_restart": None,
                       "memory_mb": None, "up_since": None, "last_difference": None, "current": None, "last": None,
                       "port": port, "updated": time.time()}
+        # The running tally across every session (results/checks.json, committed with the results): what the
+        # checks have compared since they began keeping count, so the engine's record has a number.
+        self.tally_path = tally_path
+        self.tally = load_tally(tally_path)
+        self.tally["sessions"] += 1
+        self.tally_written = 0.0
 
     # -- what the page shows
     def summary(self) -> dict:
@@ -269,6 +296,25 @@ class Checker:
     def add(self, key: str, n: int = 1) -> None:
         with self.lock:
             self.state[key] += n
+            if key in TALLIED:
+                self.tally[key] += n
+        self.write_tally()
+
+    def write_tally(self, force: bool = False) -> None:
+        """results/checks.json, at most every half minute (and at the end)."""
+        if self.tally_path is None or (not force and time.time() - self.tally_written < 30):
+            return
+        self.tally_written = time.time()
+        with self.lock:
+            text = json.dumps(dict(self.tally, updated=time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())),
+                              indent=1) + "\n"
+        try:
+            self.tally_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.tally_path.with_suffix(".tmp")
+            tmp.write_text(text)
+            tmp.replace(self.tally_path)
+        except OSError:
+            pass
 
     # -- the hidden game
     def control(self) -> None:
@@ -436,7 +482,7 @@ class Checker:
         out.mkdir(parents=True, exist_ok=True)
         f = out / f"{game.seed}-move{step}.json"
         f.write_text(json.dumps({"seed": game.seed, "move": step, "what": what, "differences": diff,
-                                 "moves": game.moves, "engine": engine_view(game), "game": gs},
+                                 "stake": game.stake, "moves": game.moves, "engine": engine_view(game), "game": gs},
                                 indent=1, default=str))
         shown = str(f.relative_to(ROOT) if f.is_relative_to(ROOT) else f)
         self.add("differences")
@@ -518,6 +564,7 @@ class Checker:
             self.add("runs")
             self.note(last={"seed": seed, "label": label, "ok": ok, "result": msg, "time": time.time()}, current=None)
             self.say(f"[checks] {label} {seed}: {msg}")
+        self.write_tally(force=True)
 
     def someone_recording(self) -> bool:
         """`make record-me`'s game is up (its companion mod wrote its report in the last few seconds)."""

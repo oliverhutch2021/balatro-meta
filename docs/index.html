@@ -152,13 +152,15 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
     </div>
     <div class="panel hero">
       <h1>A bot that learns to win Balatro</h1>
-      <p class="lede">It plays a faithful copy of the game, sees only what a player sees, and decides every move by what it expects to win. A week in, it wins seven runs in ten. The goal is 90%, and strategies better than its human teacher's.</p>
-      <div class="score" aria-label="From 0.07% to 71.8% of runs won; its biggest hand scored 16.6 billion">
+      <p class="lede">It plays a faithful copy of the game, sees only what a player sees, and decides every move by what it expects to win. A week in, it wins seven runs in ten on the seeds it is tuned on, and two in three on an exam it never sees. The goal is 90%, and strategies better than its human teacher's.</p>
+      <div class="score" aria-label="From 0.07% to 71.8% of runs won on the tuning seeds; 66.5% on the exam; its biggest hand scored 16.6 billion">
         <div class="box plain" tabindex="0"><span class="v num">0.07%</span><span class="k">First bot, 30 Oct</span></div>
         <span class="op" aria-hidden="true">→</span>
-        <div class="box chips" tabindex="0"><span class="v num">71.8%</span><span class="k">Runs won now · 8,000 seeds</span></div>
+        <div class="box chips" tabindex="0"><span class="v num">71.8%</span><span class="k">Won now · 8,000 tuning seeds</span></div>
+        <div class="box plain" tabindex="0"><span class="v num">66.5%</span><span class="k">Exam · 3 Nov bot, seeds kept apart</span></div>
         <div class="box mult" tabindex="0"><span class="v num">16.6B</span><span class="k">Its biggest hand</span></div>
       </div>
+      <details class="col"><summary>New to Balatro? The game in a paragraph</summary><p style="margin-top:8px">Balatro is a solitaire card game built on poker hands. A run is eight rounds, called antes, each with three score targets, called blinds, that roughly double from one to the next; the third of each ante is a boss blind with a rule of its own. You hold eight cards, play up to four poker hands and discard up to three times per blind, and each hand scores chips × mult. Beat ante 8's boss and the run is won. Between blinds a shop sells jokers (up to five held, and the source of nearly all scoring), planet cards that level up a hand type, tarot cards that change your cards, vouchers and packs; money earns interest. Everything random comes from the run's seed. Stakes are difficulty levels, White the easiest; decks change the starting rules. The bot plays White Stake with the Red Deck, the game's first table.</p></details>
       <p class="hint">Move over the table to steer the felt; tap to stir it.</p>
     </div>
   </div>
@@ -232,7 +234,7 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
         <div class="three">
           <div>
             <h3>The engine</h3>
-            <p>Our own copy of Balatro 1.0.1o in Rust: all 150 jokers, 52 consumables, 32 vouchers, 24 tags and 28 boss blinds. The same seed deals the same cards, shops and packs as the real game, and the engine is checked move by move against the real game.</p>
+            <p>Our own copy of Balatro 1.0.1o in Rust: all 150 jokers, 52 consumables, 32 vouchers, 24 tags and 28 boss blinds. The same seed deals the same cards, shops and packs as the real game. While the viewer runs, a hidden copy of the real game replays the bot's runs move by move and every number is compared; a difference is saved with both states. Sixty have been saved since 29 October; replayed on today's engine, 25 are fixed and 35 open, most of them scores one chip apart (a rounding difference under study), the rest card debuffs under bosses, hands dealt after a pack and a few larger scoring gaps. Fidelity is a standing job, not a finished one.</p>
           </div>
           <div>
             <h3>Fair play</h3>
@@ -260,7 +262,7 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
           <div><b>Play better</b><small>The bot decides with the network's estimate. Round 4 gained 1.75 points, round 5 only 0.4.</small></div>
           <div class="new"><b>Explore</b><small>New from round 7: one decision in ten takes another option rated nearly as good, so the network sees where untried choices lead.</small></div>
         </div>
-        <p class="col muted">Without exploration, the network only learns from the choices the bot already makes, so each round can only refine its habits. That is why the gains were shrinking. Rounds 7 to 10 explored, round 10 with whole builds (a quarter of its runs commit from ante 3 to one hand picked at random), and their networks are no better than round 7's. More say for the networks helped up to a point (66.1% at four times the formula's weight) and collapsed past it (53.8% at sixteen): picking the best of many options with a judge that errs picks its errors. So on 5 November the project stopped tuning the judge and asked, with the two experiments below, where the losses actually come from.</p>
+        <p class="col muted">Without exploration, the network only learns from the choices the bot already makes, so each round can only refine its habits. That is why the gains were shrinking. Rounds 7 to 10 explored, round 10 with whole builds (a quarter of its runs commit from ante 3 to one hand picked at random), and their networks are no better than round 7's: round 10's won 66.1% at four times the formula's weight, where round 8's had won 66.5% at two and a half. More say for the networks collapsed past that point (63% at eight times, 53.8% at sixteen): picking the best of many options with a judge that errs picks its errors. So on 5 November the project stopped tuning the judge and asked, with the two experiments below, where the losses actually come from.</p>
       </div>
     </div>
   </section>
@@ -341,6 +343,32 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
           </table>
         </div>
         <p class="col">Focus on one hand, tested with fairer pack skipping on 8,000 seeds, gained 1.64 points (p = 0.001) and is now how the bot plays. None of the other gains is clear on 2,000 seeds, and the rules added as extra points (x mult, a thinner deck) made the bot worse: they skew everything else it weighs. The lessons that help will have to be found by the bot itself, which is what exploration is for. The player's runs show what it is looking for: on 1 November one took Straight from level 1 to 19 in one run and Flush to level 33 in another, where the bot's main hand ends its wins at a median level 5.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="stakes">
+    <div class="wrap">
+      <span class="label">The harder tables</span>
+      <h2>Every stake, once</h2>
+      <div class="panel">
+        <p class="col lead">Stakes add their rules one by one: Red takes a discard, Green makes the targets grow faster, Black lets jokers be eternal, Blue takes a hand, Purple makes the targets grow faster again, Orange adds perishable jokers, Gold adds rentals. The champion of 3 November, built for White, played 2,000 seeds at each.</p>
+        <div class="tbl col">
+          <table>
+            <thead><tr><th>Stake</th><th class="r">Won</th><th class="r">Blinds beaten a run</th></tr></thead>
+            <tbody>
+              <tr><td>White</td><td class="r num">66.8%</td><td class="r num">21.4</td></tr>
+              <tr><td>Red</td><td class="r num">52.0%</td><td class="r num">19.9</td></tr>
+              <tr><td>Green</td><td class="r num">19.7%</td><td class="r num">16.1</td></tr>
+              <tr><td>Black</td><td class="r num">11.4%</td><td class="r num">15.1</td></tr>
+              <tr><td>Blue</td><td class="r num">8.8%</td><td class="r num">14.4</td></tr>
+              <tr><td>Purple</td><td class="r num">1.9%</td><td class="r num">12.6</td></tr>
+              <tr><td>Orange</td><td class="r num">0.9%</td><td class="r num">11.8</td></tr>
+              <tr><td>Gold</td><td class="r num">0.2%</td><td class="r num">9.4</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="col muted">Networks that learned every stake's runs (two nights, 4 November) played worse than the White champion at every stake but Gold, and a correction trained on where the champion is wrong at each stake predicted far better and played worse: both were a better-calibrated judge the bot then trusted too much. The higher stakes wait for the budget and the forks to settle at White.</p>
       </div>
     </div>
   </section>

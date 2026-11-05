@@ -10,6 +10,17 @@ a bot that wins 90% of runs at White Stake and finds strategies its human teache
 
 ![Runs won at White Stake by each version of the bot, from 0.07% on 30 October to 71.8% on 5 November](docs/climb.svg)
 
+## Balatro in a paragraph
+
+Balatro is a solitaire card game built on poker hands. A run is eight rounds ("antes"), each with three score
+targets ("blinds") that roughly double from one to the next; the third of each ante is a boss blind with a rule
+of its own. You hold eight cards, play up to four poker hands and discard up to three times per blind, and each
+hand scores chips × mult. The run is won by beating ante 8's boss. Between blinds a shop sells jokers (up to five
+held, and the source of nearly all scoring), planet cards that level up a hand type, tarot cards that change your
+cards, vouchers and packs; money earns interest. Everything random comes from the run's seed. Stakes are
+difficulty levels, White the easiest and Gold the hardest; decks change the starting rules (Red Deck: one more
+discard). The bot plays White Stake with the Red Deck, the game's first table, where a strong human wins most runs.
+
 ## The idea
 
 1. **A faithful game.** Our own Rust engine plays Balatro 1.0.1o rule for rule: all 150 jokers, 52 consumables,
@@ -55,21 +66,27 @@ a bot that wins 90% of runs at White Stake and finds strategies its human teache
 
 | Table | Bot | Seeds | Won |
 | --- | --- | --- | --- |
-| White Stake, Red Deck | champion of 5 November (3× samples from ante 5, 4× in boss blinds) | 8,000 usual seeds | **71.8%** |
-| White Stake, Red Deck | champion of 3 November, the exam | 8,000 seeds kept apart, never used to choose | 66.5% |
+| White Stake, Red Deck | champion of 5 November (3× samples from ante 5, 4× in boss blinds) | 8,000 tuning seeds | **71.8%** |
+| White Stake, Red Deck | champion of 3 November | 8,000 exam seeds, kept apart and never used to choose | 66.5% |
 | Red Stake | champion of 3 November | 2,000 | 52.0% |
 | Green · Black · Blue | champion of 3 November | 2,000 each | 19.7% · 11.4% · 8.8% |
 | Purple · Orange · Gold | champion of 3 November | 2,000 each | 1.9% · 0.9% · 0.2% |
 
-The usual seeds are where ideas are compared, so they flatter the bot a little; the exam's seeds only ever measure
-the best bot there is. The current champion has not sat the exam yet. Every measured version, with its code,
-options and seeds, is in `results/progress.jsonl`.
+The tuning seeds are where ideas are compared and the winners kept, so they flatter the bot a little (the
+champion of 3 November scored 66.5% on both sets, so the flattery was small then). The exam seeds only ever
+measure the best bot there is. The champion of 5 November sits the exam next; until it has, 71.8% is a tuning
+number. Every measured version, with its code, options and seeds, is in `results/progress.jsonl`.
 
 ## How we know it's right
 
-- The engine is checked against the real game through [BalatroBot](https://github.com/coder/balatrobot): a hidden
-  copy of the game plays the same seeds move by move and every number is compared. No rule difference has been
-  found.
+- The engine is checked against the real game through [BalatroBot](https://github.com/coder/balatrobot): while
+  the viewer runs, a hidden copy of the game replays the bot's runs move by move and every number on screen is
+  compared with the engine's. A difference stops that run's check and is saved with both states. Since 29 October
+  the checks have saved 60 differences; replayed on today's engine (`make recheck`), 25 are fixed and 35 are open:
+  17 scores one chip apart (a rounding difference, under study), 2 larger scoring gaps, 9 card-debuff flags under
+  bosses, 3 hands dealt after an Arcana pack, 2 cash-outs a dollar or two apart, 2 rounds the engine ends that the
+  game doesn't. From 5 November the checks keep a tally of the runs and moves they compared
+  (`results/checks.json`); before that, no count was kept, so there is no honest "N moves, 0 mismatches" to quote.
 - Two versions of the bot are always compared on the same seeds, run by run, with a paired test; a version's own
   win rate on 8,000 seeds is known to about ±1 point.
 - Training uses fresh seeds; tests use seeds the bot never played; the exam's seeds choose nothing.

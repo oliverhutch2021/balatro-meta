@@ -35,7 +35,7 @@ bash bootstrap.sh
 ```
 
 It installs make, LuaJIT, uv, Rust and Python 3.12, builds the engine, and installs PyTorch with CUDA for
-the 4070 Ti (about 3 GB; `SKIP_GPU=1 bash bootstrap.sh` leaves that for later). It asks for your Ubuntu
+the GPU (about 3 GB; `SKIP_GPU=1 bash bootstrap.sh` leaves that for later). It asks for your Ubuntu
 password once and ends with a check table. If any line says FAIL, paste the table into the chat.
 
 Result commits are made under your name. If the check table says the Git identity is missing:
@@ -224,7 +224,7 @@ or `make learned` for all three in a row.
   2 GB) goes to `~/.cache/balatro-meta/data/value-1` on the WSL disk. The runs' numbers go to
   `results/value/record-1.json`: a measure of today's teacher on seeds it has never played.
 - `make value-net` (about 15 minutes): installs PyTorch with CUDA if it isn't there yet, then trains the
-  network on the 4070 Ti. It reads a position as the screen shows it (the same rule as everything the bot
+  network on the GPU. It reads a position as the screen shows it (the same rule as everything the bot
   sees) and learns the chance of winning, and how far the run gets. It tries four network sizes and keeps
   the best, judged on runs it never trained on, and measures it on others again. The network goes to
   `models/value-1.bin` (not committed; the report holds its checksum), and the report, with how well it

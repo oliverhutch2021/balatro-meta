@@ -554,3 +554,42 @@ def test_a_hidden_game_that_never_answers_is_started_again_and_says_why(tmp_path
     assert c.game.stops == 1 and c.game.launches == 2 and resets == [1]
     assert len(lines) == 1 and "didn't answer within 90 s" in lines[0] and "directly" in lines[0]
     assert c.summary()["restarts"] == 1
+
+
+def test_a_saved_difference_replays_on_todays_engine_and_the_checks_keep_a_tally(tmp_path, monkeypatch):
+    """`make recheck`: a saved difference whose game state the engine now agrees with reads as fixed; one it
+    still differs from stays open. The checks' tally of runs and moves compared persists across sessions."""
+    import recheck
+    monkeypatch.setattr(watch, "WATCH", tmp_path)
+    monkeypatch.setattr(checker, "WATCH", tmp_path)
+    tally = tmp_path / "checks.json"
+    # A game that lies about its money in the shop: the checks save the difference (with the stake), and the tally
+    # counts the run and its moves.
+    srv = serve(FakeGame(cheat=True))
+    api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
+    c = checker.Checker(api=api, files=checker.ModFiles(None), launch=False, say=lambda *_: None, tally_path=tally)
+    ok, msg = c.check_run("WATCH003", None, "test")
+    srv.shutdown()
+    assert not ok and "money" in msg
+    c.write_tally(force=True)
+    t = json.loads(tally.read_text())
+    assert t["sessions"] == 1 and t["moves"] > 0 and t["differences"] == 1 and t["runs"] == 0, "runs count in the loop"
+    assert checker.Checker(files=checker.ModFiles(None), launch=False, say=lambda *_: None, tally_path=tally).tally["sessions"] == 2
+    files = sorted((tmp_path / "mismatches").glob("*.json"))
+    assert len(files) == 1
+    saved = json.loads(files[0].read_text())
+    assert saved["stake"] == 1 and saved["moves"]
+    # Replayed: the lie is still in the saved state, so the difference is open; the stake is read from the file.
+    r = recheck.recheck_file(files[0])
+    assert r["now"] and r["now"][0].startswith("money") and r["stake"] == 1
+    # The same file with the game's money put right: fixed. And one from before files named their stake.
+    fixed = dict(saved)
+    fixed["game"] = dict(saved["game"], money=saved["engine"]["money"])
+    (tmp_path / "mismatches" / "fixed-case.json").write_text(json.dumps(fixed, default=str))
+    old = dict(fixed)
+    old.pop("stake")
+    (tmp_path / "mismatches" / "old-case.json").write_text(json.dumps(old, default=str))
+    results = [recheck.recheck_file(p) for p in sorted((tmp_path / "mismatches").glob("*.json"))]
+    s = recheck.summarise(results)
+    assert (s["files"], s["fixed"], s["open"], s["errors"]) == (3, 2, 1, 0)
+    assert s["open_by_field"] == {"money": 1}

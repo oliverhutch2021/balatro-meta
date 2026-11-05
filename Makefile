@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late teacher-boss teacher-budget teacher-budget-big diagnose forks-quick forks-night forks-table forks-now
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late teacher-boss teacher-budget teacher-budget-big recheck diagnose forks-quick forks-night forks-table forks-now
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -168,6 +168,9 @@ teacher-budget:  ## How far the search budget goes: late-x=2, from ante 3, late-
 
 teacher-budget-big:  ## The same four on 8,000 seeds (the confirmation; about 14 hours)
 	$(PY) scripts/jobs.py run teacher-budget-big $(JOB_FLAGS)
+
+recheck:  ## Every difference the real-game checks saved, replayed on today's engine: fixed or still open (seconds)
+	$(PY) scripts/recheck.py --out results/checks-recheck.json
 
 diagnose:  ## Where the champion's runs are lost and why: the newest recording replayed, a quarter of the lost blinds played again with deeper search (about 15 minutes)
 	$(PY) scripts/jobs.py run diagnose $(JOB_FLAGS)
