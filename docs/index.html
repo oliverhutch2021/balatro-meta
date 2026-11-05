@@ -249,6 +249,71 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
     </div>
   </section>
 
+  <section id="wins">
+    <div class="wrap">
+      <span class="label">How it wins · 3,000 recorded runs</span>
+      <h2>Levelled Pairs, scaling jokers, and money by ante 3</h2>
+      <div class="panel">
+        <p class="col lead">The champion's 3,000 recorded runs, replayed with every blind's winning hand and every joker held at the end noted. The base win rate of this recording is 61% (it explores: one shop move in ten takes a near-equal alternative). Everything here is association, not cause: a joker held at the end was held by a run that lived long enough to hold it.</p>
+        <h3>The scoring hands</h3>
+        <p class="col">The hand type that cleared most of a run's blinds, as the blind's biggest hand (the throwaway plays, a fifth of all hands, don't count). Straights carry a third of its runs; levelled Pairs win most; Flushes win least.</p>
+        <div class="chart" id="handsChart" role="img" aria-label="Bar chart: share of runs by main scoring hand, with each group's win rate. Straight 32% of runs, 63% won; Full House 20%, 55%; Pair 18%, 74%; Flush 13%, 47%; Two Pair 12%, 65%; High Card 3%, 80%; Three of a Kind 2%, 46%."></div>
+        <h3>The jokers</h3>
+        <p class="col">Held at the run's end, in at least 40 of the 3,000 runs. Left: the ones most often in its hands. Right: the best and worst company by win rate when held. The worst list is mostly a shop that never got upgraded: a run still holding Mail-In Rebate at ante 7 is a run that found nothing better.</p>
+        <div class="three">
+          <div class="tbl">
+            <table>
+              <thead><tr><th>Most held</th><th class="r">Runs</th><th class="r">Won</th></tr></thead>
+              <tbody>
+                <tr><td>Runner</td><td class="r num">25%</td><td class="r num">68%</td></tr>
+                <tr><td>Supernova</td><td class="r num">20%</td><td class="r num">55%</td></tr>
+                <tr><td>Card Sharp</td><td class="r num">19%</td><td class="r num up">77%</td></tr>
+                <tr><td>Hologram</td><td class="r num">17%</td><td class="r num up">78%</td></tr>
+                <tr><td>Constellation</td><td class="r num">17%</td><td class="r num up">76%</td></tr>
+                <tr><td>Abstract Joker</td><td class="r num">15%</td><td class="r num">54%</td></tr>
+                <tr><td>Castle</td><td class="r num">15%</td><td class="r num up">75%</td></tr>
+                <tr><td>Bootstraps</td><td class="r num">14%</td><td class="r num up">78%</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="tbl">
+            <table>
+              <thead><tr><th>Best company</th><th class="r">Runs</th><th class="r">Won</th></tr></thead>
+              <tbody>
+                <tr><td>Baseball Card</td><td class="r num">10%</td><td class="r num up">86%</td></tr>
+                <tr><td>Blueprint</td><td class="r num">9%</td><td class="r num up">84%</td></tr>
+                <tr><td>Ramen</td><td class="r num">3%</td><td class="r num up">85%</td></tr>
+                <tr><td>Blackboard</td><td class="r num">4%</td><td class="r num up">80%</td></tr>
+                <tr><td>Obelisk</td><td class="r num">3%</td><td class="r num up">80%</td></tr>
+                <tr><td>Brainstorm</td><td class="r num">4%</td><td class="r num up">79%</td></tr>
+                <tr><td>Bull</td><td class="r num">11%</td><td class="r num up">77%</td></tr>
+                <tr><td>The Duo</td><td class="r num">9%</td><td class="r num up">75%</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="tbl">
+            <table>
+              <thead><tr><th>Worst company</th><th class="r">Runs</th><th class="r">Won</th></tr></thead>
+              <tbody>
+                <tr><td>Mail-In Rebate</td><td class="r num">4%</td><td class="r num down">18%</td></tr>
+                <tr><td>Even Steven</td><td class="r num">2%</td><td class="r num down">23%</td></tr>
+                <tr><td>Business Card</td><td class="r num">2%</td><td class="r num down">25%</td></tr>
+                <tr><td>Golden Joker</td><td class="r num">2%</td><td class="r num down">24%</td></tr>
+                <tr><td>Hiker</td><td class="r num">2%</td><td class="r num down">25%</td></tr>
+                <tr><td>Misprint</td><td class="r num">4%</td><td class="r num down">30%</td></tr>
+                <tr><td>Space Joker</td><td class="r num">6%</td><td class="r num down">33%</td></tr>
+                <tr><td>Blue Joker</td><td class="r num">5%</td><td class="r num down">40%</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <h3>The biggest swings</h3>
+        <p class="col">The win rate by where a run stood at a given moment. Two scaling jokers by ante 4 nearly guarantee the run; none leaves it below average. Money at ante 3 is worth 17 points between the poorest and richest third. A scoring hand that never got past level 2 loses two runs in three.</p>
+        <div class="chart" id="swingsChart" role="img" aria-label="Dot chart of win rate by factor. X mult jokers as ante 4 began: none 59%, one 70%, two or more 91%. Money as ante 3 began: under $8 54%, $8 to $15 61%, $16 or more 71%. First x mult joker held by: ante 3 70%, ante 4 or 5 74%, ante 6 to 8 80%, never 46%. Scoring hand's final level: 1 or 2 37%, 3 to 5 63%, 6 to 9 81%, 10 or more 83%. Vouchers taken: none 28%, one 54%, two 70%, three or more 78%. Jokers held as ante 3 began: 0 to 2 21%, 3 53%, 4 or 5 66%."></div>
+      </div>
+    </div>
+  </section>
+
   <section id="learn">
     <div class="wrap">
       <span class="label">How it learns</span>
@@ -569,6 +634,74 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
       hit.addEventListener("mouseenter", () => { const k = svg.getBoundingClientRect().width / W; tip.show(`<b>Ante ${i + 1}</b><br>won: ${fmt(win[i])} · $${moneyW[i]}<br>lost late: ${fmt(lose[i])} · $${moneyL[i]}`, x(i) * k, y(win[i]) * k); });
       hit.addEventListener("mouseleave", tip.hide);
     }
+  })();
+
+  (function () {
+    // The scoring hands: share of runs by main scoring hand (bar), the group's win rate as the label.
+    const hands = [["Straight", 32.0, 62.6, 4], ["Full House", 19.7, 55.5, 4], ["Pair", 17.6, 74.3, 7], ["Flush", 12.6, 46.7, 4],
+      ["Two Pair", 12.3, 65.3, 6], ["High Card", 2.8, 79.5, 4], ["Three of a Kind", 2.3, 45.6, 4]];
+    const box = document.getElementById("handsChart");
+    const W = 900, H = 300, L = 130, R = 200, T = 16, B = 30;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}` }, box);
+    const rowH = (H - T - B) / hands.length;
+    const x = (v) => L + (W - L - R) * (v / 35);
+    for (let g = 0; g <= 35; g += 5) {
+      el("line", { x1: x(g), x2: x(g), y1: T, y2: H - B, stroke: "var(--rule)", "stroke-width": 1 }, svg);
+      el("text", { x: x(g), y: H - 10, "text-anchor": "middle", "font-family": MONO, "font-size": 11, fill: "var(--muted)" }, svg, g + "%");
+    }
+    const tip = tipFor(box);
+    hands.forEach((h, i) => {
+      const y0 = T + i * rowH + rowH * 0.18, bh = rowH * 0.64;
+      const col = h[2] >= 70 ? "var(--chips)" : h[2] < 50 ? "var(--mult)" : "var(--faint)";
+      const r = el("rect", { x: L, y: y0, width: x(h[1]) - L, height: bh, rx: 4, fill: col }, svg);
+      el("text", { x: L - 10, y: y0 + bh / 2 + 4, "text-anchor": "end", "font-family": PIX, "font-size": 14, fill: "var(--ink)" }, svg, h[0]);
+      el("text", { x: x(h[1]) + 8, y: y0 + bh / 2 + 4, "font-family": MONO, "font-size": 12, fill: "var(--ink)" }, svg, `${h[1]}% of runs · wins ${Math.round(h[2])}%`);
+      r.addEventListener("mouseenter", () => { const k = svg.getBoundingClientRect().width / W; tip.show(`<b>${h[0]}</b><br>${h[1]}% of runs · ${h[2]}% won · level ${h[3]} in wins (median)`, x(h[1]) * k, y0 * k); });
+      r.addEventListener("mouseleave", tip.hide);
+    });
+  })();
+
+  (function () {
+    // The biggest swings: win rate by where a run stood, one row a factor.
+    const rows = [
+      ["X mult jokers as ante 4 began", [["none", 58.9, 2428], ["one", 70.5, 539], ["two+", 90.9, 33]]],
+      ["Money as ante 3 began", [["under $8", 54.4, 985], ["$8–15", 61.0, 1245], ["$16+", 70.7, 770]]],
+      ["First x mult joker held by", [["never", 45.9, 1432], ["ante 3", 69.6, 303], ["ante 4–5", 73.7, 628], ["ante 6–8", 79.9, 637]]],
+      ["Scoring hand's final level", [["1–2", 37.5, 926], ["3–5", 63.5, 1092], ["6–9", 81.0, 667], ["10+", 82.5, 315]]],
+      ["Vouchers taken", [["none", 28.2, 522], ["one", 53.8, 757], ["two", 70.2, 749], ["3+", 78.2, 972]]],
+      ["Jokers held as ante 3 began", [["0–2", 21.4, 173], ["3", 53.4, 442], ["4–5", 65.7, 2385]]],
+    ];
+    const box = document.getElementById("swingsChart");
+    const W = 900, H = 372, L = 230, R = 24, T = 26, B = 30;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}` }, box);
+    const rowH = (H - T - B) / rows.length;
+    const x = (v) => L + (W - L - R) * (v / 100);
+    for (let g = 0; g <= 100; g += 25) {
+      el("line", { x1: x(g), x2: x(g), y1: T, y2: H - B, stroke: "var(--rule)", "stroke-width": 1 }, svg);
+      el("text", { x: x(g), y: H - 10, "text-anchor": "middle", "font-family": MONO, "font-size": 11, fill: "var(--muted)" }, svg, g + "%");
+    }
+    el("line", { x1: x(61.3), x2: x(61.3), y1: T, y2: H - B, stroke: "var(--gold)", "stroke-width": 1.2, "stroke-dasharray": "4 4" }, svg);
+    el("text", { x: x(61.3), y: T - 10, "text-anchor": "middle", "font-family": MONO, "font-size": 11, fill: "var(--gold)" }, svg, "all runs 61%");
+    const tip = tipFor(box);
+    rows.forEach((row, i) => {
+      const y = T + (i + 0.5) * rowH;
+      el("text", { x: L - 14, y: y + 4, "text-anchor": "end", "font-family": PIX, "font-size": 14, fill: "var(--ink)" }, svg, row[0]);
+      const pts = row[1];
+      el("line", { x1: x(pts[0][1]), x2: x(pts[pts.length - 1][1]), y1: y, y2: y, stroke: "var(--faint)", "stroke-width": 2 }, svg);
+      // Labels sit above their dot; a label that would run into the previous one on that side goes below instead.
+      const lastEnd = { above: -Infinity, below: -Infinity };
+      pts.forEach((pt, j) => {
+        const col = pt[1] >= 70 ? "var(--chips)" : pt[1] < 50 ? "var(--mult)" : "var(--ink)";
+        const px = x(pt[1]), half = pt[0].length * 3.3 + 5;
+        const side = px - half >= lastEnd.above ? "above" : px - half >= lastEnd.below ? "below"
+          : (px - lastEnd.above >= px - lastEnd.below ? "above" : "below");
+        lastEnd[side] = px + half;
+        const c = el("circle", { cx: px, cy: y, r: 6, fill: col, stroke: "var(--panel-solid)", "stroke-width": 2 }, svg);
+        el("text", { x: px, y: side === "above" ? y - 11 : y + 20, "text-anchor": "middle", "font-family": MONO, "font-size": 10.5, fill: "var(--muted)" }, svg, pt[0]);
+        c.addEventListener("mouseenter", () => { const k = svg.getBoundingClientRect().width / W; tip.show(`<b>${row[0]}: ${pt[0]}</b><br>${pt[1]}% won · ${fmt(pt[2])} runs`, x(pt[1]) * k, y * k); });
+        c.addEventListener("mouseleave", tip.hide);
+      });
+    });
   })();
 
   // The felt: our own swirling, pixelated shader behind everything (steered by the pointer, stirred by a tap).
