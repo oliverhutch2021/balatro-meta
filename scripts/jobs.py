@@ -1021,9 +1021,27 @@ def boss_steps(root: Path = ROOT) -> list[tuple]:
     return champion_trials(root, BOSS_TRIALS, BIG_RUNS)
 
 
-def champion_trials(root: Path, trials: tuple[tuple[str, str], ...], runs: int) -> list[tuple]:
-    """The teacher that won most of the first `runs` usual seeds (best_8k) played again on today's code (once: the
-    control every such trial shares), then at each (weight, option) of `trials`, each set run by run against it."""
+# make teacher-budget: how far the search budget goes, screened on 2,000 seeds against the champion's 8,000-seed
+# control (a 3-point gain shows on 2,000: the ante-5 budget's 8,000 seeds split 871 to 526). Three times the samples
+# from ante 6 won +3.1 points, from ante 5 +4.3 (5 November). Tried: twice from ante 5 (is three the sweet spot, at
+# two thirds of the cost?), three times from ante 3 (does starting earlier keep paying?), six times from ante 5 (how
+# far does it scale?), and three times everywhere (is it the late antes, or under-searching all along?). The winner
+# is then confirmed on 8,000 (make teacher-budget-big), which is what makes it the champion.
+BUDGET_TRIALS = (("2.5", "late-x=2"), ("2.5", "late-from=3"), ("2.5", "late-x=6"), ("2.5", "late-from=1"))
+SCREEN_RUNS = 2000
+
+
+def budget_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
+    return champion_trials(root, BUDGET_TRIALS, runs, control_runs=BIG_RUNS)
+
+
+def champion_trials(root: Path, trials: tuple[tuple[str, str], ...], runs: int,
+                    control_runs: int | None = None) -> list[tuple]:
+    """The teacher that won most of the first 8,000 usual seeds (best_8k) played again on today's code (once, on
+    `control_runs` seeds, by default `runs`: the control every such trial shares), then at each (weight, option) of
+    `trials` on the first `runs` seeds, each set run by run against it (the comparison pairs the first seeds of
+    both, so a 2,000-seed screen compares against the 8,000-seed control). A trial's `name=value` replaces the
+    champion's own setting of that name, so "late-x=6" on a champion with late-x=3 plays at 6."""
     steps: list[tuple] = [("build", [*MAKE, "build"])]
     best = best_8k_report(root)
     if best is None:
@@ -1033,7 +1051,8 @@ def champion_trials(root: Path, trials: tuple[tuple[str, str], ...], runs: int) 
     opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
     w0 = args[args.index("--value-weight") + 1] if "--value-weight" in args else "1"
     nets_stem = Path(report).stem.split("-on-")[-1]
-    tag, size = f"f{FORMULA}", f"{runs // 1000}k"
+    control_runs = control_runs or runs
+    tag, size, control_size = f"f{FORMULA}", f"{runs // 1000}k", f"{control_runs // 1000}k"
 
     def with_(w: str, o: str) -> list[str]:
         a = list(args)
@@ -1043,12 +1062,14 @@ def champion_trials(root: Path, trials: tuple[tuple[str, str], ...], runs: int) 
         else:
             a += ["--teacher-options", o]
         return a
-    control = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w0}-again-on-{nets_stem}.json"
+    control = f"results/tune/{tag}-{file_safe(opts)}-{control_size}-w{w0}-again-on-{nets_stem}.json"
     if not (root / control).exists():
-        steps.append(("champion", [*BASELINE, "--bot", "teacher", *with_(w0, opts), "--runs", str(runs), "--seed",
-                                   "1", "--out", control]))
+        steps.append(("champion", [*BASELINE, "--bot", "teacher", *with_(w0, opts), "--runs", str(control_runs),
+                                   "--seed", "1", "--out", control]))
     for w, extra in trials:
-        o = f"{opts},{extra}"
+        names = {e.split("=")[0] for e in extra.split(",") if "=" in e}
+        kept = [e for e in opts.split(",") if e and e.split("=")[0] not in names]
+        o = ",".join([*kept, extra])
         out = f"results/tune/{tag}-{file_safe(o)}-{size}-w{w}-on-{nets_stem}.json"
         if not (root / out).exists():
             steps.append((f"w{w}-{extra}", [*BASELINE, "--bot", "teacher", *with_(w, o), "--runs", str(runs),
@@ -1495,6 +1516,8 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-margin": margin_steps(),
     "teacher-late": late_steps(),
     "teacher-boss": boss_steps(),
+    "teacher-budget": budget_steps(),
+    "teacher-budget-big": budget_steps(runs=BIG_RUNS),
     "diagnose": diagnose_steps(),
     # An hour of forks and the networks that learn from them: the judge test today (results/forks/forks-quick.json,
     # then results/value/value-forks-quick.json's measured.forks).

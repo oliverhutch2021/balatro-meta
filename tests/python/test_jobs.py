@@ -1095,6 +1095,22 @@ def test_the_late_trials_share_the_doubt_trials_control(tmp_path):
     assert boss["champion"] == doubt["champion"]
     play = boss["w2.5-boss-x=4"]
     assert play[play.index("--teacher-options") + 1] == "precise,boss-x=4" and "teacher-boss" in jobs.JOBS
+    # The screen: 2,000 seeds a trial against the 8,000-seed control, a trial's setting replacing the champion's own.
+    tune = tmp_path / "results" / "tune"
+    (tune / f"f{jobs.FORMULA}-precise+late-x-3+late-from-5-8k-w2.5-on-ensemble8-w1.5.json").write_text(json.dumps(
+        {"kind": "baseline", "runs": 8000, "win_rate": 0.70675, "seed_base": 1, "value_net": jobs.ensemble(8),
+         "value_weight": 2.5, "teacher_options": ["precise", "late-x=3", "late-from=5"]}))
+    screen = {n: a for n, a, *_ in jobs.budget_steps(tmp_path)}
+    champ = screen["champion"]
+    assert champ[champ.index("--runs") + 1] == "8000" and champ[champ.index("--teacher-options") + 1] == "precise,late-x=3,late-from=5"
+    assert champ[champ.index("--out") + 1] == f"results/tune/f{jobs.FORMULA}-precise+late-x-3+late-from-5-8k-w2.5-again-on-ensemble8-w1.5.json"
+    six = screen["w2.5-late-x=6"]
+    assert six[six.index("--runs") + 1] == "2000" and six[six.index("--teacher-options") + 1] == "precise,late-from=5,late-x=6"
+    early = screen["w2.5-late-from=1"]
+    assert early[early.index("--teacher-options") + 1] == "precise,late-x=3,late-from=1"
+    cmp = screen["compare-w2.5-late-x=6"]
+    assert cmp[1] == champ[champ.index("--out") + 1] and "-2k-" in cmp[2]
+    assert "teacher-budget" in jobs.JOBS and "teacher-budget-big" in jobs.JOBS
 
 
 def test_the_fork_table_reads_every_fork_file_there_is(tmp_path):

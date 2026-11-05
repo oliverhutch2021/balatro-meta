@@ -752,6 +752,21 @@ ante 6 (and from ante 5), where the runs are lost; it can run after the forks or
 cd /mnt/h/balatro-meta && make forks-night && make teacher-late
 ```
 
+## Step 29: how far the search budget goes (3.5 hours, then a confirmation)
+
+5 November: three times the samples from ante 6 won 69.4% against the champion's 66.4% on the same 8,000 seeds
+(p = 4 x 10^-14); from ante 5, 70.7% (+4.3 points, p = 2 x 10^-20), at 3.9 times the time a run takes. The jobs take
+the best 8,000-seed report as the champion, so the ante-5 budget is the champion now (`best_8k_report`), and every
+trial from here is set against it played again. `make teacher-budget` screens four settings on 2,000 seeds each
+(a 3-point gain shows there; the comparison pairs the first 2,000 seeds of the 8,000-seed control): twice the samples
+from ante 5, three times from ante 3, six times from ante 5, and three times everywhere. The winner is then confirmed
+on 8,000 seeds, which is what makes it the champion (`make teacher-budget-big` plays all four there, a night's work;
+or Claude queues the winner alone).
+
+```
+cd /mnt/h/balatro-meta && make teacher-budget
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a
@@ -760,6 +775,9 @@ search guided by the network at card-play time.
 ## If something goes wrong
 
 - `make status` shows which steps are done; logs are in `.sync/logs/`.
+- `git push` says "non-fast-forward": `make sync` replays your results commits on top of the new code, which rewrites
+  their hashes, so GitHub has to be moved to your branch: `git push --force-with-lease origin main` (it refuses if
+  GitHub has anything you haven't seen).
 - A step failed: paste the last 20 lines of its log into the chat.
 - "uncommitted changes": a tracked file was edited. `git stash` puts the edit aside, or ask Claude.
 - "detected dubious ownership": run `git config --global --add safe.directory /mnt/h/balatro-meta`.
