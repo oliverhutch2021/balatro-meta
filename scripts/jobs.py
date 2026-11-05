@@ -1172,9 +1172,11 @@ def fork_steps(name: str, seconds: int, root: Path = ROOT, data: Path = DATA) ->
         return steps
     _, folder = rec
     runs = recorded_runs(folder, 3000)
+    # Each fork job forks its own decisions of the recording (forks-quick 0, forks-1 1, forks-2 2...).
+    salt = 0 if name == "forks-quick" else int(name.rsplit("-", 1)[-1])
     steps.append(("fork", [*BASELINE, "--bot", "teacher", *best[1], "--replay", str(folder), "--forks",
-                           str(data / name), "--fork-chance", str(fork_chance(seconds, runs)),
-                           "--fork-copies", str(FORK_COPIES),
+                           str(data / name), "--fork-chance", str(fork_chance(seconds, runs)), "--fork-salt",
+                           str(salt), "--fork-copies", str(FORK_COPIES),
                            "--fork-best", str(FORK_BEST), "--fork-play-options", FORK_PLAY, "--fork-antes", "2-6",
                            "--seconds", str(seconds), "--out", f"results/forks/{name}.json"]))
     steps.append(("table", ["scripts/fork_table.py", *map(str, fork_files(name, data)),

@@ -271,7 +271,8 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64
                 FORK_BEST.load(Ordering::Relaxed) as usize,
                 FORK_COPIES.load(Ordering::Relaxed) as usize,
             );
-            if let Some(f) = fork(&run, made, salt << 12 | step, best, copies) {
+            let fork_salt = (salt << 12 | step) ^ (FORK_SALT.load(Ordering::Relaxed) << 36);
+            if let Some(f) = fork(&run, made, fork_salt, best, copies) {
                 s.forks.push((step, f));
             }
         }
@@ -441,9 +442,13 @@ fn fork_here(run: &Run, salt: u64, step: u64) -> bool {
     if run.ante < i32::from(lo) || run.ante > i32::from(hi) {
         return false;
     }
-    let h = (salt.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ step.wrapping_mul(0xC2B2_AE3D_27D4_EB4F))
-        .rotate_left(23)
-        .wrapping_mul(0xD6E8_FEB8_6659_FD93);
+    let h = (salt.wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        ^ step.wrapping_mul(0xC2B2_AE3D_27D4_EB4F)
+        ^ FORK_SALT
+            .load(Ordering::Relaxed)
+            .wrapping_mul(0x94D0_49BB_1331_11EB))
+    .rotate_left(23)
+    .wrapping_mul(0xD6E8_FEB8_6659_FD93);
     (h % 1_000_000) < FORK_CHANCE_PPM.load(Ordering::Relaxed)
 }
 
@@ -666,6 +671,9 @@ static FORK_ANTE_LO: AtomicU8 = AtomicU8::new(2);
 static FORK_ANTE_HI: AtomicU8 = AtomicU8::new(6);
 static FORK_BEST: AtomicU64 = AtomicU64::new(3);
 static FORK_COPIES: AtomicU64 = AtomicU64::new(6);
+/// `--fork-salt N`: which decisions are forked and the copies' seeds differ by it, so another night on the same
+/// recording forks other decisions, not the same ones again.
+static FORK_SALT: AtomicU64 = AtomicU64::new(0);
 /// `--diagnose OUT.csv`: a row about every run; `--deep X` (times 100) the samples the lost blind is played again
 /// with, for a share `--deep-share` (parts per million) of the lost runs.
 static DIAGNOSE: AtomicBool = AtomicBool::new(false);
@@ -1055,7 +1063,7 @@ impl Recorder {
              {VALUE_INPUT_VERSION},\n \"inputs\": {VALUE_LEN},\n \"layouts\": [{}],\n \"runs\": {},\n \
              \"rows\": {},\n \"chunks\": {},\n \"runs_per_chunk\": {RUNS_PER_CHUNK},\n \"labels\": [{}],\n \
              \"fork_chance\": {},\n \"fork_antes\": [{}, {}],\n \"fork_best\": {},\n \"fork_copies\": {},\n \
-             \"stake\": {stake},\n{about}\n}}\n",
+             \"fork_salt\": {},\n \"stake\": {stake},\n{about}\n}}\n",
             layouts.join(", "),
             self.runs,
             self.rows,
@@ -1066,6 +1074,7 @@ impl Recorder {
             FORK_ANTE_HI.load(Ordering::Relaxed),
             FORK_BEST.load(Ordering::Relaxed),
             FORK_COPIES.load(Ordering::Relaxed),
+            FORK_SALT.load(Ordering::Relaxed),
             stake = STAKE.load(Ordering::Relaxed),
         );
         debug_assert!(partial == about.contains("\"partial\": true"));
@@ -1920,6 +1929,11 @@ fn main() {
         let n: u64 = n.parse().expect("--fork-copies takes a count");
         assert!(n >= 1, "--fork-copies: at least one copy");
         FORK_COPIES.store(n, Ordering::Relaxed);
+    }
+    if let Some(n) = opt("--fork-salt") {
+        let n: u64 = n.parse().expect("--fork-salt takes a number");
+        assert!(n < 1 << 20, "--fork-salt: under a million");
+        FORK_SALT.store(n, Ordering::Relaxed);
     }
     if let Some(o) = opt("--teacher-options") {
         let names: Vec<String> = o
