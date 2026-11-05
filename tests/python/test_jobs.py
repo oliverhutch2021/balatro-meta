@@ -1032,6 +1032,13 @@ def test_a_fork_round_forks_the_newest_recording_then_trains_a_pair_and_its_cont
     f = steps["fork"]
     assert f[f.index("--replay") + 1] == str(night) and f[f.index("--forks") + 1] == str(data / "forks-1")
     assert f[f.index("--seconds") + 1] == str(9 * 3600) and f[f.index("--fork-copies") + 1] == str(jobs.FORK_COPIES)
+    # The share of decisions forked makes the recording last the night: 3,000 runs, nine hours.
+    (night / "manifest.json").write_text(json.dumps({"moves_kept": True, "stake": 1, "runs": 3000}))
+    f = {n: a for n, a, *_ in jobs.fork_steps("forks-1", jobs.FORK_SECONDS, tmp_path, data)}["fork"]
+    chance = float(f[f.index("--fork-chance") + 1])
+    assert abs(chance - 9 * 3600 / 1.6 / (3000 * 40)) < 1e-3 and 0.15 < chance < 0.2
+    assert jobs.fork_chance(3600, 3000) == jobs.FORK_CHANCE, "an hour: the usual share"
+    assert jobs.fork_chance(10 ** 9, 10) == 1.0
     assert f[f.index("--value-net") + 1] == jobs.ensemble(8) and f[f.index("--teacher-options") + 1] == "precise"
     quick = {n: a for n, a, *_ in jobs.fork_steps("forks-quick", jobs.FORK_QUICK_SECONDS, tmp_path, data)}["fork"]
     assert quick[quick.index("--seconds") + 1] == "3600" and quick[quick.index("--forks") + 1] == str(data / "forks-quick")

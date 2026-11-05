@@ -1142,7 +1142,12 @@ def diagnose_steps(root: Path = ROOT, data: Path = DATA) -> list[tuple]:
 # often the champion's own choice was that option is the judge test, measured in minutes instead of three hours of
 # play. The quick turn (make forks-quick) forks for an hour, for the judge test today. The fork files add up: every
 # round's train together (fork_files).
+# A night's share is set from its time: the night recording's 3,000 runs enter about 120,000 shops and packs, and a
+# fork takes about 1.6 seconds on 16 threads, so a share of 0.06 ran out of runs in three hours (4 November's
+# night); the share is chosen so the runs last the time given (fork_chance).
 FORK_CHANCE = 0.06
+FORK_SECONDS_A_FORK = 1.6
+FORK_DECISIONS_A_RUN = 40
 FORK_COPIES = 4
 FORK_BEST = 2
 FORK_PLAY = "light"
@@ -1151,16 +1156,25 @@ FORK_QUICK_SECONDS = 3600
 FORK_ROUNDS = 4
 
 
+def fork_chance(seconds: int, runs: int) -> float:
+    """The share of decisions forked so that `runs` recorded runs last `seconds` (at least FORK_CHANCE, at most 1)."""
+    wanted = seconds / FORK_SECONDS_A_FORK
+    return round(min(1.0, max(FORK_CHANCE, wanted / max(runs * FORK_DECISIONS_A_RUN, 1))), 3)
+
+
 def fork_steps(name: str, seconds: int, root: Path = ROOT, data: Path = DATA) -> list[tuple]:
     """The forks job `name` (forks-quick, forks-1...): the champion forks the newest replayable recording's decisions
-    for `seconds`, into DATA/<name>, with its report (the judge test) in results/forks/<name>.json."""
+    for `seconds` (a share of them chosen so the recording lasts that long: fork_chance), into DATA/<name>, with its
+    report (the judge test) in results/forks/<name>.json."""
     steps: list[tuple] = [("build", [*MAKE, "build"])]
     best, rec = best_8k_report(root), replayable_recording(data)
     if best is None or rec is None:
         return steps
     _, folder = rec
+    runs = recorded_runs(folder, 3000)
     steps.append(("fork", [*BASELINE, "--bot", "teacher", *best[1], "--replay", str(folder), "--forks",
-                           str(data / name), "--fork-chance", str(FORK_CHANCE), "--fork-copies", str(FORK_COPIES),
+                           str(data / name), "--fork-chance", str(fork_chance(seconds, runs)),
+                           "--fork-copies", str(FORK_COPIES),
                            "--fork-best", str(FORK_BEST), "--fork-play-options", FORK_PLAY, "--fork-antes", "2-6",
                            "--seconds", str(seconds), "--out", f"results/forks/{name}.json"]))
     steps.append(("table", ["scripts/fork_table.py", *map(str, fork_files(name, data)),

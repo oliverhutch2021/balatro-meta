@@ -435,6 +435,10 @@ def fork_batch_loss(torch, net, fb: Batches, fs: ForkSet, ids, mean, scale, devi
     return pair_loss(torch, z, t(opt_of).to(device), n, t(pa).to(device), t(pb).to(device), t(pt).to(device))
 
 
+# The expected largest of m standard normal draws (for what a perfect judge gains with m options).
+EXPECTED_MAX_OF = {2: 0.5642, 3: 0.8463, 4: 1.0294, 5: 1.1630, 6: 1.2672, 7: 1.3522, 8: 1.4236}
+
+
 def judge_forks(fs: ForkSet, ids, extra: dict[str, np.ndarray] | None = None) -> dict:
     """The judge test on these forks. For each judge (the networks the forks were made with: "ensemble"; the
     teacher's quick look; the teacher's own choice; the run's move; picking at random; and any `extra` judge, given
@@ -446,6 +450,7 @@ def judge_forks(fs: ForkSet, ids, extra: dict[str, np.ndarray] | None = None) ->
     extra = extra or {}
     judges: dict[str, list[tuple[float, float, float]]] = {}
     oracle = []
+    true_var, seen_var, perfect_c = [], [], []
     spread, options_n = [], []
     for k, i in enumerate(ids):
         f = fs.forks[i]
@@ -475,6 +480,12 @@ def judge_forks(fs: ForkSet, ids, extra: dict[str, np.ndarray] | None = None) ->
             even = np.array([w[:copies][0::2].mean() for w in won])
             odd = np.array([w[:copies][1::2].mean() for w in won])
             oracle.append(float(odd[int(np.argmax(even))] - odd.mean()))
+            # The two halves share the options' true win rates and not the play-outs' noise, so their covariance
+            # across the options estimates the true variance between the options; the measured variance holds
+            # the noise too.
+            true_var.append(float(((even - even.mean()) * (odd - odd.mean())).sum() / (m - 1)))
+            seen_var.append(float(((wr - wr.mean()) ** 2).sum() / (m - 1)))
+            perfect_c.append(EXPECTED_MAX_OF.get(m, 1.0))
         spread.append(float(wr.max() - wr.min()))
         options_n.append(m)
     out: dict = {"forks": len(ids)}
@@ -486,6 +497,14 @@ def judge_forks(fs: ForkSet, ids, extra: dict[str, np.ndarray] | None = None) ->
                          "gain": round(float(np.mean([g for _, _, g in rows])), 4)}
     if oracle:
         out["oracle_half_gain"] = round(float(np.mean(oracle)), 4)
+    if true_var:
+        tv_, sv = float(np.mean(true_var)), float(np.mean(seen_var))
+        sd = float(np.sqrt(max(tv_, 0.0)))
+        out["true_spread"] = {"sd_between_options": round(sd, 4), "sd_measured": round(float(np.sqrt(sv)), 4),
+                              "noise_share": round(1 - tv_ / sv, 3) if sv > 0 else None,
+                              # What a judge that knew the true win rates would gain over random: the expected
+                              # best of the options' true win rates, with them spread like that.
+                              "perfect_judge_gain": round(float(np.mean(perfect_c)) * sd, 4)}
     if spread:
         out["spread"] = {"mean": round(float(np.mean(spread)), 4),
                          "a_copy_or_more": round(float(np.mean([x > 1e-9 for x in spread])), 4)}
@@ -503,6 +522,11 @@ def judge_lines(j: dict) -> list[str]:
                        f"random {r['gain']:+.3f}   ({r['judged']:,} forks)")
     if "oracle_half_gain" in j:
         out.append(f"an oracle that saw half the copies gains {j['oracle_half_gain']:+.3f} on the other half")
+    if "true_spread" in j:
+        t = j["true_spread"]
+        share = "" if t["noise_share"] is None else f"; {100 * t['noise_share']:.0f}% of the measured spread is noise"
+        out.append(f"the options' true win rates differ by {t['sd_between_options']:.3f} (sd within a fork; measured "
+                   f"{t['sd_measured']:.3f}{share}): a judge that knew them would gain {t['perfect_judge_gain']:+.3f}")
     if "spread" in j:
         out.append(f"the options' win rates differ by {j['spread']['mean']:.3f} on average, by a copy or more at "
                    f"{100 * j['spread']['a_copy_or_more']:.0f}% of the forks; {j['options_mean']} options a fork")

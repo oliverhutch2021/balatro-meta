@@ -567,6 +567,22 @@ def test_a_fork_recording_still_being_made_reads_the_chunks_its_manifest_counts(
         [1 / len(f["options"]) for f in fs.forks])) < 1e-4
     if "oracle_half_gain" in j:
         assert -1 <= j["oracle_half_gain"] <= 1
+        t = j["true_spread"]
+        assert 0 <= t["sd_between_options"] <= t["sd_measured"] + 1e-9 and t["perfect_judge_gain"] >= 0
+        # Options that differ by nothing: all noise. Copies that agree: none.
+        flat = {"options": [{"won": np.array([1.0, 0.0, 1.0, 0.0]), "key": np.array([24.0, 3.0, 24.0, 3.0]),
+                             "chosen": k == 0, "made": False, "quick": float("nan"), "logit": float("nan")}
+                            for k in range(3)], "pairs": [], "run": 0, "ante": 2}
+        sure = {"options": [{"won": np.full(4, float(k == 2)), "key": np.full(4, 24.0 if k == 2 else 3.0),
+                             "chosen": k == 0, "made": False, "quick": float("nan"), "logit": float("nan")}
+                            for k in range(3)], "pairs": [], "run": 1, "ante": 2}
+        toy = tv.ForkSet.__new__(tv.ForkSet)
+        toy.forks = [flat, flat]
+        assert tv.judge_forks(toy, np.arange(2))["true_spread"]["sd_between_options"] == 0.0
+        toy.forks = [sure, sure]
+        ts = tv.judge_forks(toy, np.arange(2))["true_spread"]
+        assert ts["sd_between_options"] == ts["sd_measured"] == pytest.approx(np.sqrt(1 / 3), abs=1e-4)
+        assert ts["noise_share"] == 0.0
     # A network judge given as its picks: picking the best by the labels is a perfect judge.
     best = np.array([int(np.lexsort((-np.arange(len(f["options"])), [o["key"].sum() for o in f["options"]],
                                      [o["won"].mean() for o in f["options"]]))[-1]) for f in fs.forks])
