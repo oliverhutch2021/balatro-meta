@@ -50,32 +50,32 @@
  },
  "deeper_play": {
   "replayed": 1160,
-  "beaten": 0.3621,
+  "beaten": 0.3724,
   "by_shortfall": {
-   "under a quarter": 0.2632,
-   "a quarter to a half": 0.2403,
-   "a half to 80%": 0.27,
-   "80% or more: a near miss": 0.4863
+   "under a quarter": 0.3158,
+   "a quarter to a half": 0.2713,
+   "a half to 80%": 0.28,
+   "80% or more: a near miss": 0.4902
   },
   "by_ante": {
    "1": 0.6071,
-   "2": 0.5641,
-   "3": 0.5156,
-   "4": 0.5036,
+   "2": 0.5897,
+   "3": 0.5781,
+   "4": 0.5396,
    "5": 0.3276,
    "6": 0.3642,
-   "7": 0.3955,
-   "8": 0.2288
+   "7": 0.3785,
+   "8": 0.2445
   },
   "by_boss": {
-   "Violet Vessel": 0.1042,
-   "The Wall": 0.2308,
-   "The Needle": 0.2174,
-   "Crimson Heart": 0.3636,
-   "The Eye": 0.3556,
-   "The Mouth": 0.5116,
-   "Amber Acorn": 0.4412,
-   "Verdant Leaf": 0.3636
+   "Violet Vessel": 0.0833,
+   "The Wall": 0.2788,
+   "The Needle": 0.2899,
+   "Crimson Heart": 0.4091,
+   "The Eye": 0.4,
+   "The Mouth": 0.5349,
+   "Amber Acorn": 0.5,
+   "Verdant Leaf": 0.3939
   }
  },
  "at_the_loss": {
@@ -182,5 +182,821 @@
   }
  },
  "late_losers_fall_behind_at_ante": null,
+ "winning_hands": {
+  "main": {
+   "Straight": {
+    "runs": 959,
+    "share": 0.3197,
+    "win_rate": 0.6257,
+    "blinds_cleared_share": 0.3477,
+    "level_in_wins_median": 4.0
+   },
+   "Full House": {
+    "runs": 591,
+    "share": 0.197,
+    "win_rate": 0.555,
+    "blinds_cleared_share": 0.174,
+    "level_in_wins_median": 4.0
+   },
+   "Pair": {
+    "runs": 529,
+    "share": 0.1763,
+    "win_rate": 0.7429,
+    "blinds_cleared_share": 0.2024,
+    "level_in_wins_median": 7.0
+   },
+   "Flush": {
+    "runs": 379,
+    "share": 0.1263,
+    "win_rate": 0.467,
+    "blinds_cleared_share": 0.1059,
+    "level_in_wins_median": 4.0
+   },
+   "Two Pair": {
+    "runs": 369,
+    "share": 0.123,
+    "win_rate": 0.6531,
+    "blinds_cleared_share": 0.1199,
+    "level_in_wins_median": 6.0
+   },
+   "High Card": {
+    "runs": 83,
+    "share": 0.0277,
+    "win_rate": 0.7952,
+    "blinds_cleared_share": 0.0307,
+    "level_in_wins_median": 4.0
+   },
+   "Three of a Kind": {
+    "runs": 68,
+    "share": 0.0227,
+    "win_rate": 0.4559,
+    "blinds_cleared_share": 0.0167,
+    "level_in_wins_median": 4.0
+   },
+   "Four of a Kind": {
+    "runs": 18,
+    "share": 0.006,
+    "win_rate": 0.2222,
+    "blinds_cleared_share": 0.0026,
+    "level_in_wins_median": 2.0
+   },
+   "Flush Five": {
+    "runs": 2,
+    "share": 0.0007,
+    "win_rate": 0.0,
+    "blinds_cleared_share": 0.0,
+    "level_in_wins_median": null
+   },
+   "Straight Flush": {
+    "runs": 2,
+    "share": 0.0007,
+    "win_rate": 0.0,
+    "blinds_cleared_share": 0.0001,
+    "level_in_wins_median": null
+   }
+  },
+  "biggest": {
+   "Straight": {
+    "runs": 766,
+    "share": 0.2553,
+    "win_rate": 0.6345
+   },
+   "Pair": {
+    "runs": 582,
+    "share": 0.194,
+    "win_rate": 0.7491
+   },
+   "Full House": {
+    "runs": 526,
+    "share": 0.1753,
+    "win_rate": 0.5665
+   },
+   "Flush": {
+    "runs": 340,
+    "share": 0.1133,
+    "win_rate": 0.4941
+   },
+   "Two Pair": {
+    "runs": 324,
+    "share": 0.108,
+    "win_rate": 0.6667
+   },
+   "Four of a Kind": {
+    "runs": 142,
+    "share": 0.0473,
+    "win_rate": 0.4366
+   },
+   "Three of a Kind": {
+    "runs": 130,
+    "share": 0.0433,
+    "win_rate": 0.4538
+   },
+   "High Card": {
+    "runs": 123,
+    "share": 0.041,
+    "win_rate": 0.7236
+   },
+   "Straight Flush": {
+    "runs": 43,
+    "share": 0.0143,
+    "win_rate": 0.3256
+   },
+   "Flush House": {
+    "runs": 12,
+    "share": 0.004,
+    "win_rate": 0.75
+   },
+   "Five of a Kind": {
+    "runs": 7,
+    "share": 0.0023,
+    "win_rate": 0.2857
+   },
+   "Flush Five": {
+    "runs": 5,
+    "share": 0.0017,
+    "win_rate": 0.2
+   }
+  }
+ },
+ "jokers": {
+  "base_win_rate": 0.6133,
+  "least_runs": 40,
+  "by_lift": [
+   {
+    "joker": "Baseball Card",
+    "held": 313,
+    "held_share": 0.1043,
+    "win_rate": 0.8562,
+    "lift": 0.2712
+   },
+   {
+    "joker": "Blueprint",
+    "held": 264,
+    "held_share": 0.088,
+    "win_rate": 0.8447,
+    "lift": 0.2537
+   },
+   {
+    "joker": "Ramen",
+    "held": 103,
+    "held_share": 0.0343,
+    "win_rate": 0.8544,
+    "lift": 0.2496
+   },
+   {
+    "joker": "Hologram",
+    "held": 520,
+    "held_share": 0.1733,
+    "win_rate": 0.7846,
+    "lift": 0.2072
+   },
+   {
+    "joker": "Card Sharp",
+    "held": 557,
+    "held_share": 0.1857,
+    "win_rate": 0.7738,
+    "lift": 0.197
+   },
+   {
+    "joker": "Blackboard",
+    "held": 116,
+    "held_share": 0.0387,
+    "win_rate": 0.8017,
+    "lift": 0.196
+   },
+   {
+    "joker": "Obelisk",
+    "held": 81,
+    "held_share": 0.027,
+    "win_rate": 0.8025,
+    "lift": 0.1944
+   },
+   {
+    "joker": "Bootstraps",
+    "held": 428,
+    "held_share": 0.1427,
+    "win_rate": 0.7757,
+    "lift": 0.1894
+   },
+   {
+    "joker": "Brainstorm",
+    "held": 117,
+    "held_share": 0.039,
+    "win_rate": 0.7949,
+    "lift": 0.1889
+   },
+   {
+    "joker": "Constellation",
+    "held": 513,
+    "held_share": 0.171,
+    "win_rate": 0.7563,
+    "lift": 0.1725
+   },
+   {
+    "joker": "Bull",
+    "held": 322,
+    "held_share": 0.1073,
+    "win_rate": 0.7671,
+    "lift": 0.1722
+   },
+   {
+    "joker": "Castle",
+    "held": 444,
+    "held_share": 0.148,
+    "win_rate": 0.7545,
+    "lift": 0.1657
+   },
+   {
+    "joker": "The Duo",
+    "held": 256,
+    "held_share": 0.0853,
+    "win_rate": 0.75,
+    "lift": 0.1494
+   },
+   {
+    "joker": "Stuntman",
+    "held": 246,
+    "held_share": 0.082,
+    "win_rate": 0.7439,
+    "lift": 0.1422
+   },
+   {
+    "joker": "Vampire",
+    "held": 325,
+    "held_share": 0.1083,
+    "win_rate": 0.7354,
+    "lift": 0.1369
+   },
+   {
+    "joker": "The Order",
+    "held": 68,
+    "held_share": 0.0227,
+    "win_rate": 0.7353,
+    "lift": 0.1248
+   },
+   {
+    "joker": "Burglar",
+    "held": 214,
+    "held_share": 0.0713,
+    "win_rate": 0.7243,
+    "lift": 0.1195
+   },
+   {
+    "joker": "Spare Trousers",
+    "held": 367,
+    "held_share": 0.1223,
+    "win_rate": 0.7084,
+    "lift": 0.1084
+   },
+   {
+    "joker": "Ancient Joker",
+    "held": 52,
+    "held_share": 0.0173,
+    "win_rate": 0.7115,
+    "lift": 0.0999
+   },
+   {
+    "joker": "Seeing Double",
+    "held": 329,
+    "held_share": 0.1097,
+    "win_rate": 0.7021,
+    "lift": 0.0997
+   },
+   {
+    "joker": "Flash Card",
+    "held": 383,
+    "held_share": 0.1277,
+    "win_rate": 0.6945,
+    "lift": 0.0931
+   },
+   {
+    "joker": "Photograph",
+    "held": 245,
+    "held_share": 0.0817,
+    "win_rate": 0.698,
+    "lift": 0.0922
+   },
+   {
+    "joker": "Runner",
+    "held": 763,
+    "held_share": 0.2543,
+    "win_rate": 0.675,
+    "lift": 0.0827
+   },
+   {
+    "joker": "Fibonacci",
+    "held": 207,
+    "held_share": 0.069,
+    "win_rate": 0.6763,
+    "lift": 0.0677
+   },
+   {
+    "joker": "Sock and Buskin",
+    "held": 65,
+    "held_share": 0.0217,
+    "win_rate": 0.6462,
+    "lift": 0.0335
+   },
+   {
+    "joker": "Arrowhead",
+    "held": 121,
+    "held_share": 0.0403,
+    "win_rate": 0.6116,
+    "lift": -0.0018
+   },
+   {
+    "joker": "Joker Stencil",
+    "held": 41,
+    "held_share": 0.0137,
+    "win_rate": 0.6098,
+    "lift": -0.0036
+   },
+   {
+    "joker": "Acrobat",
+    "held": 206,
+    "held_share": 0.0687,
+    "win_rate": 0.6019,
+    "lift": -0.0122
+   },
+   {
+    "joker": "Swashbuckler",
+    "held": 398,
+    "held_share": 0.1327,
+    "win_rate": 0.5955,
+    "lift": -0.0206
+   },
+   {
+    "joker": "Onyx Agate",
+    "held": 83,
+    "held_share": 0.0277,
+    "win_rate": 0.5904,
+    "lift": -0.0236
+   },
+   {
+    "joker": "The Trio",
+    "held": 127,
+    "held_share": 0.0423,
+    "win_rate": 0.5906,
+    "lift": -0.0238
+   },
+   {
+    "joker": "Fortune Teller",
+    "held": 136,
+    "held_share": 0.0453,
+    "win_rate": 0.5882,
+    "lift": -0.0263
+   },
+   {
+    "joker": "Hanging Chad",
+    "held": 355,
+    "held_share": 0.1183,
+    "win_rate": 0.5831,
+    "lift": -0.0343
+   },
+   {
+    "joker": "Wee Joker",
+    "held": 159,
+    "held_share": 0.053,
+    "win_rate": 0.5786,
+    "lift": -0.0367
+   },
+   {
+    "joker": "Square Joker",
+    "held": 401,
+    "held_share": 0.1337,
+    "win_rate": 0.581,
+    "lift": -0.0373
+   },
+   {
+    "joker": "Mystic Summit",
+    "held": 79,
+    "held_share": 0.0263,
+    "win_rate": 0.5696,
+    "lift": -0.0449
+   },
+   {
+    "joker": "Scholar",
+    "held": 42,
+    "held_share": 0.014,
+    "win_rate": 0.5476,
+    "lift": -0.0666
+   },
+   {
+    "joker": "Supernova",
+    "held": 609,
+    "held_share": 0.203,
+    "win_rate": 0.5534,
+    "lift": -0.0752
+   },
+   {
+    "joker": "Abstract Joker",
+    "held": 458,
+    "held_share": 0.1527,
+    "win_rate": 0.5437,
+    "lift": -0.0822
+   },
+   {
+    "joker": "Raised Fist",
+    "held": 109,
+    "held_share": 0.0363,
+    "win_rate": 0.5229,
+    "lift": -0.0938
+   },
+   {
+    "joker": "Egg",
+    "held": 142,
+    "held_share": 0.0473,
+    "win_rate": 0.5211,
+    "lift": -0.0968
+   },
+   {
+    "joker": "Half Joker",
+    "held": 257,
+    "held_share": 0.0857,
+    "win_rate": 0.5136,
+    "lift": -0.1091
+   },
+   {
+    "joker": "Scary Face",
+    "held": 74,
+    "held_share": 0.0247,
+    "win_rate": 0.5,
+    "lift": -0.1162
+   },
+   {
+    "joker": "Flower Pot",
+    "held": 47,
+    "held_share": 0.0157,
+    "win_rate": 0.4894,
+    "lift": -0.1259
+   },
+   {
+    "joker": "Red Card",
+    "held": 262,
+    "held_share": 0.0873,
+    "win_rate": 0.4962,
+    "lift": -0.1284
+   },
+   {
+    "joker": "Smiley Face",
+    "held": 126,
+    "held_share": 0.042,
+    "win_rate": 0.4841,
+    "lift": -0.1349
+   },
+   {
+    "joker": "Green Joker",
+    "held": 262,
+    "held_share": 0.0873,
+    "win_rate": 0.4809,
+    "lift": -0.1451
+   },
+   {
+    "joker": "Shoot the Moon",
+    "held": 126,
+    "held_share": 0.042,
+    "win_rate": 0.4603,
+    "lift": -0.1597
+   },
+   {
+    "joker": "Gift Card",
+    "held": 46,
+    "held_share": 0.0153,
+    "win_rate": 0.413,
+    "lift": -0.2034
+   },
+   {
+    "joker": "Banner",
+    "held": 49,
+    "held_share": 0.0163,
+    "win_rate": 0.4082,
+    "lift": -0.2086
+   },
+   {
+    "joker": "Jolly Joker",
+    "held": 47,
+    "held_share": 0.0157,
+    "win_rate": 0.4043,
+    "lift": -0.2124
+   },
+   {
+    "joker": "Madness",
+    "held": 72,
+    "held_share": 0.024,
+    "win_rate": 0.4028,
+    "lift": -0.2157
+   },
+   {
+    "joker": "Blue Joker",
+    "held": 162,
+    "held_share": 0.054,
+    "win_rate": 0.3951,
+    "lift": -0.2307
+   },
+   {
+    "joker": "Walkie Talkie",
+    "held": 56,
+    "held_share": 0.0187,
+    "win_rate": 0.375,
+    "lift": -0.2429
+   },
+   {
+    "joker": "Joker",
+    "held": 41,
+    "held_share": 0.0137,
+    "win_rate": 0.3659,
+    "lift": -0.2509
+   },
+   {
+    "joker": "Clever Joker",
+    "held": 43,
+    "held_share": 0.0143,
+    "win_rate": 0.3488,
+    "lift": -0.2683
+   },
+   {
+    "joker": "Juggler",
+    "held": 43,
+    "held_share": 0.0143,
+    "win_rate": 0.3488,
+    "lift": -0.2683
+   },
+   {
+    "joker": "Odd Todd",
+    "held": 94,
+    "held_share": 0.0313,
+    "win_rate": 0.3298,
+    "lift": -0.2927
+   },
+   {
+    "joker": "Space Joker",
+    "held": 171,
+    "held_share": 0.057,
+    "win_rate": 0.3275,
+    "lift": -0.3031
+   },
+   {
+    "joker": "Burnt Joker",
+    "held": 82,
+    "held_share": 0.0273,
+    "win_rate": 0.3171,
+    "lift": -0.3046
+   },
+   {
+    "joker": "Misprint",
+    "held": 120,
+    "held_share": 0.04,
+    "win_rate": 0.3,
+    "lift": -0.3264
+   },
+   {
+    "joker": "Sly Joker",
+    "held": 92,
+    "held_share": 0.0307,
+    "win_rate": 0.2717,
+    "lift": -0.3524
+   },
+   {
+    "joker": "Hiker",
+    "held": 72,
+    "held_share": 0.024,
+    "win_rate": 0.25,
+    "lift": -0.3723
+   },
+   {
+    "joker": "Golden Joker",
+    "held": 49,
+    "held_share": 0.0163,
+    "win_rate": 0.2449,
+    "lift": -0.3746
+   },
+   {
+    "joker": "Business Card",
+    "held": 61,
+    "held_share": 0.0203,
+    "win_rate": 0.2459,
+    "lift": -0.3751
+   },
+   {
+    "joker": "Even Steven",
+    "held": 62,
+    "held_share": 0.0207,
+    "win_rate": 0.2258,
+    "lift": -0.3957
+   },
+   {
+    "joker": "Mail-In Rebate",
+    "held": 122,
+    "held_share": 0.0407,
+    "win_rate": 0.1803,
+    "lift": -0.4514
+   }
+  ],
+  "most_held": [
+   {
+    "joker": "Runner",
+    "held": 763,
+    "held_share": 0.2543,
+    "win_rate": 0.675,
+    "lift": 0.0827
+   },
+   {
+    "joker": "Supernova",
+    "held": 609,
+    "held_share": 0.203,
+    "win_rate": 0.5534,
+    "lift": -0.0752
+   },
+   {
+    "joker": "Card Sharp",
+    "held": 557,
+    "held_share": 0.1857,
+    "win_rate": 0.7738,
+    "lift": 0.197
+   },
+   {
+    "joker": "Hologram",
+    "held": 520,
+    "held_share": 0.1733,
+    "win_rate": 0.7846,
+    "lift": 0.2072
+   },
+   {
+    "joker": "Constellation",
+    "held": 513,
+    "held_share": 0.171,
+    "win_rate": 0.7563,
+    "lift": 0.1725
+   },
+   {
+    "joker": "Abstract Joker",
+    "held": 458,
+    "held_share": 0.1527,
+    "win_rate": 0.5437,
+    "lift": -0.0822
+   },
+   {
+    "joker": "Castle",
+    "held": 444,
+    "held_share": 0.148,
+    "win_rate": 0.7545,
+    "lift": 0.1657
+   },
+   {
+    "joker": "Bootstraps",
+    "held": 428,
+    "held_share": 0.1427,
+    "win_rate": 0.7757,
+    "lift": 0.1894
+   },
+   {
+    "joker": "Square Joker",
+    "held": 401,
+    "held_share": 0.1337,
+    "win_rate": 0.581,
+    "lift": -0.0373
+   },
+   {
+    "joker": "Swashbuckler",
+    "held": 398,
+    "held_share": 0.1327,
+    "win_rate": 0.5955,
+    "lift": -0.0206
+   },
+   {
+    "joker": "Flash Card",
+    "held": 383,
+    "held_share": 0.1277,
+    "win_rate": 0.6945,
+    "lift": 0.0931
+   },
+   {
+    "joker": "Spare Trousers",
+    "held": 367,
+    "held_share": 0.1223,
+    "win_rate": 0.7084,
+    "lift": 0.1084
+   },
+   {
+    "joker": "Hanging Chad",
+    "held": 355,
+    "held_share": 0.1183,
+    "win_rate": 0.5831,
+    "lift": -0.0343
+   },
+   {
+    "joker": "Seeing Double",
+    "held": 329,
+    "held_share": 0.1097,
+    "win_rate": 0.7021,
+    "lift": 0.0997
+   },
+   {
+    "joker": "Vampire",
+    "held": 325,
+    "held_share": 0.1083,
+    "win_rate": 0.7354,
+    "lift": 0.1369
+   }
+  ]
+ },
+ "swings": {
+  "x mult jokers as ante 4 began": {
+   "none": {
+    "runs": 2428,
+    "win_rate": 0.589
+   },
+   "one": {
+    "runs": 539,
+    "win_rate": 0.705
+   },
+   "two or more": {
+    "runs": 33,
+    "win_rate": 0.9091
+   }
+  },
+  "money as ante 3 began": {
+   "under $8": {
+    "runs": 985,
+    "win_rate": 0.5442
+   },
+   "$8 to $15": {
+    "runs": 1245,
+    "win_rate": 0.6104
+   },
+   "$16 or more": {
+    "runs": 770,
+    "win_rate": 0.7065
+   }
+  },
+  "the ante the first x mult joker was held by": {
+   "by ante 3": {
+    "runs": 303,
+    "win_rate": 0.6964
+   },
+   "ante 4 or 5": {
+    "runs": 628,
+    "win_rate": 0.7373
+   },
+   "ante 6 to 8": {
+    "runs": 637,
+    "win_rate": 0.7991
+   },
+   "never": {
+    "runs": 1432,
+    "win_rate": 0.4588
+   }
+  },
+  "the main scoring hand's final level": {
+   "1 or 2": {
+    "runs": 926,
+    "win_rate": 0.3747
+   },
+   "3 to 5": {
+    "runs": 1092,
+    "win_rate": 0.6346
+   },
+   "6 to 9": {
+    "runs": 667,
+    "win_rate": 0.8096
+   },
+   "10 or more": {
+    "runs": 315,
+    "win_rate": 0.8254
+   }
+  },
+  "vouchers taken": {
+   "none": {
+    "runs": 522,
+    "win_rate": 0.2816
+   },
+   "one": {
+    "runs": 757,
+    "win_rate": 0.5376
+   },
+   "two": {
+    "runs": 749,
+    "win_rate": 0.7023
+   },
+   "three or more": {
+    "runs": 972,
+    "win_rate": 0.7819
+   }
+  },
+  "jokers held as ante 3 began": {
+   "0 to 2": {
+    "runs": 173,
+    "win_rate": 0.2139
+   },
+   "3": {
+    "runs": 442,
+    "win_rate": 0.5339
+   },
+   "4 or 5": {
+    "runs": 2385,
+    "win_rate": 0.657
+   }
+  }
+ },
  "table": "results/diagnose/night.csv"
 }
