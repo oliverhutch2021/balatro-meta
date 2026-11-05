@@ -1035,6 +1035,18 @@ def budget_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     return champion_trials(root, BUDGET_TRIALS, runs, control_runs=BIG_RUNS)
 
 
+# make teacher-budget-confirm: the screen's winner on 8,000 seeds, which is what makes it the champion. 5 November's
+# screen, against the ante-5 champion's 71.3% on 2,000 seeds: twice from ante 5 71.6% (level, at two thirds of the
+# cost), three times from ante 3 73.2% (p = 0.08), six times from ante 5 73.8% (p = 0.004, 163 minutes), three times
+# everywhere 77.1% (p < 0.0001, +0.55 blinds a run, 83 minutes): the bot was short of thought at every decision, the
+# early antes most of all.
+BUDGET_WINNER = (("2.5", "late-from=1"),)
+
+
+def budget_confirm_steps(root: Path = ROOT) -> list[tuple]:
+    return champion_trials(root, BUDGET_WINNER, BIG_RUNS)
+
+
 # Whether the champion is played again on today's code before its trials (its own report serves otherwise: the engine
 # hasn't changed its play since 4 November's fairness fixes, which moved the champion of 2 November by 0.1 point).
 CONTROL_AGAIN = False
@@ -1529,6 +1541,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-boss": boss_steps(),
     "teacher-budget": budget_steps(),
     "teacher-budget-big": budget_steps(runs=BIG_RUNS),
+    "teacher-budget-confirm": budget_confirm_steps(),
     "diagnose": diagnose_steps(),
     # An hour of forks and the networks that learn from them: the judge test today (results/forks/forks-quick.json,
     # then results/value/value-forks-quick.json's measured.forks).

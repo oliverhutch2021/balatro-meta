@@ -1116,6 +1116,10 @@ def test_the_late_trials_share_the_doubt_trials_control(tmp_path):
     cmp = screen["compare-w2.5-late-x=6"]
     assert cmp[1] == control and "-2k-" in cmp[2]
     assert "teacher-budget" in jobs.JOBS and "teacher-budget-big" in jobs.JOBS
+    confirm = {n: a for n, a, *_ in jobs.budget_confirm_steps(tmp_path)}
+    win = confirm["w2.5-late-from=1"]
+    assert win[win.index("--runs") + 1] == "8000" and win[win.index("--teacher-options") + 1] == "precise,late-x=3,late-from=1"
+    assert "teacher-budget-confirm" in jobs.JOBS
 
 
 def test_the_fork_table_reads_every_fork_file_there_is(tmp_path):
