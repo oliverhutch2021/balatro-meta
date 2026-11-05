@@ -114,12 +114,108 @@ def summarise(rows: list[dict]) -> dict:
     bw, bl = curves["biggest_hand_median"]["winners"], curves["biggest_hand_median"]["late_losers"]
     behind = next((a for a in range(1, 9) if bw[a - 1] and bl[a - 1] is not None and bl[a - 1] < 0.6 * bw[a - 1]), None)
     out["late_losers_fall_behind_at_ante"] = behind
+    if "win_hand" in rows[0]:
+        out["winning_hands"] = winning_hands(rows, won)
+        out["jokers"] = joker_table(rows, won)
+        out["swings"] = swings(rows, won)
+    return out
+
+
+def winning_hands(rows: list[dict], won: np.ndarray) -> dict:
+    """The scoring hands: for each hand type, the share of runs it was the main scoring hand of (the type that
+    cleared most blinds as the blind's biggest hand), those runs' win rate, its median final level in wins, and the
+    share of all blinds it cleared; and the type of each run's biggest hand."""
+    n = len(rows)
+    out = {"main": {}, "biggest": {}}
+    by_hand: dict[str, list[tuple[bool, int, int]]] = {}
+    for r, w in zip(rows, won):
+        by_hand.setdefault(r["win_hand"], []).append((bool(w), int(float(r["win_hand_blinds"])),
+                                                       int(float(r["win_hand_level"]))))
+    total_blinds = sum(int(float(r["win_hand_blinds"])) for r in rows)
+    for h, items in sorted(by_hand.items(), key=lambda kv: -len(kv[1])):
+        wins = [lvl for w, _, lvl in items if w]
+        out["main"][h] = {"runs": len(items), "share": round(len(items) / n, 4),
+                          "win_rate": round(sum(w for w, _, _ in items) / len(items), 4),
+                          "blinds_cleared_share": round(sum(b for _, b, _ in items) / max(total_blinds, 1), 4),
+                          "level_in_wins_median": float(np.median(wins)) if wins else None}
+    big: dict[str, list[bool]] = {}
+    for r, w in zip(rows, won):
+        if r.get("best_hand_type"):
+            big.setdefault(r["best_hand_type"], []).append(bool(w))
+    for h, ws in sorted(big.items(), key=lambda kv: -len(kv[1])):
+        out["biggest"][h] = {"runs": len(ws), "share": round(len(ws) / n, 4), "win_rate": round(sum(ws) / len(ws), 4)}
+    return out
+
+
+def joker_table(rows: list[dict], won: np.ndarray, least: int = 40) -> dict:
+    """Each joker held at the end of a run (at least `least` runs): how often it was held, the win rate of the runs
+    that held it, and the lift over the win rate of the runs that didn't. A run's end is its win or its loss, so
+    this is association, not cause: a joker that keeps runs alive and one that strong runs can afford both score
+    high."""
+    n = len(rows)
+    base = float(won.mean())
+    held: dict[str, list[bool]] = {}
+    for r, w in zip(rows, won):
+        for j in {x for x in r.get("jokers", "").split(";") if x}:
+            held.setdefault(j, []).append(bool(w))
+    table = []
+    for j, ws in held.items():
+        if len(ws) < least:
+            continue
+        k, m = sum(ws), len(ws)
+        others = (won.sum() - k) / max(n - m, 1)
+        table.append({"joker": j, "held": m, "held_share": round(m / n, 4), "win_rate": round(k / m, 4),
+                      "lift": round(k / m - others, 4)})
+    table.sort(key=lambda t: -t["lift"])
+    return {"base_win_rate": round(base, 4), "least_runs": least, "by_lift": table,
+            "most_held": sorted(table, key=lambda t: -t["held"])[:15]}
+
+
+def swings(rows: list[dict], won: np.ndarray) -> dict:
+    """What moves a run's outlook most, as win rates by where a run stood at an ante: x mult jokers held as ante 4
+    began, money as ante 3 began, the ante the first x mult joker arrived, the main scoring hand's final level, and
+    vouchers taken."""
+    out: dict = {}
+
+    def by(key, label, groups):
+        got = {}
+        for name, pick in groups:
+            m = np.array([pick(r) for r in rows])
+            if m.sum() >= 30:
+                got[name] = {"runs": int(m.sum()), "win_rate": round(float(won[m].mean()), 4)}
+        out[label] = got
+
+    xm4 = lambda r: int(float(r["ante_xmult_4"]))
+    by("ante_xmult_4", "x mult jokers as ante 4 began", [("none", lambda r: xm4(r) == 0), ("one", lambda r: xm4(r) == 1),
+                                                        ("two or more", lambda r: xm4(r) >= 2)])
+    m3 = lambda r: int(float(r["ante_money_3"]))
+    by("ante_money_3", "money as ante 3 began", [("under $8", lambda r: m3(r) < 8), ("$8 to $15", lambda r: 8 <= m3(r) <= 15),
+                                                 ("$16 or more", lambda r: m3(r) >= 16)])
+
+    def first_x(r):
+        for a in range(1, 9):
+            if int(float(r[f"ante_xmult_{a}"])) > 0:
+                return a
+        return 9
+    by("first_xmult_ante", "the ante the first x mult joker was held by", [
+        ("by ante 3", lambda r: first_x(r) <= 3), ("ante 4 or 5", lambda r: 4 <= first_x(r) <= 5),
+        ("ante 6 to 8", lambda r: 6 <= first_x(r) <= 8), ("never", lambda r: first_x(r) == 9)])
+    lvl = lambda r: int(float(r["win_hand_level"]))
+    by("win_hand_level", "the main scoring hand's final level", [("1 or 2", lambda r: lvl(r) <= 2), ("3 to 5", lambda r: 3 <= lvl(r) <= 5),
+                                                                 ("6 to 9", lambda r: 6 <= lvl(r) <= 9), ("10 or more", lambda r: lvl(r) >= 10)])
+    v = lambda r: int(float(r["vouchers"]))
+    by("vouchers", "vouchers taken", [("none", lambda r: v(r) == 0), ("one", lambda r: v(r) == 1), ("two", lambda r: v(r) == 2),
+                                      ("three or more", lambda r: v(r) >= 3)])
+    jk = lambda r: int(float(r["ante_jokers_3"]))
+    by("ante_jokers_3", "jokers held as ante 3 began", [("0 to 2", lambda r: jk(r) <= 2), ("3", lambda r: jk(r) == 3),
+                                                        ("4 or 5", lambda r: jk(r) >= 4)])
     return out
 
 
 def lines(s: dict, path: Path) -> list[str]:
-    o = [f"Diagnosis of {path.name}: {s['runs']:,} runs, {s['wins']:,} won ({pct(s['wins'], s['runs'])}), "
-         f"{s['losses']:,} lost."]
+    head = (f"Diagnosis of {path.name}: {s['runs']:,} runs, {s['wins']:,} won ({pct(s['wins'], s['runs'])}), "
+            f"{s['losses']:,} lost.")
+    o = [head]
     if not s.get("losses"):
         return o
     o.append("")
@@ -159,6 +255,31 @@ def lines(s: dict, path: Path) -> list[str]:
     o.append("")
     o.append("The late losers' biggest hand first falls under 60% of the winners' at ante "
              f"{behind}." if behind else "The late losers' biggest hand never falls under 60% of the winners' median.")
+    if "winning_hands" in s:
+        o.append("")
+        o.append("The scoring hands (the hand type that cleared most of a run's blinds as the blind's biggest hand):")
+        for h, t in list(s["winning_hands"]["main"].items())[:8]:
+            lvl = t["level_in_wins_median"]
+            o.append(f"  {h:16} main hand of {100 * t['share']:4.1f}% of runs, which won {100 * t['win_rate']:4.1f}%; "
+                     f"cleared {100 * t['blinds_cleared_share']:4.1f}% of all blinds; level in wins median "
+                     f"{lvl if lvl is None else int(lvl)}")
+        o.append("  the run's single biggest hand: " + ", ".join(
+            f"{h} {100 * t['share']:.0f}%" for h, t in list(s["winning_hands"]["biggest"].items())[:6]))
+        j = s["jokers"]
+        o.append("")
+        o.append(f"Jokers held at the end, by lift in win rate over runs without them (base {100 * j['base_win_rate']:.1f}%, "
+                 f"at least {j['least_runs']} runs; association, not cause):")
+        for t in j["by_lift"][:12]:
+            o.append(f"  {t['joker']:20} held in {100 * t['held_share']:4.1f}% of runs: won {100 * t['win_rate']:4.1f}% ({t['lift'] * 100:+.1f})")
+        o.append("  ...")
+        for t in j["by_lift"][-6:]:
+            o.append(f"  {t['joker']:20} held in {100 * t['held_share']:4.1f}% of runs: won {100 * t['win_rate']:4.1f}% ({t['lift'] * 100:+.1f})")
+        o.append("  most held: " + ", ".join(f"{t['joker']} {100 * t['held_share']:.0f}% ({100 * t['win_rate']:.0f}%)"
+                                             for t in j["most_held"][:10]))
+        o.append("")
+        o.append("The biggest swings: win rate by where a run stood")
+        for label, groups in s["swings"].items():
+            o.append(f"  {label}: " + ", ".join(f"{g} {100 * t['win_rate']:.0f}% ({t['runs']:,})" for g, t in groups.items()))
     return o
 
 

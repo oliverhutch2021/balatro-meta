@@ -342,7 +342,12 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64
             MoveKind::SkipBlind => s.skips += 1,
             MoveKind::OpenBooster => s.packs += 1,
             MoveKind::RedeemVoucher => s.vouchers += 1,
-            MoveKind::CashOut => s.blinds_beaten += 1,
+            MoveKind::CashOut => {
+                s.blinds_beaten += 1;
+                if let Some(d) = diag.as_mut() {
+                    d.blind_beaten();
+                }
+            }
             _ => {}
         }
         let chips_before = run.round_chips;
@@ -465,6 +470,13 @@ struct Diagnosis {
     ante_xmult: [u8; 9],
     ante_jokers: [u8; 9],
     seen_ante: i32,
+    /// The hand type of the biggest hand in the blind it is in, and how many blinds each hand type cleared as
+    /// the blind's biggest hand (the scoring hands, not the throwaway plays).
+    blind_best_hand: Option<HandType>,
+    win_hands: [u32; 12],
+    /// The hand type of the run's biggest hand.
+    best_hand_type: Option<HandType>,
+    best_hand: f64,
 }
 
 /// Jokers whose x mult is above one now (a scaling joker counts once it has grown).
@@ -486,13 +498,28 @@ impl Diagnosis {
     fn blind_begins(&mut self, run: &Run) {
         self.blind_start = Some(run.clone());
         self.blind_best = 0.0;
+        self.blind_best_hand = None;
     }
 
     fn hand_scored(&mut self, run: &Run, scored: f64) {
-        self.blind_best = self.blind_best.max(scored);
+        if scored >= self.blind_best {
+            self.blind_best = scored;
+            self.blind_best_hand = run.last_hand;
+        }
+        if scored >= self.best_hand {
+            self.best_hand = scored;
+            self.best_hand_type = run.last_hand;
+        }
         if (1..=8).contains(&run.ante) {
             let a = run.ante as usize;
             self.ante_best[a] = self.ante_best[a].max(scored);
+        }
+    }
+
+    /// The blind was beaten: its biggest hand's type cleared it.
+    fn blind_beaten(&mut self) {
+        if let Some(h) = self.blind_best_hand {
+            self.win_hands[h as usize] += 1;
         }
     }
 
@@ -561,8 +588,15 @@ impl Diagnosis {
             (h < share).then(|| self.deep(salt)).flatten()
         };
         let by_ante = |f: &dyn Fn(usize) -> String| (1..=8).map(f).collect::<Vec<_>>().join(",");
+        // The hand type that cleared most blinds as the blind's biggest hand (ties to the higher type).
+        let (win_hand, win_blinds) = HandType::ALL
+            .iter()
+            .map(|&h| (h, self.win_hands[h as usize]))
+            .max_by_key(|&(h, n)| (n, h as usize))
+            .unwrap_or((HandType::HighCard, 0));
+        let jokers: Vec<&str> = run.jokers.iter().map(|j| j.kind.name()).collect();
         format!(
-            "{},{},{},{},{},{},{:.3},{:.0},{:.0},{:.0},{},{},{},{},{},{:.3},{},{},{},{},{:.0},{},{},{},{},{},{},{:.0}",
+            "{},{},{},{},{},{},{:.3},{:.0},{:.0},{:.0},{},{},{},{},{},{:.3},{},{},{},{},{:.0},{},{},{},{},{},{},{},{},{},{},{},{},{:.0}",
             s.seed,
             salt,
             u8::from(s.won),
@@ -588,6 +622,12 @@ impl Diagnosis {
             by_ante(&|a| self.ante_money[a].to_string()),
             by_ante(&|a| self.ante_xmult[a].to_string()),
             by_ante(&|a| self.ante_jokers[a].to_string()),
+            win_hand.name(),
+            win_blinds,
+            run.hand_levels.get(win_hand).level,
+            self.best_hand_type.map_or("", |h| h.name()),
+            jokers.join(";"),
+            run.vouchers.iter().filter(|&&v| v).count(),
             deep.map_or("-1".to_string(), |(w, _)| u8::from(w).to_string()),
             deep.map_or(-1.0, |(_, b)| b),
             needed
@@ -602,7 +642,7 @@ ante_best_1,ante_best_2,ante_best_3,ante_best_4,ante_best_5,ante_best_6,ante_bes
 ante_money_1,ante_money_2,ante_money_3,ante_money_4,ante_money_5,ante_money_6,ante_money_7,ante_money_8,\
 ante_xmult_1,ante_xmult_2,ante_xmult_3,ante_xmult_4,ante_xmult_5,ante_xmult_6,ante_xmult_7,ante_xmult_8,\
 ante_jokers_1,ante_jokers_2,ante_jokers_3,ante_jokers_4,ante_jokers_5,ante_jokers_6,ante_jokers_7,ante_jokers_8,\
-deep_won,deep_best,deep_needed";
+win_hand,win_hand_blinds,win_hand_level,best_hand_type,jokers,vouchers,deep_won,deep_best,deep_needed";
 
 /// What a run's summary had counted when it won, so an endless run's reports count only up to its win.
 struct WinCounts {
