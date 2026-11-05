@@ -2865,13 +2865,28 @@ pub fn new_run() {
 /// decision there has fewer to come after it.
 pub fn teacher_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     let late = param("late-x").unwrap_or(1.0);
+    let mut x = 1.0;
     if late > 1.0 && f64::from(run.ante) >= param("late-from").unwrap_or(LATE_FROM) {
+        x = late;
+    }
+    // "boss-x": in a boss blind's round, every count scaled by this much (most runs are lost at a boss).
+    let boss = param("boss-x").unwrap_or(1.0);
+    if boss > 1.0
+        && run.phase == Phase::Round
+        && run
+            .blind
+            .as_ref()
+            .is_some_and(|b| matches!(b.kind, crate::blinds::BlindKind::Boss(_)))
+    {
+        x = x.max(boss);
+    }
+    if x > 1.0 {
         let s = crate::value::scales();
         let scaled = crate::value::Scales {
-            full: s.full * late,
-            quick: s.quick * late,
-            looks: s.looks * late,
-            rounds: s.rounds * late,
+            full: s.full * x,
+            quick: s.quick * x,
+            looks: s.looks * x,
+            rounds: s.rounds * x,
         };
         return crate::value::with_scales(scaled, || plain_move(run, salt));
     }
@@ -3865,6 +3880,64 @@ mod tests {
             assert!(crate::env::apply(&mut r.clone(), m.0, m.1).is_ok());
         });
         assert_eq!(scales(), usual);
+    }
+
+    #[test]
+    fn boss_x_scales_the_counts_in_a_boss_blinds_round_only() {
+        use crate::value::{scales, Scales};
+        thread_local! { static SEEN: std::cell::Cell<Option<Scales>> = const { std::cell::Cell::new(None) }; }
+        // A probe in place of the decision: what `scales()` reads inside `teacher_move`'s scaled block is what
+        // `with_scales` set; the move itself is then made with the usual counts restored.
+        let boss = Run::scenario(
+            "BOSS1",
+            crate::blinds::BlindKind::Boss(crate::blinds::Boss::Wall),
+        );
+        let small = Run::scenario("BOSS1", crate::blinds::BlindKind::Small);
+        with_options(&["boss-x=4"], || {
+            let probe = |run: &Run| {
+                let x = param("boss-x").unwrap_or(1.0);
+                let in_boss = run.phase == Phase::Round
+                    && run
+                        .blind
+                        .as_ref()
+                        .is_some_and(|b| matches!(b.kind, crate::blinds::BlindKind::Boss(_)));
+                if x > 1.0 && in_boss {
+                    let s = scales();
+                    crate::value::with_scales(
+                        Scales {
+                            full: s.full * x,
+                            quick: s.quick * x,
+                            looks: s.looks * x,
+                            rounds: s.rounds * x,
+                        },
+                        || SEEN.with(|c| c.set(Some(scales()))),
+                    );
+                } else {
+                    SEEN.with(|c| c.set(Some(scales())));
+                }
+            };
+            probe(&boss);
+            assert_eq!(
+                SEEN.with(|c| c.get()),
+                Some(Scales::all(4.0)).map(|mut s| {
+                    s.rounds = 4.0;
+                    s
+                })
+            );
+            probe(&small);
+            assert_eq!(SEEN.with(|c| c.get()), Some(Scales::USUAL));
+            assert_eq!(scales(), Scales::USUAL, "restored");
+        });
+        // The real thing: a legal move in a boss round with the option on, and nothing left scaled after it.
+        let mut run = boss.clone();
+        for _ in 0..8 {
+            run.add_card_to_hand(crate::card::Suit::Hearts, crate::card::Rank::Ten);
+        }
+        with_options(&["light", "boss-x=4"], || {
+            let m = teacher_move(&run, 1);
+            assert!(apply(&mut run.clone(), m.0, m.1).is_ok());
+            assert_eq!(scales(), Scales::all(0.5));
+        });
     }
 
     #[test]

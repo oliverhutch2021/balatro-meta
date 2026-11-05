@@ -735,11 +735,17 @@ short. So, before any more three-hour trials:
 cd /mnt/h/balatro-meta && make sync && make test && make diagnose && make forks-quick
 ```
 
-Tonight, if the quick judge test says the forks tell the options apart, `make forks-night` (about 15 hours): nine
-hours of forks (about 7,000 decisions at four copies, the two best options and doing nothing, the play-outs at the
-lighter shop budget: a fork costs a dozen full games), the pair and its control, then on 8,000 seeds the pair against
-its control and the champion with the pair against the champion. The fork files add up: each round's networks learn
-from every fork file so far. `make teacher-late` (about 5 hours) tries the other half of the thought: three times the samples from
+What the night of 5 November found. `make diagnose` (on the champion's 3,000 White runs of 4 November): 44% of the
+losses scored 80% or more of the lost blind's target and another 43% half to 80%; the champion with four times the
+samples beat 36% of the lost blinds from their start (half of the near misses; Violet Vessel 10%, The Mouth 51%);
+the late losers' biggest hand trails the winners' by 11% at ante 4 and 34% at ante 7, and they are poorer at every
+ante. `make forks-night` (6,192 forks at four copies, 78,000 play-outs, three hours: the recording's 3,000 runs ran
+out) found every judge, the champion's full choice included, under one point of win rate better than picking at
+random among the champion's two best options and leaving, and an oracle that knew half the play-outs no better: at
+four copies the labels are mostly noise, and a pair trained on them ranked no better than its control. So the search
+budget at the decisive moments is tried first (`make teacher-late`, `make teacher-boss`: three times the samples from
+ante 6 or 5, four times in boss blinds, 8,000 seeds each against the champion), and the forks wait for a wider set
+of options and more copies (`jobs.fork_chance` now sets a night's share of decisions from its time). `make teacher-late` (about 5 hours) tries the other half of the thought: three times the samples from
 ante 6 (and from ante 5), where the runs are lost; it can run after the forks or on another night.
 
 ```

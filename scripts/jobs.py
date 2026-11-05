@@ -1011,6 +1011,16 @@ def late_steps(root: Path = ROOT) -> list[tuple]:
     return champion_trials(root, LATE_TRIALS, BIG_RUNS)
 
 
+# make teacher-boss: 82% of the champion's losses come at a boss, and the lost blind played again from its start with
+# four times the samples was beaten 36% of the time (make diagnose: half of the near misses). "boss-x=4" gives the
+# boss blinds' rounds four times the samples at every ante, cheaper than the late budget and aimed where the runs end.
+BOSS_TRIALS = (("2.5", "boss-x=4"),)
+
+
+def boss_steps(root: Path = ROOT) -> list[tuple]:
+    return champion_trials(root, BOSS_TRIALS, BIG_RUNS)
+
+
 def champion_trials(root: Path, trials: tuple[tuple[str, str], ...], runs: int) -> list[tuple]:
     """The teacher that won most of the first `runs` usual seeds (best_8k) played again on today's code (once: the
     control every such trial shares), then at each (weight, option) of `trials`, each set run by run against it."""
@@ -1484,6 +1494,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-doubt": doubt_steps(),
     "teacher-margin": margin_steps(),
     "teacher-late": late_steps(),
+    "teacher-boss": boss_steps(),
     "diagnose": diagnose_steps(),
     # An hour of forks and the networks that learn from them: the judge test today (results/forks/forks-quick.json,
     # then results/value/value-forks-quick.json's measured.forks).

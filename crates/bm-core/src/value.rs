@@ -181,6 +181,8 @@ pub const PARAMS: &[(&str, f64)] = &[
     // `teacher_move`; 1: as usual): more care where most runs are lost.
     ("late-x", 1.0),
     ("late-from", 6.0),
+    // In a boss blind's round, every count behind the teacher's decisions scaled by "boss-x" (1: as usual).
+    ("boss-x", 1.0),
     // With a learned value: the learned term rates a position by the networks' chance of getting this many blinds
     // further, not of winning (`learned::reach_chance`; 0: of winning). For the stakes where wins are too rare to
     // tell positions apart.

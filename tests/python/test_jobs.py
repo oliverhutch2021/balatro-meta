@@ -1091,6 +1091,10 @@ def test_the_late_trials_share_the_doubt_trials_control(tmp_path):
         play = late[f"w{w}-{extra}"]
         assert play[play.index("--teacher-options") + 1] == f"precise,{extra}"
     assert "teacher-late" in jobs.JOBS
+    boss = {n: a for n, a, *_ in jobs.boss_steps(tmp_path)}
+    assert boss["champion"] == doubt["champion"]
+    play = boss["w2.5-boss-x=4"]
+    assert play[play.index("--teacher-options") + 1] == "precise,boss-x=4" and "teacher-boss" in jobs.JOBS
 
 
 def test_the_fork_table_reads_every_fork_file_there_is(tmp_path):
