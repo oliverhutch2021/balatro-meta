@@ -148,15 +148,15 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
   <div class="wrap">
     <div class="top">
       <span class="brand">Balatro Meta</span>
-      <span class="chipbar"><span class="tag">White Stake</span><span class="tag">Red Deck</span><span class="tag">As of 2 Nov 2026</span></span>
+      <span class="chipbar"><span class="tag">White Stake</span><span class="tag">Red Deck</span><span class="tag">As of 5 Nov 2026</span></span>
     </div>
     <div class="panel hero">
       <h1>A bot that learns to win Balatro</h1>
-      <p class="lede">It plays a faithful copy of the game, sees only what a player sees, and decides every move by what it expects to win. Five days in, it wins two runs in three. The goal is to find strategies better than its human teacher's.</p>
-      <div class="score" aria-label="From 0.07% to 66.5% of runs won; its biggest hand scored 16.6 billion">
+      <p class="lede">It plays a faithful copy of the game, sees only what a player sees, and decides every move by what it expects to win. A week in, it wins seven runs in ten. The goal is 90%, and strategies better than its human teacher's.</p>
+      <div class="score" aria-label="From 0.07% to 71.8% of runs won; its biggest hand scored 16.6 billion">
         <div class="box plain" tabindex="0"><span class="v num">0.07%</span><span class="k">First bot, 30 Oct</span></div>
         <span class="op" aria-hidden="true">→</span>
-        <div class="box chips" tabindex="0"><span class="v num">66.5%</span><span class="k">Runs won now</span></div>
+        <div class="box chips" tabindex="0"><span class="v num">71.8%</span><span class="k">Runs won now · 8,000 seeds</span></div>
         <div class="box mult" tabindex="0"><span class="v num">16.6B</span><span class="k">Its biggest hand</span></div>
       </div>
       <p class="hint">Move over the table to steer the felt; tap to stir it.</p>
@@ -168,10 +168,10 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
   <section id="climb">
     <div class="wrap">
       <span class="label">The climb</span>
-      <h2>From <span class="dg">0.07%</span> to <span class="dg">66.5%</span> in five days</h2>
+      <h2>From <span class="dg">0.07%</span> to <span class="dg">71.8%</span> in a week</h2>
       <div class="panel">
-        <p class="col lead">Each point is the best version of the bot at that moment, measured on fresh seeds it never trained on. The big steps came from deciding by value, from a network that learns which positions win, from tuning the value's own numbers, from focusing on one hand, and lately from giving the networks more say against the formula. The last point is the exam: 8,000 seeds kept apart and never used to choose anything.</p>
-        <div class="chart" id="climbChart" role="img" aria-label="Line chart: share of runs won by each version of the bot, from 0.07% on 30 October to 66.5% on 3 November."></div>
+        <p class="col lead">Each point is the best version of the bot at that moment, measured on fresh seeds it never trained on. The big steps came from deciding by value, from a network that learns which positions win, from tuning the value's own numbers, from focusing on one hand, from giving the networks more say against the formula, and on 5 November from thinking harder where runs are decided: three times the samples from ante 5 and four times in boss blinds, +5.3 points on the same 8,000 seeds. The point marked exam is 8,000 seeds kept apart and never used to choose anything; the newest bot hasn't sat it yet.</p>
+        <div class="chart" id="climbChart" role="img" aria-label="Line chart: share of runs won by each version of the bot, from 0.07% on 30 October to 71.8% on 5 November."></div>
         <details><summary>Show the numbers</summary><div class="tbl"><table id="climbTable"><thead><tr><th>Version</th><th>Date</th><th class="r">Runs</th><th class="r">Won</th></tr></thead><tbody></tbody></table></div></details>
         <p class="col muted" style="font-size:14px">Measured on 2,000 to 1,000,000 seeds per version; the 95% range is about ±2 points at 2,000 runs and ±0.6 at 25,000.</p>
       </div>
@@ -260,30 +260,60 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
           <div><b>Play better</b><small>The bot decides with the network's estimate. Round 4 gained 1.75 points, round 5 only 0.4.</small></div>
           <div class="new"><b>Explore</b><small>New from round 7: one decision in ten takes another option rated nearly as good, so the network sees where untried choices lead.</small></div>
         </div>
-        <p class="col muted">Without exploration, the network only learns from the choices the bot already makes, so each round can only refine its habits. That is why the gains were shrinking. Rounds 7 to 10 explored, round 10 with whole builds (a quarter of its runs commit from ante 3 to one hand picked at random), and their networks are no better than round 7's. The last step came from giving the networks more say against the formula: +2.6 points on 8,000 seeds.</p>
+        <p class="col muted">Without exploration, the network only learns from the choices the bot already makes, so each round can only refine its habits. That is why the gains were shrinking. Rounds 7 to 10 explored, round 10 with whole builds (a quarter of its runs commit from ante 3 to one hand picked at random), and their networks are no better than round 7's. More say for the networks helped up to a point (66.1% at four times the formula's weight) and collapsed past it (53.8% at sixteen): picking the best of many options with a judge that errs picks its errors. So on 5 November the project stopped tuning the judge and asked, with the two experiments below, where the losses actually come from.</p>
       </div>
     </div>
   </section>
 
   <section id="loses">
     <div class="wrap">
-      <span class="label">Where it loses</span>
-      <h2>Late, and just short</h2>
+      <span class="label">Where it loses · the diagnosis of 5 Nov</span>
+      <h2>Late, at a boss, and just short</h2>
       <div class="panel">
-        <p class="col lead">Of 25,000 runs in round 5's recording, 10,239 were lost, 82% of them at antes 5 to 8. A losing round typically reaches about three quarters of its target: the bot runs out of scoring as the targets climb.</p>
-        <div class="chart" id="lossChart" role="img" aria-label="Bar chart: runs lost at each ante, out of 25,000. Ante 1: 240, ante 2: 281, ante 3: 375, ante 4: 941, ante 5: 1,811, ante 6: 1,892, ante 7: 1,850, ante 8: 2,849."></div>
+        <p class="col lead">The champion's 3,000 recorded runs, played again move by move: 1,160 were lost, 82% of them at a boss and 70% at antes 5 to 8. They are near misses: 44% scored 80% or more of the target they fell to and another 43% between half and 80%. Only 13% were hopeless. At the loss the median run still held $22 it never spent.</p>
+        <div class="chart" id="lossChart" role="img" aria-label="Bar chart: share of the 1,160 losses at each ante. Ante 1: 2.4%, ante 2: 3.4%, ante 3: 5.5%, ante 4: 12.0%, ante 5: 20.0%, ante 6: 14.0%, ante 7: 15.3%, ante 8: 27.5%."></div>
+        <h3>Could better play have beaten the blind?</h3>
+        <p class="col">Every lost blind was played again from its start by the same bot with four times the samples, with the run's own cards (a diagnosis, never the bot's play). It beat <b>36%</b> of them: 49% of the near misses, 23% at ante 8. By boss, the split between build and play is sharp.</p>
         <div class="tbl col">
           <table>
-            <thead><tr><th>Lost to</th><th class="r">Runs</th><th class="r">Share of losses</th></tr></thead>
+            <thead><tr><th>Lost to</th><th class="r">Share of losses</th><th class="r">Median of target scored</th><th class="r">Beaten with deeper play</th></tr></thead>
             <tbody>
-              <tr><td>Big Blind</td><td class="r num">1,420</td><td class="r num">13.9%</td></tr>
-              <tr><td>Violet Vessel (ante 8 boss, 6× target)</td><td class="r num">1,390</td><td class="r num">13.6%</td></tr>
-              <tr><td>The Wall (a very large target)</td><td class="r num">989</td><td class="r num">9.7%</td></tr>
-              <tr><td>The Needle (a single hand)</td><td class="r num">529</td><td class="r num">5.2%</td></tr>
-              <tr><td>Crimson Heart</td><td class="r num">517</td><td class="r num">5.0%</td></tr>
-              <tr><td>Small Blind</td><td class="r num">499</td><td class="r num">4.9%</td></tr>
+              <tr><td>Violet Vessel (ante 8 finisher, 6× target)</td><td class="r num">12.4%</td><td class="r num">69%</td><td class="r num down">10%</td></tr>
+              <tr><td>The Wall (a very large target)</td><td class="r num">9.0%</td><td class="r num">75%</td><td class="r num">23%</td></tr>
+              <tr><td>The Needle (one hand)</td><td class="r num">6.0%</td><td class="r num">73%</td><td class="r num">22%</td></tr>
+              <tr><td>Crimson Heart (a joker off each hand)</td><td class="r num">5.7%</td><td class="r num">81%</td><td class="r num">36%</td></tr>
+              <tr><td>The Eye (no hand type twice)</td><td class="r num">3.9%</td><td class="r num">73%</td><td class="r num">36%</td></tr>
+              <tr><td>The Mouth (one hand type)</td><td class="r num">3.7%</td><td class="r num">72%</td><td class="r num up">51%</td></tr>
+              <tr><td>Amber Acorn (jokers shuffled face down)</td><td class="r num">2.9%</td><td class="r num">80%</td><td class="r num up">44%</td></tr>
             </tbody>
           </table>
+        </div>
+        <h3>The build gap compounds from ante 4</h3>
+        <p class="col">Runs that go on to lose at antes 5 to 8 are not undone by one bad decision. Their biggest hand trails the winners' by 11% at ante 4, 19% at 5, 24% at 6 and 34% at 7, and they are poorer at every ante: a weaker economy feeding a weaker engine from ante 3 on.</p>
+        <div class="legend"><span><i style="background:var(--chips)"></i>Runs that won</span><span><i style="background:var(--mult)"></i>Runs lost at antes 5–8</span></div>
+        <div class="chart" id="gapChart" role="img" aria-label="Line chart on a log scale: the median biggest hand each ante for runs that won against runs lost at antes 5 to 8. Winners 672, 2,192, 4,460, 8,783, 17,072, 30,834, 56,920, 94,532; late losers 660, 2,184, 4,320, 7,840, 13,860, 23,570, 37,523, 64,368. Money as each ante began, winners against late losers: $4/$4, $5/$5, $11/$10, $20/$16, $29/$23, $36/$27, $41/$29, $46/$33."></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="found">
+    <div class="wrap">
+      <span class="label">What the two experiments found</span>
+      <h2>More search where it matters: <span class="dg">+5.3</span> points</h2>
+      <div class="panel">
+        <div class="three">
+          <div>
+            <h3>Forks: are its shop choices wrong?</h3>
+            <p>At 6,750 shop and pack decisions, each of the bot's best options and leaving were played out to the end of the run on fair copies that shared the same hidden futures. Its own choice, its networks' ranking and picking at random all came within a point of win rate of each other, and a network trained on the forks played worse than one trained without them. Choosing between its top options is not where the losses are.</p>
+          </div>
+          <div>
+            <h3>Budget: does it think hard enough?</h3>
+            <p>The same bot with three times the samples from ante 6 won 69.4% against 66.4% on the same 8,000 seeds; from ante 5, 70.7% (p = 2 × 10⁻²⁰); with four times the samples in boss blinds as well, 71.8%. The biggest gain of the project, from the judgement it already had, applied harder where runs are decided.</p>
+          </div>
+          <div>
+            <h3>What it costs</h3>
+            <p>About four times the time per run: 8,000 runs take three and a half hours on sixteen cores instead of forty minutes. Fine for a bot, slower for trials, which now screen on 2,000 seeds and confirm on 8,000. The open question is how far the budget scales: from ante 3, from ante 1, six times instead of three.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -320,8 +350,8 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
       <span class="label">Next</span>
       <h2>Target: <span class="dg">90%</span> at White Stake</h2>
       <div class="next">
-        <div class="now"><h3>Today</h3><p>Looking further ahead at the big shop and pack decisions, on imagined futures built only from what's on screen, and training on every recording, with wins played on into Endless to tell strong builds from lucky ones.</p></div>
-        <div><h3>The player's seeds</h3><p>A benchmark of the seeds the human player won: how many of them the bot wins too, each played several times.</p></div>
+        <div class="now"><h3>Now</h3><p>How far the search budget goes: twice, three times and six times the samples, from ante 5, 3 and 1, screened on 2,000 seeds and confirmed on 8,000. Then the exam for the new champion, and a new round of recordings with the stronger bot, its wins played on into Endless to tell strong builds from lucky ones.</p></div>
+        <div><h3>The economy from ante 2</h3><p>The build gap starts with money. The forks move to ante 2 to 4 with a wider set of options than the bot's own (rerolling on, selling to pivot, skipping for a tag), with enough play-outs each to tell them apart.</p></div>
         <div><h3>A harder table</h3><p>Black Deck at Gold Stake as a second benchmark: one hand fewer each round, and every stake's rules at once.</p></div>
         <div><h3>Then up the stakes</h3><p>Higher stakes and the other decks, once White Stake is solved.</p></div>
       </div>
@@ -373,16 +403,18 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
     ["Tuned formula", "1 Nov", 2000, 59.85], ["Round 4's networks", "1 Nov", 2000, 61.60],
     ["Round 5's networks", "1 Nov", 2000, 62.00], ["Round 6's networks", "2 Nov", 2000, 62.90],
     ["Focus on one hand, fair skipping", "2 Nov", 8000, 64.24], ["Networks get more say (weight 2.5)", "2 Nov", 8000, 66.46],
-    ["Exam: seeds kept apart", "3 Nov", 8000, 66.49]
+    ["Exam: seeds kept apart", "3 Nov", 8000, 66.49],
+    ["3× the samples from ante 6", "5 Nov", 8000, 69.43], ["3× the samples from ante 5", "5 Nov", 8000, 70.68],
+    ["4× in boss blinds too", "5 Nov", 8000, 71.76]
   ];
-  const notes = { 3: "Decides by value", 5: "Learned value", 10: "Tuned formula" };
+  const notes = { 3: "Decides by value", 5: "Learned value", 10: "Tuned formula", 17: "More search late" };
   (function () {
     const box = document.getElementById("climbChart");
     const W = 900, H = 360, L = 48, R = 24, T = 22, B = 48;
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}` }, box);
     const x = (i) => L + i * (W - L - R) / (climb.length - 1);
-    const y = (v) => T + (1 - v / 70) * (H - T - B);
-    for (let g = 0; g <= 70; g += 10) {
+    const y = (v) => T + (1 - v / 80) * (H - T - B);
+    for (let g = 0; g <= 80; g += 10) {
       el("line", { x1: L, x2: W - R, y1: y(g), y2: y(g), stroke: "var(--rule)", "stroke-width": 1 }, svg);
       el("text", { x: L - 8, y: y(g) + 4, "text-anchor": "end", "font-family": MONO, "font-size": 11, fill: "var(--muted)" }, svg, g + "%");
     }
@@ -396,7 +428,8 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
       if (notes[i]) el("text", { x: x(i) - 8, y: y(d[3]) - 12, "text-anchor": "end", "font-family": PIX, "font-size": 14, fill: "var(--ink)" }, svg, notes[i]);
     });
     const last = climb[climb.length - 1];
-    el("text", { x: x(climb.length - 1), y: y(last[3]) - 15, "text-anchor": "end", "font-family": DIG, "font-size": 16, fill: "var(--ink)" }, svg, "66.5%");
+    el("text", { x: x(climb.length - 1), y: y(last[3]) - 15, "text-anchor": "end", "font-family": DIG, "font-size": 16, fill: "var(--ink)" }, svg, "71.8%");
+    el("text", { x: x(16), y: y(climb[16][3]) + 22, "text-anchor": "middle", "font-family": MONO, "font-size": 11, fill: "var(--gold)" }, svg, "exam");
     const tip = tipFor(box);
     climb.forEach((d, i) => {
       const hit = el("rect", { x: x(i) - 18, y: T, width: 36, height: H - T - B, fill: "transparent" }, svg);
@@ -452,26 +485,62 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
   })();
 
   (function () {
-    const lost = [240, 281, 375, 941, 1811, 1892, 1850, 2849];
+    const lost = [28, 39, 64, 139, 232, 162, 177, 319], total = 1160;
     const box = document.getElementById("lossChart");
     const W = 900, H = 300, L = 48, R = 20, T = 30, B = 40;
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}` }, box);
-    const max = 3000, bw = (W - L - R) / lost.length;
+    const max = 30, bw = (W - L - R) / lost.length;
     const y = (v) => T + (1 - v / max) * (H - T - B);
-    for (let g = 0; g <= max; g += 1000) {
+    for (let g = 0; g <= max; g += 10) {
       el("line", { x1: L, x2: W - R, y1: y(g), y2: y(g), stroke: "var(--rule)", "stroke-width": 1 }, svg);
-      el("text", { x: L - 8, y: y(g) + 4, "text-anchor": "end", "font-family": MONO, "font-size": 11, fill: "var(--muted)" }, svg, fmt(g));
+      el("text", { x: L - 8, y: y(g) + 4, "text-anchor": "end", "font-family": MONO, "font-size": 11, fill: "var(--muted)" }, svg, g + "%");
     }
     const tip = tipFor(box);
-    lost.forEach((v, i) => {
+    lost.forEach((n, i) => {
+      const v = 100 * n / total;
       const x0 = L + i * bw + bw * 0.18, w = bw * 0.64;
       const r = el("path", { d: `M${x0},${y(0)} L${x0},${y(v) + 4} Q${x0},${y(v)} ${x0 + 4},${y(v)} L${x0 + w - 4},${y(v)} Q${x0 + w},${y(v)} ${x0 + w},${y(v) + 4} L${x0 + w},${y(0)} Z`, fill: i >= 4 ? "var(--mult)" : "var(--faint)" }, svg);
-      el("text", { x: x0 + w / 2, y: y(v) - 7, "text-anchor": "middle", "font-family": MONO, "font-size": 11, fill: "var(--ink)" }, svg, fmt(v));
+      el("text", { x: x0 + w / 2, y: y(v) - 7, "text-anchor": "middle", "font-family": MONO, "font-size": 11, fill: "var(--ink)" }, svg, v.toFixed(1) + "%");
       el("text", { x: x0 + w / 2, y: H - 16, "text-anchor": "middle", "font-family": MONO, "font-size": 11, fill: "var(--muted)" }, svg, "Ante " + (i + 1));
-      r.addEventListener("mouseenter", () => { const k = svg.getBoundingClientRect().width / W; tip.show(`<b>Ante ${i + 1}</b><br>${fmt(v)} runs lost (${(100 * v / 10239).toFixed(1)}% of losses)`, (x0 + w / 2) * k, y(v) * k); });
+      r.addEventListener("mouseenter", () => { const k = svg.getBoundingClientRect().width / W; tip.show(`<b>Ante ${i + 1}</b><br>${fmt(n)} of ${fmt(total)} losses (${v.toFixed(1)}%)`, (x0 + w / 2) * k, y(v) * k); });
       r.addEventListener("mouseleave", tip.hide);
     });
-    el("text", { x: L + 4 * bw + 4, y: T - 10, "font-family": PIX, "font-size": 15, fill: "var(--ink)" }, svg, "Antes 5–8: 82% of losses");
+    el("text", { x: L + 4 * bw + 4, y: T - 10, "font-family": PIX, "font-size": 15, fill: "var(--ink)" }, svg, "Antes 5–8: 77% of losses");
+  })();
+
+  (function () {
+    // The build gap: the median biggest hand each ante, winners against the runs lost at antes 5 to 8 (log scale), with
+    // the money each held as the ante began.
+    const win = [672, 2191.5, 4460, 8782.5, 17071.5, 30834, 56920, 94531.5];
+    const lose = [660, 2184, 4320, 7840, 13860, 23569.5, 37523, 64368];
+    const moneyW = [4, 5, 11, 20, 29, 36, 41, 46], moneyL = [4, 5, 10, 16, 23, 27, 29, 33];
+    const box = document.getElementById("gapChart");
+    const W = 900, H = 340, L = 56, R = 20, T = 24, B = 56;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}` }, box);
+    const lo = Math.log10(500), hi = Math.log10(200000);
+    const x = (i) => L + (i + 0.5) * (W - L - R) / 8;
+    const y = (v) => T + (1 - (Math.log10(v) - lo) / (hi - lo)) * (H - T - B);
+    [[1000, "1k"], [10000, "10k"], [100000, "100k"]].forEach(([v, lab]) => {
+      el("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: "var(--rule)", "stroke-width": 1 }, svg);
+      el("text", { x: L - 8, y: y(v) + 4, "text-anchor": "end", "font-family": MONO, "font-size": 11, fill: "var(--muted)" }, svg, lab);
+    });
+    for (let i = 0; i < 8; i++) {
+      el("text", { x: x(i), y: H - 30, "text-anchor": "middle", "font-family": MONO, "font-size": 11, fill: "var(--muted)" }, svg, "Ante " + (i + 1));
+      el("text", { x: x(i), y: H - 14, "text-anchor": "middle", "font-family": MONO, "font-size": 10, fill: "var(--faint)" }, svg, `$${moneyW[i]} / $${moneyL[i]}`);
+      if (i >= 3 && i <= 6) el("text", { x: x(i), y: y(lose[i]) + 20, "text-anchor": "middle", "font-family": MONO, "font-size": 11, fill: "var(--mult)" }, svg, `−${Math.round(100 * (1 - lose[i] / win[i]))}%`);
+    }
+    [[win, "var(--chips)"], [lose, "var(--mult)"]].forEach(([pts, col]) => {
+      el("path", { d: pts.map((v, i) => (i ? "L" : "M") + x(i) + "," + y(v)).join(" "), fill: "none", stroke: col, "stroke-width": 3, "stroke-linejoin": "round" }, svg);
+      pts.forEach((v, i) => el("circle", { cx: x(i), cy: y(v), r: 4.5, fill: col, stroke: "var(--panel-solid)", "stroke-width": 2 }, svg));
+    });
+    el("text", { x: x(7) - 14, y: y(win[7]) - 14, "text-anchor": "end", "font-family": DIG, "font-size": 11, fill: "var(--chips)" }, svg, "won 94.5k");
+    el("text", { x: x(7) + 10, y: y(lose[7]) + 56, "text-anchor": "end", "font-family": DIG, "font-size": 11, fill: "var(--mult)" }, svg, "lost late 64.4k");
+    const tip = tipFor(box);
+    for (let i = 0; i < 8; i++) {
+      const hit = el("rect", { x: x(i) - 40, y: T, width: 80, height: H - T - B, fill: "transparent" }, svg);
+      hit.addEventListener("mouseenter", () => { const k = svg.getBoundingClientRect().width / W; tip.show(`<b>Ante ${i + 1}</b><br>won: ${fmt(win[i])} · $${moneyW[i]}<br>lost late: ${fmt(lose[i])} · $${moneyL[i]}`, x(i) * k, y(win[i]) * k); });
+      hit.addEventListener("mouseleave", tip.hide);
+    }
   })();
 
   // The felt: our own swirling, pixelated shader behind everything (steered by the pointer, stirred by a tap).
