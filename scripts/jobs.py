@@ -1035,13 +1035,19 @@ def budget_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     return champion_trials(root, BUDGET_TRIALS, runs, control_runs=BIG_RUNS)
 
 
+# Whether the champion is played again on today's code before its trials (its own report serves otherwise: the engine
+# hasn't changed its play since 4 November's fairness fixes, which moved the champion of 2 November by 0.1 point).
+CONTROL_AGAIN = False
+
+
 def champion_trials(root: Path, trials: tuple[tuple[str, str], ...], runs: int,
                     control_runs: int | None = None) -> list[tuple]:
-    """The teacher that won most of the first 8,000 usual seeds (best_8k) played again on today's code (once, on
-    `control_runs` seeds, by default `runs`: the control every such trial shares), then at each (weight, option) of
-    `trials` on the first `runs` seeds, each set run by run against it (the comparison pairs the first seeds of
-    both, so a 2,000-seed screen compares against the 8,000-seed control). A trial's `name=value` replaces the
-    champion's own setting of that name, so "late-x=6" on a champion with late-x=3 plays at 6."""
+    """The teacher that won most of the first 8,000 usual seeds (best_8k), at each (weight, option) of `trials` on
+    the first `runs` seeds, each set run by run against the champion's own runs (its report; or, with CONTROL_AGAIN
+    or an "again" report there, the champion played again on today's code on `control_runs` seeds, once). The
+    comparison pairs the first seeds of both, so a 2,000-seed screen compares against the 8,000-seed champion. A
+    trial's `name=value` replaces the champion's own setting of that name, so "late-x=6" on a champion with late-x=3
+    plays at 6."""
     steps: list[tuple] = [("build", [*MAKE, "build"])]
     best = best_8k_report(root)
     if best is None:
@@ -1062,8 +1068,12 @@ def champion_trials(root: Path, trials: tuple[tuple[str, str], ...], runs: int,
         else:
             a += ["--teacher-options", o]
         return a
-    control = f"results/tune/{tag}-{file_safe(opts)}-{control_size}-w{w0}-again-on-{nets_stem}.json"
-    if not (root / control).exists():
+    # The control: the champion's own report (the runs that made it the champion, on the same seeds), unless it was
+    # played on an older engine (an "again" report exists or is wanted: CONTROL_AGAIN), when it is played again on
+    # today's code once and that is the control every trial shares.
+    again = f"results/tune/{tag}-{file_safe(opts)}-{control_size}-w{w0}-again-on-{nets_stem}.json"
+    control = report if not CONTROL_AGAIN and not (root / again).exists() else again
+    if control == again and not (root / again).exists():
         steps.append(("champion", [*BASELINE, "--bot", "teacher", *with_(w0, opts), "--runs", str(control_runs),
                                    "--seed", "1", "--out", control]))
     for w, extra in trials:
@@ -1311,8 +1321,9 @@ def fork_play_steps(name: str, root: Path = ROOT, runs: int = BIG_RUNS) -> list[
     steps.append(play("control-pair", control_pair, control))
     steps.append(("compare-pairs", ["scripts/compare_runs.py", control, alone, "--out",
                                     f"results/tune/{Path(alone).stem}-vs-{Path(control).stem}.json"]))
-    champion = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-again-on-{nets_stem}.json"
-    if not (root / champion).exists():
+    again = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-again-on-{nets_stem}.json"
+    champion = report if not CONTROL_AGAIN and not (root / again).exists() else again
+    if champion == again and not (root / again).exists():
         steps.append(play("champion", nets, champion))
     joined = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-on-{nets_stem}+{name}.json"
     steps.append(play("champion-with-pair", f"{nets},{pair}", joined))

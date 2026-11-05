@@ -902,7 +902,7 @@ def test_the_quick_table_shows_the_training_and_every_stake(tmp_path):
     assert "White   not played yet" in text and "Gold    not played yet" in text
 
 
-def test_the_doubt_trials_play_the_champion_again_and_set_each_against_it(tmp_path):
+def test_the_doubt_trials_play_the_champion_again_and_set_each_against_it(tmp_path, monkeypatch):
     f = jobs.FORMULA
     (tmp_path / "models").mkdir()
     for n in range(1, 9):
@@ -916,10 +916,19 @@ def test_the_doubt_trials_play_the_champion_again_and_set_each_against_it(tmp_pa
         {"kind": "baseline", "runs": 8000, "win_rate": 0.6646, "seed_base": 1, "value_net": jobs.ensemble(8),
          "value_weight": 2.5, "teacher_options": ["precise"]}))
     steps = {n: a for n, a, *_ in jobs.doubt_steps(tmp_path)}
-    champ = steps["champion"]
+    # The control is the champion's own report; played again on today's code only when asked (CONTROL_AGAIN) or
+    # when such a report is already there.
+    assert "champion" not in steps
+    control = f"results/tune/f{f}-precise-8k-w2.5-on-ensemble8-w1.5.json"
+    (tune / f"f{f}-precise-8k-w2.5-again-on-ensemble8-w1.5.json").write_text("{}")
+    again = {n: a for n, a, *_ in jobs.doubt_steps(tmp_path)}
+    assert "champion" not in again and again["compare-w2.5-doubt=1"][1] == f"results/tune/f{f}-precise-8k-w2.5-again-on-ensemble8-w1.5.json"
+    (tune / f"f{f}-precise-8k-w2.5-again-on-ensemble8-w1.5.json").unlink()
+    monkeypatch.setattr(jobs, "CONTROL_AGAIN", True)
+    champ = {n: a for n, a, *_ in jobs.doubt_steps(tmp_path)}["champion"]
     assert champ[champ.index("--value-weight") + 1] == "2.5" and champ[champ.index("--teacher-options") + 1] == "precise"
-    control = champ[champ.index("--out") + 1]
-    assert control == f"results/tune/f{f}-precise-8k-w2.5-again-on-ensemble8-w1.5.json"
+    assert champ[champ.index("--out") + 1] == f"results/tune/f{f}-precise-8k-w2.5-again-on-ensemble8-w1.5.json"
+    monkeypatch.setattr(jobs, "CONTROL_AGAIN", False)
     for w, extra in jobs.DOUBT_TRIALS:
         play = steps[f"w{w}-{extra}"]
         assert play[play.index("--value-weight") + 1] == w
@@ -1073,11 +1082,8 @@ def test_a_fork_round_forks_the_newest_recording_then_trains_a_pair_and_its_cont
     assert cmp[1] == ctl[ctl.index("--out") + 1] and cmp[2] == pair[pair.index("--out") + 1]
     with_ = play["champion-with-pair"]
     assert with_[with_.index("--value-net") + 1] == f"{jobs.ensemble(8)},models/value-forks-1.bin,models/value-forks-1b.bin"
-    champ = play["champion"]
-    assert champ[champ.index("--out") + 1] == f"results/tune/f{jobs.FORMULA}-precise-8k-w2.5-again-on-ensemble8-w1.5.json"
-    (tmp_path / champ[champ.index("--out") + 1]).parent.mkdir(parents=True, exist_ok=True)
-    (tmp_path / champ[champ.index("--out") + 1]).write_text("{}")
-    assert "champion" not in {n for n, *_ in jobs.fork_play_steps("forks-1", tmp_path)}
+    assert "champion" not in play, "the champion's own report is the control"
+    assert play["compare-with-champion"][1] == f"results/tune/f{jobs.FORMULA}-precise-8k-w2.5-on-ensemble8-w1.5.json"
     for name in ("forks-1", "value-net-forks-1", "teacher-forks-1", "forks-quick", "value-net-forks-quick"):
         assert name in jobs.JOBS
 
@@ -1086,13 +1092,13 @@ def test_the_late_trials_share_the_doubt_trials_control(tmp_path):
     champion_in(tmp_path)
     late = {n: a for n, a, *_ in jobs.late_steps(tmp_path)}
     doubt = {n: a for n, a, *_ in jobs.doubt_steps(tmp_path)}
-    assert late["champion"] == doubt["champion"]
+    assert late["compare-w2.5-late-x=3"][1] == doubt["compare-w2.5-doubt=1"][1], "the same control"
     for w, extra in jobs.LATE_TRIALS:
         play = late[f"w{w}-{extra}"]
         assert play[play.index("--teacher-options") + 1] == f"precise,{extra}"
     assert "teacher-late" in jobs.JOBS
     boss = {n: a for n, a, *_ in jobs.boss_steps(tmp_path)}
-    assert boss["champion"] == doubt["champion"]
+    assert boss["compare-w2.5-boss-x=4"][1] == doubt["compare-w2.5-doubt=1"][1]
     play = boss["w2.5-boss-x=4"]
     assert play[play.index("--teacher-options") + 1] == "precise,boss-x=4" and "teacher-boss" in jobs.JOBS
     # The screen: 2,000 seeds a trial against the 8,000-seed control, a trial's setting replacing the champion's own.
@@ -1101,15 +1107,14 @@ def test_the_late_trials_share_the_doubt_trials_control(tmp_path):
         {"kind": "baseline", "runs": 8000, "win_rate": 0.70675, "seed_base": 1, "value_net": jobs.ensemble(8),
          "value_weight": 2.5, "teacher_options": ["precise", "late-x=3", "late-from=5"]}))
     screen = {n: a for n, a, *_ in jobs.budget_steps(tmp_path)}
-    champ = screen["champion"]
-    assert champ[champ.index("--runs") + 1] == "8000" and champ[champ.index("--teacher-options") + 1] == "precise,late-x=3,late-from=5"
-    assert champ[champ.index("--out") + 1] == f"results/tune/f{jobs.FORMULA}-precise+late-x-3+late-from-5-8k-w2.5-again-on-ensemble8-w1.5.json"
+    assert "champion" not in screen, "the champion's own 8,000-seed report is the control"
+    control = f"results/tune/f{jobs.FORMULA}-precise+late-x-3+late-from-5-8k-w2.5-on-ensemble8-w1.5.json"
     six = screen["w2.5-late-x=6"]
     assert six[six.index("--runs") + 1] == "2000" and six[six.index("--teacher-options") + 1] == "precise,late-from=5,late-x=6"
     early = screen["w2.5-late-from=1"]
     assert early[early.index("--teacher-options") + 1] == "precise,late-x=3,late-from=1"
     cmp = screen["compare-w2.5-late-x=6"]
-    assert cmp[1] == champ[champ.index("--out") + 1] and "-2k-" in cmp[2]
+    assert cmp[1] == control and "-2k-" in cmp[2]
     assert "teacher-budget" in jobs.JOBS and "teacher-budget-big" in jobs.JOBS
 
 
