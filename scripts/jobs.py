@@ -1696,7 +1696,7 @@ def progress_entry(job: str, step: str, argv: list[str], commit: str, root: Path
     if r.get("stake") and r.get("stake") != "White Stake":  # the Progress panel's lines are White's otherwise
         name += f", {r['stake']}"
     return {"time": now(), "name": name, "job": job, "step": step, "code": code, "title": title, "out": out,
-            "bot": r.get("bot"),
+            "bot": r.get("bot"), "stake": int(r.get("stake_number") or 1),
             "seed": int(arg("--seed") or 1), "value_net": net, "value_weight": w, "teacher_options": options,
             "runs": r["runs"], "wins": r.get("wins"), "win_rate": r.get("win_rate"), "win_ci": r.get("win_ci"),
             "mean_ante": r.get("mean_ante")}

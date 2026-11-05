@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import threading
 import time
@@ -317,6 +318,7 @@ def read_progress(path: Path = PROGRESS, results: Path = RESULTS) -> list[dict]:
             except ValueError:
                 continue
             if isinstance(e, dict) and e.get("runs"):
+                e["stake"] = entry_stake(e)
                 entries.append(e)
     except OSError:
         pass
@@ -334,10 +336,20 @@ def read_progress(path: Path = PROGRESS, results: Path = RESULTS) -> list[dict]:
         when = r.get("updated") or p.stat().st_mtime
         entries.append({"time": time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime(float(when))), "job": None,
                         "step": None, "code": None, "title": None, "out": out, "bot": r.get("bot"), "seed": None,
+                        "stake": int(r.get("stake_number") or 1),
                         "value_net": None, "value_weight": None, "runs": r.get("runs"), "wins": r.get("wins"),
                         "win_rate": r.get("win_rate"), "win_ci": r.get("win_ci"), "mean_ante": r.get("mean_ante")})
     entries.sort(key=lambda e: str(e.get("time") or ""))
     return entries
+
+
+def entry_stake(e: dict) -> int:
+    """A progress entry's stake, 1 (White) to 8 (Gold): its own field (entries from 5 November on), else the stake
+    its name ends with (", Gold Stake": the job runner named the other stakes' entries so), else White."""
+    if e.get("stake"):
+        return int(e["stake"])
+    m = re.search(r", ((?:White|Red|Green|Black|Blue|Purple|Orange|Gold) Stake)$", str(e.get("name") or ""))
+    return STAKE_NAMES.index(m[1]) + 1 if m else 1
 
 
 class Progress:

@@ -22,7 +22,7 @@ def test_a_measuring_step_is_logged_with_its_code_and_options(tmp_path):
     assert e["runs"] == 5000 and e["wins"] == 1400 and e["win_rate"] == 0.28 and e["win_ci"] == [0.27, 0.29]
     assert e["value_net"] == "models/value-1.bin" and e["value_weight"] == 2.0 and e["seed"] == 1
     assert e["job"] == "teacher-learned" and e["step"] == "weight-2" and e["out"] == "results/value/teacher-w1.json"
-    assert e["name"] == "Learned value \u00d72"
+    assert e["name"] == "Learned value \u00d72" and e["stake"] == 1
     assert e["code"] and not e["title"].startswith("results("), "the code commit, not a results commit"
     log = tmp_path / "progress.jsonl"
     jobs.record_progress(e, log)

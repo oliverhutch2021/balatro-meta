@@ -1188,26 +1188,36 @@ function shortDate(iso) {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 function clip(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1).trimEnd() + '\u2026' : s; }
+const STAKE_NAMES = ['White', 'Red', 'Green', 'Black', 'Blue', 'Purple', 'Orange', 'Gold'];
 function renderProgress() {
-  const entries = (PROG && PROG.entries) || [];
+  const all = (PROG && PROG.entries) || [];
   const goal = (PROG && PROG.goal) || 0.9;
   const pc = (S.state && S.state.pc) || {}, p = pc.progress, job = pc.job;
   const live = p && job && job.state === 'running' && !p.done && p.runs ? p : null;
+  // One stake at a time: White's progression by default (the other stakes' runs are measured at a tenth of the win
+  // rate and would flatten it); the running job's stake when it plays another.
+  const stakes = [...new Set(all.map(e => e.stake || 1))].sort((a, b) => a - b);
+  const liveStake = live && live.stake_number ? live.stake_number : null;
+  const stake = stakes.includes(S.progStake) ? S.progStake : (liveStake && stakes.includes(liveStake) ? liveStake : 1);
+  const entries = all.filter(e => (e.stake || 1) === stake);
   const best = entries.reduce((a, e) => (e.win_rate != null && (!a || e.win_rate > a.win_rate) ? e : a), null);
   // This run as it goes (its win rate block by block), or every version measured so far.
   const series = p ? sessionSeries(p) : null;
   const view = series && (S.progView === 'run' || (!S.progView && live)) ? 'run' : 'all';
-  setHTML($('progview'), series ? `<div class="seg" role="group" aria-label="What the chart shows">` +
+  const stakeSeg = stakes.length > 1 ? `<div class="seg" role="group" aria-label="Stake">` +
+    stakes.map(k => `<button data-ps="${k}" class="${k === stake ? 'on' : ''}">${STAKE_NAMES[k - 1] || k}</button>`).join('') + `</div>` : '';
+  setHTML($('progview'), (series ? `<div class="seg" role="group" aria-label="What the chart shows">` +
     `<button data-pv="run" class="${view === 'run' ? 'on' : ''}">This run</button>` +
-    `<button data-pv="all" class="${view === 'all' ? 'on' : ''}">All versions</button></div>` : '');
+    `<button data-pv="all" class="${view === 'all' ? 'on' : ''}">All versions</button></div>` : '') + stakeSeg);
+  const stakeName = stakes.length > 1 ? ` at ${STAKE_NAMES[stake - 1]} Stake` : '';
   if (view === 'run') {
     setHTML($('progchart'), sessionChart(series, live, best, goal));
     $('progcap').textContent = (series.kind === 'blocks'
       ? `This run's win rate: dots each ${num(p.block_runs || 1000)} games, the line smoothed`
-      : `This run's win rate as it went`) + (best ? `. Dashed: the best version so far (${progName(best)}).` : '.');
+      : `This run's win rate as it went`) + (best ? `. Dashed: the best version so far${stakeName} (${progName(best)}).` : '.');
   } else {
     setHTML($('progchart'), versionsChart(entries, goal));
-    $('progcap').textContent = entries.length ? 'Every version measured on this PC, oldest to newest, with its 95% range.' : '';
+    $('progcap').textContent = entries.length ? `Every version measured on this PC${stakeName}, oldest to newest, with its 95% range.` : '';
   }
   let h = '';
   if (live) {
@@ -1224,7 +1234,8 @@ function renderProgress() {
       `</span></div>`;
   });
   setHTML($('proglist'), h || '<div class="empty">Each measured version appears here when its job step finishes.</div>');
-  $('progsub').textContent = best ? `best ${rate(best.win_rate)}, goal ${Math.round(goal * 100)}%` : `goal ${Math.round(goal * 100)}%`;
+  $('progsub').textContent = (best ? `best ${rate(best.win_rate)}` : '') + (stakes.length > 1 ? `${best ? ' at ' : ''}${STAKE_NAMES[stake - 1]}` : '') +
+    (stake === 1 ? `${best || stakes.length > 1 ? ', ' : ''}goal ${Math.round(goal * 100)}%` : '');
 }
 
 function sessionSeries(p) {
@@ -1326,6 +1337,7 @@ $('search').addEventListener('click', e => {
 });
 $('progview').addEventListener('click', e => {
   const b = e.target.closest('[data-pv]'); if (b) { S.progView = b.dataset.pv; renderProgress(); }
+  const k = e.target.closest('[data-ps]'); if (k) { S.progStake = +k.dataset.ps; renderProgress(); }
 });
 $('tps').addEventListener('click', e => { const b = e.target.closest('.tp'); if (b) select(+b.dataset.k); });
 $('events').addEventListener('click', e => { const li = e.target.closest('li[data-k]'); if (li) select(+li.dataset.k); });

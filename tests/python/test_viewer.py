@@ -334,6 +334,11 @@ def test_progress_lists_every_measured_bot(tmp_path):
     got = viewer.read_progress(log, results)
     assert [e["runs"] for e in got] == [1000000, 500000, 20000], "oldest first; the unlisted report last"
     assert got[2]["out"] == "results/value/record-1.json" and got[2]["win_rate"] == 0.26
+    # Every entry carries its stake (White unless it says otherwise), so the page can chart one stake at a time.
+    assert [e["stake"] for e in got] == [1, 1, 1]
+    assert viewer.entry_stake({"name": "Learned values 1+2 \u00d72.5, precise, Gold Stake"}) == 8
+    assert viewer.entry_stake({"name": "Teacher, precise, Red Stake", "stake": 3}) == 3, "its own field first"
+    assert viewer.entry_stake({"name": "Stake-aware values 1 \u00d72.5, precise"}) == 1
     prog = viewer.Progress(log, results, every=0)
     assert prog.get()["goal"] == 0.9 and len(prog.get()["entries"]) == 3
     # Served to the page.
