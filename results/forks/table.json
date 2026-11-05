@@ -1,0 +1,180 @@
+{
+ "all": {
+  "forks": 561,
+  "ensemble": {
+   "judged": 561,
+   "picked_best": 0.2513,
+   "regret": 0.1159
+  },
+  "quick": {
+   "judged": 561,
+   "picked_best": 0.2941,
+   "regret": 0.1102
+  },
+  "chosen": {
+   "judged": 561,
+   "picked_best": 0.3725,
+   "regret": 0.1037
+  },
+  "made": {
+   "judged": 561,
+   "picked_best": 0.303,
+   "regret": 0.1105
+  },
+  "random": {
+   "judged": 561,
+   "picked_best": 0.2493,
+   "regret": 0.1143
+  }
+ },
+ "by_ante": {
+  "2": {
+   "forks": 88,
+   "ensemble": {
+    "judged": 88,
+    "picked_best": 0.2955,
+    "regret": 0.142
+   },
+   "quick": {
+    "judged": 88,
+    "picked_best": 0.3295,
+    "regret": 0.1458
+   },
+   "chosen": {
+    "judged": 88,
+    "picked_best": 0.2727,
+    "regret": 0.1402
+   },
+   "made": {
+    "judged": 88,
+    "picked_best": 0.3295,
+    "regret": 0.142
+   },
+   "random": {
+    "judged": 88,
+    "picked_best": 0.2598,
+    "regret": 0.147
+   }
+  },
+  "3": {
+   "forks": 87,
+   "ensemble": {
+    "judged": 87,
+    "picked_best": 0.1609,
+    "regret": 0.136
+   },
+   "quick": {
+    "judged": 87,
+    "picked_best": 0.2299,
+    "regret": 0.1207
+   },
+   "chosen": {
+    "judged": 87,
+    "picked_best": 0.4138,
+    "regret": 0.1015
+   },
+   "made": {
+    "judged": 87,
+    "picked_best": 0.3103,
+    "regret": 0.1034
+   },
+   "random": {
+    "judged": 87,
+    "picked_best": 0.2489,
+    "regret": 0.127
+   }
+  },
+  "4": {
+   "forks": 123,
+   "ensemble": {
+    "judged": 123,
+    "picked_best": 0.2358,
+    "regret": 0.1369
+   },
+   "quick": {
+    "judged": 123,
+    "picked_best": 0.2927,
+    "regret": 0.1179
+   },
+   "chosen": {
+    "judged": 123,
+    "picked_best": 0.3659,
+    "regret": 0.1192
+   },
+   "made": {
+    "judged": 123,
+    "picked_best": 0.252,
+    "regret": 0.1274
+   },
+   "random": {
+    "judged": 123,
+    "picked_best": 0.2491,
+    "regret": 0.1191
+   }
+  },
+  "5": {
+   "forks": 140,
+   "ensemble": {
+    "judged": 140,
+    "picked_best": 0.3071,
+    "regret": 0.0929
+   },
+   "quick": {
+    "judged": 140,
+    "picked_best": 0.35,
+    "regret": 0.1
+   },
+   "chosen": {
+    "judged": 140,
+    "picked_best": 0.3714,
+    "regret": 0.0976
+   },
+   "made": {
+    "judged": 140,
+    "picked_best": 0.3143,
+    "regret": 0.0988
+   },
+   "random": {
+    "judged": 140,
+    "picked_best": 0.2455,
+    "regret": 0.1077
+   }
+  },
+  "6": {
+   "forks": 123,
+   "ensemble": {
+    "judged": 123,
+    "picked_best": 0.2358,
+    "regret": 0.0881
+   },
+   "quick": {
+    "judged": 123,
+    "picked_best": 0.252,
+    "regret": 0.0813
+   },
+   "chosen": {
+    "judged": 123,
+    "picked_best": 0.4228,
+    "regret": 0.0705
+   },
+   "made": {
+    "judged": 123,
+    "picked_best": 0.3171,
+    "regret": 0.0894
+   },
+   "random": {
+    "judged": 123,
+    "picked_best": 0.2466,
+    "regret": 0.0848
+   }
+  }
+ },
+ "options_mean": 4.06,
+ "spread": {
+  "mean": 0.2484,
+  "a_copy_or_more": 0.8396
+ },
+ "folders": [
+  "~/.cache/balatro-meta/data/forks-quick"
+ ]
+}
