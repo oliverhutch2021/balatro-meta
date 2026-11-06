@@ -149,16 +149,16 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
   <div class="wrap">
     <div class="top">
       <span class="brand">Balatro Meta</span>
-      <span class="chipbar"><span class="tag">White Stake</span><span class="tag">Red Deck</span><span class="tag">As of 5 Nov 2026</span></span>
+      <span class="chipbar"><span class="tag">White Stake</span><span class="tag">Red Deck</span><span class="tag">As of 6 Nov 2026</span></span>
     </div>
     <div class="panel hero">
       <h1>A bot that learns to win Balatro</h1>
-      <p class="lede">It plays a faithful copy of the game, sees only what a player sees, and decides every move by what it expects to win. A week in, it wins seven runs in ten on the seeds it is tuned on, and two in three on an exam it never sees. The goal is 90%, and strategies better than its human teacher's.</p>
-      <div class="score" aria-label="From 0.07% to 71.8% of runs won on the tuning seeds; 66.5% on the exam; its biggest hand scored 16.6 billion">
+      <p class="lede">It plays a faithful copy of the game, sees only what a player sees, and decides every move by what it expects to win. A week in, it wins three runs in four, on the seeds it is tuned on and on an exam it never sees alike. The goal is 90%, and strategies better than its human teacher's.</p>
+      <div class="score" aria-label="From 0.07% to 75.6% of runs won on the tuning seeds, and 75.6% on the exam; its biggest hand scored 16.6 billion">
         <div class="box plain" tabindex="0"><span class="v num">0.07%</span><span class="k">First bot, 30 Oct</span></div>
         <span class="op" aria-hidden="true">→</span>
-        <div class="box chips" tabindex="0"><span class="v num">71.8%</span><span class="k">Won now · 8,000 tuning seeds</span></div>
-        <div class="box plain" tabindex="0"><span class="v num">66.5%</span><span class="k">Exam · 3 Nov bot, seeds kept apart</span></div>
+        <div class="box chips" tabindex="0"><span class="v num">75.6%</span><span class="k">Exam · 8,000 seeds kept apart</span></div>
+        <div class="box plain" tabindex="0"><span class="v num">75.6%</span><span class="k">On its 8,000 tuning seeds too</span></div>
         <div class="box mult" tabindex="0"><span class="v num">16.6B</span><span class="k">Its biggest hand</span></div>
       </div>
       <details class="col"><summary>New to Balatro? The game in a paragraph</summary><p style="margin-top:8px">Balatro is a solitaire card game built on poker hands. A run is eight rounds, called antes, each with three score targets, called blinds, that roughly double from one to the next; the third of each ante is a boss blind with a rule of its own. You hold eight cards, play up to four poker hands and discard up to three times per blind, and each hand scores chips × mult. Beat ante 8's boss and the run is won. Between blinds a shop sells jokers (up to five held, and the source of nearly all scoring), planet cards that level up a hand type, tarot cards that change your cards, vouchers and packs; money earns interest. Everything random comes from the run's seed. Stakes are difficulty levels, White the easiest; decks change the starting rules. The bot plays White Stake with the Red Deck, the game's first table.</p></details>
@@ -171,10 +171,10 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
   <section id="climb">
     <div class="wrap">
       <span class="label">The climb</span>
-      <h2>From <span class="dg">0.07%</span> to <span class="dg">71.8%</span> in a week</h2>
+      <h2>From <span class="dg">0.07%</span> to <span class="dg">75.6%</span> in a week</h2>
       <div class="panel">
-        <p class="col lead">Each point is the best version of the bot at that moment, measured on fresh seeds it never trained on. The big steps came from deciding by value, from a network that learns which positions win, from tuning the value's own numbers, from focusing on one hand, from giving the networks more say against the formula, and on 5 November from thinking harder where runs are decided: three times the samples from ante 5 and four times in boss blinds, +5.3 points on the same 8,000 seeds. The point marked exam is 8,000 seeds kept apart and never used to choose anything; the newest bot hasn't sat it yet.</p>
-        <div class="chart" id="climbChart" role="img" aria-label="Line chart: share of runs won by each version of the bot, from 0.07% on 30 October to 71.8% on 5 November."></div>
+        <p class="col lead">Each point is the best version of the bot at that moment, measured on fresh seeds it never trained on. The big steps came from deciding by value, from a network that learns which positions win, from tuning the value's own numbers, from focusing on one hand, from giving the networks more say against the formula, and lastly from thinking harder: three times the samples from ante 5 and four times in boss blinds (+5.3 points on the same 8,000 seeds), then three times the samples everywhere (+3.8 more, p = 4 × 10⁻¹¹). The points marked exam are 8,000 seeds kept apart and never used to choose anything: the 3 November bot scored 66.5% there, the newest 75.6%, the same as on its tuning seeds.</p>
+        <div class="chart" id="climbChart" role="img" aria-label="Line chart: share of runs won by each version of the bot, from 0.07% on 30 October to 75.6% on 6 November, with the exam at 66.5% on 3 November and 75.6% on 6 November."></div>
         <details><summary>Show the numbers</summary><div class="tbl"><table id="climbTable"><thead><tr><th>Version</th><th>Date</th><th class="r">Runs</th><th class="r">Won</th></tr></thead><tbody></tbody></table></div></details>
         <p class="col muted" style="font-size:14px">Measured on 2,000 to 1,000,000 seeds per version; the 95% range is about ±2 points at 2,000 runs and ±0.6 at 25,000.</p>
       </div>
@@ -364,7 +364,7 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
   <section id="found">
     <div class="wrap">
       <span class="label">What the two experiments found</span>
-      <h2>More search where it matters: <span class="dg">+5.3</span> points</h2>
+      <h2>More search, everywhere: <span class="dg">+9.1</span> points</h2>
       <div class="panel">
         <div class="three">
           <div>
@@ -373,11 +373,11 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
           </div>
           <div>
             <h3>Budget: does it think hard enough?</h3>
-            <p>The same bot with three times the samples from ante 6 won 69.4% against 66.4% on the same 8,000 seeds; from ante 5, 70.7% (p = 2 × 10⁻²⁰); with four times the samples in boss blinds as well, 71.8%. The biggest gain of the project, from the judgement it already had, applied harder where runs are decided.</p>
+            <p>The same bot with three times the samples from ante 6 won 69.4% against 66.4% on the same 8,000 seeds; from ante 5, 70.7% (p = 2 × 10⁻²⁰); with four times the samples in boss blinds as well, 71.8%; with three times the samples at every ante, 75.6% (+3.8 more, p = 4 × 10⁻¹¹), and 75.6% on the exam too. The biggest gain of the project, from the judgement it already had, applied harder everywhere.</p>
           </div>
           <div>
             <h3>What it costs</h3>
-            <p>About four times the time per run: 8,000 runs take three and a half hours on sixteen cores instead of forty minutes. Fine for a bot, slower for trials, which now screen on 2,000 seeds and confirm on 8,000. The open question is how far the budget scales: from ante 3, from ante 1, six times instead of three.</p>
+            <p>About four times the time per run: 8,000 runs take three and a half hours on sixteen cores instead of forty minutes. Fine for a bot, slower for trials, which now screen on 2,000 seeds and confirm on 8,000. Moving the 3× budget from ante 5 to ante 1 cost half as much again: five hours for 8,000 runs. The open question is how far it scales: six times instead of three, and whether a smarter budget (more where the value is uncertain) buys the same for less.</p>
           </div>
         </div>
       </div>
@@ -440,7 +440,7 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
       <span class="label">Next</span>
       <h2>Target: <span class="dg">90%</span> at White Stake</h2>
       <div class="next">
-        <div class="now"><h3>Now</h3><p>How far the search budget goes: twice, three times and six times the samples, from ante 5, 3 and 1, screened on 2,000 seeds and confirmed on 8,000. Then the exam for the new champion, and a new round of recordings with the stronger bot, its wins played on into Endless to tell strong builds from lucky ones.</p></div>
+        <div class="now"><h3>Now</h3><p>Where the search budget stops paying: six times the samples, and a budget that grows only where the value is uncertain. Then the economy of antes 2 and 3, where this page's analysis says runs are won: skipping a blind for its tag as a move judged by value like any other, and the worth of money and joker count early. Each idea is screened on 2,000 seeds and confirmed on 8,000.</p></div>
         <div><h3>The economy from ante 2</h3><p>The build gap starts with money. The forks move to ante 2 to 4 with a wider set of options than the bot's own (rerolling on, selling to pivot, skipping for a tag), with enough play-outs each to tell them apart.</p></div>
         <div><h3>A harder table</h3><p>Black Deck at Gold Stake as a second benchmark: one hand fewer each round, and every stake's rules at once.</p></div>
         <div><h3>Then up the stakes</h3><p>Higher stakes and the other decks, once White Stake is solved.</p></div>
@@ -495,9 +495,11 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
     ["Focus on one hand, fair skipping", "2 Nov", 8000, 64.24], ["Networks get more say (weight 2.5)", "2 Nov", 8000, 66.46],
     ["Exam: seeds kept apart", "3 Nov", 8000, 66.49],
     ["3× the samples from ante 6", "5 Nov", 8000, 69.43], ["3× the samples from ante 5", "5 Nov", 8000, 70.68],
-    ["4× in boss blinds too", "5 Nov", 8000, 71.76]
+    ["4× in boss blinds too", "5 Nov", 8000, 71.76],
+    ["3× the samples everywhere", "6 Nov", 8000, 75.56], ["Exam: seeds kept apart", "6 Nov", 8000, 75.64]
   ];
   const notes = { 3: "Decides by value", 5: "Learned value", 10: "Tuned formula", 17: "Deeper search from ante 5" };
+  const exams = [16, climb.length - 1];
   (function () {
     const box = document.getElementById("climbChart");
     const W = 900, H = 360, L = 48, R = 24, T = 22, B = 48;
@@ -514,12 +516,12 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
     });
     el("path", { d: climb.map((d, i) => (i ? "L" : "M") + x(i) + "," + y(d[3])).join(" "), fill: "none", stroke: "var(--chips)", "stroke-width": 3, "stroke-linejoin": "round" }, svg);
     climb.forEach((d, i) => {
-      el("circle", { cx: x(i), cy: y(d[3]), r: i === climb.length - 1 ? 7 : 4.5, fill: "var(--chips)", stroke: "var(--panel-solid)", "stroke-width": 2 }, svg);
-      if (notes[i]) el("text", { x: x(i) - 8, y: y(d[3]) - 12, "text-anchor": "end", "font-family": PIX, "font-size": 14, fill: "var(--ink)" }, svg, notes[i]);
+      el("circle", { cx: x(i), cy: y(d[3]), r: i === climb.length - 1 ? 7 : 4.5, fill: exams.includes(i) ? "var(--gold)" : "var(--chips)", stroke: "var(--panel-solid)", "stroke-width": 2 }, svg);
+      if (notes[i]) el("text", { x: x(i) + (i === 3 ? 10 : -8), y: y(d[3]) + (i === 3 ? 22 : -12), "text-anchor": i === 3 ? "start" : "end", "font-family": PIX, "font-size": 14, fill: "var(--ink)" }, svg, notes[i]);
     });
     const last = climb[climb.length - 1];
-    el("text", { x: x(climb.length - 1), y: y(last[3]) - 15, "text-anchor": "end", "font-family": DIG, "font-size": 16, fill: "var(--ink)" }, svg, "71.8%");
-    el("text", { x: x(16), y: y(climb[16][3]) + 22, "text-anchor": "middle", "font-family": MONO, "font-size": 11, fill: "var(--gold)" }, svg, "exam");
+    el("text", { x: x(climb.length - 1), y: y(last[3]) - 15, "text-anchor": "end", "font-family": DIG, "font-size": 16, fill: "var(--ink)" }, svg, "75.6%");
+    exams.forEach((i) => el("text", { x: x(i), y: y(climb[i][3]) + 22, "text-anchor": "middle", "font-family": MONO, "font-size": 11, fill: "var(--gold)" }, svg, "exam"));
     const tip = tipFor(box);
     climb.forEach((d, i) => {
       const hit = el("rect", { x: x(i) - 18, y: T, width: 36, height: H - T - B, fill: "transparent" }, svg);

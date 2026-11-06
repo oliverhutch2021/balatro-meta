@@ -8,7 +8,7 @@ a bot that wins 90% of runs at White Stake and finds strategies its human teache
 > affiliated with, endorsed by or connected to either of them, and the repo holds none of the game's code, text,
 > art or sound. To play, buy the game.
 
-![Runs won at White Stake by each version of the bot, from 0.07% on 30 October to 71.8% on 5 November](docs/climb.svg)
+![Runs won at White Stake by each version of the bot, from 0.07% on 30 October to 75.6% on 6 November](docs/climb.svg)
 
 ## Balatro in a paragraph
 
@@ -37,7 +37,8 @@ discard). The bot plays White Stake with the Red Deck, the game's first table, w
 
 1. **Search at the decisive moments is worth more than a better judge.** Three times the usual samples from
    ante 5 on took the bot from 66.4% to 70.7% on the same 8,000 seeds (p = 2 × 10⁻²⁰); four times the samples in
-   boss blinds added another point, to 71.8%. The price is a bot about four times slower per run.
+   boss blinds added another point, to 71.8%; three times the samples at every ante added 3.8 more, to 75.6%
+   (p = 4 × 10⁻¹¹), and the exam agreed. The price is a bot about seven times slower per run than before the budget rises.
 2. **Its losses are near misses.** Of 1,160 lost runs, 44% scored 80% or more of the target they fell to and
    another 43% between half and 80%; only 13% were hopeless. 82% die at a boss, 70% at antes 5 to 8, and the ante 8
    finisher Violet Vessel (six times the base target) alone takes 12%.
@@ -66,16 +67,18 @@ discard). The bot plays White Stake with the Red Deck, the game's first table, w
 
 | Table | Bot | Seeds | Won |
 | --- | --- | --- | --- |
-| White Stake, Red Deck | champion of 5 November (3× samples from ante 5, 4× in boss blinds) | 8,000 tuning seeds | **71.8%** |
-| White Stake, Red Deck | champion of 3 November | 8,000 exam seeds, kept apart and never used to choose | 66.5% |
+| White Stake, Red Deck | champion of 6 November (3× samples everywhere, 4× in boss blinds) | 8,000 exam seeds, kept apart and never used to choose | **75.6%** |
+| White Stake, Red Deck | champion of 6 November | 8,000 tuning seeds | 75.6% |
+| White Stake, Red Deck | champion of 3 November | the exam seeds | 66.5% |
 | Red Stake | champion of 3 November | 2,000 | 52.0% |
 | Green · Black · Blue | champion of 3 November | 2,000 each | 19.7% · 11.4% · 8.8% |
 | Purple · Orange · Gold | champion of 3 November | 2,000 each | 1.9% · 0.9% · 0.2% |
 
-The tuning seeds are where ideas are compared and the winners kept, so they flatter the bot a little (the
-champion of 3 November scored 66.5% on both sets, so the flattery was small then). The exam seeds only ever
-measure the best bot there is. The champion of 5 November sits the exam next; until it has, 71.8% is a tuning
-number. Every measured version, with its code, options and seeds, is in `results/progress.jsonl`.
+The tuning seeds are where ideas are compared and the winners kept, so they can flatter the bot; the exam seeds
+only ever measure the best bot there is, and are the headline. So far the two have agreed: 66.5% on both for the
+champion of 3 November, 75.6% on both for the champion of 6 November (the 2,000-seed screen that found it said
+77%, which is the flattery). Every measured version, with its code, options and seeds, is in
+`results/progress.jsonl`.
 
 ## How we know it's right
 

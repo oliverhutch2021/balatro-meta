@@ -767,6 +767,15 @@ or Claude queues the winner alone).
 cd /mnt/h/balatro-meta && make teacher-budget
 ```
 
+The screen (2,000 seeds, against the champion's first 2,000): twice the samples from ante 5 71.6% (no better,
+p = 0.77), three times from ante 3 73.2% (p = 0.08), six times from ante 5 73.8% (p = 0.004), three times everywhere
+77.05% (p < 10^-4, +0.55 blinds a run). The confirmation, `make teacher-budget-confirm` (5.1 hours): three times
+everywhere won 75.6% against 71.8% on the 8,000 seeds (+3.8 points, 95% range 2.7 to 4.9, p = 4 x 10^-11; 1,205 runs
+won that the champion lost against 901 the other way), so it is the champion, and the screen's 77% was about a
+point and a half of flattery from the seeds it was chosen on. The exam, `make teacher-exam` (4.6 hours), 8,000 seeds
+never used to choose anything: 75.6% (74.7 to 76.6), against 66.5% for the champion of 3 November. The tuning and
+exam numbers agree, as they did on 3 November.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

@@ -250,7 +250,7 @@ boost-round-%:  ## Boost round N, the three jobs in a row (round 1 about 3 hours
 boost-night:  ## Boost rounds 1, 2, 3... until stopped (Ctrl-C; each finished step is kept)
 	@n=1; while [ $$n -le 12 ] && $(MAKE) --no-print-directory boost-round-$$n; do git push || true; n=$$((n + 1)); done
 
-teacher-exam:  ## The best teacher there is on the exam's 8,000 seeds, used for nothing else: the headline number (about 1.25 hours)
+teacher-exam:  ## The best teacher there is on the exam's 8,000 seeds, used for nothing else: the headline number (about 4.5 hours at the champion's budget)
 	$(PY) scripts/jobs.py run teacher-exam $(JOB_FLAGS)
 
 SPEED ?= 1
