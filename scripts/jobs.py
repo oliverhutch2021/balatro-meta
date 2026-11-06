@@ -1047,6 +1047,19 @@ def budget_confirm_steps(root: Path = ROOT) -> list[tuple]:
     return champion_trials(root, BUDGET_WINNER, BIG_RUNS)
 
 
+# make teacher-skips: skipping a blind for its tag as a move judged by value like any other (teacher option "skips":
+# at the blind choice, the skip and the blind are each played out by the teacher on fair copies to where the tag has
+# acted, the Boss Blind's choice or the next ante's first, and the positions reached are compared; the skip wins when
+# its gain clears the copies' noise). The bot has never skipped (0 a run); its human teacher skips an ante 1 blind for
+# an Investment tag, and holds Double tags, and the diagnosis of 5 November put the run's outcome in its economy at
+# antes 2 and 3, which is what a tag buys. Screened on 2,000 seeds against the champion (about 30% slower a run).
+SKIP_TRIALS = (("2.5", "skips"),)
+
+
+def skips_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
+    return champion_trials(root, SKIP_TRIALS, runs, control_runs=BIG_RUNS)
+
+
 # Whether the champion is played again on today's code before its trials (its own report serves otherwise: the engine
 # hasn't changed its play since 4 November's fairness fixes, which moved the champion of 2 November by 0.1 point).
 CONTROL_AGAIN = False
@@ -1542,6 +1555,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-budget": budget_steps(),
     "teacher-budget-big": budget_steps(runs=BIG_RUNS),
     "teacher-budget-confirm": budget_confirm_steps(),
+    "teacher-skips": skips_steps(),
     "diagnose": diagnose_steps(),
     # An hour of forks and the networks that learn from them: the judge test today (results/forks/forks-quick.json,
     # then results/value/value-forks-quick.json's measured.forks).

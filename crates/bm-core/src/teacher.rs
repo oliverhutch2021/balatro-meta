@@ -66,9 +66,11 @@ pub const OPTIONS: &[&str] = &[
     // The earlier teacher: fixed joker values and rules in the shop and packs, Tarots on fixed targets,
     // the planner judging rounds by beating the blind only (no value model).
     "classic",
-    // Skip blinds for their tags when the value says so (off: on 400 test runs skipping about 2.6 blinds a
-    // run reached a lower mean final ante, 6.03 against 6.33 without; again with round 1's learned value, 1.4
-    // skips a run won 35.75% against 38.5% on the same 400 seeds).
+    // Skip blinds for their tags when the value says so: the skip and the blind played out on fair copies to the
+    // next ante and the positions reached compared (`value_blind_move`; "skip-margin", "skip-copies",
+    // "skip-gate", "skip-x"). The older form, which compared the value right after the skip with the value now,
+    // lost (on 400 seeds with round 1's learned value, 1.4 skips a run won 35.75% against 38.5%): the networks had
+    // never seen a skipped blind or a held tag and misjudged the position, and the lost shop was only guessed at.
     "skips",
     // Jokers to sell picked by the fixed judgement, not by what the run would lose without each.
     "static-sells",
@@ -2671,38 +2673,208 @@ pub fn candidates(run: &Run, salt: u64, n: usize) -> Vec<Vec<(MoveKind, u64)>> {
     out
 }
 
-/// The least gain worth skipping a blind for (a skip gives up its reward and a shop, and faces the next
-/// blind unprepared, so it needs a clear case).
+/// The least a skip must gain, in value, over playing the blind ("skip-margin": a skip gives up the blind's
+/// reward and a shop and faces the next blind unprepared, so a close call plays).
 const SKIP_MARGIN: f64 = 0.05;
+/// Fair copies a skip is judged on ("skip-copies"), each played both ways to the same checkpoint.
+const SKIP_COPIES: f64 = 4.0;
+/// The play-outs' shop counts (the quick look and the looks), as a share of the usual ("skip-x"); the deals and
+/// the rounds' tries stay the usual. At a third of the usual all round the teacher wins 12% of runs instead of
+/// 56%, and its lost rounds and poor buys drown what the skip changed; halving the shop screening alone halves the
+/// time and keeps the play.
+const SKIP_X: f64 = 0.5;
+/// What a round lost inside a play-out takes off the value the branch had at that round's start ("skip-loss"):
+/// the value there already holds the blind's chance, so the loss counts once more, not as the end of the world.
+const SKIP_LOSS: f64 = 2.0;
+/// How many standard errors of the copies' gains the mean gain must also clear ("skip-z"): the copies' futures
+/// differ (what their shops sold), and a skip taken on that noise is a blind given away. With four copies the
+/// error is itself rough (three degrees of freedom), so 2.5 lets through about one noise case in thirty.
+const SKIP_Z: f64 = 2.5;
+/// What a run lost inside a play-out scores before any blind choice was valued (a refused first move).
+const SKIP_LOST: f64 = -20.0;
+/// What a run won inside a play-out scores (above any living position's value, but not so far above that one
+/// win among the copies decides alone).
+const SKIP_WON: f64 = 20.0;
+/// Moves a play-out may take before it is given up (a stuck run counts as lost).
+const SKIP_MAX_STEPS: u64 = 600;
 
-/// At the blind choice: play the blind, or (option "skips") skip it for its tag when the value model rates
-/// the run after the skip (the tag held or used, a pack it opens taken from) clearly higher.
+thread_local! {
+    /// How deep in skip play-outs this thread is: inside one, every blind is played (no forking within a fork,
+    /// and no recursion).
+    static SKIP_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// Tags never worth a blind: a few dollars, a reroll, a hand size for one round. The rest are weighed.
+fn tag_worth_weighing(t: crate::tags::TagKind) -> bool {
+    use crate::tags::TagKind::*;
+    !matches!(t, Juggle | D6 | Boss | Skip | Garbage)
+}
+
+/// Where a skip's play-outs stop, so that both ways reach the same place with the tag's work done: the ante and
+/// whether at its Boss Blind's choice (true) or the next ante's first choice (false). A tag that acts in the next
+/// shop (a free or edition joker, a voucher, a coupon) is spent by the Boss choice when the Small Blind is
+/// skipped (the Big Blind's shop comes first), but only after the boss when the Big Blind is; one that acts at
+/// once (a pack, money, levels) has acted by the Boss choice either way; Investment pays after the boss and a
+/// Double tag waits for the next tag, so those go to the next ante.
+fn skip_checkpoint(run: &Run) -> (i32, bool) {
+    use crate::blinds::BlindSlot;
+    use crate::tags::TagKind::*;
+    let slot = run.on_deck();
+    let tag = run.tags_offered[slot.index()];
+    let at_once = matches!(
+        tag,
+        Standard
+            | Charm
+            | Meteor
+            | Buffoon
+            | Ethereal
+            | Handy
+            | Garbage
+            | TopUp
+            | Skip
+            | Orbital
+            | Economy
+            | Boss
+    );
+    let next_shop = matches!(
+        tag,
+        Uncommon | Rare | Negative | Foil | Holographic | Polychrome | Voucher | Coupon | D6
+    );
+    // At the last ante there is no next ante: the Boss choice it is, where the value holds the boss's chance.
+    let boss_choice =
+        at_once || (next_shop && slot == BlindSlot::Small) || run.ante >= run.win_ante;
+    (run.ante, boss_choice)
+}
+
+/// Whether a play-out has reached the checkpoint (`skip_checkpoint`).
+fn at_checkpoint(run: &Run, (ante, boss_choice): (i32, bool)) -> bool {
+    use crate::blinds::BlindSlot;
+    run.phase == Phase::BlindSelect
+        && (run.ante > ante
+            || (boss_choice && run.ante == ante && run.on_deck() == BlindSlot::Boss))
+}
+
+/// At the blind choice: play the blind, or (option "skips") skip it for its tag. A skip is judged like any other
+/// move, by what it leads to: on fair copies of the run (fresh hidden futures), a light teacher plays both ways,
+/// the blind skipped and the blind played, to the same checkpoint (`skip_checkpoint`: the Boss Blind's choice, or
+/// the next ante's first, once the tag has done its work), and the positions reached are valued, the lost shop
+/// and reward and the tag's gift counted by having happened. The skip wins when it gains "skip-margin" on
+/// average over "skip-copies" copies. A few tags are never worth a blind (`tag_worth_weighing`), and the Boss
+/// Blind can't be skipped. The learned term at the checkpoint reads a proxy screen (`value::value_settled`): no
+/// recording holds a skipped blind or a held tag, so the networks are shown the skipped blind as beaten and the
+/// tags as spent, and judge the run by what it holds, which is what differs between the two ways.
 fn value_blind_move(run: &Run, salt: u64) -> (MoveKind, u64) {
-    use crate::value::value;
     let play = (MoveKind::SelectBlind, 0);
-    if !on("skips") || run.on_deck() == crate::blinds::BlindSlot::Boss {
+    let slot = run.on_deck();
+    if !on("skips")
+        || slot == crate::blinds::BlindSlot::Boss
+        || SKIP_DEPTH.with(|d| d.get()) > 0
+        || !tag_worth_weighing(run.tags_offered[slot.index()])
+    {
         return play;
     }
     let vs = value_salt(run, salt);
-    let Some(c) = after(run, vs ^ 0x5C1B, &[(MoveKind::SkipBlind, 0)]) else {
-        return play;
-    };
-    let mut skip = value(&c, vs);
-    if c.phase == Phase::Pack {
-        for o in pack_options(&c, true) {
-            if let Some(d) = after(&c, vs ^ 0x77, &o) {
-                skip = skip.max(value(&d, vs));
-            }
+    let checkpoint = skip_checkpoint(run);
+    let copies = param("skip-copies").unwrap_or(SKIP_COPIES).max(1.0) as usize;
+    // The run's value here, for a branch that loses a round before any blind choice of its own.
+    let here = crate::value::value_settled(run, vs);
+    let mut gains: Vec<f64> = Vec::with_capacity(copies);
+    for i in 0..copies as u64 {
+        // One copy first: when it leans against the skip, as most do, the rest are spared (which leans the mean
+        // of the rest a little the skip's way; "skip-z" is set with that in mind).
+        if i == 1 && gains[0] <= 0.0 {
+            break;
         }
+        let copy = fair_copy(run, vs ^ (0x5C1B_0000 + i));
+        let a = play_to(
+            copy.clone(),
+            (MoveKind::SkipBlind, 0),
+            vs ^ (i << 8),
+            checkpoint,
+            here,
+        );
+        let b = play_to(copy, play, vs ^ (i << 8) ^ 1, checkpoint, here);
+        gains.push(a - b);
     }
-    // Playing the blind pays its reward and the unused hands (about $5) that a skip gives up.
-    let mut played = run.clone();
-    played.money += 5;
-    if skip > value(&played, vs) + SKIP_MARGIN {
+    let copies = gains.len();
+    let n = copies as f64;
+    let gain = gains.iter().sum::<f64>() / n;
+    let se = if copies > 1 {
+        (gains.iter().map(|g| (g - gain).powi(2)).sum::<f64>() / (n - 1.0) / n).sqrt()
+    } else {
+        0.0
+    };
+    let needed =
+        param("skip-margin").unwrap_or(SKIP_MARGIN) + param("skip-z").unwrap_or(SKIP_Z) * se;
+    if std::env::var_os("BM_SKIP_DEBUG").is_some() {
+        eprintln!(
+            "skip? ante {} {:?} tag {:?}: play-outs gain {:.3} (se {:.3}, needed {:.3}){}",
+            run.ante,
+            slot,
+            run.tags_offered[slot.index()],
+            gain,
+            se,
+            needed,
+            if gain > needed { " SKIP" } else { "" }
+        );
+    }
+    if gain > needed {
         (MoveKind::SkipBlind, 0)
     } else {
         play
     }
+}
+
+/// A run played by the teacher from `first` to the checkpoint (or its end), and the value of the position
+/// reached (`value_settled`): for a run lost or stuck, the value at the last blind choice it passed (`here`
+/// before any) less "skip-loss"; `SKIP_WON` for one won. Inside the play-out no blind is skipped, and the counts
+/// are the usual ones times "skip-x", whatever the outer decision's.
+fn play_to(
+    mut run: Run,
+    first: (MoveKind, u64),
+    salt: u64,
+    checkpoint: (i32, bool),
+    here: f64,
+) -> f64 {
+    use crate::value::{value_settled, Scales};
+    if crate::env::apply(&mut run, first.0, first.1).is_err() {
+        return SKIP_LOST;
+    }
+    let x = param("skip-x").unwrap_or(SKIP_X).max(0.05);
+    let light = Scales {
+        full: Scales::USUAL.full,
+        quick: Scales::USUAL.quick * x,
+        looks: Scales::USUAL.looks * x,
+        rounds: Scales::USUAL.rounds,
+    };
+    let loss = param("skip-loss").unwrap_or(SKIP_LOSS);
+    SKIP_DEPTH.with(|d| d.set(d.get() + 1));
+    let out = crate::value::with_scales(light, || {
+        let mut step = 0u64;
+        // The value at the last blind choice passed: what a round lost from there is set against.
+        let mut last_choice = here;
+        loop {
+            if run.won {
+                break SKIP_WON;
+            }
+            if run.phase == Phase::GameOver || step >= SKIP_MAX_STEPS {
+                break last_choice - loss;
+            }
+            if at_checkpoint(&run, checkpoint) {
+                break value_settled(&run, salt);
+            }
+            if run.phase == Phase::BlindSelect {
+                last_choice = value_settled(&run, salt);
+            }
+            let (k, a) = plain_move(&run, salt ^ (step << 24));
+            if crate::env::apply(&mut run, k, a).is_err() {
+                break last_choice - loss;
+            }
+            step += 1;
+        }
+    });
+    SKIP_DEPTH.with(|d| d.set(d.get() - 1));
+    out
 }
 
 /// Jokers that pay on the round's final hand: Dusk (its cards retriggered) and Acrobat (x3).
@@ -3977,6 +4149,100 @@ mod tests {
                 (120..280).contains(&n),
                 "about one decision in ten: {n} of 2,000"
             );
+        });
+    }
+
+    #[test]
+    fn a_skip_is_played_out_to_where_its_tag_has_acted() {
+        use crate::blinds::{BlindSlot, SlotState};
+        use crate::tags::TagKind;
+        let mut run = Run::new(RunConfig::new("SKIPCHK1"));
+        assert_eq!(run.phase, Phase::BlindSelect);
+        assert_eq!(run.on_deck(), BlindSlot::Small);
+        // A tag that acts in the next shop is spent by the Boss choice when the Small Blind is skipped (the Big
+        // Blind's shop comes first); Investment and Double go to the next ante.
+        run.tags_offered[0] = TagKind::Foil;
+        assert_eq!(skip_checkpoint(&run), (1, true));
+        run.tags_offered[0] = TagKind::Investment;
+        assert_eq!(skip_checkpoint(&run), (1, false));
+        run.tags_offered[0] = TagKind::Double;
+        assert_eq!(skip_checkpoint(&run), (1, false));
+        // Skipping the Big Blind: the next shop is after the boss, so a shop tag goes to the next ante; a pack or
+        // money has acted by the Boss choice.
+        run.slots[0] = SlotState::Defeated;
+        run.slots[1] = SlotState::Select;
+        assert_eq!(run.on_deck(), BlindSlot::Big);
+        run.tags_offered[1] = TagKind::Foil;
+        assert_eq!(skip_checkpoint(&run), (1, false));
+        run.tags_offered[1] = TagKind::Charm;
+        assert_eq!(skip_checkpoint(&run), (1, true));
+        // At the last ante there is no next ante: the Boss choice always.
+        run.ante = run.win_ante;
+        run.tags_offered[1] = TagKind::Investment;
+        assert_eq!(skip_checkpoint(&run), (run.win_ante, true));
+        // Where a play-out stops.
+        let mut at_boss = Run::new(RunConfig::new("SKIPCHK1"));
+        at_boss.slots = [SlotState::Defeated, SlotState::Defeated, SlotState::Select];
+        assert!(at_checkpoint(&at_boss, (1, true)));
+        assert!(!at_checkpoint(&at_boss, (1, false)));
+        let mut next = Run::new(RunConfig::new("SKIPCHK1"));
+        next.ante = 2;
+        assert!(at_checkpoint(&next, (1, true)));
+        assert!(at_checkpoint(&next, (1, false)));
+        assert!(
+            !at_checkpoint(&at_boss, (2, true)),
+            "an earlier ante's boss choice is not the next ante's"
+        );
+        // Tags never worth a blind.
+        assert!(!tag_worth_weighing(TagKind::Juggle));
+        assert!(!tag_worth_weighing(TagKind::D6));
+        assert!(tag_worth_weighing(TagKind::Investment));
+        assert!(tag_worth_weighing(TagKind::Negative));
+    }
+
+    #[test]
+    fn skips_are_only_weighed_at_the_top_and_never_at_the_boss() {
+        use crate::blinds::{BlindSlot, SlotState};
+        use crate::tags::TagKind;
+        new_run();
+        let mut run = Run::new(RunConfig::new("SKIPTOP1"));
+        run.tags_offered = [TagKind::Juggle, TagKind::Investment];
+        with_options(&["light", "skips"], || {
+            // A Juggle tag is never weighed: the blind is played without play-outs.
+            assert_eq!(value_blind_move(&run, 7), (MoveKind::SelectBlind, 0));
+            // Inside a play-out, nothing is skipped (no forking within a fork).
+            run.slots = [SlotState::Defeated, SlotState::Select, SlotState::Upcoming];
+            SKIP_DEPTH.with(|d| d.set(1));
+            assert_eq!(value_blind_move(&run, 7), (MoveKind::SelectBlind, 0));
+            SKIP_DEPTH.with(|d| d.set(0));
+            // The Boss Blind can't be skipped.
+            run.slots = [SlotState::Defeated, SlotState::Defeated, SlotState::Select];
+            assert_eq!(run.on_deck(), BlindSlot::Boss);
+            assert_eq!(value_blind_move(&run, 7), (MoveKind::SelectBlind, 0));
+        });
+        // Without the option, the blind is played.
+        let plain = Run::new(RunConfig::new("SKIPTOP1"));
+        with_options(&["light"], || {
+            assert_eq!(value_blind_move(&plain, 7), (MoveKind::SelectBlind, 0))
+        });
+    }
+
+    #[test]
+    fn a_skip_play_out_reaches_the_checkpoint_and_values_it() {
+        use crate::tags::TagKind;
+        new_run();
+        let run = Run::new(RunConfig::new("SKIPOUT1"));
+        with_options(&["light"], || {
+            let here = crate::value::value_settled(&run, 3);
+            // The blind played, to this ante's Boss choice: a living position's value, not a loss.
+            let played = play_to(run.clone(), (MoveKind::SelectBlind, 0), 3, (1, true), here);
+            assert!(played > SKIP_LOST + 1.0 && played < SKIP_WON, "{played}");
+            // The blind skipped for a Foil tag, to the same place.
+            let mut r = run.clone();
+            r.tags_offered[0] = TagKind::Foil;
+            let skipped = play_to(r, (MoveKind::SkipBlind, 0), 3, (1, true), here);
+            assert!(skipped > SKIP_LOST + 1.0 && skipped < SKIP_WON, "{skipped}");
+            assert_eq!(SKIP_DEPTH.with(|d| d.get()), 0, "the depth is restored");
         });
     }
 }

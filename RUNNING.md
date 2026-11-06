@@ -776,6 +776,27 @@ point and a half of flattery from the seeds it was chosen on. The exam, `make te
 never used to choose anything: 75.6% (74.7 to 76.6), against 66.5% for the champion of 3 November. The tuning and
 exam numbers agree, as they did on 3 November.
 
+## Step 30: skipping a blind for its tag, judged by value (about 1.75 hours)
+
+The bot has never skipped a blind (0 a run in every report); its human teacher skips an ante 1 blind for an
+Investment tag, holds Double tags, and takes a few others when the moment is right. The diagnosis of 5 November put
+the outcome of a run in its economy at antes 2 and 3, which is what a tag buys. Teacher option "skips" makes the skip
+a move judged like any other: at the blind choice, the teacher plays both ways out on fair copies of the run (fresh
+hidden futures), the blind skipped and the blind played, to the same place with the tag's work done (the Boss
+Blind's choice, or the next ante's first for Investment, Double and a Big Blind's shop tag), and compares the
+positions reached: the lost shop and reward and the tag's gift all counted by having happened. The networks are
+shown the skipped blind as beaten and the tags as spent (no recording holds either, so they would misjudge them). A
+skip is taken when its mean gain over four copies clears the copies' own noise by 2.5 standard errors (one copy
+first; most lean against the skip and stop there), so only the clear cases go: on 16 seeds without networks, 0.19
+skips a run, among them the ante 1 Big Blind for an Investment tag. A run is about 30% slower.
+
+```
+cd /mnt/h/balatro-meta && make teacher-skips
+```
+
+2,000 seeds against the champion of 6 November. A gain of a point or more shows; if it is level, the skips it takes
+are still worth reading in the viewer before the option is dropped, since they are the first the bot has chosen.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

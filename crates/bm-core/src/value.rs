@@ -196,6 +196,13 @@ pub const PARAMS: &[(&str, f64)] = &[
     ("tries-x", 1.0),
     // Options the teacher judges in full after the quick look (teacher.rs).
     ("finalists", 3.0),
+    // Option "skips" (teacher.rs `value_blind_move`): the gain a skip must show over playing the blind, the fair
+    // copies it is played out on, and the play-outs' counts as a share of the usual.
+    ("skip-margin", 0.05),
+    ("skip-copies", 4.0),
+    ("skip-x", 0.5),
+    ("skip-z", 2.5),
+    ("skip-loss", 2.0),
 ];
 
 /// A number of the formula: as an option set it, else its usual value.
@@ -1148,6 +1155,34 @@ fn mean(v: &[f64]) -> f64 {
 /// The value of a position between rounds (shop, pack, blind choice, cash-out). Higher is better.
 pub fn value(run: &Run, salt: u64) -> f64 {
     value_with(run, salt, samples())
+}
+
+/// The value of a position reached after a blind was skipped (teacher.rs `value_blind_move`): the formula on
+/// the position as it is (a skipped blind counts as passed, held tags as dollars), and the learned term on a
+/// proxy screen with the skipped blinds shown as beaten, the skips uncounted and the held tags gone, since no
+/// recording holds a skipped blind or a held tag and the networks would misjudge them. What the run holds, the
+/// stage it is at and the money it has are what the networks then judge, which is what the skip changed.
+pub fn value_settled(run: &Run, salt: u64) -> f64 {
+    if run.won {
+        return 1e6;
+    }
+    let v = formula(run, salt, samples());
+    if v <= -1e5 {
+        return v;
+    }
+    let skipped = run.slots.contains(&SlotState::Skipped);
+    if !skipped && run.tags.is_empty() && run.skips == 0 {
+        return v + crate::learned::term(run).unwrap_or(0.0);
+    }
+    let mut proxy = run.clone();
+    for s in proxy.slots.iter_mut() {
+        if *s == SlotState::Skipped {
+            *s = SlotState::Defeated;
+        }
+    }
+    proxy.skips = 0;
+    proxy.tags.clear();
+    v + crate::learned::term(&proxy).unwrap_or(0.0)
 }
 
 /// A quicker, rougher value (fewer deals; the same first deals as `value`), for screening options.
@@ -2467,5 +2502,22 @@ mod tests {
         let o = outlook(&g, 9, SAMPLES).unwrap();
         let f = flows(&g, o.main);
         assert!(f.mult > 0.0 && growth(&f, &o, &g, 6.0) > 0.0);
+    }
+
+    #[test]
+    fn a_settled_value_is_the_value_until_something_was_skipped() {
+        use crate::teacher::with_options;
+        let run = Run::new(RunConfig::new("SETTLED1"));
+        with_options(&["light"], || {
+            assert_eq!(value_settled(&run, 5), value(&run, 5));
+            // With a blind skipped and no networks loaded, the formula alone, as `value` would give it.
+            let mut skipped = run.clone();
+            skipped.slots[0] = SlotState::Skipped;
+            skipped.slots[1] = SlotState::Select;
+            skipped.skips = 1;
+            let v = value_settled(&skipped, 5);
+            assert!(v.is_finite() && v > -1e5);
+            assert_eq!(v, value(&skipped, 5));
+        });
     }
 }

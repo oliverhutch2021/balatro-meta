@@ -656,6 +656,42 @@ fn the_teacher_moves_the_same_on_a_fair_copy_of_any_position() {
 }
 
 #[test]
+fn a_skip_is_decided_the_same_on_a_fair_copy() {
+    // Option "skips" plays the skip and the blind out on fair copies and compares what they reach: nothing of the
+    // real run's hidden future may enter, so the decision is the same on the run and on a fair copy of it.
+    use bm_core::env::{apply, run_seed};
+    use bm_core::tags::TagKind;
+    use bm_core::teacher::{new_run, teacher_move, with_options};
+    let mut run = Run::new(RunConfig::new(&run_seed(9, 1)));
+    new_run();
+    let mut step = 0u64;
+    let mut checked = 0;
+    while run.phase != Phase::GameOver && !run.won && step < 3000 && checked < 5 {
+        let salt = 9 << 20 | step;
+        if run.phase == Phase::BlindSelect && run.on_deck() != bm_core::blinds::BlindSlot::Boss {
+            // A tag worth weighing on offer, so the play-outs run.
+            let mut pos = run.clone();
+            pos.tags_offered[pos.on_deck().index()] =
+                [TagKind::Investment, TagKind::Foil, TagKind::Charm][checked % 3];
+            let copy = fair_copy(&pos, 0xBEEF ^ step);
+            assert_eq!(screen(&copy), screen(&pos));
+            with_options(&["light", "skips"], || {
+                new_run();
+                let real = teacher_move(&pos, salt);
+                new_run();
+                assert_eq!(teacher_move(&copy, salt), real, "move {step}");
+            });
+            new_run();
+            checked += 1;
+        }
+        let (k, a) = with_options(&["light"], || teacher_move(&run, salt));
+        apply(&mut run, k, a).unwrap();
+        step += 1;
+    }
+    assert_eq!(checked, 5, "five blind choices checked");
+}
+
+#[test]
 fn the_value_input_shows_the_stake_as_the_rules_in_force() {
     use bm_core::observe::{STAKE_PART, VALUE_LEN_2};
     let part = |stake: u8| {

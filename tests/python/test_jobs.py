@@ -1120,6 +1120,12 @@ def test_the_late_trials_share_the_doubt_trials_control(tmp_path):
     win = confirm["w2.5-late-from=1"]
     assert win[win.index("--runs") + 1] == "8000" and win[win.index("--teacher-options") + 1] == "precise,late-x=3,late-from=1"
     assert "teacher-budget-confirm" in jobs.JOBS
+    # The skips screen: the option added to the champion's own, 2,000 seeds against the same control.
+    skips = {n: a for n, a, *_ in jobs.skips_steps(tmp_path)}
+    play = skips["w2.5-skips"]
+    assert play[play.index("--runs") + 1] == "2000"
+    assert play[play.index("--teacher-options") + 1] == "precise,late-x=3,late-from=5,skips"
+    assert skips["compare-w2.5-skips"][1] == control and "teacher-skips" in jobs.JOBS
 
 
 def test_the_fork_table_reads_every_fork_file_there_is(tmp_path):

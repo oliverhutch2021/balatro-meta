@@ -77,7 +77,10 @@ what it found.
   reads: the chance of winning with K blinds to spare (`make
   teacher-margin`); the learned term is off past ante 8;
   `late-x`/`late-from`: every count behind a decision scaled from that ante,
-  `make teacher-late`; forks, `forks.rs`: a decision forked, the teacher's
+  `make teacher-late`; `skips`: a blind skipped for its tag when play-outs
+  of both ways on fair copies say so (`value_blind_move`, `skip_checkpoint`,
+  `value::value_settled` shows the networks the skipped blind as beaten),
+  `make teacher-skips`; forks, `forks.rs`: a decision forked, the teacher's
   options each played out to the end on fair copies that share their seeds,
   `baseline --forks DIR`, what each option left and how its play-outs ended,
   which `train_value.py --forks` learns pairwise (the options' order) and
