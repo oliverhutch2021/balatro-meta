@@ -797,6 +797,15 @@ cd /mnt/h/balatro-meta && make teacher-skips
 2,000 seeds against the champion of 6 November. A gain of a point or more shows; if it is level, the skips it takes
 are still worth reading in the viewer before the option is dropped, since they are the first the bot has chosen.
 
+6 November, 107 minutes: level. 76.85% against the champion's 77.05% on the same 2,000 seeds (-0.2 points, 95% range
+-1.4 to +1.0, p = 0.81; 76 seeds won only with skips, 80 only without), 0.34 skips a run, a run 39% slower. The skips
+it took, read from the 70 saved runs (18 skips): Economy when rich ($67, $91, $142), Polychrome, Holographic and
+Negative tags for an edition joker, an Investment tag at ante 1 with $4, Charm packs late with money to spare, one
+Rare at ante 3 in a run that then lost at ante 5. They are the skips a player takes, and on 2,000 seeds they bought
+nothing: the blind and its shop are worth about what the tag is. The option stays off; the machinery (play-outs of a
+move's branches to a common checkpoint, `value_settled`) is there for other moves whose effects the networks never
+saw.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a
