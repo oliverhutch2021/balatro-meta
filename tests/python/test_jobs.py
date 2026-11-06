@@ -1139,6 +1139,8 @@ def test_the_late_trials_share_the_doubt_trials_control(tmp_path):
     assert play[play.index("--runs") + 1] == "2000"
     assert play[play.index("--teacher-options") + 1] == "precise,late-x=3,late-from=5,skips"
     assert skips["compare-w2.5-skips"][1] == control and "teacher-skips" in jobs.JOBS
+    six = {n: a for n, a, *_ in jobs.budget_6_steps(tmp_path)}["w2.5-late-x=6"]
+    assert six[six.index("--teacher-options") + 1] == "precise,late-from=5,late-x=6" and "teacher-budget-6" in jobs.JOBS
 
 
 def test_the_fork_table_reads_every_fork_file_there_is(tmp_path):
