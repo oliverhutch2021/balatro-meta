@@ -1,28 +1,28 @@
 {
  "job": "teacher-exam",
- "commit": "20f31c98348fe593324110bef0a20c2c9ea88818",
- "started": "2026-11-03T21:58:15+00:00",
- "finished": "2026-11-03T22:53:51+00:00",
+ "commit": "a5c87c87f8de805c275b0527ba1a44b8eca8b183",
+ "started": "2026-11-06T04:43:33+00:00",
+ "finished": "2026-11-06T09:21:33+00:00",
  "machine": {
   "host": "PC",
   "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
   "cpu_threads": 16,
   "ram_gb": 15.2,
   "load_avg_1_5_15": [
-   15.8,
-   16.8,
-   16.6
+   14.1,
+   16.3,
+   16.8
   ],
   "python": "3.12.3",
   "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
   "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
  },
  "steps": {
-  "build": 1,
-  "exam": 3335
+  "build": 2,
+  "exam": 16677
  },
  "commands": {
   "build": "make --no-print-directory build",
-  "exam": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise --runs 8000 --seed 5003 --out results/exam/exam-8k-f3-precise-rounds8-w2.5.json"
+  "exam": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 8000 --seed 5003 --out results/exam/exam-8k-f3-precise+late-x-3+boss-x-4+late-from-1-rounds8-w2.5.json"
  }
 }
