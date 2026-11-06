@@ -101,7 +101,17 @@ number. Every measured version, with its code, options and seeds, is in `results
   leads to, measured by playing the coming rounds out on fair copies; a planner that chooses which hand to build in
   each round; a search budget that grows where runs are decided.
 - **The learned value** (`learned.rs`, `scripts/train_value.py`): an ensemble of networks that read the screen and
-  give the chance of winning, trained by expert iteration on the bot's recordings.
+  give the chance of winning, trained by expert iteration on the bot's recordings. Each is a small PyTorch MLP:
+  about 4,000 to 4,900 inputs encoding the screen (hand, deck, jokers, shop, money, blind, stake), one or two hidden
+  layers of 64 to 128 ReLU units with heavy dropout (0.3, on the inputs too, so it can't learn runs by heart), and
+  26 outputs (the win logit and the blind the run ends at, plus 13 for how far a win goes on). A round trains on
+  about 7 million positions in a few minutes on the GPU and exports flat weights that the Rust engine evaluates
+  itself, so the bot needs no Python at play time.
+- **The network that plays** (`scripts/train_policy.py`, `make train`): a 4-layer, 128-wide transformer in PyTorch
+  over the screen's objects (cards, jokers, shop items), with heads for the move's kind, slot, target and cards and
+  illegal moves masked; trained by imitation of three million of the teacher's moves, then PPO on the vectorised
+  engine. It plays a run in milliseconds and won 22.8% of 5,000 seeds when the teacher of its day won 39%; it
+  becomes the student again once the teacher has stopped improving.
 - **Forks and diagnosis** (`forks.rs`, `baseline --diagnose`): decisions played out to the end on shared fair
   copies, and lost blinds played again with deeper search, to find where the win rate is hiding before tuning.
 - **Jobs and results** (`scripts/jobs.py`, `results/`): every measurement reproducible from its report; a viewer
