@@ -802,9 +802,16 @@ are still worth reading in the viewer before the option is dropped, since they a
 it took, read from the 70 saved runs (18 skips): Economy when rich ($67, $91, $142), Polychrome, Holographic and
 Negative tags for an edition joker, an Investment tag at ante 1 with $4, Charm packs late with money to spare, one
 Rare at ante 3 in a run that then lost at ante 5. They are the skips a player takes, and on 2,000 seeds they bought
-nothing: the blind and its shop are worth about what the tag is. The option stays off; the machinery (play-outs of a
-move's branches to a common checkpoint, `value_settled`) is there for other moves whose effects the networks never
-saw.
+nothing: the blind and its shop are worth about what the tag is. That is White Stake's answer, where every blind pays
+and the blinds are small; it is not the mechanic's. From Red Stake up the Small Blind pays nothing, so skipping it
+costs only its shop, and at Green and Purple the blinds grow faster, so what a tag buys is a larger share of what the
+run needs. `make skips-stakes` (about 45 minutes) tries the option at Red, Green and Purple with each stake's best
+teacher against itself on the stake's 2,000 seeds; a stake where the skips take the runs clearly further is adopted
+by the ratchet (`best_at_stake`) by itself.
+
+```
+cd /mnt/h/balatro-meta && make skips-stakes
+```
 
 ## Later steps
 

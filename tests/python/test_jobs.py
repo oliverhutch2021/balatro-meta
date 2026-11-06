@@ -813,6 +813,19 @@ def test_the_ratchet_records_each_stake_with_the_best_teacher_measured_there(tmp
     assert "--stake-net" not in data["record-stake4"]
     seeds = {a[a.index("--seed") + 1] for n, a in data.items() if n.startswith("record-")}
     assert seeds == {str(9100 + s) for s in range(1, 9)}
+    # make skips-stakes: each stake's best teacher with "skips", against that teacher's own report, named so the
+    # ratchet adopts a stake where the skips went clearly further.
+    sk = {n: a for n, a, *_ in jobs.skips_stakes_steps(tmp_path, stakes=(3, 4, 8))}
+    g = sk["skips-stake3"]
+    assert g[g.index("--teacher-options") + 1] == "precise,skips" and g[g.index("--stake-net") + 1] == jobs.residual_nets(1)
+    assert g[g.index("--stake") + 1] == "3" and g[g.index("--runs") + 1] == "2000"
+    assert sk["compare-skips-stake3"][1] == green_report
+    b = sk["skips-stake4"]
+    assert "--stake-net" not in b and sk["compare-skips-stake4"][1] == jobs.stake_baseline(4)
+    assert sk["compare-skips-stake4"][-1] == f"results/stakes/stake4-skips-on-{jobs.STAKE_BASELINE}-vs-{jobs.STAKE_BASELINE}.json"
+    gd = sk["skips-stake8"]
+    assert gd[gd.index("--teacher-options") + 1] == "precise,avoid-rental,skips"
+    assert "skips-stakes" in jobs.JOBS
     names = [n for n, *_ in r["boost-data-2"]]
     assert names.index("offsets-boost-2-stake3") > names.index("record-stake8"), "the champion's log-odds added after"
     play = {n: a for n, a, *_ in r["boost-play-2"]}

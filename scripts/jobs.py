@@ -1060,6 +1060,40 @@ def skips_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     return champion_trials(root, SKIP_TRIALS, runs, control_runs=BIG_RUNS)
 
 
+# make skips-stakes: the same option where a skip should be worth more. At White it came out level (step 30: 76.85%
+# against 77.05%, 0.34 skips a run), where every blind pays and the blinds are small. From Red Stake up the Small
+# Blind pays nothing, so skipping it costs only its shop; at Green and Purple the blinds grow faster, so what a tag
+# buys (an Investment's $25, an edition joker) is a larger share of what the run needs. Each stake's best teacher
+# (best_at_stake: the ratchet's) with "skips", on the stake's 2,000 seeds against that teacher's own report; a stake
+# where the skips take the runs clearly further (paired blinds beaten, the 95% interval above 0) is adopted by the
+# ratchet by itself, since the comparison is named as its trials are.
+SKIP_STAKES = (2, 3, 6)
+
+
+def skips_stakes_steps(root: Path = ROOT, stakes: tuple[int, ...] = SKIP_STAKES, runs: int = STAKE_RUNS
+                       ) -> list[tuple]:
+    steps: list[tuple] = [("build", [*MAKE, "build"])]
+    for s in stakes:
+        args, report = best_at_stake(s, root)
+        if report is None:
+            continue
+        args = list(args)
+        if "--teacher-options" in args:
+            i = args.index("--teacher-options") + 1
+            if "skips" in args[i].split(","):
+                continue
+            args[i] = f"{args[i]},skips"
+        else:
+            args += ["--teacher-options", "skips"]
+        stem = Path(report).stem.removeprefix(f"stake{s}-")
+        out = f"results/stakes/stake{s}-skips-on-{stem}.json"
+        steps += [(f"skips-stake{s}", [*BASELINE, "--bot", "teacher", *args, "--runs", str(runs), "--seed", "1",
+                                       "--stake", str(s), "--out", out]),
+                  (f"compare-skips-stake{s}", ["scripts/compare_runs.py", report, out, "--out",
+                                               f"results/stakes/stake{s}-skips-on-{stem}-vs-{stem}.json"])]
+    return steps
+
+
 # Whether the champion is played again on today's code before its trials (its own report serves otherwise: the engine
 # hasn't changed its play since 4 November's fairness fixes, which moved the champion of 2 November by 0.1 point).
 CONTROL_AGAIN = False
@@ -1556,6 +1590,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-budget-big": budget_steps(runs=BIG_RUNS),
     "teacher-budget-confirm": budget_confirm_steps(),
     "teacher-skips": skips_steps(),
+    "skips-stakes": skips_stakes_steps(),
     "diagnose": diagnose_steps(),
     # An hour of forks and the networks that learn from them: the judge test today (results/forks/forks-quick.json,
     # then results/value/value-forks-quick.json's measured.forks).
