@@ -1070,6 +1070,12 @@ def budget_6_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     return champion_trials(root, BUDGET_6, runs, control_runs=BIG_RUNS)
 
 
+# make teacher-budget-confirm-6: six times everywhere on the 8,000 seeds (about 16 hours). The screen of 6 November:
+# 79.2% against 77.05% on 2,000 seeds (+2.15, 95% range +0.03 to +4.3, p = 0.053) at four hours for 2,000 runs.
+def budget_confirm_6_steps(root: Path = ROOT) -> list[tuple]:
+    return champion_trials(root, BUDGET_6, BIG_RUNS)
+
+
 # make skips-stakes: the same option where a skip should be worth more. At White it came out level (step 30: 76.85%
 # against 77.05%, 0.34 skips a run), where every blind pays and the blinds are small. From Red Stake up the Small
 # Blind pays nothing, so skipping it costs only its shop; at Green and Purple the blinds grow faster, so what a tag
@@ -1602,6 +1608,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-skips": skips_steps(),
     "skips-stakes": skips_stakes_steps(),
     "teacher-budget-6": budget_6_steps(),
+    "teacher-budget-confirm-6": budget_confirm_6_steps(),
     "diagnose": diagnose_steps(),
     # An hour of forks and the networks that learn from them: the judge test today (results/forks/forks-quick.json,
     # then results/value/value-forks-quick.json's measured.forks).
