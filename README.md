@@ -58,9 +58,9 @@ discard). The bot plays White Stake with the Red Deck, the game's first table, w
    how each position's run ended gained 1.75 points at round 4, 0.4 at round 5 and little after round 6, with or
    without exploration. More say for the networks helped up to a point (66.1% at weight 4) and collapsed past it
    (53.8% at weight 16): picking the best of many options with a judge that errs picks its errors.
-7. **A human player's rules mostly hurt as rules.** Of eight lessons from a player who wins three runs in four,
+7. **A human player's rules mostly hurt as rules.** Of seven lessons from a player who wins three runs in four,
    only "focus on one hand" held up (+1.6 points on 8,000 seeds). Extra points for x mult jokers or a thin deck
-   made the bot worse (−1 to −2.75): they skew everything else it weighs.
+   made the bot worse (−1 to −2.5): they skew everything else it weighs.
 
 ## Current performance
 
