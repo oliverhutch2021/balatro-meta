@@ -1,0 +1,30 @@
+{
+ "job": "teacher-skips",
+ "commit": "f0c9019863e8fd988668b7e3cbe1faf33604bba5",
+ "started": "2026-11-06T13:31:38+00:00",
+ "finished": "2026-11-06T15:19:00+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   12.6,
+   15.9,
+   16.5
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 23,
+  "w2.5-skips": 6418,
+  "compare-w2.5-skips": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "w2.5-skips": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,skips --runs 2000 --seed 1 --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+skips-2k-w2.5-on-ensemble8-w1.5.json",
+  "compare-w2.5-skips": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+skips-2k-w2.5-on-ensemble8-w1.5.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+skips-2k-w2.5-on-ensemble8-w1.5-vs-f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json"
+ }
+}
