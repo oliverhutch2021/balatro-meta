@@ -2361,6 +2361,7 @@ fn main() {
     // alone (nothing recorded) leaves those runs out and carries on, unless more than one in a hundred went another
     // way (then the engine has changed too much for the recording to stand for it).
     let diverged = diverged.into_inner().unwrap();
+    let went_other_way = diverged.len() as u64;
     if !diverged.is_empty() {
         eprintln!(
             "{} of {} runs replayed differently from how they were recorded (the engine's rules changed since?):",
@@ -2531,5 +2532,10 @@ fn main() {
             t.deep, t.deep_won
         );
     }
-    assert_eq!(t.refused, 0, "the bot made a move the engine refused");
+    // A replay's refused moves are those of the runs that went another way (reported and left out above).
+    assert!(
+        t.refused <= if replay.is_some() { went_other_way } else { 0 },
+        "the bot made a move the engine refused ({} times)",
+        t.refused
+    );
 }
