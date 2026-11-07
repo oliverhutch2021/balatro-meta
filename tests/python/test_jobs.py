@@ -1166,6 +1166,11 @@ def test_the_late_trials_share_the_doubt_trials_control(tmp_path):
     lk = parts["w2.5-looks-x=2"]
     assert lk[lk.index("--teacher-options") + 1] == "precise,late-x=3,late-from=5,looks-x=2"
     assert {"w2.5-deals-x=2", "w2.5-tries-x=2"} <= set(parts) and "teacher-budget-parts" in jobs.JOBS
+    money = {n: a for n, a, *_ in jobs.money_steps(tmp_path)}
+    bp = money["w2.5-buying-power=0.02"]
+    assert bp[bp.index("--teacher-options") + 1] == "precise,late-x=3,late-from=5,buying-power=0.02"
+    assert {"w2.5-money-scale=15", "w2.5-above-cap=0.25", "w2.5-long-run=0.5"} <= set(money)
+    assert money["compare-w2.5-long-run=0.5"][1] == control and "teacher-money" in jobs.JOBS
 
 
 def test_the_fork_table_reads_every_fork_file_there_is(tmp_path):

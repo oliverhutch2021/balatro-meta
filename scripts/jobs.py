@@ -1288,6 +1288,23 @@ def budget_parts_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple
     return champion_trials(root, PARTS_TRIALS, runs, control_runs=BIG_RUNS)
 
 
+# make teacher-money: the money numbers of the value formula, retuned on the champion. The diagnosis of 7 November
+# (the champion's own 3,000 runs, 75.0%): 88% of the losses at a boss, 83% at antes 5 to 8, Violet Vessel 18% and
+# The Wall 11%, and deeper play beat only 7% and 14% of those (the build, not the play). At the loss the median run
+# held $23 unspent (59% held $20 or more), 60% had no x mult joker and the main hand stood at level 3. The numbers
+# that weigh a dollar held against what it buys now were last tuned on 1 November, on a bot that won 53%. Each trial
+# leans towards spending: "buying-power" (0.03: the scoring power a held dollar stands for), "money-scale" (25: the
+# money at which a further dollar is worth half), "above-cap" (0.5: a dollar beyond the interest cap) and
+# "long-run" (0.35: the weight of the run's power some rounds on, where scaling jokers and levels pay). 2,000 seeds
+# each against the champion.
+MONEY_TRIALS = (("2.5", "buying-power=0.02"), ("2.5", "money-scale=15"), ("2.5", "above-cap=0.25"),
+                ("2.5", "long-run=0.5"))
+
+
+def money_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
+    return champion_trials(root, MONEY_TRIALS, runs, control_runs=BIG_RUNS)
+
+
 # make diagnose-fresh: the champion's own runs, recorded today and diagnosed. The night recording of 4 November is the
 # champion of 5 November exploring (one shop move in ten taken at random among the near-equal), so its base win rate
 # is 61% where the champion of 6 November wins 75%, and the page's "how it wins" and "where it loses" read from it.
@@ -1681,6 +1698,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-close-2": close_2_steps(),
     "diagnose-fresh": diagnose_fresh_steps(),
     "teacher-budget-parts": budget_parts_steps(),
+    "teacher-money": money_steps(),
     "diagnose": diagnose_steps(),
     # An hour of forks and the networks that learn from them: the judge test today (results/forks/forks-quick.json,
     # then results/value/value-forks-quick.json's measured.forks).

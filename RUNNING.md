@@ -848,6 +848,22 @@ looks, the deals, the planner's tries) to find where it is.
 Also 6 November, `make teacher-stakes` with the champion (2,000 seeds a stake): Red 61.4% (the 3 November bot: 52.0),
 Green 29.0% (19.7), Black 16.1% (11.4), Blue 11.4% (8.8), Purple 2.9% (1.9), Orange 1.5% (0.9), Gold 0.15% (0.2).
 
+## Step 32: the money numbers, retuned on the champion (about 7 hours)
+
+`make diagnose-fresh` (7 November): the champion's own 3,000 runs recorded (74.8% won) and diagnosed. 88% of the
+losses at a boss, 83% at antes 5 to 8; Violet Vessel 18% and The Wall 11% of them, and deeper play beat only 7% and
+14% of those (the build, not the play: deeper play beat 25% of all lost blinds, 41% at The Mouth). At the loss the
+median run held $23 unspent (59% held $20 or more), 60% had no x mult joker, the main hand stood at level 3. Runs
+that never held an x mult joker (42%) won 62%; a main hand ending at level 1 or 2, 52%; no voucher, 48%. The bot
+dies at the big targets with a weak engine and money in its pocket: a valuation problem, how much a dollar held is
+worth against what it buys now. Those numbers were last tuned on 1 November (+6.5 points then, on a bot at 53%).
+`make teacher-money` tries four, each leaning towards spending, on 2,000 seeds against the champion. The cheaper
+budget (`make teacher-budget-parts`) waits: win rate first, the processing later.
+
+```
+cd /mnt/h/balatro-meta && make teacher-money
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a
