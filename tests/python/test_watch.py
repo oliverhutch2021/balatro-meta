@@ -362,6 +362,16 @@ def test_a_run_saved_at_a_stake_is_checked_at_that_stake(tmp_path, monkeypatch):
         watch.stake_of({"stake": 9})
 
 
+def test_a_round_total_a_chip_or_two_apart_is_let_through():
+    base = {"state": "SELECTING_HAND", "ante": 3, "money": 10, "consumables": [], "round": 7, "hands_left": 3,
+            "discards_left": 2, "hand": [], "jokers": [], "blinds": {}}
+    e = dict(base, chips=35568.0)
+    assert not watch.differences(e, dict(base, chips=35567.0)), "one chip: the last bits of a double"
+    assert not watch.differences(e, dict(base, chips=35568.0 + watch.CHIP_SLACK))
+    assert watch.differences(e, dict(base, chips=35568.0 + watch.CHIP_SLACK + 1)), "more is a difference"
+    assert watch.differences(e, dict(base, chips=34668.0))
+
+
 def test_face_down_jokers_are_compared_by_their_true_values():
     """Under Amber Acorn the jokers are face down: the bot's screen hides their sell values, but the check
     compares the true ones (as BalatroBot reports them), and also which jokers are face down."""

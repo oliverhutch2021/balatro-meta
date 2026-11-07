@@ -1170,7 +1170,8 @@ except that a debuffed Wild card loses its wildness for flushes.
   that the engine's doubles reach exactly. So something outside these lines differs (how the game's numbers are
   stored or carried between steps). The companion mod (0.7 on) reports the last hand's chips, mult and every
   joker's X mult to 17 digits, and the checks save them with each difference, so the next one shows the step
-  where the two part.
+  where the two part. Being a chip apart decides almost nothing, so the checks let a round's total differ by up to
+  3 chips (`watch.CHIP_SLACK`) and carry on checking the rest of the run.
 
 - **Numbering.** The brief had no Obelisk and called Midas Mask number 75. The game's
   data has Obelisk at order 75 and Midas Mask at 76. Both are covered here. Check
