@@ -731,3 +731,36 @@ fn losing_the_ante_8_boss_is_not_a_win() {
     win_round(&mut run);
     assert!(run.won);
 }
+
+#[test]
+fn the_pillar_mark_is_set_once_the_hand_is_scored() {
+    // The real game's checks (7 November): a card Midas Mask turns Gold while it is played keeps the "played this
+    // ante" mark, and a DNA copy made while it is played is born without it.
+    let mut run = with_jokers(&[J::MidasMask]);
+    pair_of_kings(&mut run);
+    let kings: Vec<_> = run.hand[run.hand.len() - 2..].to_vec();
+    let pos: Vec<usize> = (0..run.hand.len())
+        .filter(|&i| kings.contains(&run.hand[i]))
+        .collect();
+    play(&mut run, &pos);
+    for k in kings {
+        assert_eq!(run.card(k).enhancement, Enhancement::Gold);
+        assert!(
+            run.card(k).played_this_ante,
+            "turned Gold while played, and still marked"
+        );
+    }
+    let mut run = with_jokers(&[J::DNA]);
+    run.add_card_to_hand(Clubs, King);
+    let king = *run.hand.last().unwrap();
+    let before = run.playing_cards.len();
+    let pos = run.hand.len() - 1;
+    play(&mut run, &[pos]);
+    assert_eq!(run.playing_cards.len(), before + 1, "DNA copied the card");
+    let copy = *run.playing_cards.last().unwrap();
+    assert!(run.card(king).played_this_ante);
+    assert!(
+        !run.card(copy).played_this_ante,
+        "the copy was made before the mark"
+    );
+}

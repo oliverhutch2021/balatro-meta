@@ -170,10 +170,10 @@ the deck tallies) are refreshed just before each hand is scored
 (`Run::refresh_frame_values`). The real-game check (phase 3) runs in the
 background of `make watch` and saves each difference to `.sync/watch/mismatches/`
 (78 since 29 October; `make recheck`, `scripts/recheck.py`, replays them on
-today's engine: on 7 November 25 fixed, 53 open: 23 scores one chip apart, a
-rounding difference to find; 4 larger scoring gaps; 14 card markings under
-bosses (debuffs, enhancements); 6 hands dealt after a pack; 4 cash-outs a
-dollar or two apart; 2 rounds the engine ends and the game doesn't). The checks keep a tally of runs
+today's engine: on 7 November 62 fixed, 16 open: 6 hands dealt after a pack;
+4 larger scoring gaps; 4 cash-outs a dollar or two apart; 2 rounds the engine
+ends and the game doesn't. The Pillar's mark comes after scoring (14 fixed);
+scores within `watch.CHIP_SLACK` = 3 chips pass, Obelisk's last bits (23)). The checks keep a tally of runs
 and moves compared in `results/checks.json` (from 5 November). Open questions are the UNSURE sections
 of the notes. Now: the teacher's learned value (expert
 iteration: record, train, play with it, repeat) and `make train` (the network:

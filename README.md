@@ -93,10 +93,11 @@ champion of 3 November, 75.6% on both for the champion of 6 November (the 2,000-
 - The engine is checked against the real game through [BalatroBot](https://github.com/coder/balatrobot): while
   the viewer runs, a hidden copy of the game replays the bot's runs move by move and every number on screen is
   compared with the engine's. A difference stops that run's check and is saved with both states. Since 29 October
-  the checks have saved 78 differences; replayed on today's engine (`make recheck`, 7 November), 25 are fixed and
-  53 are open: 23 scores one chip apart (a rounding difference, the next fidelity job), 4 larger scoring gaps, 14
-  card markings under bosses (debuff flags and enhancements), 6 hands dealt after a pack, 4 cash-outs a dollar or
-  two apart, 2 rounds the engine ends that the game doesn't. From 5 November the checks keep a tally of the runs and moves they compared
+  the checks have saved 78 differences; replayed on today's engine (`make recheck`, 7 November), 62 are fixed and
+  16 open: 6 hands dealt after a pack, 4 larger scoring gaps, 4 cash-outs a dollar or two apart, 2 rounds the engine
+  ends that the game doesn't. Of the fixed, 14 were The Pillar (the "played this ante" mark comes after the hand is
+  scored) and 23 were scores one chip apart in the last bits of a double (Obelisk), which the checks now let through
+  (up to 3 chips) and carry on. From 5 November the checks keep a tally of the runs and moves they compared
   (`results/checks.json`); before that, no count was kept, so there is no honest "N moves, 0 mismatches" to quote.
 - Two versions of the bot are always compared on the same seeds, run by run, with a paired test; a version's own
   win rate on 8,000 seeds is known to about ±1 point.

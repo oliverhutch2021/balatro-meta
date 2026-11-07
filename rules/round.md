@@ -171,8 +171,12 @@ of a boss round). Steps, in order:
 2. The selected cards are ordered by on-screen position, left to right.
 3. State becomes "hand played"; hands left goes down by 1 (so it is already
    reduced while the hand is scored).
-4. Each played card: times-played +1, marked "played this ante" (The Pillar),
-   moved to the play area in that order.
+4. Each played card: times-played +1, moved to the play area in that order.
+   Its "played this ante" mark (The Pillar) is set only once the hand has been
+   scored (verified against the real game, 7 November: a card turned Gold by
+   Midas Mask or stripped by Vampire while played keeps the mark, though
+   changing an enhancement clears it; a DNA copy made during the hand is born
+   without it).
 5. The blind's play effect runs: The Hook discards up to 2 held cards, The
    Tooth takes $1 per played card, Crimson Heart and The Fish arm themselves
    for the next draw. The Hook's discard and The Tooth's charge finish before

@@ -698,13 +698,18 @@ impl Run {
         self.hand.retain(|id| !played.contains(id));
         self.hands_left -= 1;
         for &id in &played {
-            let c = self.card_mut(id);
-            c.times_played += 1;
-            c.played_this_ante = true;
+            self.card_mut(id).times_played += 1;
             self.play.push(id);
         }
         self.press_play();
         let score = evaluate_play(self);
+        // The Pillar's "played this ante" mark is set once the hand has been scored, not when it is played. The
+        // real game's checks showed it (7 November, 14 differences under The Pillar): a card Midas Mask turned
+        // Gold or Vampire stripped while being played kept the mark (changing an enhancement clears it, and
+        // here the mark came after), and a DNA copy made while it was played was born without it.
+        for &id in &played {
+            self.card_mut(id).played_this_ante = true;
+        }
         self.money += self.pending_money;
         self.pending_money = 0;
         for &id in &score.destroyed {

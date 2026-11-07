@@ -1063,8 +1063,8 @@ except that a debuffed Wild card loses its wildness for flushes.
   that has an enhancement (any of Bonus, Mult, Wild, Glass, Steel, Stone, Gold,
   Lucky), is not debuffed, and was not already stripped by a Vampire this hand:
   - at once it becomes a plain card. Edition, seal and perma bonus stay. The
-    "played this ante" mark is lost, and the boss's debuff test is re-run on the
-    card;
+    "played this ante" mark it may have had is lost (the hand's own mark comes after
+    scoring, `round.md`), and the boss's debuff test is re-run on the card;
   - after the evaluation a queued step clears its "already stripped" mark.
 
   Then x_mult += 0.1 × (number stripped), at once, so this hand's main effect
@@ -1150,7 +1150,8 @@ except that a debuffed Wild card loses its wildness for flushes.
 - **'Before'** (non-debuffed hands; not copyable): every scoring card that passes the
   face test becomes a **Gold Card** at once, in play order. Its old enhancement is
   replaced (Glass, Lucky, Stone and Steel effects are lost for this hand); edition,
-  seal and perma bonus stay; the "played this ante" mark is lost and the boss's
+  seal and perma bonus stay; an earlier "played this ante" mark is lost (this hand's
+  comes after scoring, `round.md`) and the boss's
   debuff test is re-run on the card.
 - Debuffed faces are not faces, so they are untouched. With Pareidolia every
   non-debuffed scoring card turns Gold, Stone cards included. They then score their
@@ -1194,12 +1195,14 @@ except that a debuffed Wild card loses its wildness for flushes.
   From the code; not verified in game.
 - **Burglar and a later disable of The Water** (Chicot, Luchador): from the code the
   discards come back and Burglar does not remove them again. Not verified in game.
-- **DNA copies inherit the debuff flag and the "played this ante" mark.** From the
-  code; not verified in game. It matters under The Pillar for the rest of the ante,
-  and when the copied card was debuffed.
-- **Midas Mask and Vampire clear "played this ante".** From the code, a card changed
-  by them is no longer debuffed by The Pillar later in the ante. Not verified in
-  game.
+- **DNA copies inherit the debuff flag.** From the code; not verified in game. (The
+  "played this ante" mark is settled: the copy is made before the played card gets
+  its mark, so it is born without it; checked against the real game, 7 November.)
+- **Midas Mask and Vampire and "played this ante": settled (7 November).** Changing an
+  enhancement clears the mark, but the played card gets it only after the hand is
+  scored, so a card Midas Mask or Vampire changes while it is played ends the hand
+  marked, and The Pillar debuffs it later in the ante. The real game's checks showed
+  it in 14 saved differences (`round.md`, step 4 of a played hand).
 - **Rocket, Cloud 9 and Delayed Gratification on a Perishable's last round:** the
   end-of-round effect happens (Rocket +2), then the joker is debuffed, so it pays no
   cash-out row that round. From the code; not verified in game.
