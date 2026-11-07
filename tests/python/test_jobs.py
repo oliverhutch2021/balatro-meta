@@ -1038,6 +1038,18 @@ def test_the_diagnosis_replays_the_newest_recording_with_the_champion_and_tables
     (data / "value-11" / "manifest.json").write_text(json.dumps({"moves_kept": True, "stake": 1}))
     assert jobs.replayable_recording(data) == ("round11", data / "value-11")
     assert "diagnose" in jobs.JOBS
+    # make diagnose-fresh: the champion records its own runs first (unless it has), then the same diagnosis.
+    fresh = {n: a for n, a, *_ in jobs.diagnose_fresh_steps(tmp_path, data)}
+    rec = fresh["record"]
+    assert rec[rec.index("--runs") + 1] == str(jobs.DIAGNOSE_RUNS) and rec[rec.index("--seed") + 1] == str(jobs.DIAGNOSE_SEED)
+    assert "explore" not in rec[rec.index("--teacher-options") + 1]
+    assert rec[rec.index("--record") + 1] == str(data / "diagnose-champion" / "stake1")
+    assert fresh["replay"][fresh["replay"].index("--replay") + 1] == str(data / "diagnose-champion" / "stake1")
+    assert fresh["table"][-1] == "results/diagnose/champion-summary.json"
+    (data / "diagnose-champion" / "stake1").mkdir(parents=True)
+    (data / "diagnose-champion" / "stake1" / "manifest.json").write_text("{}")
+    assert "record" not in {n for n, *_ in jobs.diagnose_fresh_steps(tmp_path, data)}
+    assert "diagnose-fresh" in jobs.JOBS
 
 
 def test_a_fork_round_forks_the_newest_recording_then_trains_a_pair_and_its_control_and_plays_them(tmp_path):

@@ -1274,6 +1274,34 @@ def diagnose_steps(root: Path = ROOT, data: Path = DATA) -> list[tuple]:
     return steps
 
 
+# make diagnose-fresh: the champion's own runs, recorded today and diagnosed. The night recording of 4 November is the
+# champion of 5 November exploring (one shop move in ten taken at random among the near-equal), so its base win rate
+# is 61% where the champion of 6 November wins 75%, and the page's "how it wins" and "where it loses" read from it.
+# This records DIAGNOSE_RUNS runs with the champion as it plays (no exploring, fresh seeds, every move kept), then
+# diagnoses them like make diagnose. About 2 hours for the recording at the champion's budget, then the diagnosis.
+DIAGNOSE_RUNS = 3000
+DIAGNOSE_SEED = 8150
+
+
+def diagnose_fresh_steps(root: Path = ROOT, data: Path = DATA) -> list[tuple]:
+    steps: list[tuple] = [("build", [*MAKE, "build"])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    folder = data / "diagnose-champion" / "stake1"
+    name = "champion"
+    if not (folder / "manifest.json").exists():
+        steps.append(("record", [*BASELINE, "--bot", "teacher", *best[1], "--runs", str(DIAGNOSE_RUNS),
+                                 "--seed", str(DIAGNOSE_SEED), "--record", str(folder),
+                                 "--out", f"results/diagnose/{name}-record.json"]))
+    table = f"results/diagnose/{name}.csv"
+    steps.append(("replay", [*BASELINE, "--bot", "teacher", *best[1], "--replay", str(folder), "--diagnose", table,
+                             "--deep", str(DEEP_X), "--deep-share", str(DEEP_SHARE),
+                             "--out", f"results/diagnose/{name}.json"]))
+    steps.append(("table", ["scripts/diagnose.py", table, "--out", f"results/diagnose/{name}-summary.json"]))
+    return steps
+
+
 # Forks (crates/bm-core/src/forks.rs): at a share FORK_CHANCE of the shops entered and packs opened in antes 2 to 6
 # of the newest replayable recording's runs (played again by their moves; a run enters about 40 of them), the
 # champion's FORK_BEST best options and doing nothing (and its own choice and the run's move, if others) are each
@@ -1637,6 +1665,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-budget-confirm-6": budget_confirm_6_steps(),
     "teacher-close": close_steps(),
     "teacher-close-2": close_2_steps(),
+    "diagnose-fresh": diagnose_fresh_steps(),
     "diagnose": diagnose_steps(),
     # An hour of forks and the networks that learn from them: the judge test today (results/forks/forks-quick.json,
     # then results/value/value-forks-quick.json's measured.forks).

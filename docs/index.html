@@ -126,7 +126,7 @@ td.r, th.r { text-align: right; }
 .three > div { display: grid; gap: 8px; align-content: start; min-width: 0; }
 .loop { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); counter-reset: s; }
 .loop > div { background: var(--panel-solid); border: 2px solid var(--panel-edge); border-radius: 10px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; box-shadow: 0 4px 0 rgba(0,0,0,0.45); }
-.loop > div::before { counter-increment: s; content: counter(s); font-family: var(--display); font-weight: 700; font-size: 28px; line-height: 1; color: var(--chips); text-shadow: 0 2px 0 rgba(0,0,0,0.5); }
+.loop > div::before { counter-increment: s; content: counter(s); font-family: var(--digits); font-weight: 600; font-size: 26px; line-height: 1; color: var(--chips); text-shadow: 0 2px 0 rgba(0,0,0,0.5); }
 .loop > div.new { border-color: var(--mult); }
 .loop > div.new::before { color: var(--mult); }
 .loop b { font-family: var(--display); font-size: 19px; }
@@ -153,11 +153,10 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
     <div class="panel hero">
       <h1>A bot that learns to win Balatro</h1>
       <p class="lede">It plays a faithful copy of the game, sees only what a player sees, and decides every move by what it expects to win. A week in, it wins three runs in four, on the seeds it is tuned on and on an exam it never sees alike. The goal is 90%, and strategies better than its human teacher's.</p>
-      <div class="score" aria-label="From 0.07% to 75.6% of runs won on the tuning seeds, and 75.6% on the exam; its biggest hand scored 16.6 billion">
+      <div class="score" aria-label="From 0.07% to 75.6% of runs won on 8,000 seeds kept apart; its biggest hand scored 16.6 billion">
         <div class="box plain" tabindex="0"><span class="v num">0.07%</span><span class="k">First bot, 30 Oct</span></div>
         <span class="op" aria-hidden="true">→</span>
-        <div class="box chips" tabindex="0"><span class="v num">75.6%</span><span class="k">Exam · 8,000 seeds kept apart</span></div>
-        <div class="box plain" tabindex="0"><span class="v num">75.6%</span><span class="k">On its 8,000 tuning seeds too</span></div>
+        <div class="box chips" tabindex="0"><span class="v num">75.6%</span><span class="k">Won now · 8,000 seeds kept apart</span></div>
         <div class="box mult" tabindex="0"><span class="v num">16.6B</span><span class="k">Its biggest hand</span></div>
       </div>
       <details class="col"><summary>New to Balatro? The game in a paragraph</summary><p style="margin-top:8px">Balatro is a solitaire card game built on poker hands. A run is eight rounds, called antes, each with three score targets, called blinds, that roughly double from one to the next; the third of each ante is a boss blind with a rule of its own. You hold eight cards, play up to four poker hands and discard up to three times per blind, and each hand scores chips × mult. Beat ante 8's boss and the run is won. Between blinds a shop sells jokers (up to five held, and the source of nearly all scoring), planet cards that level up a hand type, tarot cards that change your cards, vouchers and packs; money earns interest. Everything random comes from the run's seed. Stakes are difficulty levels, White the easiest; decks change the starting rules. The bot plays White Stake with the Red Deck, the game's first table.</p></details>
@@ -250,7 +249,7 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
 
   <section id="wins">
     <div class="wrap">
-      <span class="label">How it wins · 3,000 recorded runs</span>
+      <span class="label">How it wins · 3,000 runs recorded on 4 Nov (the 5 Nov champion, exploring; a fresh diagnosis of the current one is next)</span>
       <h2>Levelled Pairs, scaling jokers, and money by ante 3</h2>
       <div class="panel">
         <p class="col lead">The champion's 3,000 recorded runs, replayed with every blind's winning hand and every joker held at the end noted. The base win rate of this recording is 61% (it explores: one shop move in ten takes a near-equal alternative). Everything here is association, not cause: a joker held at the end was held by a run that lived long enough to hold it.</p>
@@ -333,7 +332,7 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
 
   <section id="loses">
     <div class="wrap">
-      <span class="label">Where it loses · the diagnosis of 5 Nov</span>
+      <span class="label">Where it loses · the diagnosis of 5 Nov (the 5 Nov champion; the current one is diagnosed next)</span>
       <h2>Late, at a boss, and just short</h2>
       <div class="panel">
         <p class="col lead">The champion's 3,000 recorded runs, played again move by move: 1,160 were lost, 82% of them at a boss and 70% at antes 5 to 8. They are near misses: 44% scored 80% or more of the target they fell to and another 43% between half and 80%. Only 13% were hopeless. At the loss the median run still held $22 it never spent.</p>
