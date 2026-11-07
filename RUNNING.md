@@ -840,6 +840,11 @@ fixed option the same way (about 2.75 hours).
 cd /mnt/h/balatro-meta && make teacher-close-2
 ```
 
+7 November, the fixed screen: close-x=2 76.25% (-0.8, p = 0.47) and close-x=3 77.45% (+0.4, p = 0.74; +0.18 blinds,
+95% range -0.01 to +0.36) against 77.05%. Level: re-judging the close calls among the finalists is not where six
+times everywhere found its 2 points. `make teacher-budget-parts` doubles each part of the budget on its own (the
+looks, the deals, the planner's tries) to find where it is.
+
 Also 6 November, `make teacher-stakes` with the champion (2,000 seeds a stake): Red 61.4% (the 3 November bot: 52.0),
 Green 29.0% (19.7), Black 16.1% (11.4), Blue 11.4% (8.8), Purple 2.9% (1.9), Orange 1.5% (0.9), Gold 0.15% (0.2).
 
