@@ -2132,6 +2132,7 @@ fn main() {
                         if i >= target || over {
                             break;
                         }
+                        let mut other_way = false;
                         let mut s = match &replay {
                             None => play(run_seed(base, i), i, true, bot, None),
                             Some((runs, _, _)) => {
@@ -2144,6 +2145,7 @@ fn main() {
                                     || s.stage != r.end_stage
                                     || s.recorded.as_ref().is_some_and(|rec| rec.at.len() != r.rows)
                                 {
+                                    other_way = true;
                                     diverged.lock().unwrap().push(format!(
                                         "run {i} (seed {}): recorded {} moves, {}; replayed {} moves, {}{}",
                                         r.seed,
@@ -2160,7 +2162,9 @@ fn main() {
                         if let Some(d) = s.detail.take() {
                             details.lock().unwrap().push(d);
                         }
-                        if let Some(d) = s.diagnosis.clone() {
+                        // A run that went another way on today's engine is left out of a diagnosis: its blinds
+                        // are not the ones the recording played.
+                        if let (Some(d), false) = (s.diagnosis.clone(), other_way) {
                             diagnoses.lock().unwrap().push(d);
                         }
                         if let Some(r) = &fork_recorder {
@@ -2353,7 +2357,9 @@ fn main() {
     let t = totals.into_inner().unwrap();
     let el = start.elapsed().as_secs_f64();
     // A replayed run that went another way means the engine no longer plays what was recorded: its positions and
-    // labels would be wrong, so the new recording is left without a manifest (the trainer refuses it).
+    // labels would be wrong, so the new recording is left without a manifest (the trainer refuses it). A diagnosis
+    // alone (nothing recorded) leaves those runs out and carries on, unless more than one in a hundred went another
+    // way (then the engine has changed too much for the recording to stand for it).
     let diverged = diverged.into_inner().unwrap();
     if !diverged.is_empty() {
         eprintln!(
@@ -2364,7 +2370,11 @@ fn main() {
         for d in diverged.iter().take(10) {
             eprintln!("  {d}");
         }
-        std::process::exit(1);
+        let recording = recorder.is_some() || fork_recorder.is_some();
+        if recording || diverged.len() as u64 * 100 > t.runs.max(1) {
+            std::process::exit(1);
+        }
+        eprintln!("Those runs are left out of the diagnosis; the rest go on.");
     }
     if let Some(r) = recorder {
         let mut r = r.into_inner().unwrap();
