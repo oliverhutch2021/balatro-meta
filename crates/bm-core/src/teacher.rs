@@ -2328,7 +2328,10 @@ fn search(best: &[f64], cost: f64, again: bool) -> f64 {
 /// Judge options in two passes: a quick value for each, then the full value for the three best that beat
 /// doing nothing. Returns the first move of the winner, or None if nothing beats doing nothing.
 /// Doing nothing is judged as the position `base` when given (the run after skipping a pack: "fair-skip"), else
-/// as the position here.
+/// as the position here. With "close-x" above 1: when the two best are within "close-gap" of each other, those
+/// two are judged again with every count behind the value scaled by "close-x", and the better of them taken.
+/// Most decisions are not close and cost nothing more; the close ones, where a noisy estimate picks its errors,
+/// get the care (the budget that paid most, 3× and 6× everywhere, spent where it tells).
 fn choose_against(
     run: &Run,
     base: Option<&Run>,
@@ -2347,11 +2350,9 @@ fn choose_against(
     }
     options.sort_by(|a, b| b.1.total_cmp(&a.1));
     options.truncate(finalists());
-    let mut best = (value(here, vs) + MIN_GAIN, None);
-    let mut judged = vec![best];
-    for (first, _, judge) in options {
-        let v = match judge {
-            Judge::Moves(m) => after(run, vs ^ 0x5EED, &m).map_or(f64::MIN, |c| value(&c, vs)),
+    let judge_of = |judge: &Judge| -> f64 {
+        match judge {
+            Judge::Moves(m) => after(run, vs ^ 0x5EED, m).map_or(f64::MIN, |c| value(&c, vs)),
             Judge::Sampled(samples) => {
                 let n = samples.len().max(1) as f64;
                 samples
@@ -2366,16 +2367,49 @@ fn choose_against(
                     .map(|(c, follow)| sampled_value(c, follow, vs))
                     .unzip();
                 let cost = here_full(run, vs) - bare.iter().sum::<f64>() / bare.len().max(1) as f64;
-                search(&best, cost, again)
+                search(&best, cost, *again)
             }
-        };
-        judged.push((v, Some(first)));
-        if v > best.0 {
-            best = (v, Some(first));
+        }
+    };
+    // Doing nothing is judged first (index 0), then each finalist.
+    let mut judged: Vec<(f64, Option<(MoveKind, u64)>)> = vec![(value(here, vs) + MIN_GAIN, None)];
+    for (first, _, judge) in &options {
+        judged.push((judge_of(judge), Some(*first)));
+    }
+    let close_x = param("close-x").unwrap_or(1.0);
+    if close_x > 1.0 && judged.len() > 1 {
+        let mut order: Vec<usize> = (0..judged.len()).collect();
+        order.sort_by(|&a, &b| judged[b].0.total_cmp(&judged[a].0));
+        let (top, next) = (order[0], order[1]);
+        if judged[top].0 - judged[next].0 < param("close-gap").unwrap_or(CLOSE_GAP) {
+            let s = crate::value::scales();
+            let more = crate::value::Scales {
+                full: s.full * close_x,
+                quick: s.quick * close_x,
+                looks: s.looks * close_x,
+                rounds: s.rounds * close_x,
+            };
+            crate::value::with_scales(more, || {
+                for i in [top, next] {
+                    judged[i].0 = if i == 0 {
+                        value(here, vs) + MIN_GAIN
+                    } else {
+                        judge_of(&options[i - 1].2)
+                    };
+                }
+            });
         }
     }
+    let best = judged
+        .iter()
+        .copied()
+        .fold(judged[0], |b, j| if j.0 > b.0 { j } else { b });
     explore(run, vs, &judged, best).1
 }
+
+/// How close the two best options' values must be for "close-x" to judge them again ("close-gap", in the
+/// value's units: log chance).
+const CLOSE_GAP: f64 = 0.1;
 
 /// "explore=p" (for recordings, never for measuring): with chance p, a decision between options takes another
 /// that the value rates nearly as high (within "explore-within" of the best, doing nothing included) in place of
@@ -4244,5 +4278,38 @@ mod tests {
             assert!(skipped > SKIP_LOST + 1.0 && skipped < SKIP_WON, "{skipped}");
             assert_eq!(SKIP_DEPTH.with(|d| d.get()), 0, "the depth is restored");
         });
+    }
+
+    #[test]
+    fn close_calls_are_judged_again_with_more_care_and_nothing_else_changes() {
+        // With "close-x" at 1 the teacher's moves are what they were; with it above 1, a run still plays legally
+        // and the same way each time (the extra tries and deals come from the same salts).
+        use crate::env::apply;
+        let play = |opts: &[&str]| {
+            new_run();
+            let mut run = Run::new(RunConfig::new("CLOSEX01"));
+            let mut moves = Vec::new();
+            let mut step = 0u64;
+            while run.phase != Phase::GameOver && !run.won && step < 400 && run.ante <= 2 {
+                let m = with_options(opts, || teacher_move(&run, step));
+                apply(&mut run, m.0, m.1).expect("a legal move");
+                moves.push(m);
+                step += 1;
+            }
+            moves
+        };
+        let plain = play(&["light"]);
+        assert_eq!(
+            play(&["light", "close-x=1"]),
+            plain,
+            "close-x=1 is the teacher as it was"
+        );
+        let careful = play(&["light", "close-x=3"]);
+        assert_eq!(
+            play(&["light", "close-x=3"]),
+            careful,
+            "the same run each time"
+        );
+        assert!(careful.len() > 20);
     }
 }

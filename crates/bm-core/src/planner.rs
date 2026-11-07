@@ -499,7 +499,6 @@ pub fn plan(run: &Run, best: (f64, u64), salt: u64) -> (MoveKind, u64) {
     }
     let reference = value_aware().then(|| reference(run, best.1, salt));
     let hand = seen(run);
-    let mut choice: Option<((u64, f64), (MoveKind, u64))> = None;
     // Each plan from its own first move; with DNA on the first hand, the best-hand plan after copying the
     // most valuable card too (a hand played for DNA, judged like the rest).
     let mut tries: Vec<(Plan, Option<(MoveKind, u64)>)> = Plan::options(&hand)
@@ -531,42 +530,114 @@ pub fn plan(run: &Run, best: (f64, u64), salt: u64) -> (MoveKind, u64) {
             }
         }
     }
-    for (n, (p, own)) in tries.into_iter().enumerate() {
-        let first = own.unwrap_or_else(|| plan_move(run, p, best));
-        if choice.as_ref().is_some_and(|(_, m)| *m == first) {
-            continue; // the same move now as a better-scoring plan
-        }
-        let (mut beats, mut close, mut gain) = (0u64, 0.0, 0.0);
-        for t in 0..try_count(TRIES) {
+    // Each plan tried `try_count(TRIES)` times: how often it beats the blind, how close it gets, what the round
+    // adds (the value teacher).
+    struct Tried {
+        plan: Plan,
+        first: (MoveKind, u64),
+        n: u64,
+        tries: u64,
+        beats: u64,
+        close: f64,
+        gain: f64,
+    }
+    let run_tries = |t: &mut Tried, from: u64, count: u64| {
+        for i in from..from + count {
             let (beat, c, g) = try_policy(
                 run,
-                Policy::Plan(p),
-                first,
-                salt.wrapping_mul(0x9E37).wrapping_add((n as u64) << 32 | t),
+                Policy::Plan(t.plan),
+                t.first,
+                salt.wrapping_mul(0x9E37).wrapping_add(t.n << 32 | i),
                 reference,
             );
-            beats += u64::from(beat);
-            close += c;
-            gain += g;
+            t.beats += u64::from(beat);
+            t.close += c;
+            t.gain += g;
         }
-        // Beating the blind first; then what the round adds (when it is beaten at all), else how close.
-        let key = (
-            beats,
-            if beats > 0 && reference.is_some() {
-                gain / beats as f64
+        t.tries += count;
+    };
+    // Beating the blind first; then what the round adds (when it is beaten at all), else how close.
+    let key = |t: &Tried| {
+        (
+            t.beats as f64 / t.tries.max(1) as f64,
+            if t.beats > 0 && reference.is_some() {
+                t.gain / t.beats as f64
             } else {
-                close
+                t.close / t.tries.max(1) as f64
             },
-        );
-        if choice
-            .as_ref()
-            .is_none_or(|(k, _)| key.0 > k.0 || (key.0 == k.0 && key.1 > k.1))
-        {
-            choice = Some((key, first));
+        )
+    };
+    let better = |a: (f64, f64), b: (f64, f64)| a.0 > b.0 || (a.0 == b.0 && a.1 > b.1);
+    let mut tried: Vec<Tried> = Vec::new();
+    let mut top: Option<usize> = None;
+    for (n, (p, own)) in tries.into_iter().enumerate() {
+        let first = own.unwrap_or_else(|| plan_move(run, p, best));
+        if top.is_some_and(|i| tried[i].first == first) {
+            continue; // the same move now as a better-scoring plan
+        }
+        let mut t = Tried {
+            plan: p,
+            first,
+            n: n as u64,
+            tries: 0,
+            beats: 0,
+            close: 0.0,
+            gain: 0.0,
+        };
+        run_tries(&mut t, 0, try_count(TRIES));
+        tried.push(t);
+        let i = tried.len() - 1;
+        if top.is_none_or(|b| better(key(&tried[i]), key(&tried[b]))) {
+            top = Some(i);
         }
     }
-    choice.map_or((MoveKind::Play, best.1), |(_, m)| m)
+    let Some(mut a) = top else {
+        return (MoveKind::Play, best.1);
+    };
+    // "close-x": when the two best plans beat the blind nearly as often (within "close-beats" of the tries),
+    // both are tried that many times more, and the totals decide. Most rounds have a clear plan; the close
+    // ones get the care.
+    let close_x = crate::teacher::param("close-x").unwrap_or(1.0);
+    if close_x > 1.0 && tried.len() > 1 {
+        let mut b: Option<usize> = None;
+        for i in 0..tried.len() {
+            if i != a && b.is_none_or(|j| better(key(&tried[i]), key(&tried[j]))) {
+                b = Some(i);
+            }
+        }
+        let b = b.expect("a second plan");
+        let within = (crate::teacher::param("close-beats").unwrap_or(CLOSE_BEATS)
+            * tried[a].tries as f64)
+            .ceil() as u64;
+        if tried[a].beats.abs_diff(tried[b].beats) <= within {
+            let more = ((close_x - 1.0) * try_count(TRIES) as f64).ceil() as u64;
+            for i in [a, b] {
+                let from = tried[i].tries;
+                let mut t = Tried {
+                    plan: tried[i].plan,
+                    first: tried[i].first,
+                    n: tried[i].n,
+                    tries: 0,
+                    beats: 0,
+                    close: 0.0,
+                    gain: 0.0,
+                };
+                run_tries(&mut t, from, more);
+                tried[i].tries += t.tries;
+                tried[i].beats += t.beats;
+                tried[i].close += t.close;
+                tried[i].gain += t.gain;
+            }
+            if better(key(&tried[b]), key(&tried[a])) {
+                a = b;
+            }
+        }
+    }
+    tried[a].first
 }
+
+/// How near in beats (as a share of the tries) the two best plans must be for "close-x" to try them again.
+const CLOSE_BEATS: f64 = 0.1;
 
 /// How often the best-hand plan beats the blind from here, on fair copies (a quick read of a round's
 /// difficulty).

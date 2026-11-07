@@ -80,7 +80,9 @@ what it found.
   `make teacher-late`; `skips`: a blind skipped for its tag when play-outs
   of both ways on fair copies say so (`value_blind_move`, `skip_checkpoint`,
   `value::value_settled` shows the networks the skipped blind as beaten),
-  `make teacher-skips`; forks, `forks.rs`: a decision forked, the teacher's
+  `make teacher-skips`; `close-x`: the adaptive budget, a decision's two
+  close options judged again with every count scaled (`choose_against`,
+  `planner::plan`), `make teacher-close`; forks, `forks.rs`: a decision forked, the teacher's
   options each played out to the end on fair copies that share their seeds,
   `baseline --forks DIR`, what each option left and how its play-outs ended,
   which `train_value.py --forks` learns pairwise (the options' order) and

@@ -196,6 +196,12 @@ pub const PARAMS: &[(&str, f64)] = &[
     ("tries-x", 1.0),
     // Options the teacher judges in full after the quick look (teacher.rs).
     ("finalists", 3.0),
+    // The adaptive budget: when a decision's two best options are close (a shop's or pack's within "close-gap"
+    // in value, a round's two best plans within "close-beats" of the tries in beats), those two are judged again
+    // with every count scaled by "close-x" (teacher.rs `choose_against`, planner.rs `plan`; 1: never).
+    ("close-x", 1.0),
+    ("close-gap", 0.1),
+    ("close-beats", 0.1),
     // Option "skips" (teacher.rs `value_blind_move`): the gain a skip must show over playing the blind, the fair
     // copies it is played out on, and the play-outs' counts as a share of the usual.
     ("skip-margin", 0.05),

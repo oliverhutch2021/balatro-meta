@@ -813,6 +813,24 @@ by the ratchet (`best_at_stake`) by itself.
 cd /mnt/h/balatro-meta && make skips-stakes
 ```
 
+## Step 31: the adaptive budget (3.5 hours)
+
+6 November, `make teacher-budget-6`: six times the samples everywhere won 79.2% against the champion's 77.05% on
+2,000 seeds (+2.15, 95% range +0.03 to +4.3, p = 0.053), at four hours for 2,000 runs: the budget still pays, less
+each time, and a 6x champion would make every screen a four-hour job. The confirm was not run. Teacher option
+"close-x=K" spends the care where it tells: when a decision's two best options are close (a shop's or pack's within
+"close-gap" = 0.1 in value; a round's two best plans within "close-beats" = 10% of the tries in beats), those two are
+judged again with every count scaled by K, and the better taken; every other decision costs nothing more. On the
+champion's 3x budget, close-x=2 judges close calls at 6x for about 30% more time a run and close-x=3 at 9x for about
+45%. The job screens both on 2,000 seeds against the champion.
+
+```
+cd /mnt/h/balatro-meta && make teacher-close
+```
+
+Also 6 November, `make teacher-stakes` with the champion (2,000 seeds a stake): Red 61.4% (the 3 November bot: 52.0),
+Green 29.0% (19.7), Black 16.1% (11.4), Blue 11.4% (8.8), Purple 2.9% (1.9), Orange 1.5% (0.9), Gold 0.15% (0.2).
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a

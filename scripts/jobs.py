@@ -1076,6 +1076,19 @@ def budget_confirm_6_steps(root: Path = ROOT) -> list[tuple]:
     return champion_trials(root, BUDGET_6, BIG_RUNS)
 
 
+# make teacher-close: the adaptive budget, screened on 2,000 seeds against the champion of 6 November. Six times the
+# samples everywhere gained about 2 points over three times (79.2% against 77.05%, p = 0.053) at twice the time.
+# "close-x=K": when a decision's two best options are close (a shop's or pack's within "close-gap" in value, a
+# round's two best plans within "close-beats" of the tries in beats), those two are judged again with every count
+# scaled by K; the rest of the decisions cost nothing more. On the champion's 3x budget, close-x=2 judges close calls
+# at 6x for about 30% more time a run, close-x=3 at 9x for about 45%.
+CLOSE_TRIALS = (("2.5", "close-x=2"), ("2.5", "close-x=3"))
+
+
+def close_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
+    return champion_trials(root, CLOSE_TRIALS, runs, control_runs=BIG_RUNS)
+
+
 # make skips-stakes: the same option where a skip should be worth more. At White it came out level (step 30: 76.85%
 # against 77.05%, 0.34 skips a run), where every blind pays and the blinds are small. From Red Stake up the Small
 # Blind pays nothing, so skipping it costs only its shop; at Green and Purple the blinds grow faster, so what a tag
@@ -1609,6 +1622,7 @@ JOBS: dict[str, list[tuple]] = {
     "skips-stakes": skips_stakes_steps(),
     "teacher-budget-6": budget_6_steps(),
     "teacher-budget-confirm-6": budget_confirm_6_steps(),
+    "teacher-close": close_steps(),
     "diagnose": diagnose_steps(),
     # An hour of forks and the networks that learn from them: the judge test today (results/forks/forks-quick.json,
     # then results/value/value-forks-quick.json's measured.forks).
