@@ -1162,6 +1162,10 @@ def test_the_late_trials_share_the_doubt_trials_control(tmp_path):
     again = {n: a for n, a, *_ in jobs.close_2_steps(tmp_path)}["w2.5-close-x=2,close-gap=0.1"]
     assert again[again.index("--teacher-options") + 1] == "precise,late-x=3,late-from=5,close-x=2,close-gap=0.1"
     assert "teacher-close-2" in jobs.JOBS
+    parts = {n: a for n, a, *_ in jobs.budget_parts_steps(tmp_path)}
+    lk = parts["w2.5-looks-x=2"]
+    assert lk[lk.index("--teacher-options") + 1] == "precise,late-x=3,late-from=5,looks-x=2"
+    assert {"w2.5-deals-x=2", "w2.5-tries-x=2"} <= set(parts) and "teacher-budget-parts" in jobs.JOBS
 
 
 def test_the_fork_table_reads_every_fork_file_there_is(tmp_path):

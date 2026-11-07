@@ -1274,6 +1274,20 @@ def diagnose_steps(root: Path = ROOT, data: Path = DATA) -> list[tuple]:
     return steps
 
 
+# make teacher-budget-parts: where the budget pays. Six times the samples everywhere gained about 2 points over three
+# times (6 November, p = 0.053); the adaptive budget, which re-judges only the close calls among a decision's
+# finalists with more deals, gained nothing (7 November: close-x=2 76.25% against 77.05%, p = 0.47). So the gain is
+# not in the finalists' deals. The budget has four parts (value::Scales): the deals behind each full value ("deals-x"),
+# the quick look that screens options ("quick-x"), the sample contents behind packs and rerolls ("looks-x") and the
+# planner's tries a plan ("tries-x"). Each of the three larger parts doubled on its own, on the champion, 2,000 seeds
+# each: whichever carries the gain is where a cheaper budget should spend.
+PARTS_TRIALS = (("2.5", "looks-x=2"), ("2.5", "deals-x=2"), ("2.5", "tries-x=2"))
+
+
+def budget_parts_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
+    return champion_trials(root, PARTS_TRIALS, runs, control_runs=BIG_RUNS)
+
+
 # make diagnose-fresh: the champion's own runs, recorded today and diagnosed. The night recording of 4 November is the
 # champion of 5 November exploring (one shop move in ten taken at random among the near-equal), so its base win rate
 # is 61% where the champion of 6 November wins 75%, and the page's "how it wins" and "where it loses" read from it.
@@ -1666,6 +1680,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-close": close_steps(),
     "teacher-close-2": close_2_steps(),
     "diagnose-fresh": diagnose_fresh_steps(),
+    "teacher-budget-parts": budget_parts_steps(),
     "diagnose": diagnose_steps(),
     # An hour of forks and the networks that learn from them: the judge test today (results/forks/forks-quick.json,
     # then results/value/value-forks-quick.json's measured.forks).
