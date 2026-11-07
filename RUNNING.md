@@ -828,6 +828,18 @@ champion's 3x budget, close-x=2 judges close calls at 6x for about 30% more time
 cd /mnt/h/balatro-meta && make teacher-close
 ```
 
+The screen (6 November, 77 and 85 minutes): close-x=2 75.3% and close-x=3 74.6% against 77.05%, -1.75 (p = 0.11) and
+-2.45 points (p = 0.024), blinds beaten level. Worse, not better, and for a reason found in the morning: having judged
+the two close options again, the code let a third option, or doing nothing, win at its first, unchecked estimate. The
+two judged again come down on average (they led partly by luck), so the bot bought less: packs 17.2 and 16.9 a run
+against the champion's 18.0, money at the end $58 and $60 against $55, where 6x everywhere bought more (18.7 packs).
+Fixed on 7 November: the choice is between the two options judged again, alone. `make teacher-close-2` screens the
+fixed option the same way (about 2.75 hours).
+
+```
+cd /mnt/h/balatro-meta && make teacher-close-2
+```
+
 Also 6 November, `make teacher-stakes` with the champion (2,000 seeds a stake): Red 61.4% (the 3 November bot: 52.0),
 Green 29.0% (19.7), Black 16.1% (11.4), Blue 11.4% (8.8), Purple 2.9% (1.9), Orange 1.5% (0.9), Gold 0.15% (0.2).
 

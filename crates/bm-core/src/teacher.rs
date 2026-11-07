@@ -2376,6 +2376,10 @@ fn choose_against(
     for (first, _, judge) in &options {
         judged.push((judge_of(judge), Some(*first)));
     }
+    let mut best = judged
+        .iter()
+        .copied()
+        .fold(judged[0], |b, j| if j.0 > b.0 { j } else { b });
     let close_x = param("close-x").unwrap_or(1.0);
     if close_x > 1.0 && judged.len() > 1 {
         let mut order: Vec<usize> = (0..judged.len()).collect();
@@ -2398,12 +2402,17 @@ fn choose_against(
                     };
                 }
             });
+            // The choice is between these two alone. Judged again, both come down on average (they led partly
+            // by luck), and an option left at its first estimate would win on luck that was never checked:
+            // the first screen of this option (6 November) let it, and the bot bought less and lost 1.75
+            // points.
+            best = if judged[next].0 > judged[top].0 {
+                judged[next]
+            } else {
+                judged[top]
+            };
         }
     }
-    let best = judged
-        .iter()
-        .copied()
-        .fold(judged[0], |b, j| if j.0 > b.0 { j } else { b });
     explore(run, vs, &judged, best).1
 }
 

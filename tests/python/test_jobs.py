@@ -1147,6 +1147,9 @@ def test_the_late_trials_share_the_doubt_trials_control(tmp_path):
     c2 = close["w2.5-close-x=2"]
     assert c2[c2.index("--teacher-options") + 1] == "precise,late-x=3,late-from=5,close-x=2"
     assert close["compare-w2.5-close-x=3"][1] == control and "teacher-close" in jobs.JOBS
+    again = {n: a for n, a, *_ in jobs.close_2_steps(tmp_path)}["w2.5-close-x=2,close-gap=0.1"]
+    assert again[again.index("--teacher-options") + 1] == "precise,late-x=3,late-from=5,close-x=2,close-gap=0.1"
+    assert "teacher-close-2" in jobs.JOBS
 
 
 def test_the_fork_table_reads_every_fork_file_there_is(tmp_path):

@@ -1089,6 +1089,19 @@ def close_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     return champion_trials(root, CLOSE_TRIALS, runs, control_runs=BIG_RUNS)
 
 
+# make teacher-close-2: the same screen of the option as fixed on 7 November. The first screen's reports (CLOSE_TRIALS,
+# 6 November: close-x=2 75.3%, close-x=3 74.6% against 77.05%) are of a version that, having judged the two close
+# options again, let a third option or doing nothing win at its first, unchecked estimate; the two judged again come
+# down on average, so the bot bought less (packs 17.2 and 16.9 a run against the champion's 18.0; money at the end
+# 58 and 60 against 55) and lost 1.75 and 2.45 points. Fixed, the choice is between the two alone. The trials carry
+# "close-gap" spelt out so that their reports are new files.
+CLOSE_TRIALS_2 = (("2.5", "close-x=2,close-gap=0.1"), ("2.5", "close-x=3,close-gap=0.1"))
+
+
+def close_2_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
+    return champion_trials(root, CLOSE_TRIALS_2, runs, control_runs=BIG_RUNS)
+
+
 # make skips-stakes: the same option where a skip should be worth more. At White it came out level (step 30: 76.85%
 # against 77.05%, 0.34 skips a run), where every blind pays and the blinds are small. From Red Stake up the Small
 # Blind pays nothing, so skipping it costs only its shop; at Green and Purple the blinds grow faster, so what a tag
@@ -1623,6 +1636,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-budget-6": budget_6_steps(),
     "teacher-budget-confirm-6": budget_confirm_6_steps(),
     "teacher-close": close_steps(),
+    "teacher-close-2": close_2_steps(),
     "diagnose": diagnose_steps(),
     # An hour of forks and the networks that learn from them: the judge test today (results/forks/forks-quick.json,
     # then results/value/value-forks-quick.json's measured.forks).
