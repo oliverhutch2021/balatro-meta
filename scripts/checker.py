@@ -43,7 +43,7 @@ from watch import (
 
 CHECK_PORT = 12350
 RECORD_PORT = 12351  # make record-me's game (scripts/record_me.py): the checks wait while it is up
-MOD_VERSION = "0.6.0"
+MOD_VERSION = "0.7.0"
 # Overnight: Balatro's memory grows over a long session and can run out, so the hidden game gets a fresh
 # start every hour, or sooner when it gets big, and at once when it stops answering.
 RESTART_EVERY = 3600  # seconds
@@ -481,8 +481,13 @@ class Checker:
         out = WATCH / "mismatches"
         out.mkdir(parents=True, exist_ok=True)
         f = out / f"{game.seed}-move{step}.json"
+        # The game's numbers to the last bit, from the companion mod (0.7 on): the hand's chips and mult, the
+        # round's total and each joker's X mult, to find where a score one chip apart first parts from the engine.
+        st = self.files.read_state() or {}
+        exact = {k.removeprefix("exact_"): v for k, v in st.items() if k.startswith("exact_")}
         f.write_text(json.dumps({"seed": game.seed, "move": step, "what": what, "differences": diff,
-                                 "stake": game.stake, "moves": game.moves, "engine": engine_view(game), "game": gs},
+                                 "stake": game.stake, "moves": game.moves, "engine": engine_view(game), "game": gs,
+                                 "exact": exact},
                                 indent=1, default=str))
         shown = str(f.relative_to(ROOT) if f.is_relative_to(ROOT) else f)
         self.add("differences")

@@ -7,12 +7,15 @@
 --     compare only once the move is over;
 --   * in the menu, makes sure BalatroBot can start the next run (see ensure_viewed_back);
 --   * if asked, blocks mouse and keyboard (with a small badge), sets the game speed and mutes the sound.
+--   * reports the last hand's chips and mult and each joker's X mult to 17 significant digits (every bit of
+--     the game's numbers), so a score that differs from the engine's by a chip can be traced to the step
+--     where the two first part.
 -- It changes nothing in the rules. It talks through files next to the game's saves (love.filesystem):
 -- balatro_meta/<BalatroBot port>/control.txt in, state.txt out, so a Balatro on another port (one you
 -- play yourself) is never affected. Without a fresh control file it does nothing but report its state
 -- once a second.
 
-local VERSION = "0.6.0"
+local VERSION = "0.7.0"
 local PORT = tonumber(os.getenv("BALATROBOT_PORT")) or 12346
 local DIR = "balatro_meta/" .. PORT
 local CONTROL = DIR .. "/control.txt"
@@ -175,6 +178,29 @@ local function note_end(seed, won, ante, round)
     end
 end
 
+-- The last hand's numbers exactly (17 significant digits round-trip a double): the hand's final chips and mult
+-- (the game keeps them in the globals hand_chips and mult after scoring), the round's total, and each joker's
+-- X mult left to right ("" outside a run).
+local function exact()
+    local function f(x)
+        return type(x) == "number" and string.format("%.17g", x) or ""
+    end
+    local xs = {}
+    if G and G.jokers and type(G.jokers.cards) == "table" then
+        for i, c in ipairs(G.jokers.cards) do
+            local key = c.config and c.config.center and c.config.center.key or "?"
+            xs[#xs + 1] = key .. ":" .. f(c.ability and c.ability.x_mult)
+        end
+    end
+    local g = G and G.GAME
+    return {
+        "exact_chips=" .. f(rawget(_G, "hand_chips")),
+        "exact_mult=" .. f(rawget(_G, "mult")),
+        "exact_round=" .. f(type(g) == "table" and g.chips or nil),
+        "exact_xmult=" .. table.concat(xs, ","),
+    }
+end
+
 local function write_state()
     local seed, won, ante, round = run_info()
     note_end(seed, won, ante, round)
@@ -195,6 +221,12 @@ local function write_state()
         "round=" .. round,
         "last_end=" .. (M.last_end or ""),
     }
+    local ok, extra = pcall(exact)
+    if ok then
+        for _, line in ipairs(extra) do
+            lines[#lines + 1] = line
+        end
+    end
     if M.error then
         lines[#lines + 1] = "error=" .. tostring(M.error):gsub("[\r\n]", " ")
     end

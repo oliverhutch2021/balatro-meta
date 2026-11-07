@@ -1161,6 +1161,17 @@ except that a debuffed Wild card loses its wildness for flushes.
 
 ## UNSURE
 
+- **Obelisk and the one-chip scores (7 November).** 21 of the 23 open differences of one chip hold Obelisk. The
+  game's own code, read again, does what this file says: the X mult grows by repeated addition of `extra`, the
+  joker's X mult multiplies the running mult with nothing in between, and the score is floored once at the end.
+  Under plain double arithmetic that is exactly what the engine computes, yet the game's totals fit neither: in
+  the 15 cases where the game is a chip higher, its Obelisk must hold 2.0 or more where five additions give
+  1.9999999999999998; in the 4 where it is a chip lower, the hand's product must fall just under the whole number
+  that the engine's doubles reach exactly. So something outside these lines differs (how the game's numbers are
+  stored or carried between steps). The companion mod (0.7 on) reports the last hand's chips, mult and every
+  joker's X mult to 17 digits, and the checks save them with each difference, so the next one shows the step
+  where the two part.
+
 - **Numbering.** The brief had no Obelisk and called Midas Mask number 75. The game's
   data has Obelisk at order 75 and Midas Mask at 76. Both are covered here. Check
   that the companion note for the later jokers starts at order 77 (Luchador), so
