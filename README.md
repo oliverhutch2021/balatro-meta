@@ -38,7 +38,10 @@ discard). The bot plays White Stake with the Red Deck, the game's first table, w
 1. **Search at the decisive moments is worth more than a better judge.** Three times the usual samples from
    ante 5 on took the bot from 66.4% to 70.7% on the same 8,000 seeds (p = 2 × 10⁻²⁰); four times the samples in
    boss blinds added another point, to 71.8%; three times the samples at every ante added 3.8 more, to 75.6%
-   (p = 4 × 10⁻¹¹), and the exam agreed. The price is a bot about seven times slower per run than before the budget rises.
+   (p = 4 × 10⁻¹¹), and the exam agreed; six times everywhere added about 2 more on a 2,000-seed screen (p = 0.053).
+   The price is a bot about seven times slower per run than before the budget rises, which is why the budget is
+   now being made adaptive (more samples only where a decision's best options are close). The gain carried to
+   every stake without a rule written for them: half again as many wins at Red, Green and Black.
 2. **Its losses are near misses.** Of 1,160 lost runs, 44% scored 80% or more of the target they fell to and
    another 43% between half and 80%; only 13% were hopeless. 82% die at a boss, 70% at antes 5 to 8, and the ante 8
    finisher Violet Vessel (six times the base target) alone takes 12%.
@@ -59,7 +62,12 @@ discard). The bot plays White Stake with the Red Deck, the game's first table, w
    how each position's run ended gained 1.75 points at round 4, 0.4 at round 5 and little after round 6, with or
    without exploration. More say for the networks helped up to a point (66.1% at weight 4) and collapsed past it
    (53.8% at weight 16): picking the best of many options with a judge that errs picks its errors.
-7. **A human player's rules mostly hurt as rules.** Of seven lessons from a player who wins three runs in four,
+7. **Skipping blinds for tags is a wash at White Stake.** Made a move judged by value like any other (the skip
+   and the blind each played out on fair copies to where the tag has acted), the bot skipped 0.34 blinds a run,
+   the ones a player takes (an Investment tag at ante 1, edition jokers, Economy when rich), and came out level:
+   76.85% against 77.05% on 2,000 seeds. A blind and its shop are worth about what a tag is, at the stake where
+   every blind pays; the harder stakes, where the Small Blind pays nothing, are untested.
+8. **A human player's rules mostly hurt as rules.** Of seven lessons from a player who wins three runs in four,
    only "focus on one hand" held up (+1.6 points on 8,000 seeds). Extra points for x mult jokers or a thin deck
    made the bot worse (−1 to −2.5): they skew everything else it weighs.
 
@@ -70,9 +78,9 @@ discard). The bot plays White Stake with the Red Deck, the game's first table, w
 | White Stake, Red Deck | champion of 6 November (3× samples everywhere, 4× in boss blinds) | 8,000 exam seeds, kept apart and never used to choose | **75.6%** |
 | White Stake, Red Deck | champion of 6 November | 8,000 tuning seeds | 75.6% |
 | White Stake, Red Deck | champion of 3 November | the exam seeds | 66.5% |
-| Red Stake | champion of 3 November | 2,000 | 52.0% |
-| Green · Black · Blue | champion of 3 November | 2,000 each | 19.7% · 11.4% · 8.8% |
-| Purple · Orange · Gold | champion of 3 November | 2,000 each | 1.9% · 0.9% · 0.2% |
+| Red Stake | champion of 6 November (3 November's in brackets) | 2,000 | 61.4% (52.0%) |
+| Green · Black · Blue | champion of 6 November | 2,000 each | 29.0% · 16.1% · 11.4% (19.7 · 11.4 · 8.8) |
+| Purple · Orange · Gold | champion of 6 November | 2,000 each | 2.9% · 1.5% · 0.15% (1.9 · 0.9 · 0.2) |
 
 The tuning seeds are where ideas are compared and the winners kept, so they can flatter the bot; the exam seeds
 only ever measure the best bot there is, and are the headline. So far the two have agreed: 66.5% on both for the
@@ -85,10 +93,10 @@ champion of 3 November, 75.6% on both for the champion of 6 November (the 2,000-
 - The engine is checked against the real game through [BalatroBot](https://github.com/coder/balatrobot): while
   the viewer runs, a hidden copy of the game replays the bot's runs move by move and every number on screen is
   compared with the engine's. A difference stops that run's check and is saved with both states. Since 29 October
-  the checks have saved 60 differences; replayed on today's engine (`make recheck`), 25 are fixed and 35 are open:
-  17 scores one chip apart (a rounding difference, under study), 2 larger scoring gaps, 9 card-debuff flags under
-  bosses, 3 hands dealt after an Arcana pack, 2 cash-outs a dollar or two apart, 2 rounds the engine ends that the
-  game doesn't. From 5 November the checks keep a tally of the runs and moves they compared
+  the checks have saved 78 differences; replayed on today's engine (`make recheck`, 7 November), 25 are fixed and
+  53 are open: 23 scores one chip apart (a rounding difference, the next fidelity job), 4 larger scoring gaps, 14
+  card markings under bosses (debuff flags and enhancements), 6 hands dealt after a pack, 4 cash-outs a dollar or
+  two apart, 2 rounds the engine ends that the game doesn't. From 5 November the checks keep a tally of the runs and moves they compared
   (`results/checks.json`); before that, no count was kept, so there is no honest "N moves, 0 mismatches" to quote.
 - Two versions of the bot are always compared on the same seeds, run by run, with a paired test; a version's own
   win rate on 8,000 seeds is known to about ±1 point.

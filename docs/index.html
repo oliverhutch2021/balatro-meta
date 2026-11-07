@@ -6,7 +6,7 @@
 <meta name="description" content="Balatro Meta: a fan project searching for the strategies that win Balatro most often, with a faithful simulator and a bot that plays fairly and learns from its own runs.">
 <title>Balatro Meta</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Silkscreen&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&family=Press+Start+2P&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Silkscreen&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 /* Layout: one arcade-table world. A swirling, pixelated felt shader fills the screen behind chunky slate panels
    (a card table under a CRT); score boxes, cards and charts sit in a single centred column. Deliberately
@@ -34,7 +34,7 @@
   --label: "Silkscreen", "Pixelify Sans", ui-monospace, monospace;
   --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
-  --digits: "Press Start 2P", "Pixelify Sans", ui-monospace, monospace;
+  --digits: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; }
 html { background: var(--felt-deep); }
@@ -69,8 +69,8 @@ header .wrap { padding-block: 26px 10px; display: grid; gap: 22px; }
 .hero .lede { color: var(--muted); font-size: 19px; max-width: 56ch; }
 .score { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; }
 .box { border-radius: 10px; padding: 10px 16px 8px; display: grid; gap: 2px; min-width: 0; cursor: pointer; transition: transform 120ms ease; user-select: none; }
-.box .v { font-family: var(--digits); font-weight: 400; font-size: clamp(24px, 4.4vw, 40px); line-height: 1.2; text-shadow: 0 3px 0 rgba(0,0,0,0.35); }
-.dg { font-family: var(--digits); font-weight: 400; font-size: 0.68em; letter-spacing: -0.04em; vertical-align: -0.06em; }
+.box .v { font-family: var(--digits); font-weight: 700; font-size: clamp(26px, 4.6vw, 42px); line-height: 1.15; text-shadow: 0 3px 0 rgba(0,0,0,0.35); }
+.dg { font-family: var(--digits); font-weight: 600; font-size: 0.92em; letter-spacing: -0.02em; }
 .box .k { font-family: var(--label); font-size: 11px; opacity: 0.9; }
 .box.chips { background: var(--chips); box-shadow: 0 5px 0 var(--chips-dark); color: #fff; }
 .box.mult { background: var(--mult); box-shadow: 0 5px 0 var(--mult-dark); color: #fff; }
@@ -110,11 +110,10 @@ td.r, th.r { text-align: right; }
 .card blockquote { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--card-quote); font-style: italic; font-size: 15px; line-height: 1.45; }
 .card p { font-size: 15px; line-height: 1.5; }
 .jokers { display: flex; flex-wrap: wrap; gap: 14px; perspective: 700px; }
-.joker { width: 128px; aspect-ratio: 5 / 7; background: var(--card); color: var(--card-ink); border-radius: 10px; padding: 8px; display: grid; grid-template-rows: auto 1fr auto; gap: 4px; text-align: center;
+.joker { width: 128px; background: var(--card); color: var(--card-ink); border-radius: 10px; padding: 8px; display: grid; grid-template-rows: auto auto 1fr; gap: 6px; text-align: center;
   box-shadow: 0 5px 0 rgba(0,0,0,0.5); transition: transform 160ms ease; max-width: 100%; }
 .joker .nm { font-family: var(--display); font-weight: 700; font-size: 14px; line-height: 1.1; }
-.joker .em { border-radius: 6px; display: grid; place-items: center; }
-.joker .em svg { width: 72px; height: 72px; max-width: 80%; filter: drop-shadow(0 3px 0 rgba(0,0,0,0.3)); }
+.joker .em { height: 10px; border-radius: 5px; }
 .joker .fx { font-family: var(--label); font-size: 9px; line-height: 1.25; color: var(--card-muted); }
 @media (prefers-reduced-motion: no-preference) {
   .float { animation: bob 4.5s ease-in-out infinite; }
@@ -149,7 +148,7 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
   <div class="wrap">
     <div class="top">
       <span class="brand">Balatro Meta</span>
-      <span class="chipbar"><span class="tag">White Stake</span><span class="tag">Red Deck</span><span class="tag">As of 6 Nov 2026</span></span>
+      <span class="chipbar"><span class="tag">White Stake</span><span class="tag">Red Deck</span><span class="tag">As of 7 Nov 2026</span></span>
     </div>
     <div class="panel hero">
       <h1>A bot that learns to win Balatro</h1>
@@ -215,11 +214,11 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
       </div>
       <span class="label">Final build · Flush at level 6 · $123 left</span>
       <div class="jokers" aria-label="Final jokers">
-        <div class="joker float tilt"><span class="nm">Ancient Joker</span><span class="em" data-art="ancient" style="background:#3c6fb4"></span><span class="fx">Pays for one suit, changing each round</span></div>
-        <div class="joker float tilt"><span class="nm">Brainstorm</span><span class="em" data-art="brainstorm" style="background:#7a52b8"></span><span class="fx">Copies the leftmost joker</span></div>
-        <div class="joker float tilt"><span class="nm">Hanging Chad</span><span class="em" data-art="chad" style="background:#c9822e"></span><span class="fx">Retriggers the first card scored</span></div>
-        <div class="joker float tilt"><span class="nm">Glass Joker</span><span class="em" data-art="glass" style="background:#3a9c8c"></span><span class="fx">Grows as Glass cards break</span></div>
-        <div class="joker float tilt"><span class="nm">Seltzer</span><span class="em" data-art="seltzer" style="background:#c44a4a"></span><span class="fx">Retriggers every card for a while</span></div>
+        <div class="joker float tilt"><span class="nm">Ancient Joker</span><span class="em" style="background:#3c6fb4"></span><span class="fx">Pays for one suit, changing each round</span></div>
+        <div class="joker float tilt"><span class="nm">Brainstorm</span><span class="em" style="background:#7a52b8"></span><span class="fx">Copies the leftmost joker</span></div>
+        <div class="joker float tilt"><span class="nm">Hanging Chad</span><span class="em" style="background:#c9822e"></span><span class="fx">Retriggers the first card scored</span></div>
+        <div class="joker float tilt"><span class="nm">Glass Joker</span><span class="em" style="background:#3a9c8c"></span><span class="fx">Grows as Glass cards break</span></div>
+        <div class="joker float tilt"><span class="nm">Seltzer</span><span class="em" style="background:#c44a4a"></span><span class="fx">Retriggers every card for a while</span></div>
       </div>
     </div>
   </section>
@@ -232,7 +231,7 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
         <div class="three">
           <div>
             <h3>The engine</h3>
-            <p>Our own copy of Balatro 1.0.1o in Rust: all 150 jokers, 52 consumables, 32 vouchers, 24 tags and 28 boss blinds. The same seed deals the same cards, shops and packs as the real game. While the viewer runs, a hidden copy of the real game replays the bot's runs move by move and every number is compared; a difference is saved with both states. Sixty have been saved since 29 October; replayed on today's engine, 25 are fixed and 35 open, most of them scores one chip apart (a rounding difference under study), the rest card debuffs under bosses, hands dealt after a pack and a few larger scoring gaps. Fidelity is a standing job, not a finished one.</p>
+            <p>Our own copy of Balatro 1.0.1o in Rust: all 150 jokers, 52 consumables, 32 vouchers, 24 tags and 28 boss blinds. The same seed deals the same cards, shops and packs as the real game.</p>
           </div>
           <div>
             <h3>Fair play</h3>
@@ -243,6 +242,8 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
             <p>Every move, from a shop purchase to the cards in a hand, is tried on copies and judged by one number: the chance of beating each blind ahead, the run's scoring power later, and money as buying power. A network trained on its own runs adds its estimate of the chance of winning.</p>
           </div>
         </div>
+        <h3>How we know the game is right</h3>
+        <p class="col">While the viewer runs, a hidden copy of the real game replays the bot's runs move by move and every number on screen is compared with the engine's; a difference stops that run's check and is saved with both states. 78 have been saved since 29 October. Replayed on today's engine, 25 are fixed and 53 open: 23 scores one chip apart (a rounding difference, the next fidelity job), 4 larger scoring gaps, 14 card markings under bosses (debuffs and enhancements), 6 hands dealt after a pack, 4 cash-outs a dollar or two apart and 2 rounds the engine ends that the game doesn't. Fidelity is a standing job, not a finished one.</p>
       </div>
     </div>
   </section>
@@ -363,48 +364,17 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
 
   <section id="found">
     <div class="wrap">
-      <span class="label">What the two experiments found</span>
+      <span class="label">What the experiments found</span>
       <h2>More search, everywhere: <span class="dg">+9.1</span> points</h2>
       <div class="panel">
-        <div class="three">
-          <div>
-            <h3>Forks: are its shop choices wrong?</h3>
-            <p>At 6,750 shop and pack decisions, each of the bot's best options and leaving were played out to the end of the run on fair copies that shared the same hidden futures. Its own choice, its networks' ranking and picking at random all came within a point of win rate of each other, and a network trained on the forks played worse than one trained without them. Choosing between its top options is not where the losses are.</p>
-          </div>
-          <div>
-            <h3>Budget: does it think hard enough?</h3>
-            <p>The same bot with three times the samples from ante 6 won 69.4% against 66.4% on the same 8,000 seeds; from ante 5, 70.7% (p = 2 × 10⁻²⁰); with four times the samples in boss blinds as well, 71.8%; with three times the samples at every ante, 75.6% (+3.8 more, p = 4 × 10⁻¹¹), and 75.6% on the exam too. The biggest gain of the project, from the judgement it already had, applied harder everywhere.</p>
-          </div>
-          <div>
-            <h3>What it costs</h3>
-            <p>About four times the time per run: 8,000 runs take three and a half hours on sixteen cores instead of forty minutes. Fine for a bot, slower for trials, which now screen on 2,000 seeds and confirm on 8,000. Moving the 3× budget from ante 5 to ante 1 cost half as much again: five hours for 8,000 runs. The open question is how far it scales: six times instead of three, and whether a smarter budget (more where the value is uncertain) buys the same for less.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section id="teacher">
-    <div class="wrap">
-      <span class="label">The human teacher</span>
-      <h2>A human player's lessons, tested</h2>
-      <div class="panel">
-        <p class="col lead">The project's human player wins about three runs in four at White Stake and records those runs move by move, so the bot's choice can be set against the player's at every decision. The player's losses come early (antes 1 to 3); the bot's come late. Each lesson below became an option and was tested on the same 2,000 seeds with and without it.</p>
-        <div class="tbl">
-          <table>
-            <thead><tr><th>The lesson</th><th>As the bot tried it</th><th class="r">Change</th></tr></thead>
-            <tbody>
-              <tr><td>Focus on one hand</td><td>Always take the most played hand's Planet, with pack picks judged against skipping (8,000 seeds; now the bot's own play)</td><td class="r num up">+1.64</td></tr>
-              <tr><td>Overstock is one of the strongest vouchers</td><td>Value the extra shop slot more</td><td class="r num up">+0.85</td></tr>
-              <tr><td>Five of a Kind from copied cards</td><td>Look for five of a rank</td><td class="r num up">+0.70</td></tr>
-              <tr><td>Card Sharp should be a free win</td><td>Play a cheap hand first for the ×3</td><td class="r num">+0.15</td></tr>
-              <tr><td>Clip the deck hard</td><td>Count each card fewer</td><td class="r num down">−1.00</td></tr>
-              <tr><td>Fix the deck with Tarots</td><td>Price Tarots by what they do to the deck</td><td class="r num down">−1.30</td></tr>
-              <tr><td>X mult is needed by ante 6</td><td>Count held x mult more as the run goes on</td><td class="r num down">−2.50</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="col">Focus on one hand, tested with fairer pack skipping on 8,000 seeds, gained 1.64 points (p = 0.001) and is now how the bot plays. None of the other gains is clear on 2,000 seeds, and the rules added as extra points (x mult, a thinner deck) made the bot worse: they skew everything else it weighs. The lessons that help will have to be found by the bot itself, which is what exploration is for. The player's runs show what it is looking for: on 1 November one took Straight from level 1 to 19 in one run and Flush to level 33 in another, where the bot's main hand ends its wins at a median level 5.</p>
+        <h3>Forks: are its shop choices wrong?</h3>
+        <p class="col">At 6,750 shop and pack decisions, each of the bot's best options and leaving were played out to the end of the run on fair copies that shared the same hidden futures. Its own choice, its networks' ranking and picking at random all came within a point of win rate of each other, and a network trained on the forks played worse than one trained without them. Choosing between its top options is not where the losses are.</p>
+        <h3>Budget: does it think hard enough?</h3>
+        <p class="col">No. The same bot with three times the samples from ante 6 won 69.4% against 66.4% on the same 8,000 seeds; from ante 5, 70.7% (p = 2 × 10⁻²⁰); with four times the samples in boss blinds as well, 71.8%; with three times the samples at every ante, 75.6% (+3.8 more, p = 4 × 10⁻¹¹), and 75.6% on the exam too. Six times everywhere added about 2 points more on a 2,000-seed screen (79.2% against 77.05%, p = 0.053). The biggest gain of the project came from the judgement it already had, applied harder everywhere, and it carried to every stake: half again as many wins at Red, Green and Black.</p>
+        <h3>What it costs, and the smarter budget</h3>
+        <p class="col">Three times the samples everywhere makes a run about seven times slower than the first teacher's: 8,000 runs take five hours on sixteen cores; six times would double that again. So the budget is being made adaptive: when a decision's two best options are close, those two are judged again with more samples, and every other decision costs nothing extra. Its first screen lost 1.75 points, to a bias (after the two were re-judged, an unchecked third option could win on luck); the fixed version is on the bench now.</p>
+        <h3>Skipping blinds for tags</h3>
+        <p class="col">Made a move judged by value like any other (the skip and the blind each played out on fair copies to where the tag has acted), the bot skipped 0.34 blinds a run, the ones a player takes: an Investment tag at ante 1, edition jokers, Economy when rich. On 2,000 seeds it came out level, 76.85% against 77.05%: at White Stake a blind and its shop are worth about what a tag is. The harder stakes, where the Small Blind pays nothing, are where it should matter, and are next.</p>
       </div>
     </div>
   </section>
@@ -414,23 +384,23 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
       <span class="label">The harder tables</span>
       <h2>Every stake, once</h2>
       <div class="panel">
-        <p class="col lead">Stakes add their rules one by one: Red takes a discard, Green makes the targets grow faster, Black lets jokers be eternal, Blue takes a hand, Purple makes the targets grow faster again, Orange adds perishable jokers, Gold adds rentals. The champion of 3 November, built for White, played 2,000 seeds at each.</p>
+        <p class="col lead">Stakes add their rules one by one: at Red the Small Blind pays nothing, Green makes the targets grow faster, Black lets jokers be eternal, Blue takes a discard, Purple makes the targets grow faster again, Orange adds perishable jokers, Gold adds rentals. The champion of 6 November, built for White, played 2,000 seeds at each; in brackets, the champion of 3 November.</p>
         <div class="tbl col">
           <table>
             <thead><tr><th>Stake</th><th class="r">Won</th><th class="r">Blinds beaten a run</th></tr></thead>
             <tbody>
-              <tr><td>White</td><td class="r num">66.8%</td><td class="r num">21.4</td></tr>
-              <tr><td>Red</td><td class="r num">52.0%</td><td class="r num">19.9</td></tr>
-              <tr><td>Green</td><td class="r num">19.7%</td><td class="r num">16.1</td></tr>
-              <tr><td>Black</td><td class="r num">11.4%</td><td class="r num">15.1</td></tr>
-              <tr><td>Blue</td><td class="r num">8.8%</td><td class="r num">14.4</td></tr>
-              <tr><td>Purple</td><td class="r num">1.9%</td><td class="r num">12.6</td></tr>
-              <tr><td>Orange</td><td class="r num">0.9%</td><td class="r num">11.8</td></tr>
-              <tr><td>Gold</td><td class="r num">0.2%</td><td class="r num">9.4</td></tr>
+              <tr><td>White</td><td class="r num">77.1% <span class="muted">(66.8%)</span></td><td class="r num">22.1</td></tr>
+              <tr><td>Red</td><td class="r num">61.4% <span class="muted">(52.0%)</span></td><td class="r num">20.8</td></tr>
+              <tr><td>Green</td><td class="r num">29.0% <span class="muted">(19.7%)</span></td><td class="r num">17.9</td></tr>
+              <tr><td>Black</td><td class="r num">16.1% <span class="muted">(11.4%)</span></td><td class="r num">16.6</td></tr>
+              <tr><td>Blue</td><td class="r num">11.4% <span class="muted">(8.8%)</span></td><td class="r num">15.3</td></tr>
+              <tr><td>Purple</td><td class="r num">2.9% <span class="muted">(1.9%)</span></td><td class="r num">13.5</td></tr>
+              <tr><td>Orange</td><td class="r num">1.5% <span class="muted">(0.9%)</span></td><td class="r num">12.6</td></tr>
+              <tr><td>Gold</td><td class="r num">0.15% <span class="muted">(0.2%)</span></td><td class="r num">9.8</td></tr>
             </tbody>
           </table>
         </div>
-        <p class="col muted">Networks that learned every stake's runs (two nights, 4 November) played worse than the White champion at every stake but Gold, and a correction trained on where the champion is wrong at each stake predicted far better and played worse: both were a better-calibrated judge the bot then trusted too much. The higher stakes wait for the budget and the forks to settle at White.</p>
+        <p class="col muted">The search budget carried over whole: the 6 November champion wins half again as often as the 3 November one at Red, Green and Black without a single rule written for them. Networks that learned every stake's runs (two nights, 4 November) played worse than the White champion at every stake but Gold, and a correction trained on where the champion is wrong at each stake predicted far better and played worse: both were a better-calibrated judge the bot then trusted too much.</p>
       </div>
     </div>
   </section>
@@ -440,8 +410,8 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
       <span class="label">Next</span>
       <h2>Target: <span class="dg">90%</span> at White Stake</h2>
       <div class="next">
-        <div class="now"><h3>Now</h3><p>Where the search budget stops paying: six times the samples, and a budget that grows only where the value is uncertain. Then the economy of antes 2 and 3, where this page's analysis says runs are won: skipping a blind for its tag as a move judged by value like any other, and the worth of money and joker count early. Each idea is screened on 2,000 seeds and confirmed on 8,000.</p></div>
-        <div><h3>The economy from ante 2</h3><p>The build gap starts with money. The forks move to ante 2 to 4 with a wider set of options than the bot's own (rerolling on, selling to pivot, skipping for a tag), with enough play-outs each to tell them apart.</p></div>
+        <div class="now"><h3>Now</h3><p>The adaptive budget: close calls judged again with more samples, aiming at the 6× result (+2 points) for near the 3× cost. Then skipping for tags at the stakes where the Small Blind pays nothing, and the one-chip rounding difference in the engine's scores. Each idea is screened on 2,000 seeds and confirmed on 8,000.</p></div>
+        <div><h3>The economy from ante 2</h3><p>The build gap starts with money and joker count by ante 3. The worth of money and of an early joker in the value are the next numbers to screen, now that the budget has stopped moving everything else.</p></div>
         <div><h3>A harder table</h3><p>Black Deck at Gold Stake as a second benchmark: one hand fewer each round, and every stake's rules at once.</p></div>
         <div><h3>Then up the stakes</h3><p>Higher stakes and the other decks, once White Stake is solved.</p></div>
       </div>
@@ -482,7 +452,7 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
   }
   const fmt = (n) => n.toLocaleString("en-GB", { maximumFractionDigits: 0 });
   const short = (n) => n >= 1e9 ? (n / 1e9).toFixed(1) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + "k" : String(Math.round(n));
-  const MONO = "JetBrains Mono, monospace", PIX = "Pixelify Sans, monospace", DIG = "'Press Start 2P', monospace";
+  const MONO = "JetBrains Mono, monospace", PIX = "Pixelify Sans, monospace", DIG = "JetBrains Mono, monospace";
 
   const climb = [
     ["Greedy bot", "30 Oct", 1000000, 0.07], ["Rule-based teacher", "30 Oct", 500000, 1.69],
@@ -655,38 +625,6 @@ footer .wrap { padding-block: 40px 40px; font-family: var(--label); font-size: 1
         el("text", { x: px, y: side === "above" ? y - 11 : y + 20, "text-anchor": "middle", "font-family": MONO, "font-size": 10.5, fill: "var(--muted)" }, svg, pt[0]);
         c.addEventListener("mouseenter", () => { const k = svg.getBoundingClientRect().width / W; tip.show(`<b>${row[0]}: ${pt[0]}</b><br>${pt[1]}% won · ${fmt(pt[2])} runs`, x(pt[1]) * k, y * k); });
         c.addEventListener("mouseleave", tip.hide);
-      });
-    });
-  })();
-
-  // The jokers' pictures: our own pixel art, drawn from each joker's name (nothing from the game's sheets).
-  (function () {
-    const ART = {
-      ancient: { pal: { s: "#d8c398", d: "#7a6648", e: "#f0b43c" }, rows: [
-        "....ssss....", "..ssssssss..", ".ssssssssss.", ".ssddssddss.", ".ssdessdess.", ".ssssssssss.",
-        ".sssssddsss.", "..ssdddddss.", "..ssssssss..", "...ssssss...", "....ssss....", "............"] },
-      brainstorm: { pal: { p: "#f2a7c3", q: "#d6789c", y: "#f7d04b" }, rows: [
-        "...pppppp...", "..pqppppqp..", ".ppppqppppp.", ".pqpppppqpp.", ".ppppqpppyp.", ".pqppppyyyp.",
-        ".pppqppyypp.", "..ppppyyppp.", "..pppyyqpp..", "...pyypp....", "....y.......", "............"] },
-      chad: { pal: { w: "#f6f1e3", h: "#2a2a2a", c: "#f6f1e3" }, rows: [
-        ".wwwwwwwww..", ".wwwwwwwwww.", ".wwhwwhwwww.", ".wwwwwwwwww.", ".wwhwwwwhww.", ".wwwwwhwwww.",
-        ".wwwwwwwwww.", ".wwhwwwwwww.", ".wwwwwwwwww.", ".wwwwwwhwww.", ".......cc...", ".......c...."] },
-      glass: { pal: { b: "#bfe6f5", B: "#7fc4e6", k: "#ffffff" }, rows: [
-        "bbbbbbbbbbbb", "bkbbbbbbbbkb", "bbkbbbbbbkbb", "bbbkbbbbkbbb", "bbbbkbbkbbbb", "bbbbbkkbbbbb",
-        "bkkkkkBkkkkb", "bbbbbkkbbbbb", "bbbbkbbkbbbb", "bbbkbbbbkbbb", "bbkbbbbbbkbb", "bkbbbbbbbbkb"] },
-      seltzer: { pal: { g: "#cfe9f5", l: "#e05a5a", o: "#ffffff", t: "#e6d8a8" }, rows: [
-        ".....tt.....", ".....tt.....", "....gggg....", "....gggg....", "...gggggg...", "..ggoggggg..",
-        "..llllllll..", "..llllllll..", "..gggggogg..", "..gogggggg..", "..ggggoggg..", "...gggggg..."] },
-    };
-    document.querySelectorAll(".em[data-art]").forEach((box) => {
-      const art = ART[box.dataset.art];
-      if (!art) return;
-      const svg = el("svg", { viewBox: "0 0 12 12", width: "72", height: "72", "shape-rendering": "crispEdges", "aria-hidden": "true" }, box);
-      art.rows.forEach((row, y) => {
-        for (let x = 0; x < row.length; x++) {
-          const c = art.pal[row[x]];
-          if (c) el("rect", { x, y, width: 1, height: 1, fill: c }, svg);
-        }
       });
     });
   })();
