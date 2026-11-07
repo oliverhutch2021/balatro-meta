@@ -1,42 +1,42 @@
 {
  "job": "teacher-stakes",
- "commit": "c040d9ef953b38c2f9e06980e61c11ec7f7b2900",
- "started": "2026-11-03T23:55:14+00:00",
- "finished": "2026-11-04T00:57:22+00:00",
+ "commit": "8510870dbe7c407161368fc34ac4cacd9bf97c52",
+ "started": "2026-11-06T21:42:01+00:00",
+ "finished": "2026-11-07T03:26:23+00:00",
  "machine": {
   "host": "PC",
   "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
   "cpu_threads": 16,
   "ram_gb": 15.2,
   "load_avg_1_5_15": [
-   16.3,
-   17.2,
-   17.0
+   14.3,
+   16.8,
+   17.1
   ],
   "python": "3.12.3",
   "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
   "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
  },
  "steps": {
-  "build": 1,
-  "stake-8": 149,
-  "stake-7": 303,
-  "stake-6": 327,
-  "stake-5": 399,
-  "stake-4": 479,
-  "stake-3": 540,
-  "stake-2": 697,
-  "stake-1": 832
+  "build": 2,
+  "stake-8": 883,
+  "stake-7": 1729,
+  "stake-6": 1667,
+  "stake-5": 2031,
+  "stake-4": 2570,
+  "stake-3": 3030,
+  "stake-2": 3845,
+  "stake-1": 4903
  },
  "commands": {
   "build": "make --no-print-directory build",
-  "stake-8": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise --runs 2000 --seed 1 --stake 8 --out results/stakes/stake8-2k-f3-precise-rounds8-w2.5.json",
-  "stake-7": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise --runs 2000 --seed 1 --stake 7 --out results/stakes/stake7-2k-f3-precise-rounds8-w2.5.json",
-  "stake-6": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise --runs 2000 --seed 1 --stake 6 --out results/stakes/stake6-2k-f3-precise-rounds8-w2.5.json",
-  "stake-5": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise --runs 2000 --seed 1 --stake 5 --out results/stakes/stake5-2k-f3-precise-rounds8-w2.5.json",
-  "stake-4": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise --runs 2000 --seed 1 --stake 4 --out results/stakes/stake4-2k-f3-precise-rounds8-w2.5.json",
-  "stake-3": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise --runs 2000 --seed 1 --stake 3 --out results/stakes/stake3-2k-f3-precise-rounds8-w2.5.json",
-  "stake-2": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise --runs 2000 --seed 1 --stake 2 --out results/stakes/stake2-2k-f3-precise-rounds8-w2.5.json",
-  "stake-1": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise --runs 2000 --seed 1 --stake 1 --out results/stakes/stake1-2k-f3-precise-rounds8-w2.5.json"
+  "stake-8": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 2000 --seed 1 --stake 8 --out results/stakes/stake8-2k-f3-precise+late-x-3+boss-x-4+late-from-1-rounds8-w2.5.json",
+  "stake-7": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 2000 --seed 1 --stake 7 --out results/stakes/stake7-2k-f3-precise+late-x-3+boss-x-4+late-from-1-rounds8-w2.5.json",
+  "stake-6": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 2000 --seed 1 --stake 6 --out results/stakes/stake6-2k-f3-precise+late-x-3+boss-x-4+late-from-1-rounds8-w2.5.json",
+  "stake-5": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 2000 --seed 1 --stake 5 --out results/stakes/stake5-2k-f3-precise+late-x-3+boss-x-4+late-from-1-rounds8-w2.5.json",
+  "stake-4": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 2000 --seed 1 --stake 4 --out results/stakes/stake4-2k-f3-precise+late-x-3+boss-x-4+late-from-1-rounds8-w2.5.json",
+  "stake-3": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 2000 --seed 1 --stake 3 --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1-rounds8-w2.5.json",
+  "stake-2": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 2000 --seed 1 --stake 2 --out results/stakes/stake2-2k-f3-precise+late-x-3+boss-x-4+late-from-1-rounds8-w2.5.json",
+  "stake-1": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 2000 --seed 1 --stake 1 --out results/stakes/stake1-2k-f3-precise+late-x-3+boss-x-4+late-from-1-rounds8-w2.5.json"
  }
 }
