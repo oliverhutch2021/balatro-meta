@@ -431,7 +431,9 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64
     if DETAIL.load(Ordering::Relaxed) {
         s.detail = Some(detail_row(&run, &s));
     }
-    if let Some(d) = diag {
+    // A replay that went another way (a move refused, the script run out) gets no row: it would be left out of the
+    // diagnosis anyway, and its lost blind needn't be played again with deeper search.
+    if let Some(d) = diag.filter(|_| !s.refused && !s.unfinished) {
         s.diagnosis = Some(d.row(&run, &s, salt));
     }
     s
@@ -1379,6 +1381,8 @@ fn load_replay(dir: &Path) -> (Vec<Replayed>, String, u8) {
 /// Everything counted so far.
 struct Totals {
     runs: u64,
+    /// `--replay`: runs that went another way than recorded, kept out of every other count.
+    left_out: u64,
     wins: u64,
     moves: u64,
     refused: u64,
@@ -1415,6 +1419,7 @@ impl Totals {
     fn new() -> Totals {
         Totals {
             runs: 0,
+            left_out: 0,
             wins: 0,
             moves: 0,
             refused: 0,
@@ -1505,6 +1510,7 @@ impl Totals {
         self.wins += o.wins;
         self.moves += o.moves;
         self.refused += o.refused;
+        self.left_out += o.left_out;
         for (a, b) in self.ante.iter_mut().zip(o.ante) {
             *a += b;
         }
@@ -2000,7 +2006,7 @@ fn main() {
     }
     let details: Mutex<Vec<String>> = Mutex::new(Vec::new());
     // `--replay`: runs that went another way than recorded.
-    let diverged: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    let diverged: Mutex<Vec<(u64, String)>> = Mutex::new(Vec::new());
     // The learned value (`--value-net`), and how much it counts (`--value-weight`).
     let value_net = opt("--value-net");
     if let Some(p) = &value_net {
@@ -2146,7 +2152,7 @@ fn main() {
                                     || s.recorded.as_ref().is_some_and(|rec| rec.at.len() != r.rows)
                                 {
                                     other_way = true;
-                                    diverged.lock().unwrap().push(format!(
+                                    diverged.lock().unwrap().push((i, format!(
                                         "run {i} (seed {}): recorded {} moves, {}; replayed {} moves, {}{}",
                                         r.seed,
                                         r.moves.len(),
@@ -2154,17 +2160,25 @@ fn main() {
                                         s.moves,
                                         if s.won { "won".into() } else { format!("ended at stage {}", s.stage) },
                                         if s.refused { " (a move refused)" } else if s.unfinished { " (not over)" } else { "" }
-                                    ));
+                                    )));
                                 }
                                 s
                             }
                         };
+                        // A run that went another way on today's engine is left out of every count (the totals,
+                        // the samples, the runs table, the diagnosis): what it played is not what the recording
+                        // played. Its letter in run_stages is how the recording ended, so the runs still pair.
+                        if other_way {
+                            if let (Some(st), Some((runs, _, _))) = (&stages, &replay) {
+                                st.lock().unwrap()[i as usize] = b'A' + runs[i as usize].end_stage.min(24) as u8;
+                            }
+                            local.left_out += 1;
+                            continue;
+                        }
                         if let Some(d) = s.detail.take() {
                             details.lock().unwrap().push(d);
                         }
-                        // A run that went another way on today's engine is left out of a diagnosis: its blinds
-                        // are not the ones the recording played.
-                        if let (Some(d), false) = (s.diagnosis.clone(), other_way) {
+                        if let Some(d) = s.diagnosis.clone() {
                             diagnoses.lock().unwrap().push(d);
                         }
                         if let Some(r) = &fork_recorder {
@@ -2357,25 +2371,27 @@ fn main() {
     let t = totals.into_inner().unwrap();
     let el = start.elapsed().as_secs_f64();
     // A replayed run that went another way means the engine no longer plays what was recorded: its positions and
-    // labels would be wrong, so the new recording is left without a manifest (the trainer refuses it). A diagnosis
-    // alone (nothing recorded) leaves those runs out and carries on, unless more than one in a hundred went another
-    // way (then the engine has changed too much for the recording to stand for it).
-    let diverged = diverged.into_inner().unwrap();
-    let went_other_way = diverged.len() as u64;
+    // labels would be wrong, so the new recording is left without a manifest (the trainer refuses it), and a plain
+    // replay (a check that today's engine still plays the recording) fails. A diagnosis alone (`--diagnose`, nothing
+    // recorded) leaves those runs out of every count, names them in the report (`left_out_runs`) and carries on,
+    // unless more than one in a hundred went another way (then the engine has changed too much for the recording to
+    // stand for it).
+    let mut diverged = diverged.into_inner().unwrap();
+    diverged.sort();
     if !diverged.is_empty() {
         eprintln!(
             "{} of {} runs replayed differently from how they were recorded (the engine's rules changed since?):",
             diverged.len(),
-            t.runs
+            t.runs + t.left_out
         );
-        for d in diverged.iter().take(10) {
+        for (_, d) in diverged.iter().take(10) {
             eprintln!("  {d}");
         }
         let recording = recorder.is_some() || fork_recorder.is_some();
-        if recording || diverged.len() as u64 * 100 > t.runs.max(1) {
+        if recording || diagnose.is_none() || t.left_out * 100 > (t.runs + t.left_out).max(1) {
             std::process::exit(1);
         }
-        eprintln!("Those runs are left out of the diagnosis; the rest go on.");
+        eprintln!("Those runs are left out of the report and the diagnosis; the rest go on.");
     }
     if let Some(r) = recorder {
         let mut r = r.into_inner().unwrap();
@@ -2479,6 +2495,14 @@ fn main() {
         stake_net.as_deref().map_or("null".into(), esc),
         learned::stake_mode().map_or("null".into(), |m| esc(m.name())),
     );
+    if replay.is_some() {
+        let ids: Vec<String> = diverged.iter().map(|(i, _)| i.to_string()).collect();
+        tail += &format!(
+            ",\n \"left_out\": {},\n \"left_out_runs\": [{}]",
+            t.left_out,
+            ids.join(", ")
+        );
+    }
     if let Some(st) = stages {
         let st = String::from_utf8(st.into_inner().unwrap()).expect("letters");
         tail += &format!(",\n \"run_stages\": {}", esc(&st));
@@ -2532,10 +2556,11 @@ fn main() {
             t.deep, t.deep_won
         );
     }
-    // A replay's refused moves are those of the runs that went another way (reported and left out above).
+    // A replayed run with a refused move went another way and is left out above, so no counted run may have one
+    // (refused_moves counts runs: each stops at its first).
     assert!(
-        t.refused <= if replay.is_some() { went_other_way } else { 0 },
-        "the bot made a move the engine refused ({} times)",
+        t.refused == 0,
+        "the engine refused a move in {} runs",
         t.refused
     );
 }

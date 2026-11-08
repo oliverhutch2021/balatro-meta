@@ -1171,6 +1171,12 @@ def test_the_late_trials_share_the_doubt_trials_control(tmp_path):
     assert bp[bp.index("--teacher-options") + 1] == "precise,late-x=3,late-from=5,buying-power=0.02"
     assert {"w2.5-money-scale=15", "w2.5-above-cap=0.25", "w2.5-long-run=0.5"} <= set(money)
     assert money["compare-w2.5-long-run=0.5"][1] == control and "teacher-money" in jobs.JOBS
+    long = {n: a for n, a, *_ in jobs.long_steps(tmp_path)}
+    lp = long["w2.5-long-power-x=1.4"]
+    assert lp[lp.index("--teacher-options") + 1] == "precise,late-x=3,late-from=5,long-power-x=1.4"
+    assert lp[lp.index("--value-weight") + 1] == "2.5", "the champion's own weight"
+    assert {"w2.5-long-money-x=1.4", "w2.5-long-rounds=15", "w2.5-long-rounds=24"} <= set(long)
+    assert long["compare-w2.5-long-rounds=24"][1] == control and "teacher-long" in jobs.JOBS
 
 
 def test_the_fork_table_reads_every_fork_file_there_is(tmp_path):

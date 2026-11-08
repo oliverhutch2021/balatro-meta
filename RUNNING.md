@@ -850,18 +850,42 @@ Green 29.0% (19.7), Black 16.1% (11.4), Blue 11.4% (8.8), Purple 2.9% (1.9), Ora
 
 ## Step 32: the money numbers, retuned on the champion (about 7 hours)
 
-`make diagnose-fresh` (7 November): the champion's own 3,000 runs recorded (74.8% won) and diagnosed. 88% of the
+`make diagnose-fresh` (7 November): the champion's own 3,000 runs recorded (75.1% won) and diagnosed; 8 of them
+play another way on today's engine (7 met The Pillar, whose fix came after the recording) and are left out, so
+the diagnosis is of 2,992 runs, 75.0% won (`results/diagnose/champion-summary.json`; `champion.json`'s 74.8% still
+counted those 8 as losses, fixed in code since: a diagnosis now leaves them out of the report too and names them
+in `left_out_runs`). 88% of the
 losses at a boss, 83% at antes 5 to 8; Violet Vessel 18% and The Wall 11% of them, and deeper play beat only 7% and
 14% of those (the build, not the play: deeper play beat 25% of all lost blinds, 41% at The Mouth). At the loss the
 median run held $23 unspent (59% held $20 or more), 60% had no x mult joker, the main hand stood at level 3. Runs
 that never held an x mult joker (42%) won 62%; a main hand ending at level 1 or 2, 52%; no voucher, 48%. The bot
 dies at the big targets with a weak engine and money in its pocket: a valuation problem, how much a dollar held is
 worth against what it buys now. Those numbers were last tuned on 1 November (+6.5 points then, on a bot at 53%).
-`make teacher-money` tries four, each leaning towards spending, on 2,000 seeds against the champion. The cheaper
-budget (`make teacher-budget-parts`) waits: win rate first, the processing later.
+`make teacher-money` tries four on 2,000 seeds against the champion: three lean towards spending, and `long-run=0.5`
+weighs the whole long view more (the power some rounds on and the held money's shopping alike, so it is not a
+spending test). The cheaper budget (`make teacher-budget-parts`) waits: win rate first, the processing later.
+
+So far (8 November): `buying-power=0.02` -4.45 points (p = 0.0001), `money-scale=15` -2.6 (p = 0.016),
+`above-cap=0.25` level (-0.3, p = 0.75). Counting money for less loses, so the $23 held at a loss is not the
+teacher spending too little; the trials worth trying next go the other way (money counted for more), or change
+what the money buys rather than its worth.
 
 ```
 cd /mnt/h/balatro-meta && make teacher-money
+```
+
+## Step 33: the long run, one part at a time (about 7 hours)
+
+The value formula's long run is the run's scoring power some rounds on, its growth, and what the held money will buy
+in the shops still to come, all under one weight (`long-run`, 0.35), so `long-run=0.5` moved them all at once. Two
+new teacher options scale its parts apart: `long-power-x` (the power and growth) and `long-money-x` (the held
+money), both 1 as usual. `make teacher-long` tries each at 1.4 (about `long-run=0.5` on that part alone), and how far
+the long run looks: `long-rounds` is 9 (three antes), so before ante 6 it never sees the eighth ante's boss, where
+most runs are lost; `long-rounds=15` and `=24` (the rest of the run). 2,000 seeds each against the champion, at its
+own weight. Run it after `make teacher-money` has finished.
+
+```
+cd /mnt/h/balatro-meta && make teacher-long
 ```
 
 ## Later steps

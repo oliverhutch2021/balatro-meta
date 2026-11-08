@@ -547,6 +547,36 @@ def test_the_diagnosis_rows_say_where_each_run_ended_and_whether_deeper_play_bea
         assert "Where the losses are" in text and "Could better play" in text
 
 
+def test_a_run_that_replays_another_way_is_left_out_of_a_diagnosis_and_fails_a_plain_replay(recording, tmp_path):
+    """One run of 300 said to have ended elsewhere: a diagnosis leaves it out of every count and names it; a plain
+    replay (a check that the engine still plays the recording) fails."""
+    import re
+    bent = tmp_path / "bent"
+    shutil.copytree(recording, bent)
+    first = min(bent.glob("chunk-*-runs.json"))
+    text = first.read_text()
+    line = next(ln for ln in text.splitlines() if ln.lstrip().startswith('{"run": 0,'))
+    stage = int(re.search(r'"end_stage": (\d+)', line).group(1))
+    other = 0 if stage else 1
+    won = "true" if other == 24 else "false"
+    new = re.sub(r'"won": \w+', f'"won": {won}', re.sub(r'"end_stage": \d+', f'"end_stage": {other}', line))
+    first.write_text(text.replace(line, new))
+    report = tmp_path / "diag.json"
+    baseline("--bot", "teacher", "--teacher-options", "light", "--replay", str(bent), "--diagnose",
+             str(tmp_path / "diag.csv"), "--deep-share", "0",
+             "--threads", "2", "--out", str(report))
+    r = json.loads(report.read_text())
+    assert r["runs"] == 299 and r["left_out"] == 1 and r["left_out_runs"] == [0] and r["refused_moves"] == 0
+    assert sum(r["ante_hist"]) == 299, "the run left out is in no count"
+    assert r["run_stages"][0] == chr(ord("A") + other) and len(r["run_stages"]) == 300, "the recording's ending"
+    rows = (tmp_path / "diag.csv").read_text().splitlines()[1:]
+    assert len(rows) == 299
+    plain = subprocess.run(["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "baseline", "--",
+                            "--replay", str(bent), "--threads", "2", "--out", str(tmp_path / "plain.json")],
+                           cwd=ROOT, capture_output=True, text=True, check=False, timeout=900)
+    assert plain.returncode == 1 and "replayed differently" in plain.stderr
+
+
 def test_a_fork_recording_still_being_made_reads_the_chunks_its_manifest_counts(forked, tmp_path):
     partial = tmp_path / "partial"
     shutil.copytree(forked / "forks", partial)

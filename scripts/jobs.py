@@ -1141,14 +1141,14 @@ def skips_stakes_steps(root: Path = ROOT, stakes: tuple[int, ...] = SKIP_STAKES,
 CONTROL_AGAIN = False
 
 
-def champion_trials(root: Path, trials: tuple[tuple[str, str], ...], runs: int,
+def champion_trials(root: Path, trials: tuple[tuple[str | None, str], ...], runs: int,
                     control_runs: int | None = None) -> list[tuple]:
     """The teacher that won most of the first 8,000 usual seeds (best_8k), at each (weight, option) of `trials` on
     the first `runs` seeds, each set run by run against the champion's own runs (its report; or, with CONTROL_AGAIN
     or an "again" report there, the champion played again on today's code on `control_runs` seeds, once). The
     comparison pairs the first seeds of both, so a 2,000-seed screen compares against the 8,000-seed champion. A
     trial's `name=value` replaces the champion's own setting of that name, so "late-x=6" on a champion with late-x=3
-    plays at 6."""
+    plays at 6. A weight of None is the champion's own, so the trial changes the option alone."""
     steps: list[tuple] = [("build", [*MAKE, "build"])]
     best = best_8k_report(root)
     if best is None:
@@ -1178,6 +1178,7 @@ def champion_trials(root: Path, trials: tuple[tuple[str, str], ...], runs: int,
         steps.append(("champion", [*BASELINE, "--bot", "teacher", *with_(w0, opts), "--runs", str(control_runs),
                                    "--seed", "1", "--out", control]))
     for w, extra in trials:
+        w = w or w0
         names = {e.split("=")[0] for e in extra.split(",") if "=" in e}
         kept = [e for e in opts.split(",") if e and e.split("=")[0] not in names]
         o = ",".join([*kept, extra])
@@ -1288,21 +1289,40 @@ def budget_parts_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple
     return champion_trials(root, PARTS_TRIALS, runs, control_runs=BIG_RUNS)
 
 
-# make teacher-money: the money numbers of the value formula, retuned on the champion. The diagnosis of 7 November
-# (the champion's own 3,000 runs, 75.0%): 88% of the losses at a boss, 83% at antes 5 to 8, Violet Vessel 18% and
-# The Wall 11%, and deeper play beat only 7% and 14% of those (the build, not the play). At the loss the median run
-# held $23 unspent (59% held $20 or more), 60% had no x mult joker and the main hand stood at level 3. The numbers
-# that weigh a dollar held against what it buys now were last tuned on 1 November, on a bot that won 53%. Each trial
-# leans towards spending: "buying-power" (0.03: the scoring power a held dollar stands for), "money-scale" (25: the
-# money at which a further dollar is worth half), "above-cap" (0.5: a dollar beyond the interest cap) and
-# "long-run" (0.35: the weight of the run's power some rounds on, where scaling jokers and levels pay). 2,000 seeds
-# each against the champion.
-MONEY_TRIALS = (("2.5", "buying-power=0.02"), ("2.5", "money-scale=15"), ("2.5", "above-cap=0.25"),
-                ("2.5", "long-run=0.5"))
+# make teacher-money: the money numbers of the value formula, retuned on the champion. The diagnosis of 7 November (the
+# champion's own runs, the 2,992 that still replay: 75.0%): 88% of the losses at a boss, 83% at antes 5 to 8, Violet
+# Vessel 18% and The Wall 11%, and deeper play beat only 7% and 14% of those (the build, not the play). At the loss the
+# median run held $23 unspent (59% held $20 or more), 60% had no x mult joker and the main hand stood at level 3. The
+# numbers that weigh a dollar held against what it buys now were last tuned on 1 November, on a bot that won 53%. The
+# first three lean towards spending: "buying-power" (0.03: the scoring power a held dollar stands for), "money-scale"
+# (25: the money at which a further dollar is worth half) and "above-cap" (0.5: a dollar beyond the interest cap).
+# "long-run" (0.35) does not: it weighs the whole long run (value::breakdown_with: the power some rounds on, its growth,
+# and the held money's shopping in the shops still to come), so 0.5 counts held money 43% more along with the future
+# power, and tests the long view as a whole, not spending. 2,000 seeds each against the champion, at the champion's own
+# weight (None). 8 November: buying-power=0.02 lost 4.45 points (p = 0.0001), money-scale=15 lost 2.6 (p = 0.016),
+# above-cap=0.25 was level (-0.3, p = 0.75): money counted for less loses, so the held $23 at a loss is not the teacher
+# spending too little.
+MONEY_TRIALS = ((None, "buying-power=0.02"), (None, "money-scale=15"), (None, "above-cap=0.25"),
+                (None, "long-run=0.5"))
 
 
 def money_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     return champion_trials(root, MONEY_TRIALS, runs, control_runs=BIG_RUNS)
+
+
+# make teacher-long: the long run (value::breakdown_with), one part at a time. "long-run" weighs the power some rounds
+# on, its growth and the held money's shopping together, so teacher-money's long-run=0.5 moved all three. Its parts
+# apart: "long-power-x=1.4" (the power and growth alone counted 40% more, about long-run=0.5 on them: does looking
+# further ahead pay?) and "long-money-x=1.4" (the held money alone: teacher-money found money counted for less loses,
+# so does more win?). And how far it looks: "long-rounds" is 9 (three antes), so before ante 6 it never sees the
+# eighth ante's boss, where most runs are lost; 15 sees five antes ahead, 24 the rest of the run (it is capped at the
+# rounds left). 2,000 seeds each against the champion, at its own weight.
+LONG_TRIALS = ((None, "long-power-x=1.4"), (None, "long-money-x=1.4"), (None, "long-rounds=15"),
+               (None, "long-rounds=24"))
+
+
+def long_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
+    return champion_trials(root, LONG_TRIALS, runs, control_runs=BIG_RUNS)
 
 
 # make diagnose-fresh: the champion's own runs, recorded today and diagnosed. The night recording of 4 November is the
@@ -1699,6 +1719,7 @@ JOBS: dict[str, list[tuple]] = {
     "diagnose-fresh": diagnose_fresh_steps(),
     "teacher-budget-parts": budget_parts_steps(),
     "teacher-money": money_steps(),
+    "teacher-long": long_steps(),
     "diagnose": diagnose_steps(),
     # An hour of forks and the networks that learn from them: the judge test today (results/forks/forks-quick.json,
     # then results/value/value-forks-quick.json's measured.forks).

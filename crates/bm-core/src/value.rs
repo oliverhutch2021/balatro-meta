@@ -140,6 +140,11 @@ pub const PARAMS: &[(&str, f64)] = &[
     ("sharpness", SHARPNESS),
     ("planner-edge", PLANNER_EDGE),
     ("long-run", LONG_RUN),
+    // The long run's two parts scaled apart (1: as "long-run" weighs them): its scoring power and growth some rounds
+    // on ("long-power-x"), and its held money's shopping in the shops still to come ("long-money-x"). "long-run"
+    // scales both at once, so it cannot tell looking further ahead from counting held money more.
+    ("long-power-x", 1.0),
+    ("long-money-x", 1.0),
     ("long-rounds", LONG_ROUNDS),
     ("buying-power", BUYING_POWER),
     ("money-scale", MONEY_SCALE),
@@ -1305,7 +1310,9 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
     let deck_share = p("deck-share", DECK_SHARE);
     let power = (1.0 - deck_share) * mean(&o.next) + deck_share * deck_power(run, salt, deals);
     let long_weight = p("long-run", LONG_RUN);
-    let long_run = long_weight * (power + growth(&f, &o, run, long) + shopping);
+    let shopping = p("long-money-x", 1.0) * shopping;
+    let long_run =
+        long_weight * (p("long-power-x", 1.0) * (power + growth(&f, &o, run, long)) + shopping);
     let mut sorted = o.next.clone();
     sorted.sort_by(f64::total_cmp);
     Some(Breakdown {
@@ -2124,6 +2131,13 @@ mod tests {
         assert_ne!(total(&["long-run=0.25"]), usual);
         assert_ne!(total(&["sharpness=2"]), usual);
         assert_ne!(total(&["money-scale=40", "precise"]), usual);
+        // The long run's parts apart: at 1 as usual; the power's part moves the total, and so does the money's
+        // (this first shop holds money and has shops to come).
+        assert_eq!(total(&["long-power-x=1", "long-money-x=1"]), usual);
+        assert_ne!(total(&["long-power-x=1.4"]), usual);
+        assert_ne!(total(&["long-money-x=1.4"]), usual);
+        let part = |opts: &[&str]| with_options(opts, || breakdown(&run, 9).unwrap().money);
+        assert!(part(&["long-money-x=2"]) > part(&[]) && part(&["long-power-x=2"]) == part(&[]));
         // The last value given counts.
         assert_eq!(total(&["long-run=0.25", "long-run=0.35"]), usual);
         for bad in ["long-run=x", "long-run=", "nonsense=1", "long-run=inf"] {
