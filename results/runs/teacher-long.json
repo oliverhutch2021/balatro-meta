@@ -1,0 +1,50 @@
+{
+ "job": "teacher-long",
+ "commit": "5891c051f14251c649419a44e4b985902f0868e6",
+ "started": "2026-11-08T03:19:58+00:00",
+ "finished": "2026-11-08T10:35:24+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   14.8,
+   16.6,
+   16.9
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 29,
+  "w2.5-long-power-x=1.4": 4287,
+  "compare-w2.5-long-power-x=1.4": 0,
+  "w2.5-long-money-x=1.4": 4436,
+  "compare-w2.5-long-money-x=1.4": 0,
+  "w2.5-long-rounds=15": 4254,
+  "compare-w2.5-long-rounds=15": 0,
+  "w2.5-long-rounds=24": 4230,
+  "compare-w2.5-long-rounds=24": 0,
+  "w2.5-buying-power=0.04": 4437,
+  "compare-w2.5-buying-power=0.04": 0,
+  "w2.5-money-scale=40": 4451,
+  "compare-w2.5-money-scale=40": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "w2.5-long-power-x=1.4": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,long-power-x=1.4 --runs 2000 --seed 1 --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+long-power-x-1.4-2k-w2.5-on-ensemble8-w1.5.json",
+  "compare-w2.5-long-power-x=1.4": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+long-power-x-1.4-2k-w2.5-on-ensemble8-w1.5.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+long-power-x-1.4-2k-w2.5-on-ensemble8-w1.5-vs-f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json",
+  "w2.5-long-money-x=1.4": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,long-money-x=1.4 --runs 2000 --seed 1 --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+long-money-x-1.4-2k-w2.5-on-ensemble8-w1.5.json",
+  "compare-w2.5-long-money-x=1.4": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+long-money-x-1.4-2k-w2.5-on-ensemble8-w1.5.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+long-money-x-1.4-2k-w2.5-on-ensemble8-w1.5-vs-f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json",
+  "w2.5-long-rounds=15": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,long-rounds=15 --runs 2000 --seed 1 --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+long-rounds-15-2k-w2.5-on-ensemble8-w1.5.json",
+  "compare-w2.5-long-rounds=15": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+long-rounds-15-2k-w2.5-on-ensemble8-w1.5.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+long-rounds-15-2k-w2.5-on-ensemble8-w1.5-vs-f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json",
+  "w2.5-long-rounds=24": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,long-rounds=24 --runs 2000 --seed 1 --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+long-rounds-24-2k-w2.5-on-ensemble8-w1.5.json",
+  "compare-w2.5-long-rounds=24": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+long-rounds-24-2k-w2.5-on-ensemble8-w1.5.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+long-rounds-24-2k-w2.5-on-ensemble8-w1.5-vs-f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json",
+  "w2.5-buying-power=0.04": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,buying-power=0.04 --runs 2000 --seed 1 --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+buying-power-0.04-2k-w2.5-on-ensemble8-w1.5.json",
+  "compare-w2.5-buying-power=0.04": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+buying-power-0.04-2k-w2.5-on-ensemble8-w1.5.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+buying-power-0.04-2k-w2.5-on-ensemble8-w1.5-vs-f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json",
+  "w2.5-money-scale=40": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,money-scale=40 --runs 2000 --seed 1 --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+money-scale-40-2k-w2.5-on-ensemble8-w1.5.json",
+  "compare-w2.5-money-scale=40": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+money-scale-40-2k-w2.5-on-ensemble8-w1.5.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+money-scale-40-2k-w2.5-on-ensemble8-w1.5-vs-f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json"
+ }
+}
