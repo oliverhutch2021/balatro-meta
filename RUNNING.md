@@ -865,8 +865,9 @@ worth against what it buys now. Those numbers were last tuned on 1 November (+6.
 weighs the whole long view more (the power some rounds on and the held money's shopping alike, so it is not a
 spending test). The cheaper budget (`make teacher-budget-parts`) waits: win rate first, the processing later.
 
-So far (8 November): `buying-power=0.02` -4.45 points (p = 0.0001), `money-scale=15` -2.6 (p = 0.016),
-`above-cap=0.25` level (-0.3, p = 0.75). Counting money for less loses, so the $23 held at a loss is not the
+Results (8 November; the champion won 77.05% of the same 2,000 seeds): `buying-power=0.02` -4.45 points
+(p = 0.0001), `money-scale=15` -2.6 (p = 0.016), `long-run=0.5` -1.55 (p = 0.15), `above-cap=0.25` level (-0.3,
+p = 0.75). None beat the champion. Counting money for less loses, so the $23 held at a loss is not the
 teacher spending too little; the trials worth trying next go the other way (money counted for more), or change
 what the money buys rather than its worth.
 
