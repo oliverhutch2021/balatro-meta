@@ -1175,7 +1175,8 @@ def test_the_late_trials_share_the_doubt_trials_control(tmp_path):
     lp = long["w2.5-long-power-x=1.4"]
     assert lp[lp.index("--teacher-options") + 1] == "precise,late-x=3,late-from=5,long-power-x=1.4"
     assert lp[lp.index("--value-weight") + 1] == "2.5", "the champion's own weight"
-    assert {"w2.5-long-money-x=1.4", "w2.5-long-rounds=15", "w2.5-long-rounds=24"} <= set(long)
+    assert {"w2.5-long-money-x=1.4", "w2.5-long-rounds=15", "w2.5-long-rounds=24", "w2.5-buying-power=0.04",
+            "w2.5-money-scale=40"} <= set(long)
     assert long["compare-w2.5-long-rounds=24"][1] == control and "teacher-long" in jobs.JOBS
 
 

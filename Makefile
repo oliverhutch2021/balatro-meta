@@ -199,7 +199,7 @@ teacher-budget-parts:  ## Where the budget pays: the looks, the deals and the pl
 teacher-money:  ## The value formula's money numbers retuned on the champion, each leaning towards spending, 2,000 seeds each (about 7 hours)
 	$(PY) scripts/jobs.py run teacher-money $(JOB_FLAGS)
 
-teacher-long:  ## The value formula's long run one part at a time (its power, its held money) and how far it looks, 2,000 seeds each against the champion (about 7 hours)
+teacher-long:  ## The value formula's long run one part at a time (its power, its held money), how far it looks, and the money numbers counted higher, 2,000 seeds each against the champion (about 8.5 hours)
 	$(PY) scripts/jobs.py run teacher-long $(JOB_FLAGS)
 
 recheck:  ## Every difference the real-game checks saved, replayed on today's engine: fixed or still open (seconds)

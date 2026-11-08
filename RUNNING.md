@@ -874,15 +874,17 @@ what the money buys rather than its worth.
 cd /mnt/h/balatro-meta && make teacher-money
 ```
 
-## Step 33: the long run, one part at a time (about 7 hours)
+## Step 33: the long run, one part at a time (about 8.5 hours)
 
 The value formula's long run is the run's scoring power some rounds on, its growth, and what the held money will buy
 in the shops still to come, all under one weight (`long-run`, 0.35), so `long-run=0.5` moved them all at once. Two
 new teacher options scale its parts apart: `long-power-x` (the power and growth) and `long-money-x` (the held
 money), both 1 as usual. `make teacher-long` tries each at 1.4 (about `long-run=0.5` on that part alone), and how far
 the long run looks: `long-rounds` is 9 (three antes), so before ante 6 it never sees the eighth ante's boss, where
-most runs are lost; `long-rounds=15` and `=24` (the rest of the run). 2,000 seeds each against the champion, at its
-own weight. Run it after `make teacher-money` has finished.
+most runs are lost; `long-rounds=15` and `=24` (the rest of the run). Then the money numbers the other way, since
+counting money for less lost: `buying-power=0.04` and `money-scale=40` (is the usual 0.03 and 25 the best, or is
+money still worth more?). Six trials, 2,000 seeds each against the champion at its own weight, about 85 minutes
+each. Run it after `make teacher-money` has finished.
 
 ```
 cd /mnt/h/balatro-meta && make teacher-long

@@ -1316,9 +1316,13 @@ def money_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
 # further ahead pay?) and "long-money-x=1.4" (the held money alone: teacher-money found money counted for less loses,
 # so does more win?). And how far it looks: "long-rounds" is 9 (three antes), so before ante 6 it never sees the
 # eighth ante's boss, where most runs are lost; 15 sees five antes ahead, 24 the rest of the run (it is capped at the
-# rounds left). 2,000 seeds each against the champion, at its own weight.
+# rounds left). Then the money numbers the other way: teacher-money's two that mattered both lost when money counted
+# for less (buying-power=0.02, money-scale=15), so "buying-power=0.04" and "money-scale=40" ask whether the usual 0.03
+# and 25 are the best or money is still worth more than the formula says (these count it more in every blind ahead,
+# where long-money-x moves the long run's part alone). 2,000 seeds each against the champion, at its own weight
+# (about 85 minutes a trial).
 LONG_TRIALS = ((None, "long-power-x=1.4"), (None, "long-money-x=1.4"), (None, "long-rounds=15"),
-               (None, "long-rounds=24"))
+               (None, "long-rounds=24"), (None, "buying-power=0.04"), (None, "money-scale=40"))
 
 
 def long_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
