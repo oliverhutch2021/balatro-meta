@@ -8,7 +8,9 @@ jokers, and for a share of the lost runs whether the teacher beat the lost blind
 start with several times the usual samples (`deep_won`: a build that couldn't have scored it against play that
 fell short). The tables split the losses by blind and ante, by how short they fell, by whether deeper play beat
 the blind, and set the winners' build against the late losers' ante by ante, so the ante the losers fall behind at
-shows.
+shows. With `--deep-tries`, `deep_share` is each blind's share of tries beaten. `--control SUMMARY` sets deeper play
+against the same runs diagnosed with `--deep 1` (a second try at the usual samples beats some blinds by luck alone):
+what deeper search adds is the difference (make diagnose-control).
 """
 from __future__ import annotations
 
@@ -70,19 +72,23 @@ def summarise(rows: list[dict]) -> dict:
     out["closeness_by_boss"] = {b: round(median(np.array([float(r["closeness"]) for r in lost if r["lost_to"] == b])), 3)
                                 for b in list(out["by_boss"])[:8]}
     # Deeper play.
-    deep = num(lost, "deep_won")
+    # Each lost blind's share of tries beaten at the deeper budget (baseline --deep-tries; a table of one try, or
+    # older than deep_share, has only deep_won: 0 or 1). The means are the chance a lost blind is beaten.
+    deep = num(lost, "deep_share" if lost and "deep_share" in lost[0] else "deep_won")
     tried = deep >= 0
     if tried.any():
-        d = {"replayed": int(tried.sum()), "beaten": round(float((deep[tried] > 0.5).mean()), 4)}
-        d["by_shortfall"] = {name: round(float((deep[tried & (close >= lo) & (close < hi)] > 0.5).mean()), 4)
+        d = {"replayed": int(tried.sum()), "beaten": round(float(deep[tried].mean()), 4)}
+        d["by_shortfall"] = {name: round(float(deep[tried & (close >= lo) & (close < hi)].mean()), 4)
                              for lo, hi, name in BUCKETS if (tried & (close >= lo) & (close < hi)).any()}
-        d["by_ante"] = {int(a): round(float((deep[tried & (antes == a)] > 0.5).mean()), 4)
+        d["by_ante"] = {int(a): round(float(deep[tried & (antes == a)].mean()), 4)
                         for a in range(1, 9) if (tried & (antes == a)).any()}
         d["by_boss"] = {}
+        d["by_boss_n"] = {}
         for b in list(out["by_boss"])[:8]:
             m = tried & np.array([r["lost_to"] == b for r in lost])
             if m.any():
-                d["by_boss"][b] = round(float((deep[m] > 0.5).mean()), 4)
+                d["by_boss"][b] = round(float(deep[m].mean()), 4)
+                d["by_boss_n"][b] = int(m.sum())
         out["deeper_play"] = d
     # The build at the loss.
     money = num(lost, "money_end")
@@ -283,15 +289,85 @@ def lines(s: dict, path: Path) -> list[str]:
     return o
 
 
+def over_control(s: dict, control: dict) -> dict | None:
+    """Deeper play set against the control (the same lost blinds played again at the usual samples, `--deep 1`):
+    a second try beats some blinds by luck alone, so what deeper search adds is the difference. Per boss, the points
+    of win rate at stake if every blind deeper play beats over the control were a run won (an upper bound: the run
+    still has blinds to come): the boss's share of the losses times that difference times the loss rate."""
+    d, c = s.get("deeper_play"), control.get("deeper_play")
+    if not d or not c:
+        return None
+    if (s["runs"], s["losses"], d["replayed"]) != (control["runs"], control["losses"], c["replayed"]):
+        raise SystemExit(f"The control is of other runs ({control['runs']:,} runs, {control['losses']:,} lost, "
+                         f"{c['replayed']:,} replayed against {s['runs']:,}, {s['losses']:,}, {d['replayed']:,}): "
+                         "diagnose the same recording with --deep 1.")
+    # Keys as text on both sides: a summary read back from JSON has its antes as text.
+    diff = lambda a, b: {str(k): round(v - b[str(k)], 4) for k, v in a.items() if str(k) in b}
+    c = {**c, **{k: {str(i): v for i, v in c[k].items()} for k in ("by_shortfall", "by_ante", "by_boss")}}
+    out = {"replayed": d["replayed"], "control_replayed": c["replayed"],
+           "beaten": round(d["beaten"] - c["beaten"], 4), "control_beaten": c["beaten"],
+           "by_shortfall": diff(d["by_shortfall"], c["by_shortfall"]), "by_ante": diff(d["by_ante"], c["by_ante"]),
+           "by_boss": diff(d["by_boss"], c["by_boss"]), "control_by_boss": c["by_boss"]}
+    loss_rate = s["losses"] / max(s["runs"], 1)
+    out["points_at_stake_by_boss"] = {b: round(100 * s["by_boss"][b] * max(v, 0.0) * loss_rate, 2)
+                                      for b, v in out["by_boss"].items() if b in s["by_boss"]}
+    out["points_at_stake"] = round(100 * max(out["beaten"], 0.0) * loss_rate, 2)
+    # The bosses where deeper play beat most (make diagnose-fresh, 7 November), pooled: each alone is 24 to 49 blinds.
+    n = d.get("by_boss_n") or {}
+    group = [b for b in PLAY_BOSSES if b in out["by_boss"] and n.get(b)]
+    if group:
+        total = sum(n[b] for b in group)
+        out["play_bosses"] = {
+            "bosses": group, "replayed": total,
+            "beaten": round(sum(n[b] * d["by_boss"][b] for b in group) / total, 4),
+            "control_beaten": round(sum(n[b] * c["by_boss"][b] for b in group) / total, 4),
+            "points_at_stake": round(sum(out["points_at_stake_by_boss"].get(b, 0.0) for b in group), 2)}
+    return out
+
+
+# The bosses lost to play more than to the build on 7 November (deeper play beat 20% to 41% of them).
+PLAY_BOSSES = ("The Mouth", "Amber Acorn", "The Eye", "The Needle")
+
+
+def control_lines(o: dict) -> list[str]:
+    head = (f"Over the control (the same blinds played again at the usual samples, {o['control_replayed']:,} of them: "
+            f"{100 * o['control_beaten']:.1f}% beaten by a second try alone): deeper search adds "
+            f"{100 * o['beaten']:+.1f} points of blinds beaten, at most {o['points_at_stake']:.1f} points of win rate.")
+    stake = sorted(o["points_at_stake_by_boss"].items(), key=lambda kv: -kv[1])
+    out = ["", head,
+           "  by shortfall: " + ", ".join(f"{k} {100 * v:+.0f}" for k, v in o["by_shortfall"].items()),
+           "  by ante:      " + ", ".join(f"{a}: {100 * v:+.0f}" for a, v in o["by_ante"].items()),
+           "  by boss:      " + ", ".join(f"{k} {100 * v:+.0f} (control {100 * o['control_by_boss'][k]:.0f}%)"
+                                          for k, v in o["by_boss"].items()),
+           "  win rate at stake by boss, at most: " + ", ".join(f"{k} {v:.2f}" for k, v in stake)]
+    g = o.get("play_bosses")
+    if g:
+        out.append(f"  {', '.join(g['bosses'])} together ({g['replayed']} blinds): {100 * g['beaten']:.1f}% beaten "
+                   f"deeper against {100 * g['control_beaten']:.1f}% by a second try; at most "
+                   f"{g['points_at_stake']:.2f} points of win rate.")
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("csv", type=Path, help="the table baseline --diagnose wrote")
     ap.add_argument("--out", type=Path, help="where to write the summary (JSON)")
+    ap.add_argument("--control", type=Path,
+                    help="the summary (JSON) of the same runs diagnosed with --deep 1, the control: the lost blinds "
+                         "played again at the usual samples; deeper play is then reported over it")
     a = ap.parse_args()
     rows = load(a.csv)
     s = summarise(rows)
     s["table"] = str(a.csv)
     print("\n".join(lines(s, a.csv)))
+    if a.control:
+        o = over_control(s, json.loads(a.control.read_text()))
+        if o is None:
+            print("No deeper play in the table or the control to set against each other.")
+        else:
+            s["deeper_play_over_control"] = o
+            s["control"] = str(a.control)
+            print("\n".join(control_lines(o)))
     if a.out:
         a.out.parent.mkdir(parents=True, exist_ok=True)
         a.out.write_text(json.dumps(s, indent=1) + "\n")

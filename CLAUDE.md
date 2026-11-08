@@ -91,7 +91,11 @@ what it found.
   that went best; `make forks-quick`, `make forks-night`; `baseline
   --diagnose` and `scripts/diagnose.py`, `make diagnose`: where the runs are
   lost and why, a share of the lost blinds played again with deeper search, a
-  diagnosis, never play or training;
+  diagnosis, never play or training (`--deep 1` the control at the usual
+  samples, `--deep-tries K` each blind K times, `diagnose.py --control`:
+  deeper play over luck, `make diagnose-control`); from round 11 a round
+  (`jobs.screened_round`) is recorded by the champion in parts, its pair
+  learns from that round alone and is screened against the champion;
   `StakeMode`: `baseline --stake-net` corrects the value networks' log-odds,
   a residual pair trained with `train_value.py --offset` on recordings that
   keep their log-odds, `baseline --offsets`/`--offsets-into`, or a stake
@@ -188,5 +192,7 @@ baseline.
 ## Workflow
 
 Claude writes code in the cloud; the user's PC (WSL2 Ubuntu, 16 threads, a
-12 GB GPU) runs heavy jobs. The cloud cannot push to GitHub:
-Claude leaves `.sync/claude.bundle`, the user runs `make sync` and pushes.
+12 GB GPU) runs heavy jobs. The cloud can read the public repo (a new chat
+clones it from GitHub, then fetches the PC's `.sync/from-pc.bundle` for the
+results commits not pushed yet) but cannot push to it: Claude leaves
+`.sync/claude.bundle`, the user runs `make sync` and pushes.

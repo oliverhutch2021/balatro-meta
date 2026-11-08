@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late teacher-boss teacher-budget teacher-budget-big teacher-budget-confirm teacher-skips skips-stakes teacher-budget-6 teacher-budget-confirm-6 teacher-close teacher-close-2 diagnose-fresh teacher-budget-parts teacher-money teacher-long recheck diagnose forks-quick forks-night forks-table forks-now
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late teacher-boss teacher-budget teacher-budget-big teacher-budget-confirm teacher-skips skips-stakes teacher-budget-6 teacher-budget-confirm-6 teacher-close teacher-close-2 diagnose-fresh diagnose-control teacher-budget-parts teacher-money teacher-long recheck diagnose forks-quick forks-night forks-table forks-now
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -110,7 +110,7 @@ value-net-%:  ## Learned value round N, 2/3: the round's value network, on its r
 teacher-learned-%:  ## Learned value round N, 3/3: the teacher with the round's value, and all rounds' together at two weights (about 1 hour)
 	$(PY) scripts/jobs.py run teacher-learned-$* $(JOB_FLAGS)
 
-learned-%:  ## Round N of the learned value, the three jobs in a row: make learned-3, then learned-4... (about 3 hours)
+learned-%:  ## Round N of the learned value, the three jobs in a row: make learned-3, then learned-4... (round 11 on: recorded by the champion in 5 parts, about 19 hours, then 2 trainings and 3 screens, about 5.5)
 	@$(MAKE) --no-print-directory teacher-data-$*
 	@$(MAKE) --no-print-directory value-net-$*
 	@$(MAKE) --no-print-directory teacher-learned-$*
@@ -192,6 +192,9 @@ teacher-close-2:  ## The adaptive budget as fixed on 7 November (the choice betw
 
 diagnose-fresh:  ## The champion's own runs recorded today (3,000, no exploring) and diagnosed: how it wins and where it loses (about 2.5 hours)
 	$(PY) scripts/jobs.py run diagnose-fresh $(JOB_FLAGS)
+
+diagnose-control:  ## Every lost blind of diagnose-fresh's runs played again 8 times at the usual samples and 8 at 4x: what deeper search adds over luck (minutes)
+	$(PY) scripts/jobs.py run diagnose-control $(JOB_FLAGS)
 
 teacher-budget-parts:  ## Where the budget pays: the looks, the deals and the planner's tries each doubled on their own, 2,000 seeds each against the champion (about 5 hours)
 	$(PY) scripts/jobs.py run teacher-budget-parts $(JOB_FLAGS)

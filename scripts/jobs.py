@@ -206,6 +206,10 @@ EXPLORE_FROM = 7
 # habits.
 COMMIT = "commit=0.25"
 COMMIT_FROM = 10
+# ...and only round 10: it gained nothing over round 9 (plateau since round 6), and in a recording by the champion
+# a quarter of the runs on builds it wouldn't choose would spend a quarter of the night on them. Round 11 on explores
+# single moves alone.
+COMMIT_LAST = 10
 # From round 11 a won run plays on into Endless, to ante 12 (baseline --endless), and its positions up to the win are
 # labelled with how many blinds it beat after it as well (0 to 12): a win with a build that clears ante 10 is a better
 # win than one that scrapes through ante 8, which a win alone can't tell. The networks learn it as a second head
@@ -215,11 +219,11 @@ ENDLESS_FROM = 11
 
 
 def exploring(args: list[str], n: int) -> list[str]:
-    """A recording's teacher arguments, with the exploration rounds from EXPLORE_FROM on use (and from COMMIT_FROM,
-    whole-build exploration too)."""
+    """A recording's teacher arguments, with the exploration rounds from EXPLORE_FROM on use (and in rounds
+    COMMIT_FROM to COMMIT_LAST, whole-build exploration too)."""
     if n < EXPLORE_FROM:
         return args
-    extra = f"{EXPLORE},{COMMIT}" if n >= COMMIT_FROM else EXPLORE
+    extra = f"{EXPLORE},{COMMIT}" if COMMIT_FROM <= n <= COMMIT_LAST else EXPLORE
     args = list(args)
     if "--teacher-options" in args:
         i = args.index("--teacher-options") + 1
@@ -753,6 +757,8 @@ def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
     measure it). teacher-learned-n: the teacher plays the usual 5,000 seeds with it at weights 1 and 2, without
     options, to set against the earlier rounds on the same footing. From ENDLESS_FROM the recording's wins play on
     into Endless, so its networks also learn how far a win would have gone."""
+    if n >= SCREEN_FROM:
+        return screened_round(n, root)
     data = DATA / f"value-{n}"
     endless = ["--endless"] if n >= ENDLESS_FROM else []
     return {
@@ -777,6 +783,58 @@ def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
                           "--runs", "5000", "--seed", "1", "--out", f"results/value/teacher{n}-w1.json"]),
             *ensemble_steps(n),
         ],
+    }
+
+
+# From round 11 a round is recorded by the champion as it plays (best_8k: its networks, weight, options and search
+# budget), exploring single moves (EXPLORE; no whole builds: COMMIT_LAST), its wins played on into Endless. It is
+# recorded in ROUND_PARTS parts of ROUND_PART_RUNS runs, each a step with its own seed base and folder
+# (value-N/part-K): a recording stopped part way starts that part again, not the night (about 3.5 hours a part at
+# the champion's budget). The round's pair learns from its own recording alone: the rounds before were recorded by
+# teachers that won 50% to 66%, and outcome labels from a 75% player are the point of the round. Then three screens on
+# the first SCREEN_RUNS usual seeds, each set run by run against the champion's own runs: the pair alone at the
+# champion's weight and at ROUND_HIGH_WEIGHT, and the champion's networks with the pair. A screen chooses nothing by
+# itself (best_8k counts 8,000-seed reports only).
+SCREEN_FROM = 11
+ROUND_PARTS = 5
+ROUND_PART_RUNS = 5000
+ROUND_HIGH_WEIGHT = "4"
+
+
+def round_parts(n: int, data: Path) -> list[Path]:
+    """Where round n's recording goes, part by part (from SCREEN_FROM). Code that looks for a round at
+    value-N/manifest.json (make diagnose's replayable_recording, the forks') doesn't see a round in parts: teach it
+    when those jobs come back."""
+    return [data / f"value-{n}" / f"part-{k}" for k in range(1, ROUND_PARTS + 1)]
+
+
+def screened_round(n: int, root: Path = ROOT, data: Path | None = None) -> dict[str, list[tuple]]:
+    """Round n from SCREEN_FROM on, three jobs as before: teacher-data-n (record, part by part), value-net-n (the
+    pair, on round n's runs alone) and teacher-learned-n (the screens against the champion)."""
+    best = best_8k_report(root)
+    record = exploring(best[1] if best else best_recording(root), n)
+    parts = round_parts(n, data or DATA)
+    pair = f"models/value-{n}.bin,models/value-{n}b.bin"
+    steps = [("build", [*MAKE, "build"])]
+    for k, folder in enumerate(parts, 1):
+        steps.append((f"record-{k}", [*BASELINE, "--bot", "teacher", *record, "--runs", str(ROUND_PART_RUNS),
+                                      "--seed", str(101 * (n + 1) + k - 1), "--endless", "--record", str(folder),
+                                      "--out", f"results/value/record-{n}-{k}.json"]))
+    data_args = [a for f in parts for a in ("--data", str(f))]
+    nets = best[1][best[1].index("--value-net") + 1] if best else None
+    trials: list[tuple] = [(None, "", pair, f"round{n}"), (ROUND_HIGH_WEIGHT, "", pair, f"round{n}")]
+    if nets:
+        trials.append((None, "", f"{nets},{pair}", f"champion+round{n}"))
+    return {
+        f"teacher-data-{n}": steps,
+        f"value-net-{n}": [
+            ("setup-gpu", [*MAKE, "setup-gpu"]),
+            *[(f"train{suffix}", ["scripts/train_value.py", *data_args, "--newest", str(ROUND_PARTS), "--seed", seed,
+                                  "--out", f"models/value-{n}{suffix}.bin",
+                                  "--report", f"results/value/value-{n}{suffix}.json"])
+              for suffix, seed in (("", "1"), ("b", "2"))],
+        ],
+        f"teacher-learned-{n}": champion_trials(root, tuple(trials), SCREEN_RUNS),
     }
 
 
@@ -1141,14 +1199,16 @@ def skips_stakes_steps(root: Path = ROOT, stakes: tuple[int, ...] = SKIP_STAKES,
 CONTROL_AGAIN = False
 
 
-def champion_trials(root: Path, trials: tuple[tuple[str | None, str], ...], runs: int,
+def champion_trials(root: Path, trials: tuple[tuple, ...], runs: int,
                     control_runs: int | None = None) -> list[tuple]:
     """The teacher that won most of the first 8,000 usual seeds (best_8k), at each (weight, option) of `trials` on
     the first `runs` seeds, each set run by run against the champion's own runs (its report; or, with CONTROL_AGAIN
     or an "again" report there, the champion played again on today's code on `control_runs` seeds, once). The
     comparison pairs the first seeds of both, so a 2,000-seed screen compares against the 8,000-seed champion. A
     trial's `name=value` replaces the champion's own setting of that name, so "late-x=6" on a champion with late-x=3
-    plays at 6. A weight of None is the champion's own, so the trial changes the option alone."""
+    plays at 6. A weight of None is the champion's own, so the trial changes the option alone. A trial of four,
+    (weight, option, networks, name), plays those networks instead of the champion's (named so in its report's
+    file: "-on-<name>"); an option of "" keeps the champion's options as they are."""
     steps: list[tuple] = [("build", [*MAKE, "build"])]
     best = best_8k_report(root)
     if best is None:
@@ -1161,9 +1221,11 @@ def champion_trials(root: Path, trials: tuple[tuple[str | None, str], ...], runs
     control_runs = control_runs or runs
     tag, size, control_size = f"f{FORMULA}", f"{runs // 1000}k", f"{control_runs // 1000}k"
 
-    def with_(w: str, o: str) -> list[str]:
+    def with_(w: str, o: str, nets: str | None = None) -> list[str]:
         a = list(args)
         a[a.index("--value-weight") + 1] = w
+        if nets:
+            a[a.index("--value-net") + 1] = nets
         if "--teacher-options" in a:
             a[a.index("--teacher-options") + 1] = o
         else:
@@ -1177,17 +1239,19 @@ def champion_trials(root: Path, trials: tuple[tuple[str | None, str], ...], runs
     if control == again and not (root / again).exists():
         steps.append(("champion", [*BASELINE, "--bot", "teacher", *with_(w0, opts), "--runs", str(control_runs),
                                    "--seed", "1", "--out", control]))
-    for w, extra in trials:
+    for w, extra, *other in trials:
         w = w or w0
+        nets, stem = (other[0], other[1]) if other else (None, nets_stem)
         names = {e.split("=")[0] for e in extra.split(",") if "=" in e}
         kept = [e for e in opts.split(",") if e and e.split("=")[0] not in names]
-        o = ",".join([*kept, extra])
-        out = f"results/tune/{tag}-{file_safe(o)}-{size}-w{w}-on-{nets_stem}.json"
+        o = ",".join([*kept, extra]) if extra else opts
+        out = f"results/tune/{tag}-{file_safe(o)}-{size}-w{w}-on-{stem}.json"
+        label = f"w{w}-{extra or stem}" if not (other and extra) else f"w{w}-{extra}-{stem}"
         if not (root / out).exists():
-            steps.append((f"w{w}-{extra}", [*BASELINE, "--bot", "teacher", *with_(w, o), "--runs", str(runs),
-                                            "--seed", "1", "--out", out]))
-        steps.append((f"compare-w{w}-{extra}", ["scripts/compare_runs.py", control, out, "--out",
-                                                f"results/tune/{Path(out).stem}-vs-{Path(control).stem}.json"]))
+            steps.append((label, [*BASELINE, "--bot", "teacher", *with_(w, o, nets), "--runs", str(runs),
+                                  "--seed", "1", "--out", out]))
+        steps.append((f"compare-{label}", ["scripts/compare_runs.py", control, out, "--out",
+                                           f"results/tune/{Path(out).stem}-vs-{Path(control).stem}.json"]))
     return steps
 
 
@@ -1354,6 +1418,34 @@ def diagnose_fresh_steps(root: Path = ROOT, data: Path = DATA) -> list[tuple]:
                              "--deep", str(DEEP_X), "--deep-share", str(DEEP_SHARE),
                              "--out", f"results/diagnose/{name}.json"]))
     steps.append(("table", ["scripts/diagnose.py", table, "--out", f"results/diagnose/{name}-summary.json"]))
+    return steps
+
+
+# make diagnose-control: is the play at the bosses worth more search? make diagnose-fresh's deeper play beat 25% of
+# the champion's lost blinds (41% at The Mouth), but a lost blind played again at the champion's own budget is
+# beaten some of the time by luck alone, and one try a blind leaves that luck in. This plays every lost blind of
+# the same recording again CONTROL_TRIES times at the usual samples (the control) and CONTROL_TRIES times at DEEP_X
+# (each try its own samples), so each blind's chance at each budget is measured and what deeper search adds is the
+# difference (diagnose.py --control: by boss, and as points of win rate at stake, an upper bound). Minutes: the
+# diagnosis at 4x took 49 seconds.
+CONTROL_TRIES = 8
+
+
+def diagnose_control_steps(root: Path = ROOT, data: Path = DATA) -> list[tuple]:
+    steps: list[tuple] = [("build", [*MAKE, "build"])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    folder = data / "diagnose-champion" / "stake1"
+    out = "results/diagnose/champion"
+    for name, x in (("control", 1), (f"deep{DEEP_X}", DEEP_X)):
+        steps.append((name, [*BASELINE, "--bot", "teacher", *best[1], "--replay", str(folder),
+                             "--diagnose", f"{out}-{name}.csv", "--deep", str(x), "--deep-tries", str(CONTROL_TRIES),
+                             "--deep-share", str(DEEP_SHARE), "--out", f"{out}-{name}.json"]))
+    steps.append(("table-control", ["scripts/diagnose.py", f"{out}-control.csv",
+                                    "--out", f"{out}-control-summary.json"]))
+    steps.append(("table", ["scripts/diagnose.py", f"{out}-deep{DEEP_X}.csv", "--control",
+                            f"{out}-control-summary.json", "--out", f"{out}-deep{DEEP_X}-summary.json"]))
     return steps
 
 
@@ -1721,6 +1813,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-close": close_steps(),
     "teacher-close-2": close_2_steps(),
     "diagnose-fresh": diagnose_fresh_steps(),
+    "diagnose-control": diagnose_control_steps(),
     "teacher-budget-parts": budget_parts_steps(),
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),

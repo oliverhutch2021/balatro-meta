@@ -956,7 +956,7 @@ def test_from_round_11_the_recorded_wins_play_on_into_endless():
     rec = {n: a for n, a, *_ in jobs.JOBS["teacher-data-10"]}["record"]
     assert "--endless" not in rec
     for n in range(jobs.ENDLESS_FROM, jobs.LAST_ROUND + 1):
-        rec = {name: a for name, a, *_ in jobs.JOBS[f"teacher-data-{n}"]}["record"]
+        rec = {name: a for name, a, *_ in jobs.JOBS[f"teacher-data-{n}"]}["record-1"]
         assert "--endless" in rec and rec[rec.index("--seed") + 1] == str(101 * (n + 1))
 
 
@@ -1214,3 +1214,66 @@ def test_forks_now_trains_at_three_pair_weights_and_a_control_on_every_fork_file
     assert a[a.index("--pair-weight") + 1] == "3" and a[a.index("--fork-split") + 1] == str(jobs.FORK_SPLIT)
     assert steps["table"][0] == "scripts/forks_report.py" and len(steps["table"]) == 1 + 4 + 2
     assert "forks-now" in jobs.JOBS
+
+
+def test_from_round_11_the_champion_records_a_round_in_parts_and_its_pair_is_screened_against_it(tmp_path):
+    data = tmp_path / "data"
+    champion_in(tmp_path)
+    champion = jobs.best_8k_report(tmp_path)
+    round11 = jobs.screened_round(11, tmp_path, data)
+    assert set(round11) == {"teacher-data-11", "value-net-11", "teacher-learned-11"}
+    rec = {n: a for n, a, *_ in round11["teacher-data-11"]}
+    assert list(rec) == ["build", *(f"record-{k}" for k in range(1, jobs.ROUND_PARTS + 1))]
+    seeds, folders = set(), set()
+    for k in range(1, jobs.ROUND_PARTS + 1):
+        a = rec[f"record-{k}"]
+        assert a[a.index("--value-net") + 1] == jobs.ensemble(8) and a[a.index("--value-weight") + 1] == "2.5"
+        opts = a[a.index("--teacher-options") + 1].split(",")
+        assert opts == ["precise", jobs.EXPLORE], "the champion's own options, single moves explored, no whole builds"
+        assert "--endless" in a and a[a.index("--runs") + 1] == str(jobs.ROUND_PART_RUNS)
+        seeds.add(a[a.index("--seed") + 1])
+        folders.add(a[a.index("--record") + 1])
+        assert a[a.index("--out") + 1] == f"results/value/record-11-{k}.json"
+    assert len(seeds) == len(folders) == jobs.ROUND_PARTS, "each part its own seeds and folder: a part restarts alone"
+    assert not seeds & {"1", str(jobs.EXAM_SEED), str(jobs.DIAGNOSE_SEED)}
+    parts = [str(f) for f in jobs.round_parts(11, data)]
+    assert sorted(folders) == sorted(parts)
+    for suffix, train in (("", "train"), ("b", "trainb")):
+        t = {n: a for n, a, *_ in round11["value-net-11"]}[train]
+        assert [t[i + 1] for i, x in enumerate(t) if x == "--data"] == parts, "round 11's own runs alone"
+        assert t[t.index("--newest") + 1] == str(jobs.ROUND_PARTS)
+        assert t[t.index("--out") + 1] == f"models/value-11{suffix}.bin"
+    screens = {n: a for n, a, *_ in round11["teacher-learned-11"]}
+    pair = "models/value-11.bin,models/value-11b.bin"
+    plays = {n: a for n, a in screens.items() if n != "build" and not n.startswith("compare-")}
+    assert {n: (a[a.index("--value-net") + 1], a[a.index("--value-weight") + 1]) for n, a in plays.items()} == {
+        "w2.5-round11": (pair, "2.5"), "w4-round11": (pair, "4"),
+        "w2.5-champion+round11": (f"{jobs.ensemble(8)},{pair}", "2.5")}
+    for n, a in plays.items():
+        assert a[a.index("--teacher-options") + 1] == "precise", "the champion's options as they are"
+        assert a[a.index("--runs") + 1] == str(jobs.SCREEN_RUNS) and a[a.index("--seed") + 1] == "1"
+        cmp = screens[f"compare-{n}"]
+        assert cmp[1] == champion[2] and cmp[2] == a[a.index("--out") + 1], "set against the champion's own runs"
+    assert len({a[a.index("--out") + 1] for a in plays.values()}) == 3
+    assert jobs.screened_round(11, tmp_path, data) == round11
+    assert {n: a for n, a, *_ in jobs.JOBS["value-net-11"]}["train"][1] == "--data"
+    # Rounds before 11 are as they were: round 10 still commits, round 11 doesn't.
+    assert "commit" in jobs.exploring(["--teacher-options", "precise"], 10)[1]
+    assert jobs.exploring(["--teacher-options", "precise"], 11)[1] == f"precise,{jobs.EXPLORE}"
+
+
+def test_the_diagnosis_control_plays_the_lost_blinds_again_at_both_budgets_and_sets_them_against_each_other(tmp_path):
+    data = tmp_path / "data"
+    assert [n for n, *_ in jobs.diagnose_control_steps(tmp_path, data)] == ["build"]
+    champion_in(tmp_path)
+    steps = {n: a for n, a, *_ in jobs.diagnose_control_steps(tmp_path, data)}
+    assert list(steps) == ["build", "control", f"deep{jobs.DEEP_X}", "table-control", "table"]
+    for name, x in (("control", "1"), (f"deep{jobs.DEEP_X}", str(jobs.DEEP_X))):
+        a = steps[name]
+        assert a[a.index("--replay") + 1] == str(data / "diagnose-champion" / "stake1"), "make diagnose-fresh's runs"
+        assert a[a.index("--deep") + 1] == x and a[a.index("--deep-tries") + 1] == str(jobs.CONTROL_TRIES)
+        assert a[a.index("--value-net") + 1] == jobs.ensemble(8)
+    t = steps["table"]
+    assert t[t.index("--control") + 1] == "results/diagnose/champion-control-summary.json"
+    assert steps["table-control"][1] == "results/diagnose/champion-control.csv"
+    assert "diagnose-control" in jobs.JOBS

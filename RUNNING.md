@@ -891,9 +891,53 @@ each. Run it after `make teacher-money` has finished.
 cd /mnt/h/balatro-meta && make teacher-long
 ```
 
+## Step 34: is the boss play worth more search, then round 11 recorded by the champion (minutes, then about 25 hours)
+
+Steps 32 and 33 settled the formula: ten trials either side of its numbers, none better, so the $23 the losing runs
+hold is a symptom. The judge's other half is the networks, and every one of them learned from teachers that won 50%
+to 66%. Round 11 was planned twice (steps 23 and 27) and never recorded, so no network has yet learned from the
+Endless labels, and none from a 75% player. Two jobs:
+
+1. `make diagnose-control` (a few minutes). The diagnosis of 7 November replayed each lost blind once with four
+   times the samples and called a blind it beat "lost to play" (41% at The Mouth, 38% Amber Acorn, 25% The Eye,
+   20% The Needle; 25% of all lost blinds). But the same blind played again at the champion's own budget is beaten
+   some of the time by luck alone, and a single try a blind leaves that luck in the number. This plays every lost
+   blind of the same 2,992 runs again 8 times at the usual samples (the control) and 8 times at 4x, each try with
+   its own samples, so each blind's chance at each budget is measured and what deeper search adds is the
+   difference (`baseline --deep 1`, `--deep-tries`; `diagnose.py --control`). The summary,
+   `results/diagnose/champion-deep4-summary.json`, gives it by boss and as points of win rate at stake, an upper
+   bound. Before it, those four bosses add up to at most 1.3 points; a 2,000-seed screen resolves about 2.5. If the
+   four together still show a point or more over the control, a per-boss budget gets a screen; if not, the boss
+   play is not where the points are and the budget stays as it is.
+2. `make learned-11` (about 19 hours of recording, then about 5.5 hours of training and screens). Changed from the
+   earlier rounds (`jobs.screened_round`, from round 11 on):
+   - Recorded by the champion as it plays: its 14 networks, weight 2.5 and 3x/4x budget, exploring single moves
+     (one shop or pack decision in ten takes a near-equal option) but no whole builds (`commit` gave nothing in
+     round 10). Each win plays on into Endless to ante 12 and its positions learn how many blinds it beat after
+     (in a 4-run test the wins went 3, 5 and 6 blinds on; it costs about 22% more time).
+   - In five parts of 5,000 runs (`teacher-data-11`, steps `record-1` to `record-5`, seed bases 1212 to 1216,
+     `~/.cache/balatro-meta/data/value-11/part-K`), about 3.8 hours each. A stopped recording starts again at the
+     part it was in, not from nothing.
+   - The pair (`models/value-11.bin`, `-11b`) learns from round 11's runs alone: the point is labels from the
+     strongest player, not more positions from weaker ones.
+   - `teacher-learned-11`: three screens on the first 2,000 usual seeds, each set run by run against the
+     champion's own runs (77.05% there): the pair alone at weight 2.5, the pair alone at 4, and the champion's 14
+     networks with the pair at 2.5. The pair alone level with the champion's 14 would already say the labels
+     carry more; a gain of two points or more is what gets stacked. The margin trials (`margin=K`, reading the
+     depth head) follow on whichever networks win.
+
+```
+cd /mnt/h/balatro-meta && make sync && make test && make diagnose-control && make learned-11
+```
+
+Ctrl+C stops it whenever you need the PC; the same line carries on (`make diagnose-control` is then skipped as done,
+and the recording starts the part it was in again: at most about 3.8 hours lost).
+
 ## Later steps
 
-Claude adds each one here when it's ready. Next: more rounds of the learned value and of the network, and a
+Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001
+to 4,000 add to a screen that came out in between instead of replaying the first 2,000), ready for round 11's
+screens. Next: more rounds of the learned value and of the network, and a
 search guided by the network at card-play time.
 
 ## If something goes wrong

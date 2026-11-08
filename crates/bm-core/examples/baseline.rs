@@ -43,8 +43,11 @@
 //! it went: where it ended and by how much it fell short, its build then, and ante by ante its biggest hand, money
 //! and x mult jokers; for a share `--deep-share` (0.25) of the lost runs, the blind they lost is played again from
 //! its start by the teacher with `--deep` (4) times the usual samples, to tell a build that couldn't have scored it
-//! from play that fell short (`scripts/diagnose.py` reads the table). A diagnosis, never the bot's play or its
-//! training: that replay sees the run's own cards.
+//! from play that fell short (`scripts/diagnose.py` reads the table; `--deep 1` is the control, the blind played
+//! again at the usual samples, since a second try beats some blinds by luck alone; `--deep 0` plays none again;
+//! `--deep-tries K` plays each K times, its own samples each, for the table's `deep_share`: the blind's chance of
+//! being beaten at that budget; `deep_won` and the report's `beaten` stay the first try's).
+//! A diagnosis, never the bot's play or its training: that replay sees the run's own cards.
 //!
 //! With `BM_WATCH_DIR` set (the job runner sets it), it writes there for the live viewer:
 //! `progress.json` about once a second (runs, runs a second, win rate, final antes, what ended the
@@ -527,12 +530,16 @@ impl Diagnosis {
 
     /// The lost blind played again from its start by the teacher with `DEEP` times the usual samples (the run's
     /// own cards: a diagnosis of the play, never the bot's play): whether it beat the blind, and its biggest hand.
-    fn deep(&self, salt: u64) -> Option<(bool, f64)> {
+    /// `--deep 1` is the control: the same blind played again at the usual samples, with fresh samples, so the
+    /// share deeper play beats can be set against the share a second try beats by luck alone. Try `t` plays with
+    /// its own samples; try 0's are those a single try always had, so an older table plays again the same.
+    fn deep(&self, salt: u64, t: u64) -> Option<(bool, f64)> {
         let x = DEEP_X.load(Ordering::Relaxed) as f64 / 100.0;
         let start = self.blind_start.as_ref()?;
-        if x <= 1.0 {
+        if x < 1.0 {
             return None;
         }
+        let salt = salt ^ t.wrapping_mul(0x9E37_79B9_7F4A_7C15);
         let s = bm_core::value::scales();
         let scaled = bm_core::value::Scales {
             full: s.full * x,
@@ -587,8 +594,15 @@ impl Diagnosis {
         } else {
             let share = DEEP_SHARE_PPM.load(Ordering::Relaxed);
             let h = salt.wrapping_mul(0x9E37_79B9_7F4A_7C15).rotate_left(31) % 1_000_000;
-            (h < share).then(|| self.deep(salt)).flatten()
+            (h < share).then(|| self.deep(salt, 0)).flatten()
         };
+        // `--deep-tries K`: the share of K tries that beat the blind (try 0 is `deep`'s), a blind's chance of being
+        // beaten at that budget rather than one try's luck.
+        let tries = DEEP_TRIES.load(Ordering::Relaxed).max(1);
+        let deep_share = deep.map(|(w, _)| {
+            let more = (1..tries).filter(|&t| self.deep(salt, t).is_some_and(|(w, _)| w));
+            (u64::from(w) + more.count() as u64) as f64 / tries as f64
+        });
         let by_ante = |f: &dyn Fn(usize) -> String| (1..=8).map(f).collect::<Vec<_>>().join(",");
         // The hand type that cleared most blinds as the blind's biggest hand (ties to the higher type).
         let (win_hand, win_blinds) = HandType::ALL
@@ -598,7 +612,7 @@ impl Diagnosis {
             .unwrap_or((HandType::HighCard, 0));
         let jokers: Vec<&str> = run.jokers.iter().map(|j| j.kind.name()).collect();
         format!(
-            "{},{},{},{},{},{},{:.3},{:.0},{:.0},{:.0},{},{},{},{},{},{:.3},{},{},{},{},{:.0},{},{},{},{},{},{},{},{},{},{},{},{},{:.0}",
+            "{},{},{},{},{},{},{:.3},{:.0},{:.0},{:.0},{},{},{},{},{},{:.3},{},{},{},{},{:.0},{},{},{},{},{},{},{},{},{},{},{:.4},{},{},{:.0}",
             s.seed,
             salt,
             u8::from(s.won),
@@ -630,6 +644,7 @@ impl Diagnosis {
             self.best_hand_type.map_or("", |h| h.name()),
             jokers.join(";"),
             run.vouchers.iter().filter(|&&v| v).count(),
+            deep_share.unwrap_or(-1.0),
             deep.map_or("-1".to_string(), |(w, _)| u8::from(w).to_string()),
             deep.map_or(-1.0, |(_, b)| b),
             needed
@@ -644,7 +659,7 @@ ante_best_1,ante_best_2,ante_best_3,ante_best_4,ante_best_5,ante_best_6,ante_bes
 ante_money_1,ante_money_2,ante_money_3,ante_money_4,ante_money_5,ante_money_6,ante_money_7,ante_money_8,\
 ante_xmult_1,ante_xmult_2,ante_xmult_3,ante_xmult_4,ante_xmult_5,ante_xmult_6,ante_xmult_7,ante_xmult_8,\
 ante_jokers_1,ante_jokers_2,ante_jokers_3,ante_jokers_4,ante_jokers_5,ante_jokers_6,ante_jokers_7,ante_jokers_8,\
-win_hand,win_hand_blinds,win_hand_level,best_hand_type,jokers,vouchers,deep_won,deep_best,deep_needed";
+win_hand,win_hand_blinds,win_hand_level,best_hand_type,jokers,vouchers,deep_share,deep_won,deep_best,deep_needed";
 
 /// What a run's summary had counted when it won, so an endless run's reports count only up to its win.
 struct WinCounts {
@@ -721,6 +736,8 @@ static FORK_SALT: AtomicU64 = AtomicU64::new(0);
 static DIAGNOSE: AtomicBool = AtomicBool::new(false);
 static DEEP_X: AtomicU64 = AtomicU64::new(400);
 static DEEP_SHARE_PPM: AtomicU64 = AtomicU64::new(250_000);
+/// `--deep-tries K`: each lost blind played again K times, each with its own samples (the table's `deep_share`).
+static DEEP_TRIES: AtomicU64 = AtomicU64::new(1);
 
 /// The columns of a fork recording's `lab.npy` (f32), one row per option and copy: the run and step the fork was
 /// at, the fork's number in its run, the option's number and how many there were, the copy's number, the ante and
@@ -1732,10 +1749,11 @@ fn report_json(r: &Report) -> String {
         o.replace_range(
             end..,
             &format!(
-                ",\n \"deep\": {{\"lost_blinds_replayed\": {}, \"beaten\": {}, \"samples_x\": {}}}\n}}\n",
+                ",\n \"deep\": {{\"lost_blinds_replayed\": {}, \"beaten\": {}, \"samples_x\": {}, \"tries\": {}}}\n}}\n",
                 t.deep,
                 t.deep_won,
-                num(DEEP_X.load(Ordering::Relaxed) as f64 / 100.0)
+                num(DEEP_X.load(Ordering::Relaxed) as f64 / 100.0),
+                DEEP_TRIES.load(Ordering::Relaxed).max(1)
             ),
         );
     }
@@ -1948,6 +1966,12 @@ fn main() {
             .parse()
             .expect("--deep takes a number (times the usual samples)");
         DEEP_X.store((x * 100.0).round() as u64, Ordering::Relaxed);
+    }
+    if let Some(k) = opt("--deep-tries") {
+        let k: u64 = k
+            .parse()
+            .expect("--deep-tries takes a whole number of tries");
+        DEEP_TRIES.store(k.max(1), Ordering::Relaxed);
     }
     if let Some(x) = opt("--deep-share") {
         let x: f64 = x.parse().expect("--deep-share takes a share, 0 to 1");
