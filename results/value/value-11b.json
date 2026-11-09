@@ -770,5 +770,5 @@
  },
  "device": "NVIDIA GeForce RTX 4070 Ti",
  "torch": "2.11.0+cu128",
- "seconds": 80.8
+ "seconds": 52.0
 }
