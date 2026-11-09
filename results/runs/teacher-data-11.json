@@ -1,0 +1,36 @@
+{
+ "job": "teacher-data-11",
+ "commit": "4cc4c8519ff6d2967be9670c740eee5fe66e9ed9",
+ "started": "2026-11-08T12:41:19+00:00",
+ "finished": "2026-11-09T07:56:36+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   12.8,
+   16.1,
+   16.7
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 4,
+  "record-1": 13291,
+  "record-2": 13760,
+  "record-3": 14744,
+  "record-4": 14703,
+  "record-5": 12814
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "record-1": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,explore=0.1 --runs 5000 --seed 1212 --endless --record ~/.cache/balatro-meta/data/value-11/part-1 --out results/value/record-11-1.json",
+  "record-2": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,explore=0.1 --runs 5000 --seed 1213 --endless --record ~/.cache/balatro-meta/data/value-11/part-2 --out results/value/record-11-2.json",
+  "record-3": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,explore=0.1 --runs 5000 --seed 1214 --endless --record ~/.cache/balatro-meta/data/value-11/part-3 --out results/value/record-11-3.json",
+  "record-4": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,explore=0.1 --runs 5000 --seed 1215 --endless --record ~/.cache/balatro-meta/data/value-11/part-4 --out results/value/record-11-4.json",
+  "record-5": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,explore=0.1 --runs 5000 --seed 1216 --endless --record ~/.cache/balatro-meta/data/value-11/part-5 --out results/value/record-11-5.json"
+ }
+}
