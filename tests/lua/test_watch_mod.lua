@@ -55,7 +55,11 @@ love.mousepressed()
 assert(calls.pressed == 1 and calls.drawn == 1 and calls.updated == 1)
 assert(select(1, love.mouse.getPosition()) == 500)
 local s = state()
-assert(s.version == M.version and s.port == "12350" and s.locked == "0" and s["end"] == "1")
+-- The version the checks expect (scripts/checker.py's MOD_VERSION, passed by tests/python/test_watch_mod.py), so a
+-- bump on one side only fails; run directly, the mod's own.
+local want = os.getenv("EXPECT_MOD_VERSION") or M.version
+assert(s.version == want, "the mod reports version " .. tostring(s.version) .. ", the checks expect " .. want)
+assert(s.port == "12350" and s.locked == "0" and s["end"] == "1")
 assert(G.SETTINGS.GAMESPEED == 4 and G.GAME.viewed_back == nil)
 G.STATE = 5
 
