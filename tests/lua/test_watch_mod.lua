@@ -55,7 +55,7 @@ love.mousepressed()
 assert(calls.pressed == 1 and calls.drawn == 1 and calls.updated == 1)
 assert(select(1, love.mouse.getPosition()) == 500)
 local s = state()
-assert(s.version == "0.6.0" and s.port == "12350" and s.locked == "0" and s["end"] == "1")
+assert(s.version == M.version and s.port == "12350" and s.locked == "0" and s["end"] == "1")
 assert(G.SETTINGS.GAMESPEED == 4 and G.GAME.viewed_back == nil)
 G.STATE = 5
 
