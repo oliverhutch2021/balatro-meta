@@ -232,6 +232,9 @@ fn detail_row(run: &Run, s: &RunSummary) -> String {
 }
 
 /// `script`: the run's recorded moves (`--replay`), played in place of the bot's.
+/// The run's index inside its salt: `--salt K` sits above it, from bit 24, and changes only the bot's samples.
+const RUN_INDEX: u64 = (1 << 24) - 1;
+
 fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64)]>) -> RunSummary {
     bm_core::teacher::new_run();
     let mut run = Run::new(RunConfig::at_stake(&seed, STAKE.load(Ordering::Relaxed)));
@@ -593,11 +596,17 @@ impl Diagnosis {
             .filter(|j| j.x_mult > 1.0)
             .map(|j| j.x_mult)
             .product();
+        // The row and the choice of blinds played again follow the run's index alone, so a table at another
+        // `--salt` pairs with it run by run (diagnose.py); the salt draws only the tries' samples.
+        let run_index = salt & RUN_INDEX;
         let deep = if s.won {
             None
         } else {
             let share = DEEP_SHARE_PPM.load(Ordering::Relaxed);
-            let h = salt.wrapping_mul(0x9E37_79B9_7F4A_7C15).rotate_left(31) % 1_000_000;
+            let h = run_index
+                .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+                .rotate_left(31)
+                % 1_000_000;
             (h < share).then(|| self.deep(salt, 0)).flatten()
         };
         // `--deep-tries K`: the share of K tries that beat the blind (try 0 is `deep`'s), a blind's chance of being
@@ -618,7 +627,7 @@ impl Diagnosis {
         format!(
             "{},{},{},{},{},{},{:.3},{:.0},{:.0},{:.0},{},{},{},{},{},{:.3},{},{},{},{},{:.0},{},{},{},{},{},{},{},{},{},{},{:.4},{},{},{:.0}",
             s.seed,
-            salt,
+            run_index,
             u8::from(s.won),
             s.end,
             s.lost_to,
@@ -1956,6 +1965,10 @@ fn main() {
     // the same K, so they keep their common samples (scripts/jobs.py, champion_trials).
     let salt_k: u64 = opt("--salt").map_or(0, |s| s.parse().expect("--salt takes a number"));
     assert!(salt_k < 1 << 20, "--salt: under 2^20");
+    assert!(
+        salt_k == 0 || [opt("--forks"), opt("--record"), opt("--record-moves")].iter().all(Option::is_none),
+        "--salt: not with --forks or --record yet (their files don't keep the salt, and the forks' salt meets it at bit 36)"
+    );
     assert!(
         salt_k == 0 || target < 1 << 24,
         "--salt: fewer than 2^24 runs"
