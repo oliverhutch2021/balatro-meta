@@ -81,6 +81,8 @@ def compare(a: dict, b: dict) -> dict:
         "a": {"bot": a.get("bot"), "win_rate": sum(wa) / n, "wins": sum(wa), "blinds_beaten": sum(ba) / n},
         "b": {"bot": b.get("bot"), "win_rate": sum(wb) / n, "wins": sum(wb), "blinds_beaten": sum(bb) / n},
         "seeds": n,
+        # The bots' sample salts (baseline --salt): equal in a screen, so control and trial share their samples.
+        "salts": [a.get("salt", 0), b.get("salt", 0)],
         "win_rate_diff": diff,
         "win_rate_diff_ci": [diff - 1.96 * se, diff + 1.96 * se],
         "only_a_won": only_a,

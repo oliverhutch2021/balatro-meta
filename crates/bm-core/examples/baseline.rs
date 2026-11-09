@@ -1,7 +1,7 @@
 //! A bot's baseline: it plays fresh-seed runs on every thread and reports as it goes.
 //!
 //!     cargo run --release -p bm-core --example baseline -- [--bot greedy|teacher] [--runs N] [--seconds S]
-//!         [--threads T] [--seed BASE] [--out results/baseline/greedy.json]
+//!         [--threads T] [--seed BASE] [--salt K] [--out results/baseline/greedy.json]
 //!         [--value-net models/value-1.bin] [--value-weight W] [--record DIR]
 //!
 //! `greedy` is the simple bot (bots.rs); `teacher` the rule-based one written to teach the network
@@ -61,7 +61,9 @@
 //! 1's small blind) to `X` (ante 8's boss), or `Y` for a win.
 //!
 //! Seeds come from a fixed sampler (`--seed`), so a rerun plays the same runs. The bot sees only what
-//! the screen shows (bots.rs works on fair copies).
+//! the screen shows (bots.rs works on fair copies). A run is fixed by its seed, its index (the salt of the bot's
+//! own samples), the code and the options, so playing a bot again replays the same runs; `--salt K` draws the bot's
+//! samples afresh on the same deals (run i's salt becomes `i | K << 24`; K = 0 is the usual runs).
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
@@ -1948,6 +1950,15 @@ fn main() {
     };
     let seconds: Option<f64> = opt("--seconds").and_then(|s| s.parse().ok());
     let base: u64 = opt("--seed").and_then(|s| s.parse().ok()).unwrap_or(1);
+    // `--salt K`: the same deals, the bot's own samples drawn afresh. A screen plays its control and every trial at
+    // the same K, so they keep their common samples (scripts/jobs.py, champion_trials).
+    let salt_k: u64 = opt("--salt").map_or(0, |s| s.parse().expect("--salt takes a number"));
+    assert!(salt_k < 1 << 20, "--salt: under 2^20");
+    assert!(
+        salt_k == 0 || target < 1 << 24,
+        "--salt: fewer than 2^24 runs"
+    );
+    let run_salt = |i: u64| i | salt_k << 24;
     let threads: usize = match opt("--threads").and_then(|s| s.parse().ok()) {
         Some(t) if t > 0 => t,
         _ => std::thread::available_parallelism().map_or(1, |n| n.get()),
@@ -2164,10 +2175,10 @@ fn main() {
                         }
                         let mut other_way = false;
                         let mut s = match &replay {
-                            None => play(run_seed(base, i), i, true, bot, None),
+                            None => play(run_seed(base, i), run_salt(i), true, bot, None),
                             Some((runs, _, _)) => {
                                 let r = &runs[i as usize];
-                                let s = play(r.seed.clone(), i, true, bot, Some(&r.moves));
+                                let s = play(r.seed.clone(), run_salt(i), true, bot, Some(&r.moves));
                                 if s.refused
                                     || s.unfinished
                                     || s.moves != r.moves.len() as u64
@@ -2507,7 +2518,7 @@ fn main() {
     // (scripts/compare_runs.py), and each run's ending in seed order.
     let opts = bm_core::teacher::options();
     let mut tail = format!(
-        ",\n \"seed_base\": {base},\n \"value_net\": {},\n \"value_weight\": {},\n \"teacher_options\": [{}],\n \
+        ",\n \"seed_base\": {base},\n \"salt\": {salt_k},\n \"value_net\": {},\n \"value_weight\": {},\n \"teacher_options\": [{}],\n \
          \"stake_net\": {},\n \"stake_mode\": {}",
         value_net.as_deref().map_or("null".into(), esc),
         if value_net.is_some() {

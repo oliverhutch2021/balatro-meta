@@ -1245,17 +1245,31 @@ def test_from_round_11_the_champion_records_a_round_in_parts_and_its_pair_is_scr
         assert t[t.index("--out") + 1] == f"models/value-11{suffix}.bin"
     screens = {n: a for n, a, *_ in round11["teacher-learned-11"]}
     pair = "models/value-11.bin,models/value-11b.bin"
-    plays = {n: a for n, a in screens.items() if n != "build" and not n.startswith("compare-")}
+    # The control: the champion as it is, at the screens' salt on the screen seeds, not its own stored runs.
+    control = screens["champion"]
+    assert [control[control.index(k) + 1] for k in ("--value-net", "--value-weight", "--teacher-options")] == [
+        jobs.ensemble(8), "2.5", "precise"]
+    assert [control[control.index(k) + 1] for k in ("--runs", "--seed", "--salt")] == [
+        str(jobs.SCREEN_RUNS), "1", str(jobs.SCREEN_SALT)]
+    control_out = control[control.index("--out") + 1]
+    assert f"-salt{jobs.SCREEN_SALT}-" in control_out and control_out != champion[2]
+    plays = {n: a for n, a in screens.items() if n not in ("build", "champion") and not n.startswith("compare-")}
     assert {n: (a[a.index("--value-net") + 1], a[a.index("--value-weight") + 1]) for n, a in plays.items()} == {
         "w2.5-round11": (pair, "2.5"), "w4-round11": (pair, "4"),
         "w2.5-champion+round11": (f"{jobs.ensemble(8)},{pair}", "2.5")}
     for n, a in plays.items():
         assert a[a.index("--teacher-options") + 1] == "precise", "the champion's options as they are"
         assert a[a.index("--runs") + 1] == str(jobs.SCREEN_RUNS) and a[a.index("--seed") + 1] == "1"
+        assert a[a.index("--salt") + 1] == str(jobs.SCREEN_SALT), "every trial at the control's salt"
         cmp = screens[f"compare-{n}"]
-        assert cmp[1] == champion[2] and cmp[2] == a[a.index("--out") + 1], "set against the champion's own runs"
-    assert len({a[a.index("--out") + 1] for a in plays.values()}) == 3
+        assert cmp[1] == control_out and cmp[2] == a[a.index("--out") + 1], "set against the fresh-salt control"
+    assert len({a[a.index("--out") + 1] for a in plays.values()} | {control_out}) == 4
     assert jobs.screened_round(11, tmp_path, data) == round11
+    # Played once and shared: once the control's report is there, the screens only pair with it.
+    (tmp_path / control_out).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / control_out).write_text("{}")
+    again = {n: a for n, a, *_ in jobs.screened_round(11, tmp_path, data)["teacher-learned-11"]}
+    assert "champion" not in again and all(again[f"compare-{n}"][1] == control_out for n in plays)
     assert {n: a for n, a, *_ in jobs.JOBS["value-net-11"]}["train"][1] == "--data"
     # Rounds before 11 are as they were: round 10 still commits, round 11 doesn't.
     assert "commit" in jobs.exploring(["--teacher-options", "precise"], 10)[1]

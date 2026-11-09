@@ -834,7 +834,7 @@ def screened_round(n: int, root: Path = ROOT, data: Path | None = None) -> dict[
                                   "--report", f"results/value/value-{n}{suffix}.json"])
               for suffix, seed in (("", "1"), ("b", "2"))],
         ],
-        f"teacher-learned-{n}": champion_trials(root, tuple(trials), SCREEN_RUNS),
+        f"teacher-learned-{n}": champion_trials(root, tuple(trials), SCREEN_RUNS, salt=SCREEN_SALT),
     }
 
 
@@ -1197,10 +1197,18 @@ def skips_stakes_steps(root: Path = ROOT, stakes: tuple[int, ...] = SKIP_STAKES,
 # Whether the champion is played again on today's code before its trials (its own report serves otherwise: the engine
 # hasn't changed its play since 4 November's fairness fixes, which moved the champion of 2 November by 0.1 point).
 CONTROL_AGAIN = False
+# A fresh-salt control. The champion's own runs on the screen seeds are the ones that made it champion: on seeds 1 to
+# 2,000 they sit about a point above its level there (77.05% against 74.35, 75.85 and 75.00 on the next three blocks,
+# beyond what those seeds' difficulty explains), so a screen against them reads a challenger low. Playing the champion
+# again does not help: a run is fixed by its seed, its index, the code and the options, so it replays the same runs.
+# With a salt (`baseline --salt K`) the deals stay and the bot's own samples are drawn afresh: the control is the
+# champion at salt K on the screen seeds, played once and shared, and every trial plays at the same K, so control and
+# trials keep their common samples. From round 11 the rounds' screens use it.
+SCREEN_SALT = 1
 
 
 def champion_trials(root: Path, trials: tuple[tuple, ...], runs: int,
-                    control_runs: int | None = None) -> list[tuple]:
+                    control_runs: int | None = None, salt: int = 0) -> list[tuple]:
     """The teacher that won most of the first 8,000 usual seeds (best_8k), at each (weight, option) of `trials` on
     the first `runs` seeds, each set run by run against the champion's own runs (its report; or, with CONTROL_AGAIN
     or an "again" report there, the champion played again on today's code on `control_runs` seeds, once). The
@@ -1208,7 +1216,9 @@ def champion_trials(root: Path, trials: tuple[tuple, ...], runs: int,
     trial's `name=value` replaces the champion's own setting of that name, so "late-x=6" on a champion with late-x=3
     plays at 6. A weight of None is the champion's own, so the trial changes the option alone. A trial of four,
     (weight, option, networks, name), plays those networks instead of the champion's (named so in its report's
-    file: "-on-<name>"); an option of "" keeps the champion's options as they are."""
+    file: "-on-<name>"); an option of "" keeps the champion's options as they are. With a `salt`, the control is the
+    champion played at that salt on `control_runs` seeds (once, "-salt<K>" in its name; SCREEN_SALT) and every trial
+    plays at the same salt."""
     steps: list[tuple] = [("build", [*MAKE, "build"])]
     best = best_8k_report(root)
     if best is None:
@@ -1235,21 +1245,25 @@ def champion_trials(root: Path, trials: tuple[tuple, ...], runs: int,
     # played on an older engine (an "again" report exists or is wanted: CONTROL_AGAIN), when it is played again on
     # today's code once and that is the control every trial shares.
     again = f"results/tune/{tag}-{file_safe(opts)}-{control_size}-w{w0}-again-on-{nets_stem}.json"
-    control = report if not CONTROL_AGAIN and not (root / again).exists() else again
-    if control == again and not (root / again).exists():
+    salted, salt_args = (f"-salt{salt}", ["--salt", str(salt)]) if salt else ("", [])
+    if salt:
+        control = f"results/tune/{tag}-{file_safe(opts)}-{control_size}-w{w0}{salted}-on-{nets_stem}.json"
+    else:
+        control = report if not CONTROL_AGAIN and not (root / again).exists() else again
+    if control != report and not (root / control).exists():
         steps.append(("champion", [*BASELINE, "--bot", "teacher", *with_(w0, opts), "--runs", str(control_runs),
-                                   "--seed", "1", "--out", control]))
+                                   "--seed", "1", *salt_args, "--out", control]))
     for w, extra, *other in trials:
         w = w or w0
         nets, stem = (other[0], other[1]) if other else (None, nets_stem)
         names = {e.split("=")[0] for e in extra.split(",") if "=" in e}
         kept = [e for e in opts.split(",") if e and e.split("=")[0] not in names]
         o = ",".join([*kept, extra]) if extra else opts
-        out = f"results/tune/{tag}-{file_safe(o)}-{size}-w{w}-on-{stem}.json"
+        out = f"results/tune/{tag}-{file_safe(o)}-{size}-w{w}{salted}-on-{stem}.json"
         label = f"w{w}-{extra or stem}" if not (other and extra) else f"w{w}-{extra}-{stem}"
         if not (root / out).exists():
             steps.append((label, [*BASELINE, "--bot", "teacher", *with_(w, o, nets), "--runs", str(runs),
-                                  "--seed", "1", "--out", out]))
+                                  "--seed", "1", *salt_args, "--out", out]))
         steps.append((f"compare-{label}", ["scripts/compare_runs.py", control, out, "--out",
                                            f"results/tune/{Path(out).stem}-vs-{Path(control).stem}.json"]))
     return steps

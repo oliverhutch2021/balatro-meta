@@ -933,6 +933,49 @@ cd /mnt/h/balatro-meta && make sync && make test && make diagnose-control && mak
 Ctrl+C stops it whenever you need the PC; the same line carries on (`make diagnose-control` is then skipped as done,
 and the recording starts the part it was in again: at most about 3.8 hours lost).
 
+What it found. The recording took 19 h 15 min and the pair trained in two minutes. `make diagnose-control`: a
+second try at the usual budget beats 26.6% of the lost blinds by luck alone, and four times the samples beats 25.3%
+(-1.3 points blind by blind, 95% -2.4 to -0.1; at ante 8 level). At The Mouth, Amber Acorn, The Eye and The Needle
+together: 28.6% against 30.0% (95% -4.3 to +1.4), at most 0.06 points of win rate. The "lost to play" shares of
+7 November were a second roll of the dice: deeper search does not beat the lost blind, so a per-boss budget has
+nothing to gain. Where the 3x budget's gain comes from (shops and packs, or the play of blinds it wins) is not
+settled by this.
+
+## Step 35: round 11's screens against a fresh-salt control (about 6 hours)
+
+Every 2,000-seed screen so far was set against the champion's own runs on seeds 1 to 2,000. Those are the runs that
+made it champion, and they sit about a point above its level there: by block of 2,000 seeds the champion won 77.05%,
+74.35%, 75.85% and 75.00%, and beyond what each block's difficulty explains (from 25 other 8,000-seed reports) that is
++0.9, -1.2, +1.1 and -0.8 points. So a screen against them reads a challenger about a point low, and moving to the
+next block would read one about a point high. Playing the champion again does not help either: a run is fixed by its
+seed, its index, the code and the options, so the `again` reports replay the same runs (8,000 of 8,000 endings).
+
+`baseline --salt K` keeps the deals and draws the bot's own samples afresh (run i's salt becomes `i | K << 24`;
+K = 0 replays today's runs exactly). From round 11 a round's screens (`jobs.champion_trials(..., salt=SCREEN_SALT)`)
+play the champion once at salt 1 on seeds 1 to 2,000 and every trial at the same salt, so control and trials share
+their samples as before but the control's luck is a new draw.
+
+`make teacher-learned-11`: the control (the champion at salt 1), then round 11's pair alone at weight 2.5, the pair
+alone at 4, and the champion's 14 networks with the pair at 2.5, each set run by run against the control.
+
+The decision, stated before the run (each arm's paired difference with its 95% range; three arms screened together):
+
+- **Stack** the best arm if it is +2 points or more and its range excludes zero: it joins the champion, and the
+  margin trials (`margin=K`) run on it next.
+- **Level** (the range spans zero): nothing is stacked. The pair alone level with the 14 says one round of a 75%
+  teacher's labels carries as much as eight rounds from weaker teachers; the margin trials then run on the 14 with
+  the pair, the arm that keeps the champion's judge and adds the depth head.
+- **Worse** (every range below zero): round 11's pair does not help, and the next step looks elsewhere.
+
+The fresh control against the champion's stored runs on the same seeds is reported for information only: one draw
+carries about a point of noise of its own, so it shows the selection's direction at best.
+
+```
+cd /mnt/h/balatro-meta && make sync && make test && make teacher-learned-11
+```
+
+Ctrl+C stops it whenever you need the PC; the same line carries on from the step it was in.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001
