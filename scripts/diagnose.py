@@ -179,43 +179,47 @@ def joker_table(rows: list[dict], won: np.ndarray, least: int = 40) -> dict:
 
 
 def swings(rows: list[dict], won: np.ndarray) -> dict:
-    """What moves a run's outlook most, as win rates by where a run stood at an ante: x mult jokers held as ante 4
-    began, money as ante 3 began, the ante the first x mult joker arrived, the main scoring hand's final level, and
-    vouchers taken."""
+    """What moves a run's outlook most: win rates by where a run stood as an ante began, among the runs still alive
+    then. A run that ended earlier has no state at that ante (its columns read 0), so counting it would put every
+    early loss in the poorest group. End-of-run counts (the main hand's final level, vouchers taken, the ante the
+    first x mult joker arrived) are left out: they grow with the run's length, so a run that lasts longer scores
+    higher on them whatever its strength (a run lost at ante 5 has had fewer shops than a win)."""
     out: dict = {}
 
-    def by(key, label, groups):
+    def alive(r: dict, ante: int) -> bool:
+        return r["won"] == "1" or int(float(r["ante"])) >= ante
+
+    def by(label, ante, groups):
         got = {}
+        live = np.array([alive(r, ante) for r in rows])
         for name, pick in groups:
-            m = np.array([pick(r) for r in rows])
+            m = live & np.array([pick(r) for r in rows])
             if m.sum() >= 30:
                 got[name] = {"runs": int(m.sum()), "win_rate": round(float(won[m].mean()), 4)}
         out[label] = got
 
-    xm4 = lambda r: int(float(r["ante_xmult_4"]))
-    by("ante_xmult_4", "x mult jokers as ante 4 began", [("none", lambda r: xm4(r) == 0), ("one", lambda r: xm4(r) == 1),
-                                                        ("two or more", lambda r: xm4(r) >= 2)])
-    m3 = lambda r: int(float(r["ante_money_3"]))
-    by("ante_money_3", "money as ante 3 began", [("under $8", lambda r: m3(r) < 8), ("$8 to $15", lambda r: 8 <= m3(r) <= 15),
-                                                 ("$16 or more", lambda r: m3(r) >= 16)])
-
-    def first_x(r):
-        for a in range(1, 9):
-            if int(float(r[f"ante_xmult_{a}"])) > 0:
-                return a
-        return 9
-    by("first_xmult_ante", "the ante the first x mult joker was held by", [
-        ("by ante 3", lambda r: first_x(r) <= 3), ("ante 4 or 5", lambda r: 4 <= first_x(r) <= 5),
-        ("ante 6 to 8", lambda r: 6 <= first_x(r) <= 8), ("never", lambda r: first_x(r) == 9)])
-    lvl = lambda r: int(float(r["win_hand_level"]))
-    by("win_hand_level", "the main scoring hand's final level", [("1 or 2", lambda r: lvl(r) <= 2), ("3 to 5", lambda r: 3 <= lvl(r) <= 5),
-                                                                 ("6 to 9", lambda r: 6 <= lvl(r) <= 9), ("10 or more", lambda r: lvl(r) >= 10)])
-    v = lambda r: int(float(r["vouchers"]))
-    by("vouchers", "vouchers taken", [("none", lambda r: v(r) == 0), ("one", lambda r: v(r) == 1), ("two", lambda r: v(r) == 2),
-                                      ("three or more", lambda r: v(r) >= 3)])
-    jk = lambda r: int(float(r["ante_jokers_3"]))
-    by("ante_jokers_3", "jokers held as ante 3 began", [("0 to 2", lambda r: jk(r) <= 2), ("3", lambda r: jk(r) == 3),
-                                                        ("4 or 5", lambda r: jk(r) >= 4)])
+    col = lambda key: (lambda r: float(r[key]))
+    for a in (4, 5):
+        xm = col(f"ante_xmult_{a}")
+        by(f"x mult jokers as ante {a} began", a, [("none", lambda r, xm=xm: xm(r) == 0),
+                                                   ("one", lambda r, xm=xm: xm(r) == 1),
+                                                   ("two or more", lambda r, xm=xm: xm(r) >= 2)])
+    m3, m4 = col("ante_money_3"), col("ante_money_4")
+    by("money as ante 3 began", 3, [("under $8", lambda r: m3(r) < 8), ("$8 to $15", lambda r: 8 <= m3(r) <= 15),
+                                    ("$16 or more", lambda r: m3(r) >= 16)])
+    by("money as ante 4 began", 4, [("under $15", lambda r: m4(r) < 15), ("$15 to $24", lambda r: 15 <= m4(r) <= 24),
+                                    ("$25 or more", lambda r: m4(r) >= 25)])
+    # The biggest hand of ante 3, in thirds of the runs alive as ante 4 began.
+    b3 = col("ante_best_3")
+    live4 = [b3(r) for r in rows if alive(r, 4)]
+    if live4:
+        lo, hi = (float(q) for q in np.quantile(live4, [1 / 3, 2 / 3]))
+        by("biggest hand in ante 3", 4, [(f"under {lo:,.0f}", lambda r: b3(r) < lo),
+                                         (f"{lo:,.0f} to {hi:,.0f}", lambda r: lo <= b3(r) < hi),
+                                         (f"{hi:,.0f} or more", lambda r: b3(r) >= hi)])
+    j3 = col("ante_jokers_3")
+    by("jokers held as ante 3 began", 3, [("0 to 2", lambda r: j3(r) <= 2), ("3", lambda r: j3(r) == 3),
+                                          ("4 or 5", lambda r: j3(r) >= 4)])
     return out
 
 
@@ -284,7 +288,7 @@ def lines(s: dict, path: Path) -> list[str]:
         o.append("  most held: " + ", ".join(f"{t['joker']} {100 * t['held_share']:.0f}% ({100 * t['win_rate']:.0f}%)"
                                              for t in j["most_held"][:10]))
         o.append("")
-        o.append("The biggest swings: win rate by where a run stood")
+        o.append("The biggest swings: win rate by where a run stood as an ante began (the runs alive then)")
         for label, groups in s["swings"].items():
             o.append(f"  {label}: " + ", ".join(f"{g} {100 * t['win_rate']:.0f}% ({t['runs']:,})" for g, t in groups.items()))
     return o

@@ -77,3 +77,16 @@ def test_over_the_control_blind_by_blind_gives_a_range_and_its_bound():
     with pytest.raises(SystemExit):
         diagnose.over_control(deep, control, deep_rows, control_rows[:-1] + [dict(control_rows[-1], won="0",
                                                                                   deep_share="0.5", run="99999")])
+
+
+def test_swings_count_only_the_runs_alive_at_that_ante():
+    rows = diagnose.load(TABLE)
+    sw = diagnose.summarise(rows)["swings"]
+    alive4 = sum(1 for r in rows if r["won"] == "1" or int(float(r["ante"])) >= 4)
+    assert alive4 < len(rows), "the table has runs lost before ante 4"
+    assert sum(g["runs"] for g in sw["x mult jokers as ante 4 began"].values()) == alive4
+    assert sum(g["runs"] for g in sw["biggest hand in ante 3"].values()) == alive4
+    # A run lost at ante 2 reads 0 x mult jokers at ante 4; it must not land in "none".
+    early = [r for r in rows if r["won"] == "0" and int(float(r["ante"])) < 4]
+    assert early and all(float(r["ante_xmult_4"]) == 0 for r in early)
+    assert not {"the main scoring hand's final level", "vouchers taken"} & set(sw), "end-of-run counts left out"
