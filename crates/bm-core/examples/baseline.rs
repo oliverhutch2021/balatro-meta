@@ -232,10 +232,17 @@ fn detail_row(run: &Run, s: &RunSummary) -> String {
 }
 
 /// `script`: the run's recorded moves (`--replay`), played in place of the bot's.
-/// The run's index inside its salt: `--salt K` sits above it, from bit 24, and changes only the bot's samples.
-const RUN_INDEX: u64 = (1 << 24) - 1;
-
-fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64)]>) -> RunSummary {
+/// Run `index` of the job, its bot's samples salted by `salt` (the index itself, or with `--salt K` the index and K
+/// above it): the index names the run in a diagnosis's table and picks its blinds to play again; the salt only
+/// draws samples.
+fn play(
+    seed: String,
+    index: u64,
+    salt: u64,
+    keep: bool,
+    bot: Bot,
+    script: Option<&[(u8, u64)]>,
+) -> RunSummary {
     bm_core::teacher::new_run();
     let mut run = Run::new(RunConfig::at_stake(&seed, STAKE.load(Ordering::Relaxed)));
     let mut s = RunSummary {
@@ -444,7 +451,7 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64
     // A replay that went another way (a move refused, the script run out) gets no row: it would be left out of the
     // diagnosis anyway, and its lost blind needn't be played again with deeper search.
     if let Some(d) = diag.filter(|_| !s.refused && !s.unfinished) {
-        s.diagnosis = Some(d.row(&run, &s, salt));
+        s.diagnosis = Some(d.row(&run, &s, index, salt));
     }
     s
 }
@@ -583,7 +590,7 @@ impl Diagnosis {
         })
     }
 
-    fn row(&self, run: &Run, s: &RunSummary, salt: u64) -> String {
+    fn row(&self, run: &Run, s: &RunSummary, run_index: u64, salt: u64) -> String {
         let needed = run.blind.as_ref().map_or(0.0, |b| b.chips);
         let (main, _) = HandType::ALL
             .iter()
@@ -598,7 +605,6 @@ impl Diagnosis {
             .product();
         // The row and the choice of blinds played again follow the run's index alone, so a table at another
         // `--salt` pairs with it run by run (diagnose.py); the salt draws only the tries' samples.
-        let run_index = salt & RUN_INDEX;
         let deep = if s.won {
             None
         } else {
@@ -2190,10 +2196,10 @@ fn main() {
                         }
                         let mut other_way = false;
                         let mut s = match &replay {
-                            None => play(run_seed(base, i), run_salt(i), true, bot, None),
+                            None => play(run_seed(base, i), i, run_salt(i), true, bot, None),
                             Some((runs, _, _)) => {
                                 let r = &runs[i as usize];
-                                let s = play(r.seed.clone(), run_salt(i), true, bot, Some(&r.moves));
+                                let s = play(r.seed.clone(), i, run_salt(i), true, bot, Some(&r.moves));
                                 if s.refused
                                     || s.unfinished
                                     || s.moves != r.moves.len() as u64
