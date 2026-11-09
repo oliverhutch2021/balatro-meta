@@ -1291,3 +1291,30 @@ def test_the_diagnosis_control_plays_the_lost_blinds_again_at_both_budgets_and_s
     assert t[t.index("--control") + 1] == "results/diagnose/champion-control-summary.json"
     assert steps["table-control"][1] == "results/diagnose/champion-control.csv"
     assert "diagnose-control" in jobs.JOBS
+
+
+def test_the_budget_taken_away_one_part_at_a_time_against_the_salted_champion(tmp_path):
+    champion_in(tmp_path)
+    champion = jobs.best_8k_report(tmp_path)
+    steps = {n: a for n, a, *_ in jobs.budget_away_steps(tmp_path)}
+    control = steps["champion"]
+    assert [control[control.index(k) + 1] for k in ("--runs", "--seed", "--salt")] == [
+        str(jobs.SCREEN_RUNS), "1", str(jobs.SCREEN_SALT)]
+    control_out = control[control.index("--out") + 1]
+    trials = {n: a for n, a in steps.items() if n not in ("build", "champion") and not n.startswith("compare-")}
+    flats = {n: a[a.index("--teacher-options") + 1] for n, a in trials.items()}
+    assert sorted(flats.values()) == sorted(
+        ["precise,flat-deals,flat-quick,flat-looks", "precise,flat-tries", "precise,flat-deals", "precise,flat-looks"])
+    for n, a in trials.items():
+        assert a[a.index("--salt") + 1] == str(jobs.SCREEN_SALT) and a[a.index("--runs") + 1] == str(jobs.SCREEN_RUNS)
+        assert a[a.index("--value-net") + 1] == jobs.ensemble(8) and a[a.index("--value-weight") + 1] == "2.5"
+        assert steps[f"compare-{n}"][1] == control_out, "each against the champion at the same salt"
+    # The halves against each other: the tries kept flat as A, every count between rounds kept flat as B.
+    both = steps["compare-between-vs-tries"]
+    out = {flats[n]: a[a.index("--out") + 1] for n, a in trials.items()}
+    assert both[1:3] == [out["precise,flat-tries"], out["precise,flat-deals,flat-quick,flat-looks"]]
+    # The control played for round 11's screens is shared: once there, only the trials play.
+    (tmp_path / control_out).write_text("{}")
+    again = [n for n, *_ in jobs.budget_away_steps(tmp_path)]
+    assert "champion" not in again and len([n for n in again if n.startswith("compare-")]) == 5
+    assert champion[2] not in {a[1] for n, a in steps.items() if n.startswith("compare-")}

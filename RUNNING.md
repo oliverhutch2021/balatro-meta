@@ -986,6 +986,56 @@ cd /mnt/h/balatro-meta && make sync && make test && make teacher-learned-11 FORC
 
 Ctrl+C stops it whenever you need the PC; the same line carries on from the step it was in.
 
+What it found (all at salt 1 on seeds 1 to 2,000, against the champion at salt 1, 75.35%): the 14 networks with
+round 11's pair at 2.5 won 77.05%, +1.70 (95% -0.28 to +3.68); the pair alone 61.70% at 2.5 (-13.65) and 60.50%
+at 4 (-14.85). Level by the rule: nothing stacked. The pair alone can't stand in for the 14 at any weight tried.
+The fresh control against the stored runs on the same seeds: 75.35% against 77.05%, the direction the stored
+runs' luck predicted. The +1.70 arm stays a candidate for the final combined bot, with no re-screen.
+
+## Step 36: where the budget's gain sits, by taking it away (about 3.5 to 4 hours)
+
+From the usual counts to the champion's 3x at every ante (4x in boss rounds) was worth about 9 points (66.4% to
+75.6% on the 8,000 tuning seeds, step 29). The budget has four parts (`value::Scales`): the deals behind each full
+value, the quick look that screens options, the sample contents behind packs and rerolls, and the planner's tries.
+Doubling one part on top (`make teacher-budget-parts`, parked) could show a point or so, under a 2,000-seed screen's
+reach. This takes the 3x/4x away from one part at a time instead: teacher option `flat-deals`, `flat-quick`,
+`flat-looks` or `flat-tries` keeps that part at its own count while the champion's 3x/4x scales the rest
+(`teacher::move_scales`). The deals and the quick look also value held cards in a round; the tries are the
+planner's alone.
+
+`make teacher-budget-away`: four arms, each on seeds 1 to 2,000 at salt 1, set run by run against the champion at
+salt 1 (round 11's control, already played: no control step):
+
+- (a) every count between rounds flat (`flat-deals,flat-quick,flat-looks`);
+- (b) the tries flat (`flat-tries`);
+- (c) the deals alone flat; (d) the sample contents alone flat;
+- and (a) against (b) run by run (`compare-between-vs-tries`).
+
+Each arm thinks less than the control, so each runs faster (in a small cloud run without networks, (a) took a
+fifth of (b)'s time).
+
+The decision, stated before the run (each difference with its 95% range; four arms and one comparison of two):
+
+- **Between rounds carries it** if (a) is 3 points or more below the control with its range below zero, and (a) is
+  2 points or more below (b) with that range below zero. Next: one screen raising only the counts between rounds
+  to 6x (the tries stay at 3x/4x), on salt 1 against the same control; (c) against (d) says whether the work on
+  valuing shops aims at the deals or at the sample contents.
+- **The tries carry it** in the mirror case: (b) 3 or more below the control and 2 or more below (a), both ranges
+  below zero. Next: one screen raising only the tries to 6x, and a look at what changes in the play of the blinds
+  it wins.
+- **An even split** otherwise: 6x everywhere stays for the final bot and no part gets work of its own.
+
+For information: (a) and (b) together against the 9 points. Much less than 9 means the parts stand in for each
+other; much more, that they need each other. Where 1x to 3x sits need not be where 3x to 6x sits; the screen that
+raises the carrying part checks that. No arm here is adopted, so salt 1's control stays unselected and the next
+screen can use it.
+
+```
+cd /mnt/h/balatro-meta && make sync && make test && make teacher-budget-away
+```
+
+Ctrl+C stops it whenever you need the PC; the same line carries on from the step it was in.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

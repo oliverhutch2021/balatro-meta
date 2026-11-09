@@ -94,6 +94,13 @@ pub const OPTIONS: &[&str] = &[
     // "looks" and "steady-rounds" together: on the same 400 test runs, 45.0% won against 38.5% (p = 0.03), at
     // about 1.45 times the time. The teacher the recordings use (scripts/jobs.py: recording_options).
     "precise",
+    // One part of the budget kept at its own count when "late-x" or "boss-x" scale the rest (`move_scales`): the
+    // deals behind each full value, the quick look that screens options, the sample contents behind packs and
+    // rerolls, the planner's tries. For taking the 3x/4x away from one part at a time (make teacher-budget-away).
+    "flat-deals",
+    "flat-quick",
+    "flat-looks",
+    "flat-tries",
     // With a joker that pays on the round's final hand (Dusk retriggers its cards, Acrobat x3): when the best
     // hand beats the blind only as the final hand, play single spare cards until one hand is left, then the
     // best; and the value's sample rounds try that way of playing too (the discards dig for the final hand
@@ -3079,6 +3086,15 @@ pub fn new_run() {
 /// scaled by that much (`value::Scales`, rounds included): the late antes are where most runs are lost, and a
 /// decision there has fewer to come after it.
 pub fn teacher_move(run: &Run, salt: u64) -> (MoveKind, u64) {
+    match move_scales(run) {
+        Some(scaled) => crate::value::with_scales(scaled, || plain_move(run, salt)),
+        None => plain_move(run, salt),
+    }
+}
+
+/// The counts behind the teacher's move here when "late-x" or "boss-x" scale them (None: as the options set them).
+/// A part switched "flat-…" keeps its own count.
+pub(crate) fn move_scales(run: &Run) -> Option<crate::value::Scales> {
     let late = param("late-x").unwrap_or(1.0);
     let mut x = 1.0;
     if late > 1.0 && f64::from(run.ante) >= param("late-from").unwrap_or(LATE_FROM) {
@@ -3095,17 +3111,17 @@ pub fn teacher_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     {
         x = x.max(boss);
     }
-    if x > 1.0 {
-        let s = crate::value::scales();
-        let scaled = crate::value::Scales {
-            full: s.full * x,
-            quick: s.quick * x,
-            looks: s.looks * x,
-            rounds: s.rounds * x,
-        };
-        return crate::value::with_scales(scaled, || plain_move(run, salt));
+    if x <= 1.0 {
+        return None;
     }
-    plain_move(run, salt)
+    let s = crate::value::scales();
+    let by = |flat: &str, n: f64| if on(flat) { n } else { n * x };
+    Some(crate::value::Scales {
+        full: by("flat-deals", s.full),
+        quick: by("flat-quick", s.quick),
+        looks: by("flat-looks", s.looks),
+        rounds: by("flat-tries", s.rounds),
+    })
 }
 
 /// The ante "late-x" scales the teacher's counts from, unless "late-from" sets another.
@@ -4152,6 +4168,42 @@ mod tests {
             let m = teacher_move(&run, 1);
             assert!(apply(&mut run.clone(), m.0, m.1).is_ok());
             assert_eq!(scales(), Scales::all(0.5));
+        });
+    }
+
+    #[test]
+    fn a_flat_part_keeps_its_own_count_when_late_x_and_boss_x_scale_the_rest() {
+        let small = Run::scenario("BOSS1", crate::blinds::BlindKind::Small);
+        let boss = Run::scenario(
+            "BOSS1",
+            crate::blinds::BlindKind::Boss(crate::blinds::Boss::Wall),
+        );
+        let champion = ["precise", "late-x=3", "boss-x=4", "late-from=1"];
+        let at = |extra: &[&str], run: &Run| {
+            let names: Vec<&str> = champion.iter().chain(extra).copied().collect();
+            with_options(&names, || move_scales(run).expect("scaled"))
+        };
+        let s = |full, quick, looks, rounds| crate::value::Scales {
+            full,
+            quick,
+            looks,
+            rounds,
+        };
+        // The champion: "precise" (looks and tries 2) times 3, or 4 in a boss round.
+        assert_eq!(at(&[], &small), s(3.0, 3.0, 6.0, 6.0));
+        assert_eq!(at(&[], &boss), s(4.0, 4.0, 8.0, 8.0));
+        // Each part taken back to its own count, the rest scaled as before.
+        assert_eq!(at(&["flat-tries"], &small), s(3.0, 3.0, 6.0, 2.0));
+        assert_eq!(at(&["flat-tries"], &boss), s(4.0, 4.0, 8.0, 2.0));
+        assert_eq!(at(&["flat-deals"], &boss), s(1.0, 4.0, 8.0, 8.0));
+        assert_eq!(at(&["flat-looks"], &small), s(3.0, 3.0, 2.0, 6.0));
+        assert_eq!(
+            at(&["flat-deals", "flat-quick", "flat-looks"], &boss),
+            s(1.0, 1.0, 2.0, 8.0)
+        );
+        // Nothing to scale, nothing changed.
+        with_options(&["precise", "flat-tries"], || {
+            assert_eq!(move_scales(&small), None)
         });
     }
 

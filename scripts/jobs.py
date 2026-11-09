@@ -1367,6 +1367,31 @@ def budget_parts_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple
     return champion_trials(root, PARTS_TRIALS, runs, control_runs=BIG_RUNS)
 
 
+# make teacher-budget-away: where the budget's gain sits, found by taking it away (the lab's direction 1, track 1).
+# From 1x to the champion's 3x at every ante (4x in boss rounds) was worth about 9 points (66.4% to 75.6% on the
+# 8,000 tuning seeds, RUNNING step 29); doubling one part on top (teacher-budget-parts) could only show a point or
+# so, under a 2,000-seed screen's reach. Each trial here keeps one part at its own count ("flat-...", teacher.rs
+# `move_scales`) while the champion's 3x/4x scales the rest: every count between rounds (the deals, the quick look,
+# the sample contents), the planner's tries, the deals alone, the sample contents alone. Seeds 1 to 2,000 at the
+# screens' salt, each set run by run against the champion at that salt (round 11's control, played once).
+AWAY_TRIALS = ((None, "flat-deals,flat-quick,flat-looks"), (None, "flat-tries"), (None, "flat-deals"),
+               (None, "flat-looks"))
+
+
+def budget_away_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
+    """make teacher-budget-away: the AWAY_TRIALS against the champion at the screens' salt (champion_trials), and
+    the two halves set against each other run by run: every count between rounds kept flat against the tries kept
+    flat (the decision rule reads that difference, RUNNING step 36)."""
+    steps = champion_trials(root, AWAY_TRIALS, runs, salt=SCREEN_SALT)
+    played = {name[len("compare-"):]: argv[2] for name, argv, *_ in steps if name.startswith("compare-")}
+    between = next((out for label, out in played.items() if label.endswith(AWAY_TRIALS[0][1])), None)
+    tries = next((out for label, out in played.items() if label.endswith(AWAY_TRIALS[1][1])), None)
+    if between and tries:
+        steps.append(("compare-between-vs-tries", ["scripts/compare_runs.py", tries, between, "--out",
+                                                   f"results/tune/{Path(between).stem}-vs-{Path(tries).stem}.json"]))
+    return steps
+
+
 # make teacher-money: the money numbers of the value formula, retuned on the champion. The diagnosis of 7 November (the
 # champion's own runs, the 2,992 that still replay: 75.0%): 88% of the losses at a boss, 83% at antes 5 to 8, Violet
 # Vessel 18% and The Wall 11%, and deeper play beat only 7% and 14% of those (the build, not the play). At the loss the
@@ -1829,6 +1854,7 @@ JOBS: dict[str, list[tuple]] = {
     "diagnose-fresh": diagnose_fresh_steps(),
     "diagnose-control": diagnose_control_steps(),
     "teacher-budget-parts": budget_parts_steps(),
+    "teacher-budget-away": budget_away_steps(),
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
     "diagnose": diagnose_steps(),
