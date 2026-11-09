@@ -45,9 +45,11 @@ discard). The bot plays White Stake with the Red Deck, the game's first table, w
 2. **Its losses are near misses.** Of 1,160 lost runs, 44% scored 80% or more of the target they fell to and
    another 43% between half and 80%; only 13% were hopeless. 82% die at a boss, 70% at antes 5 to 8, and the ante 8
    finisher Violet Vessel (six times the base target) alone takes 12%.
-3. **A third of lost blinds were winnable with the cards it had.** Played again from the blind's start with four
-   times the samples, the bot beat 36% of the blinds it had lost (49% of the near misses). By boss: Violet Vessel
-   10% (a build problem), The Mouth 51% and Amber Acorn 44% (play problems).
+3. **Deeper play doesn't rescue the lost blind.** Played again from the blind's start with four times the samples,
+   the bot beats about a quarter to a third of the blinds it had lost, but a second try at its usual samples beats
+   as many by luck alone. On the current champion's 747 lost blinds, eight tries each way: 26.6% beaten by a second
+   try, 25.3% with four times the samples (blind by blind -1.3 points, 95% range -2.4 to -0.1), level at ante 8 and
+   at every boss within its range. The losses come from the build and the draw, not from how the blind was played.
 4. **The build gap compounds from ante 4.** Runs that go on to lose at antes 5 to 8 trail the winners' biggest hand
    by 11% at ante 4, 19% at 5, 24% at 6 and 34% at 7, and are poorer at every ante ($16 against $20 at ante 4). It
    isn't one bad decision; it is a weaker economy feeding a weaker engine from ante 3 on.

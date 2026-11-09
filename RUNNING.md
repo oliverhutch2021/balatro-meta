@@ -719,7 +719,8 @@ short. So, before any more three-hour trials:
    Every lost blind is played again from its start by the champion with four times the samples: a blind that
    deeper play beats was lost to play, not to the build (that replay sees the run's own cards: a diagnosis, never
    the bot's play). `scripts/diagnose.py` prints the tables; `results/diagnose/night-summary.json`
-   keeps them.
+   keeps them. (9 November: that reading was wrong. A second try at the usual samples beats as many lost blinds by
+   luck alone, so a single deeper try measures luck, not play; step 34.)
 2. `make forks-quick` (about 1.5 hours): forks (`forks.rs`). At a share of the shops entered and packs opened in
    antes 2 to 6 of those runs, the champion's three best options and doing nothing (and its own choice, if
    another) are each played out to the end by the champion on six fair copies that share their seeds across the
