@@ -199,7 +199,7 @@ diagnose-control:  ## Every lost blind of diagnose-fresh's runs played again 8 t
 teacher-budget-parts:  ## Where the budget pays: the looks, the deals and the planner's tries each doubled on their own, 2,000 seeds each against the champion (about 5 hours)
 	$(PY) scripts/jobs.py run teacher-budget-parts $(JOB_FLAGS)
 
-teacher-budget-away:  ## Where the budget's gain sits: one part at a time kept at its own count under the champion's 3x/4x, 2,000 seeds each at salt 1 against the champion at salt 1 (about 4 to 5 hours)
+teacher-budget-away:  ## Where the budget's gain sits: between rounds, in a round, the deals and the sample contents each kept at their own counts under the champion's 3x/4x, 2,000 seeds each at salt 1 against the champion at salt 1 (about 3.5 to 4 hours)
 	$(PY) scripts/jobs.py run teacher-budget-away $(JOB_FLAGS)
 
 teacher-money:  ## The value formula's money numbers retuned on the champion, each leaning towards spending, 2,000 seeds each (about 7 hours)

@@ -96,11 +96,15 @@ pub const OPTIONS: &[&str] = &[
     "precise",
     // One part of the budget kept at its own count when "late-x" or "boss-x" scale the rest (`move_scales`): the
     // deals behind each full value, the quick look that screens options, the sample contents behind packs and
-    // rerolls, the planner's tries. For taking the 3x/4x away from one part at a time (make teacher-budget-away).
+    // rerolls, the planner's tries. Or every count kept at its own in one phase of the run: between rounds (the
+    // blind choice, shops, packs) or in a round (the planner's tries and the values of held cards). For taking the
+    // 3x/4x away from one part at a time (make teacher-budget-away).
     "flat-deals",
     "flat-quick",
     "flat-looks",
     "flat-tries",
+    "flat-between",
+    "flat-round",
     // With a joker that pays on the round's final hand (Dusk retriggers its cards, Acrobat x3): when the best
     // hand beats the blind only as the final hand, play single spare cards until one hand is left, then the
     // best; and the value's sample rounds try that way of playing too (the discards dig for the final hand
@@ -3093,8 +3097,12 @@ pub fn teacher_move(run: &Run, salt: u64) -> (MoveKind, u64) {
 }
 
 /// The counts behind the teacher's move here when "late-x" or "boss-x" scale them (None: as the options set them).
-/// A part switched "flat-…" keeps its own count.
+/// A part switched "flat-…" keeps its own count; "flat-between" and "flat-round" keep every count in that phase.
 pub(crate) fn move_scales(run: &Run) -> Option<crate::value::Scales> {
+    let in_round = run.phase == Phase::Round;
+    if (in_round && on("flat-round")) || (!in_round && on("flat-between")) {
+        return None;
+    }
     let late = param("late-x").unwrap_or(1.0);
     let mut x = 1.0;
     if late > 1.0 && f64::from(run.ante) >= param("late-from").unwrap_or(LATE_FROM) {
@@ -4201,6 +4209,19 @@ mod tests {
             at(&["flat-deals", "flat-quick", "flat-looks"], &boss),
             s(1.0, 1.0, 2.0, 8.0)
         );
+        // By phase: every count flat in a round, or between rounds, the other phase scaled as the champion.
+        let mut shop = small.clone();
+        shop.phase = Phase::Shop;
+        assert_eq!(at(&[], &shop), s(3.0, 3.0, 6.0, 6.0));
+        let flat = |extra: &str, run: &Run| {
+            let names: Vec<&str> = champion.iter().copied().chain([extra]).collect();
+            with_options(&names, || move_scales(run))
+        };
+        assert_eq!(flat("flat-round", &boss), None);
+        assert_eq!(flat("flat-round", &small), None);
+        assert_eq!(flat("flat-round", &shop), Some(s(3.0, 3.0, 6.0, 6.0)));
+        assert_eq!(flat("flat-between", &shop), None);
+        assert_eq!(flat("flat-between", &boss), Some(s(4.0, 4.0, 8.0, 8.0)));
         // Nothing to scale, nothing changed.
         with_options(&["precise", "flat-tries"], || {
             assert_eq!(move_scales(&small), None)

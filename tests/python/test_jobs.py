@@ -1304,15 +1304,15 @@ def test_the_budget_taken_away_one_part_at_a_time_against_the_salted_champion(tm
     trials = {n: a for n, a in steps.items() if n not in ("build", "champion") and not n.startswith("compare-")}
     flats = {n: a[a.index("--teacher-options") + 1] for n, a in trials.items()}
     assert sorted(flats.values()) == sorted(
-        ["precise,flat-deals,flat-quick,flat-looks", "precise,flat-tries", "precise,flat-deals", "precise,flat-looks"])
+        ["precise,flat-between", "precise,flat-round", "precise,flat-deals", "precise,flat-looks"])
     for n, a in trials.items():
         assert a[a.index("--salt") + 1] == str(jobs.SCREEN_SALT) and a[a.index("--runs") + 1] == str(jobs.SCREEN_RUNS)
         assert a[a.index("--value-net") + 1] == jobs.ensemble(8) and a[a.index("--value-weight") + 1] == "2.5"
         assert steps[f"compare-{n}"][1] == control_out, "each against the champion at the same salt"
-    # The halves against each other: the tries kept flat as A, every count between rounds kept flat as B.
-    both = steps["compare-between-vs-tries"]
+    # The halves against each other: every count in a round kept flat as A, every count between rounds as B.
+    both = steps["compare-between-vs-round"]
     out = {flats[n]: a[a.index("--out") + 1] for n, a in trials.items()}
-    assert both[1:3] == [out["precise,flat-tries"], out["precise,flat-deals,flat-quick,flat-looks"]]
+    assert both[1:3] == [out["precise,flat-round"], out["precise,flat-between"]]
     # The control played for round 11's screens is shared: once there, only the trials play.
     (tmp_path / control_out).write_text("{}")
     again = [n for n, *_ in jobs.budget_away_steps(tmp_path)]

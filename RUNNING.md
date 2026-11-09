@@ -995,40 +995,43 @@ runs' luck predicted. The +1.70 arm stays a candidate for the final combined bot
 ## Step 36: where the budget's gain sits, by taking it away (about 3.5 to 4 hours)
 
 From the usual counts to the champion's 3x at every ante (4x in boss rounds) was worth about 9 points (66.4% to
-75.6% on the 8,000 tuning seeds, step 29). The budget has four parts (`value::Scales`): the deals behind each full
-value, the quick look that screens options, the sample contents behind packs and rerolls, and the planner's tries.
-Doubling one part on top (`make teacher-budget-parts`, parked) could show a point or so, under a 2,000-seed screen's
-reach. This takes the 3x/4x away from one part at a time instead: teacher option `flat-deals`, `flat-quick`,
-`flat-looks` or `flat-tries` keeps that part at its own count while the champion's 3x/4x scales the rest
-(`teacher::move_scales`). The deals and the quick look also value held cards in a round; the tries are the
-planner's alone.
+75.6% on the 8,000 tuning seeds, step 29). Doubling one part on top (`make teacher-budget-parts`, parked) could show
+a point or so, under a 2,000-seed screen's reach. This takes the 3x/4x away instead, from one phase of the run or
+one part of the budget at a time (`teacher::move_scales`): teacher option `flat-between` keeps every count at its
+own between rounds (the blind choice, shops, packs) and `flat-round` every count in a round (the planner's tries
+and the values of held cards), the other phase scaled as the champion; `flat-deals` and `flat-looks` keep only the
+deals behind each full value or the sample contents behind packs and rerolls (both also value held cards in a
+round). "Its own" is the champion's base ("precise": deals 1, quick look 1, sample contents 2, tries 2).
 
 `make teacher-budget-away`: four arms, each on seeds 1 to 2,000 at salt 1, set run by run against the champion at
 salt 1 (round 11's control, already played: no control step):
 
-- (a) every count between rounds flat (`flat-deals,flat-quick,flat-looks`);
-- (b) the tries flat (`flat-tries`);
-- (c) the deals alone flat; (d) the sample contents alone flat;
-- and (a) against (b) run by run (`compare-between-vs-tries`).
+- (a) every count between rounds flat (`flat-between`);
+- (b) every count in a round flat (`flat-round`);
+- (c) the deals alone flat, (d) the sample contents alone flat (each including their in-round valuations);
+- and (a) against (b) run by run (`compare-between-vs-round`).
 
-Each arm thinks less than the control, so each runs faster (in a small cloud run without networks, (a) took a
-fifth of (b)'s time).
+Each arm thinks less than the control, so each runs faster (in a small cloud run without networks, (a) took about
+a fifth of (b)'s time). (a) and (b) together are every count flat, the 66.4% bot, so their two losses can be set
+against the 9 points.
 
 The decision, stated before the run (each difference with its 95% range; four arms and one comparison of two):
 
 - **Between rounds carries it** if (a) is 3 points or more below the control with its range below zero, and (a) is
   2 points or more below (b) with that range below zero. Next: one screen raising only the counts between rounds
-  to 6x (the tries stay at 3x/4x), on salt 1 against the same control; (c) against (d) says whether the work on
+  to 6x (rounds stay at 3x/4x), on salt 1 against the same control; (c) against (d) says whether the work on
   valuing shops aims at the deals or at the sample contents.
-- **The tries carry it** in the mirror case: (b) 3 or more below the control and 2 or more below (a), both ranges
-  below zero. Next: one screen raising only the tries to 6x, and a look at what changes in the play of the blinds
-  it wins.
-- **An even split** otherwise: 6x everywhere stays for the final bot and no part gets work of its own.
+- **Round play carries it** in the mirror case: (b) 3 or more below the control and 2 or more below (a), both
+  ranges below zero. Next: one screen raising only the counts in a round to 6x, and a look at what changes in the
+  play of the blinds it wins.
+- **An even split** otherwise: 6x everywhere stays for the final bot and neither phase gets work of its own. That
+  includes both halves under 3 points each while their sum falls well short of the 9: then the phases stand in for
+  each other, which is not "neither matters".
 
-For information: (a) and (b) together against the 9 points. Much less than 9 means the parts stand in for each
-other; much more, that they need each other. Where 1x to 3x sits need not be where 3x to 6x sits; the screen that
-raises the carrying part checks that. No arm here is adopted, so salt 1's control stays unselected and the next
-screen can use it.
+For information: (a) and (b) together against the 9 points (much less than 9: they stand in for each other; much
+more: they need each other). Where 1x to 3x sits need not be where 3x to 6x sits; the screen that raises the
+carrying phase checks that. No arm here is adopted, so salt 1's control stays unselected and the next screen can
+use it.
 
 ```
 cd /mnt/h/balatro-meta && make sync && make test && make teacher-budget-away
