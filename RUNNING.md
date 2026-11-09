@@ -960,18 +960,27 @@ alone at 4, and the champion's 14 networks with the pair at 2.5, each set run by
 
 The decision, stated before the run (each arm's paired difference with its 95% range; three arms screened together):
 
-- **Stack** the best arm if it is +2 points or more and its range excludes zero: it joins the champion, and the
-  margin trials (`margin=K`) run on it next.
-- **Level** (the range spans zero): nothing is stacked. The pair alone level with the 14 says one round of a 75%
-  teacher's labels carries as much as eight rounds from weaker teachers; the margin trials then run on the 14 with
-  the pair, the arm that keeps the champion's judge and adds the depth head.
-- **Worse** (every range below zero): round 11's pair does not help, and the next step looks elsewhere.
+- **Stack** the best arm if it is +2 points or more and its range excludes zero: it joins the champion. The best of
+  three equal arms reads about a point high (one standard error), so +2 here can be about +1 underneath; that is
+  accepted because a stacked arm goes through 8,000 seeds and the exam before any headline. Its salt-1 runs are the
+  ones that chose it, so screens on it next use a new salt (2), with it played at that salt as their control.
+- **Worse** if every arm's range is below zero: round 11's pair does not help.
+- **Level** otherwise: nothing is stacked. The pair alone level with the 14 means the two can't be told apart at
+  about two points, not that one round of a 75% teacher's labels carries as much as eight rounds of weaker ones.
 
-The fresh control against the champion's stored runs on the same seeds is reported for information only: one draw
-carries about a point of noise of its own, so it shows the selection's direction at best.
+What runs next is chosen when the result lands. The margin trials (`margin=K`) were the plan, but they read the depth
+head, which beats knowing only how often each depth comes by 3% (cross-entropy 1.751 against 1.805,
+`results/value/value-11.json`), against 13% for the win head: a low-prior screen, to be weighed against the others.
+
+The fresh control against the champion's stored runs on the same seeds is information only (one draw carries about a
+point of noise of its own, so it shows the selection's direction at best); Claude runs it from the committed reports,
+`scripts/compare_runs.py <stored report> <salt-1 control>`, with no PC step.
+
+The job was first started on 9 November on the code before this step and stopped within minutes, so this first run
+needs FORCE=1 (it restarts the job on the new code):
 
 ```
-cd /mnt/h/balatro-meta && make sync && make test && make teacher-learned-11
+cd /mnt/h/balatro-meta && make sync && make test && make teacher-learned-11 FORCE=1
 ```
 
 Ctrl+C stops it whenever you need the PC; the same line carries on from the step it was in.

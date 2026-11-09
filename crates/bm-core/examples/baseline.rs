@@ -276,6 +276,8 @@ fn play(seed: String, salt: u64, keep: bool, bot: Bot, script: Option<&[(u8, u64
                 FORK_BEST.load(Ordering::Relaxed) as usize,
                 FORK_COPIES.load(Ordering::Relaxed) as usize,
             );
+            // With `--salt K` the run salt's K lands at bit 36 here, where it mixes with `--fork-salt`: forks never
+            // run with a salt today; give one of them a different meaning before they do.
             let fork_salt = (salt << 12 | step) ^ (FORK_SALT.load(Ordering::Relaxed) << 36);
             if let Some(f) = fork(&run, made, fork_salt, best, copies) {
                 s.forks.push((step, f));
