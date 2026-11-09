@@ -59,3 +59,21 @@ def test_deeper_play_over_the_control_is_the_difference_and_its_win_rate_at_stak
     other = dict(control, runs=control["runs"] - 1)
     with pytest.raises(SystemExit):
         diagnose.over_control(deep, other)
+
+
+def test_over_the_control_blind_by_blind_gives_a_range_and_its_bound():
+    out = ROOT / "results" / "diagnose" / "champion"
+    deep_rows, control_rows = (diagnose.load(Path(f"{out}-{n}.csv")) for n in ("deep4", "control"))
+    deep, control = diagnose.summarise(deep_rows), json.loads(json.dumps(diagnose.summarise(control_rows)))
+    o = diagnose.over_control(deep, control, deep_rows, control_rows)
+    lo, hi = o["beaten_range"]
+    assert lo < o["beaten"] < hi and (lo, hi) == pytest.approx((-0.0239, -0.0015), abs=1e-4)
+    assert o["points_at_stake_high"] == 0.0, "the whole range is below zero"
+    g = o["play_bosses"]
+    assert g["beaten_range"][1] == pytest.approx(0.0144, abs=1e-4)
+    assert g["points_at_stake_high"] == pytest.approx(100 * 0.0144 * 133 / 2992, abs=0.01)
+    assert any("blind by blind" in line for line in diagnose.control_lines(o))
+    assert "beaten_range" not in diagnose.over_control(deep, control), "without the tables, as before"
+    with pytest.raises(SystemExit):
+        diagnose.over_control(deep, control, deep_rows, control_rows[:-1] + [dict(control_rows[-1], won="0",
+                                                                                  deep_share="0.5", run="99999")])

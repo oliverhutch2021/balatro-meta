@@ -10,7 +10,8 @@ fell short). The tables split the losses by blind and ante, by how short they fe
 the blind, and set the winners' build against the late losers' ante by ante, so the ante the losers fall behind at
 shows. With `--deep-tries`, `deep_share` is each blind's share of tries beaten. `--control SUMMARY` sets deeper play
 against the same runs diagnosed with `--deep 1` (a second try at the usual samples beats some blinds by luck alone):
-what deeper search adds is the difference (make diagnose-control).
+what deeper search adds is the difference (make diagnose-control), blind by blind with its 95% range when the
+control's table (named in its summary) is there.
 """
 from __future__ import annotations
 
@@ -289,11 +290,35 @@ def lines(s: dict, path: Path) -> list[str]:
     return o
 
 
-def over_control(s: dict, control: dict) -> dict | None:
+def blind_shares(rows: list[dict]) -> dict[tuple[str, str], tuple[str, float]]:
+    """Each lost blind played again, by (seed, run): what it was lost to and its share of tries beaten."""
+    key = "deep_share" if rows and "deep_share" in rows[0] else "deep_won"
+    return {(r["seed"], r["run"]): (r["lost_to"], float(r[key])) for r in rows
+            if r["won"] == "0" and float(r[key]) >= 0}
+
+
+def paired_range(deep: dict, control: dict, keep=lambda boss: True) -> dict | None:
+    """Deeper play over the control blind by blind (the same lost blinds in both tables, `blind_shares`): the mean
+    difference of their shares beaten and its 95% range (normal, from the blinds' spread)."""
+    if set(deep) != set(control):
+        raise SystemExit("The control's table holds other lost blinds: diagnose the same recording with --deep 1.")
+    d = np.array([deep[k][1] - control[k][1] for k in sorted(deep) if keep(deep[k][0])])
+    if len(d) < 2:
+        return None
+    half = 1.96 * float(d.std(ddof=1)) / len(d) ** 0.5
+    m = float(d.mean())
+    return {"n": len(d), "mean": round(m, 4), "low": round(m - half, 4), "high": round(m + half, 4)}
+
+
+def over_control(s: dict, control: dict, deep_rows: list[dict] | None = None,
+                 control_rows: list[dict] | None = None) -> dict | None:
     """Deeper play set against the control (the same lost blinds played again at the usual samples, `--deep 1`):
     a second try beats some blinds by luck alone, so what deeper search adds is the difference. Per boss, the points
     of win rate at stake if every blind deeper play beats over the control were a run won (an upper bound: the run
-    still has blinds to come): the boss's share of the losses times that difference times the loss rate."""
+    still has blinds to come): the boss's share of the losses times that difference times the loss rate. With both
+    tables (`deep_rows`, `control_rows`), the difference is also taken blind by blind with its 95% range, and the
+    points at stake from the top of that range (`points_at_stake_high`): the bound a point estimate cut at zero
+    is not."""
     d, c = s.get("deeper_play"), control.get("deeper_play")
     if not d or not c:
         return None
@@ -322,6 +347,17 @@ def over_control(s: dict, control: dict) -> dict | None:
             "beaten": round(sum(n[b] * d["by_boss"][b] for b in group) / total, 4),
             "control_beaten": round(sum(n[b] * c["by_boss"][b] for b in group) / total, 4),
             "points_at_stake": round(sum(out["points_at_stake_by_boss"].get(b, 0.0) for b in group), 2)}
+    if deep_rows is not None and control_rows is not None:
+        bd, bc = blind_shares(deep_rows), blind_shares(control_rows)
+        r = paired_range(bd, bc)
+        if r:
+            out["beaten_range"] = [r["low"], r["high"]]
+            out["points_at_stake_high"] = round(100 * max(r["high"], 0.0) * loss_rate, 2)
+        g = out.get("play_bosses")
+        r = paired_range(bd, bc, lambda boss: boss in g["bosses"]) if g else None
+        if r:
+            g["beaten_range"] = [r["low"], r["high"]]
+            g["points_at_stake_high"] = round(100 * max(r["high"], 0.0) * r["n"] / max(len(bd), 1) * loss_rate, 2)
     return out
 
 
@@ -340,11 +376,20 @@ def control_lines(o: dict) -> list[str]:
            "  by boss:      " + ", ".join(f"{k} {100 * v:+.0f} (control {100 * o['control_by_boss'][k]:.0f}%)"
                                           for k, v in o["by_boss"].items()),
            "  win rate at stake by boss, at most: " + ", ".join(f"{k} {v:.2f}" for k, v in stake)]
+    if "beaten_range" in o:
+        lo, hi = o["beaten_range"]
+        out.insert(2, f"  blind by blind: {100 * o['beaten']:+.1f} points (95% {100 * lo:+.1f} to {100 * hi:+.1f}); "
+                      f"at the top of that range, {o['points_at_stake_high']:.2f} points of win rate.")
     g = o.get("play_bosses")
     if g:
-        out.append(f"  {', '.join(g['bosses'])} together ({g['replayed']} blinds): {100 * g['beaten']:.1f}% beaten "
-                   f"deeper against {100 * g['control_beaten']:.1f}% by a second try; at most "
-                   f"{g['points_at_stake']:.2f} points of win rate.")
+        line = (f"  {', '.join(g['bosses'])} together ({g['replayed']} blinds): {100 * g['beaten']:.1f}% beaten "
+                f"deeper against {100 * g['control_beaten']:.1f}% by a second try; at most "
+                f"{g['points_at_stake']:.2f} points of win rate")
+        if "beaten_range" in g:
+            lo, hi = g["beaten_range"]
+            line += (f" (blind by blind 95% {100 * lo:+.1f} to {100 * hi:+.1f} points; at its top "
+                     f"{g['points_at_stake_high']:.2f})")
+        out.append(line + ".")
     return out
 
 
@@ -361,7 +406,10 @@ def main() -> None:
     s["table"] = str(a.csv)
     print("\n".join(lines(s, a.csv)))
     if a.control:
-        o = over_control(s, json.loads(a.control.read_text()))
+        control = json.loads(a.control.read_text())
+        # The control's own table (its summary names it), for the blind-by-blind range.
+        table = Path(control.get("table") or "")
+        o = over_control(s, control, rows, load(table) if table.is_file() else None)
         if o is None:
             print("No deeper play in the table or the control to set against each other.")
         else:
