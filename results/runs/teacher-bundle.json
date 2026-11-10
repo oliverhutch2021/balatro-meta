@@ -1,0 +1,40 @@
+{
+ "job": "teacher-bundle",
+ "commit": "350f4a02299a8ff742840991a59fb7d1cb6383ea",
+ "started": "2026-11-10T01:56:36+00:00",
+ "finished": "2026-11-10T12:36:15+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   13.9,
+   16.2,
+   16.6
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 9,
+  "white-champion": 16852,
+  "compare-stored": 0,
+  "white-candidate": 16110,
+  "compare-white": 0,
+  "green-champion": 2686,
+  "green-candidate": 2721,
+  "compare-green": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "white-champion": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 8000 --seed 1 --salt 2 --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-salt2-on-ensemble8-w1.5.json",
+  "compare-stored": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-salt2-on-ensemble8-w1.5.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-salt2-on-ensemble8-w1.5-vs-f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-on-ensemble8-w1.5.json",
+  "white-candidate": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin,models/value-11.bin,models/value-11b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,reroll-best --runs 8000 --seed 1 --salt 2 --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+reroll-best-8k-w2.5-salt2-on-champion+round11.json",
+  "compare-white": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-salt2-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+reroll-best-8k-w2.5-salt2-on-champion+round11.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+reroll-best-8k-w2.5-salt2-on-champion+round11-vs-f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-salt2-on-ensemble8-w1.5.json",
+  "green-champion": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 2000 --seed 1 --salt 2 --stake 3 --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1-w2.5-salt2-on-ensemble8-w1.5.json",
+  "green-candidate": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin,models/value-11.bin,models/value-11b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,reroll-best --runs 2000 --seed 1 --salt 2 --stake 3 --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+reroll-best-w2.5-salt2-on-champion+round11.json",
+  "compare-green": "scripts/compare_runs.py results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1-w2.5-salt2-on-ensemble8-w1.5.json results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+reroll-best-w2.5-salt2-on-champion+round11.json --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+reroll-best-w2.5-salt2-on-champion+round11-vs-stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1-w2.5-salt2-on-ensemble8-w1.5.json"
+ }
+}

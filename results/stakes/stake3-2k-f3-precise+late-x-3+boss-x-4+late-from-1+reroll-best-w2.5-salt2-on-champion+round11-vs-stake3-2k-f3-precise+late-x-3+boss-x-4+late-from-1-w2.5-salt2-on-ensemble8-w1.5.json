@@ -1,0 +1,35 @@
+{
+ "kind": "comparison",
+ "a": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.282,
+  "wins": 564,
+  "blinds_beaten": 17.5105,
+  "report": "results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1-w2.5-salt2-on-ensemble8-w1.5.json"
+ },
+ "b": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.29,
+  "wins": 580,
+  "blinds_beaten": 17.5795,
+  "report": "results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+reroll-best-w2.5-salt2-on-champion+round11.json"
+ },
+ "seeds": 2000,
+ "salts": [
+  2,
+  2
+ ],
+ "win_rate_diff": 0.008,
+ "win_rate_diff_ci": [
+  -0.011399841978737866,
+  0.027399841978737866
+ ],
+ "only_a_won": 188,
+ "only_b_won": 204,
+ "p_value": 0.44872329555411544,
+ "blinds_beaten_diff": 0.069,
+ "blinds_beaten_diff_ci": [
+  -0.12983874344339202,
+  0.26783874344339204
+ ]
+}
