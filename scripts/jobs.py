@@ -1438,16 +1438,19 @@ def bundle_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCRE
 
 # make teacher-looks: the long run (about 37 hours). Step 36 put the budget's gain between rounds and in the
 # sample contents behind packs and rerolls (`flat-looks` -4.65, `flat-deals` -0.25, against the 3x champion), so the
-# budget worth buying is more looks, not more of everything. Three arms on 8,000 White seeds at the bundle's salt,
-# each set run by run against the champion at that salt (step 37's control, which chose nothing), cheapest first so
-# a stop leaves whole results: twice the looks with the deals at their own count, four times the looks so, and 6x
-# everything between rounds (the budget curve's third point). Round 11's pair is carried in each (step 37: Level,
-# free to run). Each comparison is written as its arm ends; the looks' two arms are also set against each other.
+# budget worth buying is more looks, not more of everything. Arms on 8,000 White seeds at the bundle's salt, each
+# set run by run against the champion at that salt (step 37's control, which chose nothing), the champion's own
+# networks (round 11's pair is out: step 37's bundle was Level), cheapest first so a stop leaves whole results:
+# twice the looks with the deals at their own count, four times the looks so, then the two looks arms on 2,000
+# Green seeds against step 37's Green control, and last 6x everything between rounds (does anything between rounds
+# other than the looks pay). Each comparison is written as its arm ends; the two looks arms are also set against
+# each other.
 LOOKS_ARMS = (("looks12", "looks-x=4,flat-deals"), ("looks24", "looks-x=8,flat-deals"), ("between6", "between-x=2"))
 
 
-def looks_steps(root: Path = ROOT, runs: int = BIG_RUNS) -> list[tuple]:
-    """make teacher-looks: the LOOKS_ARMS against the champion at BUNDLE_SALT on `runs` seeds."""
+def looks_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
+    """make teacher-looks: the LOOKS_ARMS against the champion at BUNDLE_SALT on `runs` White seeds, the looks
+    arms also on `green_runs` Green seeds, `between6` last."""
     steps: list[tuple] = [("build", [*MAKE, "build"])]
     best = best_8k_report(root)
     if best is None:
@@ -1455,34 +1458,48 @@ def looks_steps(root: Path = ROOT, runs: int = BIG_RUNS) -> list[tuple]:
     args = list(best[1])
     opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
     w = args[args.index("--value-weight") + 1]
-    nets = args[args.index("--value-net") + 1]
     stem = Path(best[2]).stem.split("-on-")[-1]
-    pair = "models/value-11.bin,models/value-11b.bin"
-    tag, size, s = f"f{FORMULA}", f"{runs // 1000}k", f"salt{BUNDLE_SALT}"
-    control = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-{s}-on-{stem}.json"
+    tag, size, gsize, s = f"f{FORMULA}", f"{runs // 1000}k", f"{green_runs // 1000}k", f"salt{BUNDLE_SALT}"
 
-    def play(o: str, n: str, out: str) -> list[str]:
+    def white(o: str) -> str:
+        return f"results/tune/{tag}-{file_safe(o)}-{size}-w{w}-{s}-on-{stem}.json"
+
+    def green(o: str) -> str:
+        return f"results/stakes/stake{BUNDLE_GREEN}-{gsize}-{tag}-{file_safe(o)}-w{w}-{s}-on-{stem}.json"
+
+    def play(o: str, count: int, out: str, stake: list[str]) -> list[str]:
         a = list(args)
-        a[a.index("--value-net") + 1] = n
         a[a.index("--teacher-options") + 1] = o
-        return [*BASELINE, "--bot", "teacher", *a, "--runs", str(runs), "--seed", "1", "--salt", str(BUNDLE_SALT),
-                "--out", out]
+        return [*BASELINE, "--bot", "teacher", *a, "--runs", str(count), "--seed", "1", "--salt", str(BUNDLE_SALT),
+                *stake, "--out", out]
 
-    if not (root / control).exists():
-        steps.append(("champion", play(opts, nets, control)))
-    outs = {}
-    for name, extra in LOOKS_ARMS:
-        o = f"{opts},{extra}"
-        out = f"results/tune/{tag}-{file_safe(o)}-{size}-w{w}-{s}-on-champion+round11.json"
-        outs[name] = out
+    def arm(name: str, o: str, out: str, control: str, count: int, stake: list[str]) -> None:
+        if not (root / control).exists():
+            steps.append((f"{name}-control", play(opts, count, control, stake)))
         if not (root / out).exists():
-            steps.append((name, play(o, f"{nets},{pair}", out)))
+            steps.append((name, play(o, count, out, stake)))
         steps.append((f"compare-{name}", ["scripts/compare_runs.py", control, out, "--out",
-                                          f"results/tune/{Path(out).stem}-vs-{Path(control).stem}.json"]))
-        if name == "looks24":
-            steps.append(("compare-looks24-vs-looks12", ["scripts/compare_runs.py", outs["looks12"], out, "--out",
-                                                         f"results/tune/{Path(out).stem}-vs-{Path(outs['looks12']).stem}.json"]))
-    return steps
+                                          f"{Path(out).parent}/{Path(out).stem}-vs-{Path(control).stem}.json"]))
+
+    looks = {name: f"{opts},{extra}" for name, extra in LOOKS_ARMS}
+    arm("looks12", looks["looks12"], white(looks["looks12"]), white(opts), runs, [])
+    arm("looks24", looks["looks24"], white(looks["looks24"]), white(opts), runs, [])
+    steps.append(("compare-looks24-vs-looks12", [
+        "scripts/compare_runs.py", white(looks["looks12"]), white(looks["looks24"]), "--out",
+        f"results/tune/{Path(white(looks['looks24'])).stem}-vs-{Path(white(looks['looks12'])).stem}.json"]))
+    for name in ("looks12", "looks24"):
+        arm(f"green-{name}", looks[name], green(looks[name]), green(opts), green_runs, ["--stake", str(BUNDLE_GREEN)])
+    arm("between6", looks["between6"], white(looks["between6"]), white(opts), runs, [])
+    # A control played here only once: the arms after the first that needs it find it there.
+    seen, kept = set(), []
+    for step in steps:
+        if step[0].endswith("-control"):
+            out = step[1][-1]
+            if out in seen:
+                continue
+            seen.add(out)
+        kept.append(step)
+    return kept
 
 
 def budget_away_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:

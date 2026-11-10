@@ -205,7 +205,7 @@ teacher-budget-away:  ## Where the budget's gain sits: between rounds, in a roun
 teacher-bundle:  ## Overnight: the champion and one combined candidate (round 11's pair + the reroll fix) on 8,000 White seeds at a fresh salt, then both on 2,000 Green seeds, each pair compared as it finishes (about 12.5 hours)
 	$(PY) scripts/jobs.py run teacher-bundle $(JOB_FLAGS)
 
-teacher-looks:  ## The long run: twice and four times the looks with the deals at their own count, then 6x between rounds, each on 8,000 White seeds at salt 2 against the champion there, cheapest first (about 37 hours)
+teacher-looks:  ## The long run: twice and four times the looks with the deals at their own count (8,000 White and 2,000 Green seeds), then 6x between rounds, at salt 2 against the champion there, cheapest first (about 40 hours)
 	$(PY) scripts/jobs.py run teacher-looks $(JOB_FLAGS)
 
 teacher-money:  ## The value formula's money numbers retuned on the champion, each leaning towards spending, 2,000 seeds each (about 7 hours)

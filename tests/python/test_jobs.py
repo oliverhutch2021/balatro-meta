@@ -1354,22 +1354,29 @@ def test_the_overnight_bundle_plays_the_champion_and_one_candidate_at_a_fresh_sa
 def test_the_long_run_buys_looks_and_then_6x_between_rounds_against_the_salted_champion(tmp_path):
     champion_in(tmp_path)
     steps = {n: a for n, a, *_ in jobs.looks_steps(tmp_path)}
-    assert list(steps) == ["build", "champion", "looks12", "compare-looks12", "looks24", "compare-looks24",
-                           "compare-looks24-vs-looks12", "between6", "compare-between6"], "cheapest first"
-    control = steps["champion"][steps["champion"].index("--out") + 1]
-    pair = "models/value-11.bin,models/value-11b.bin"
+    assert list(steps) == ["build", "looks12-control", "looks12", "compare-looks12", "looks24", "compare-looks24",
+                           "compare-looks24-vs-looks12", "green-looks12-control", "green-looks12",
+                           "compare-green-looks12", "green-looks24", "compare-green-looks24", "between6",
+                           "compare-between6"], "cheapest first, Green before between6, each control played once"
+    white_control = steps["looks12-control"][-1]
+    green_control = steps["green-looks12-control"][-1]
     opts = {"looks12": "precise,looks-x=4,flat-deals", "looks24": "precise,looks-x=8,flat-deals",
             "between6": "precise,between-x=2"}
-    for name, o in opts.items():
+    for name, o in [*opts.items(), ("green-looks12", opts["looks12"]), ("green-looks24", opts["looks24"])]:
         a = steps[name]
+        green = name.startswith("green-")
         assert [a[a.index(x) + 1] for x in ("--runs", "--seed", "--salt")] == [
-            str(jobs.BIG_RUNS), "1", str(jobs.BUNDLE_SALT)]
+            str(jobs.SCREEN_RUNS if green else jobs.BIG_RUNS), "1", str(jobs.BUNDLE_SALT)]
+        assert (a[a.index("--stake") + 1] if "--stake" in a else None) == ("3" if green else None)
         assert a[a.index("--teacher-options") + 1] == o
-        assert a[a.index("--value-net") + 1] == f"{jobs.ensemble(8)},{pair}", "round 11's pair carried"
-        assert steps[f"compare-{name}"][1:3] == [control, a[a.index("--out") + 1]]
+        assert a[a.index("--value-net") + 1] == jobs.ensemble(8), "the champion's own networks: no pair"
+        assert steps[f"compare-{name}"][1:3] == [green_control if green else white_control, a[a.index("--out") + 1]]
     out = {n: steps[n][steps[n].index("--out") + 1] for n in opts}
     assert steps["compare-looks24-vs-looks12"][1:3] == [out["looks12"], out["looks24"]]
-    # The bundle's control is shared: once there, it isn't played again.
-    assert control == next(a for n, a, *_ in jobs.bundle_steps(tmp_path) if n == "white-champion")[-1]
-    (tmp_path / control).write_text("{}")
-    assert "champion" not in [n for n, *_ in jobs.looks_steps(tmp_path)]
+    # Step 37's controls are shared: the same files as the bundle's, not played again once there.
+    bundle = {n: a for n, a, *_ in jobs.bundle_steps(tmp_path)}
+    assert white_control == bundle["white-champion"][-1] and green_control == bundle["green-champion"][-1]
+    for c in (white_control, green_control):
+        (tmp_path / c).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / c).write_text("{}")
+    assert not [n for n, *_ in jobs.looks_steps(tmp_path) if n.endswith("-control")]

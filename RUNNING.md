@@ -1101,24 +1101,29 @@ What steps 36 and 37 found.
   candidates, the reroll fix waits for the shop audit. Green: 28.20% against 29.00%, +0.80 (-1.14 to +2.74),
   information. The fresh control against the stored 8,000 runs: +0.41 (-0.69 to +1.51), information.
 
-## Step 38: the long run, buying looks (about 37 hours)
+## Step 38: the long run, buying looks (about 40 hours)
 
 Step 36 says the budget worth buying is more looks, not more of everything, and the looks are also where the time
 goes (looks flat saved 41% of the control's time, deals flat 10%). Teacher option `looks-x=K` sets the sample
 contents' own count (the champion's "precise" is 2, so 3x makes 6); `flat-deals` keeps the deals at their own;
 `between-x=K` raises every count between rounds K times more on top of `late-x` (`teacher::move_scales`).
 
-`make teacher-looks`: three arms on seeds 1 to 8,000 at salt 2, each with round 11's pair carried, each set run by
-run against step 37's champion control (salt 2, chose nothing: no control step), cheapest first, each compared as
-soon as it ends:
+`make teacher-looks`, on seeds 1 to 8,000 at salt 2 with the champion's own 14 networks (round 11's pair is out:
+step 37's bundle was Level, so its +1.70 on 2,000 seeds was noise), each arm set run by run against step 37's
+champion control (salt 2, chose nothing: no control step), cheapest first, each compared as soon as it ends:
 
 - `looks12`: twice the looks (12), the deals at their own count, about 7.5 hours;
 - `looks24`: four times the looks (24), the deals at their own, about 13.6 hours; also set against `looks12`;
-- `between6`: 6x every count between rounds (the budget curve's third point), about 16 hours.
+- the two looks arms on 2,000 Green seeds against step 37's Green control (28.20%), about 1.1 and 2.1 hours,
+  information as step 37 defines it;
+- `between6`: 6x every count between rounds, about 16 hours, last and the first to cut: with the looks arms in, it
+  asks only whether anything between rounds other than the looks pays (it differs from `looks12` by the quick
+  look and the deals at 6).
 
-The decision, stated before the run (each arm's difference against the control with its 95% range, about +/-1;
-three arms screened together, so the best reads about half a point high):
+The decision, stated before the run (each White arm's difference against the control with its 95% range, about
++/-1; three White arms, so the best reads about half a point high):
 
+- **An arm is void** if its time is outside 0.6 to 1.6 times its estimate above: the check that the option bit.
 - **A new champion** if the best arm is +1.5 or more with its range above zero. If `looks24` against `looks12`
   spans zero and both clear the bar, the cheaper `looks12` is the one. If `between6` is best but not clearly
   above the better looks arm, the looks arm is the one. The adoption is its own change, after C's review: salted
@@ -1127,7 +1132,7 @@ three arms screened together, so the best reads about half a point high):
   work turns to what the judge believes (the shop audit, the reroll fix, Track 3's labels).
 - **The exam** on the user's return only for an adopted arm +3 or more with its range above zero.
 - For information: the looks curve at 2 (-4.65 on 2,000 seeds), 6 (the control), 12 and 24 says how much more the
-  looks can buy.
+  looks can buy; money at the end against the control says whether more looks spend the money runs now keep.
 
 ```
 cd /mnt/h/balatro-meta && make sync && make test && make teacher-looks
