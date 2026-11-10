@@ -1089,6 +1089,52 @@ cd /mnt/h/balatro-meta && while grep -q '"state": "running"' .sync/watch/current
 
 Ctrl+C stops it whenever you need the PC; `make teacher-bundle` carries on from the arm it was in.
 
+What steps 36 and 37 found.
+
+- **Step 36 (salt 1, seeds 1 to 2,000, against the champion's 75.35%):** every count between rounds flat -5.45
+  (95% -7.75 to -3.15); every count in a round flat -0.80 (-2.96 to +1.36); between rounds against in a round
+  -4.65 (-6.93 to -2.37). **Between rounds carries it.** Within it, the deals flat -0.25 (-2.36 to +1.86) and the
+  sample contents flat -4.65 (-6.85 to -2.45): the gain is in the looks behind packs and rerolls, not the deals.
+  Time for 2,000 runs: the control 74 min; between flat 19; in a round flat 77; deals flat 67; looks flat 44.
+- **Step 37 (salt 2, seeds 1 to 8,000):** the champion 75.98%; the bundle (round 11's pair and `reroll-best`)
+  76.05%, +0.07 (-0.93 to +1.08). **Level:** nothing adopted, no split runs; the pair is carried in later
+  candidates, the reroll fix waits for the shop audit. Green: 28.20% against 29.00%, +0.80 (-1.14 to +2.74),
+  information. The fresh control against the stored 8,000 runs: +0.41 (-0.69 to +1.51), information.
+
+## Step 38: the long run, buying looks (about 37 hours)
+
+Step 36 says the budget worth buying is more looks, not more of everything, and the looks are also where the time
+goes (looks flat saved 41% of the control's time, deals flat 10%). Teacher option `looks-x=K` sets the sample
+contents' own count (the champion's "precise" is 2, so 3x makes 6); `flat-deals` keeps the deals at their own;
+`between-x=K` raises every count between rounds K times more on top of `late-x` (`teacher::move_scales`).
+
+`make teacher-looks`: three arms on seeds 1 to 8,000 at salt 2, each with round 11's pair carried, each set run by
+run against step 37's champion control (salt 2, chose nothing: no control step), cheapest first, each compared as
+soon as it ends:
+
+- `looks12`: twice the looks (12), the deals at their own count, about 7.5 hours;
+- `looks24`: four times the looks (24), the deals at their own, about 13.6 hours; also set against `looks12`;
+- `between6`: 6x every count between rounds (the budget curve's third point), about 16 hours.
+
+The decision, stated before the run (each arm's difference against the control with its 95% range, about +/-1;
+three arms screened together, so the best reads about half a point high):
+
+- **A new champion** if the best arm is +1.5 or more with its range above zero. If `looks24` against `looks12`
+  spans zero and both clear the bar, the cheaper `looks12` is the one. If `between6` is best but not clearly
+  above the better looks arm, the looks arm is the one. The adoption is its own change, after C's review: salted
+  reports never become the champion by rate (`best_8k_report`).
+- **Level** if no arm reaches it: the champion stays, the budget is near its plateau for this judge, and the
+  work turns to what the judge believes (the shop audit, the reroll fix, Track 3's labels).
+- **The exam** on the user's return only for an adopted arm +3 or more with its range above zero.
+- For information: the looks curve at 2 (-4.65 on 2,000 seeds), 6 (the control), 12 and 24 says how much more the
+  looks can buy.
+
+```
+cd /mnt/h/balatro-meta && make sync && make test && make teacher-looks
+```
+
+Ctrl+C stops it whenever you need the PC; `make teacher-looks` carries on from the arm it was in.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

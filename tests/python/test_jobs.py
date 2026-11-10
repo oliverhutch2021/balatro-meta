@@ -1349,3 +1349,27 @@ def test_the_overnight_bundle_plays_the_champion_and_one_candidate_at_a_fresh_sa
                                             "teacher_options": ["precise", "reroll-best"]}))
     assert jobs.best_8k_report(tmp_path)[2].endswith("-on-ensemble8-w1.5.json")
     assert "white-candidate" not in [n for n, *_ in jobs.bundle_steps(tmp_path)], "a finished arm isn't played again"
+
+
+def test_the_long_run_buys_looks_and_then_6x_between_rounds_against_the_salted_champion(tmp_path):
+    champion_in(tmp_path)
+    steps = {n: a for n, a, *_ in jobs.looks_steps(tmp_path)}
+    assert list(steps) == ["build", "champion", "looks12", "compare-looks12", "looks24", "compare-looks24",
+                           "compare-looks24-vs-looks12", "between6", "compare-between6"], "cheapest first"
+    control = steps["champion"][steps["champion"].index("--out") + 1]
+    pair = "models/value-11.bin,models/value-11b.bin"
+    opts = {"looks12": "precise,looks-x=4,flat-deals", "looks24": "precise,looks-x=8,flat-deals",
+            "between6": "precise,between-x=2"}
+    for name, o in opts.items():
+        a = steps[name]
+        assert [a[a.index(x) + 1] for x in ("--runs", "--seed", "--salt")] == [
+            str(jobs.BIG_RUNS), "1", str(jobs.BUNDLE_SALT)]
+        assert a[a.index("--teacher-options") + 1] == o
+        assert a[a.index("--value-net") + 1] == f"{jobs.ensemble(8)},{pair}", "round 11's pair carried"
+        assert steps[f"compare-{name}"][1:3] == [control, a[a.index("--out") + 1]]
+    out = {n: steps[n][steps[n].index("--out") + 1] for n in opts}
+    assert steps["compare-looks24-vs-looks12"][1:3] == [out["looks12"], out["looks24"]]
+    # The bundle's control is shared: once there, it isn't played again.
+    assert control == next(a for n, a, *_ in jobs.bundle_steps(tmp_path) if n == "white-champion")[-1]
+    (tmp_path / control).write_text("{}")
+    assert "champion" not in [n for n, *_ in jobs.looks_steps(tmp_path)]

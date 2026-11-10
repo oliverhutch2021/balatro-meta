@@ -3159,6 +3159,10 @@ pub(crate) fn move_scales(run: &Run) -> Option<crate::value::Scales> {
     {
         x = x.max(boss);
     }
+    // "between-x": between rounds, this much more again.
+    if !in_round {
+        x *= param("between-x").unwrap_or(1.0).max(1.0);
+    }
     if x <= 1.0 {
         return None;
     }
@@ -4262,6 +4266,15 @@ mod tests {
         assert_eq!(flat("flat-round", &shop), Some(s(3.0, 3.0, 6.0, 6.0)));
         assert_eq!(flat("flat-between", &shop), None);
         assert_eq!(flat("flat-between", &boss), Some(s(4.0, 4.0, 8.0, 8.0)));
+        // "between-x": the counts between rounds raised again (6x), the rounds' as the champion's.
+        assert_eq!(flat("between-x=2", &shop), Some(s(6.0, 6.0, 12.0, 12.0)));
+        assert_eq!(flat("between-x=2", &small), Some(s(3.0, 3.0, 6.0, 6.0)));
+        assert_eq!(flat("between-x=2", &boss), Some(s(4.0, 4.0, 8.0, 8.0)));
+        // More sample contents with the deals at their own count, between rounds only by its use.
+        assert_eq!(
+            at(&["looks-x=4", "flat-deals"], &shop),
+            s(1.0, 3.0, 12.0, 6.0)
+        );
         // Nothing to scale, nothing changed.
         with_options(&["precise", "flat-tries"], || {
             assert_eq!(move_scales(&small), None)

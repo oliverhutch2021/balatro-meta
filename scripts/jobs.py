@@ -1436,6 +1436,55 @@ def bundle_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCRE
     return steps
 
 
+# make teacher-looks: the long run (about 37 hours). Step 36 put the budget's gain between rounds and in the
+# sample contents behind packs and rerolls (`flat-looks` -4.65, `flat-deals` -0.25, against the 3x champion), so the
+# budget worth buying is more looks, not more of everything. Three arms on 8,000 White seeds at the bundle's salt,
+# each set run by run against the champion at that salt (step 37's control, which chose nothing), cheapest first so
+# a stop leaves whole results: twice the looks with the deals at their own count, four times the looks so, and 6x
+# everything between rounds (the budget curve's third point). Round 11's pair is carried in each (step 37: Level,
+# free to run). Each comparison is written as its arm ends; the looks' two arms are also set against each other.
+LOOKS_ARMS = (("looks12", "looks-x=4,flat-deals"), ("looks24", "looks-x=8,flat-deals"), ("between6", "between-x=2"))
+
+
+def looks_steps(root: Path = ROOT, runs: int = BIG_RUNS) -> list[tuple]:
+    """make teacher-looks: the LOOKS_ARMS against the champion at BUNDLE_SALT on `runs` seeds."""
+    steps: list[tuple] = [("build", [*MAKE, "build"])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    args = list(best[1])
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
+    w = args[args.index("--value-weight") + 1]
+    nets = args[args.index("--value-net") + 1]
+    stem = Path(best[2]).stem.split("-on-")[-1]
+    pair = "models/value-11.bin,models/value-11b.bin"
+    tag, size, s = f"f{FORMULA}", f"{runs // 1000}k", f"salt{BUNDLE_SALT}"
+    control = f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-{s}-on-{stem}.json"
+
+    def play(o: str, n: str, out: str) -> list[str]:
+        a = list(args)
+        a[a.index("--value-net") + 1] = n
+        a[a.index("--teacher-options") + 1] = o
+        return [*BASELINE, "--bot", "teacher", *a, "--runs", str(runs), "--seed", "1", "--salt", str(BUNDLE_SALT),
+                "--out", out]
+
+    if not (root / control).exists():
+        steps.append(("champion", play(opts, nets, control)))
+    outs = {}
+    for name, extra in LOOKS_ARMS:
+        o = f"{opts},{extra}"
+        out = f"results/tune/{tag}-{file_safe(o)}-{size}-w{w}-{s}-on-champion+round11.json"
+        outs[name] = out
+        if not (root / out).exists():
+            steps.append((name, play(o, f"{nets},{pair}", out)))
+        steps.append((f"compare-{name}", ["scripts/compare_runs.py", control, out, "--out",
+                                          f"results/tune/{Path(out).stem}-vs-{Path(control).stem}.json"]))
+        if name == "looks24":
+            steps.append(("compare-looks24-vs-looks12", ["scripts/compare_runs.py", outs["looks12"], out, "--out",
+                                                         f"results/tune/{Path(out).stem}-vs-{Path(outs['looks12']).stem}.json"]))
+    return steps
+
+
 def budget_away_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     """make teacher-budget-away: the AWAY_TRIALS against the champion at the screens' salt (champion_trials), and
     the two halves set against each other run by run: every count between rounds kept flat against every count in a
@@ -1914,6 +1963,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-budget-parts": budget_parts_steps(),
     "teacher-budget-away": budget_away_steps(),
     "teacher-bundle": bundle_steps(),
+    "teacher-looks": looks_steps(),
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
     "diagnose": diagnose_steps(),

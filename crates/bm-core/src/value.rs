@@ -199,6 +199,9 @@ pub const PARAMS: &[(&str, f64)] = &[
     ("quick-x", 1.0),
     ("looks-x", 1.0),
     ("tries-x", 1.0),
+    // Between rounds (the blind choice, shops, packs), every count scaled by this much more on top of "late-x"
+    // (teacher.rs `move_scales`): the budget raised only where it pays (RUNNING step 36).
+    ("between-x", 1.0),
     // Options the teacher judges in full after the quick look (teacher.rs).
     ("finalists", 3.0),
     // The adaptive budget: when a decision's two best options are close (a shop's or pack's within "close-gap"
