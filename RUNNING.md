@@ -1058,19 +1058,25 @@ nothing elsewhere.
 - the champion (the control; also the control of the longer chain to come), about 5.1 hours;
 - one combined candidate at the champion's budget: its 14 networks with round 11's pair (+1.70 on 2,000 seeds,
   95% -0.28 to +3.68) and `reroll-best`, about 5.1 to 5.5 hours;
-- then both on 2,000 Green seeds at the same salt (`--stake 3`), about 0.85 hours each, a second gauge.
+- then both on 2,000 Green seeds at the same salt (`--stake 3`), about 0.85 hours each, a second gauge;
+- and, for information only, the fresh control against the champion's stored 8,000 runs (`compare-stored`): its
+  luck and the code's drift since 6 November.
 
 A salted report never becomes the champion by a higher rate (`best_8k_report` leaves them out): a champion changes
 on this rule. The decision, stated before the run (the White paired difference with its 95% range, about +/-1):
 
 - **Gain** if the candidate is +1 point or more with its range above zero: it becomes the base the longer chain
-  builds on, and its own next screens use a new salt (3). The exam follows only for a combined bot 3 points or more
+  builds on. Later candidates are paired against this same salt-2 champion control, which chose nothing, so their
+  difference is the total over the champion, which is what the exam decision needs (a salt-3 control of the
+  bundle is needed only to read a step on top of it). The exam follows only for a combined bot 3 points or more
   above its control with the range above zero.
 - **Worse** if the range is below zero: the combination is dropped and the parts split to find the one that costs.
 - **Level** otherwise: nothing is adopted, and the parts are split next (the pair alone and the reroll fix alone;
-  the shop audit says whether the fix earns its own arm).
-- Green is information for this decision. A candidate level at White and clearly up at Green (range above zero)
-  stays a candidate for the stakes phase, not the White champion.
+  the shop audit says whether the fix earns its own arm). A Level bundle does not say the reroll fix failed: it
+  bites where a reroll's cost comes out at zero or below (always in the last shop, by noise elsewhere), its ceiling
+  is the ante 8 losses (about 8% of runs), and its likely share is under what +/-1 can see here.
+- Green is information for this decision. A candidate level at White and clearly up at Green (its paired 95%
+  range above zero, about +/-2 on 2,000 seeds) stays a candidate for the stakes phase, not the White champion.
 
 It starts once step 36 has finished (the sync needs its results committed); this line waits for it:
 

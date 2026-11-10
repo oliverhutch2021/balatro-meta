@@ -1424,6 +1424,11 @@ def bundle_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCRE
                                                 ("green", green, green_runs, ["--stake", str(BUNDLE_GREEN)])):
         if not (root / control).exists():
             steps.append((f"{name}-champion", play(opts, nets, count, control, stake)))
+        if name == "white":
+            # Information only: the champion's fresh draw against its stored runs on the same 8,000 seeds (its luck
+            # and the code's drift since).
+            steps.append(("compare-stored", ["scripts/compare_runs.py", best[2], control, "--out",
+                                             f"results/tune/{Path(control).stem}-vs-{Path(best[2]).stem}.json"]))
         if not (root / cand).exists():
             steps.append((f"{name}-candidate", play(cand_opts, f"{nets},{pair}", count, cand, stake)))
         steps.append((f"compare-{name}", ["scripts/compare_runs.py", control, cand, "--out",

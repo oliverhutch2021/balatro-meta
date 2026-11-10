@@ -1323,8 +1323,11 @@ def test_the_budget_taken_away_one_part_at_a_time_against_the_salted_champion(tm
 def test_the_overnight_bundle_plays_the_champion_and_one_candidate_at_a_fresh_salt(tmp_path):
     champion_in(tmp_path)
     steps = {n: a for n, a, *_ in jobs.bundle_steps(tmp_path)}
-    assert list(steps) == ["build", "white-champion", "white-candidate", "compare-white",
+    assert list(steps) == ["build", "white-champion", "compare-stored", "white-candidate", "compare-white",
                            "green-champion", "green-candidate", "compare-green"], "each pair compared as it finishes"
+    stored = steps["compare-stored"]
+    champion = jobs.best_8k_report(tmp_path)
+    assert stored[1:3] == [champion[2], steps["white-champion"][steps["white-champion"].index("--out") + 1]]
     pair = "models/value-11.bin,models/value-11b.bin"
     for name, runs, stake in (("white", jobs.BIG_RUNS, None), ("green", jobs.SCREEN_RUNS, "3")):
         c, k = steps[f"{name}-champion"], steps[f"{name}-candidate"]
