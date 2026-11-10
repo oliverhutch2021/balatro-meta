@@ -239,6 +239,9 @@ def test_a_win_whose_screen_shows_a_state_that_never_settles_still_ends_the_run_
         rec.step()
         fake.person()
     assert rec.run is not None and fake.game is not None and not fake.game.over
+    # The run in progress: an earlier run can already have been lost within those moves (the recorder draws fresh
+    # seeds), so its file is found by its seed, not as the first file listed.
+    seed = rec.run.seed
     real = fake.call
 
     def won(method, params=None, timeout=None):
@@ -251,7 +254,8 @@ def test_a_win_whose_screen_shows_a_state_that_never_settles_still_ends_the_run_
     rec.step()
     assert rec.run is None
     rec.close()
-    files = list(tmp_path.glob("*.jsonl.gz"))
+    files = [f for f in tmp_path.glob("*.jsonl.gz") if seed in f.name]
+    assert len(files) == 1
     with gzip.open(files[0], "rt") as fh:
         end = json.loads(fh.read().splitlines()[-1])
     assert end["kind"] == "end" and end["won"] and end["why"] == "won"
