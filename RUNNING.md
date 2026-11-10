@@ -1070,11 +1070,14 @@ on this rule. The decision, stated before the run (the White paired difference w
   difference is the total over the champion, which is what the exam decision needs (a salt-3 control of the
   bundle is needed only to read a step on top of it). The exam follows only for a combined bot 3 points or more
   above its control with the range above zero.
-- **Worse** if the range is below zero: the combination is dropped and the parts split to find the one that costs.
-- **Level** otherwise: nothing is adopted, and the parts are split next (the pair alone and the reroll fix alone;
-  the shop audit says whether the fix earns its own arm). A Level bundle does not say the reroll fix failed: it
-  bites where a reroll's cost comes out at zero or below (always in the last shop, by noise elsewhere), its ceiling
-  is the ante 8 losses (about 8% of runs), and its likely share is under what +/-1 can see here.
+- **Worse** if the range is below zero: the combination is dropped and the parts split to find the one that costs
+  (the only case that spends runs on the parts).
+- **Level** otherwise: nothing is adopted, the champion doesn't change, and no split runs follow (5 hours an arm
+  for parts worth under a point each). The reroll fix is decided by the shop audit's spend-down fork, where it
+  acts; the pair is carried in later candidates, free to run, without being called a gain. A Level bundle does not
+  say the reroll fix failed: it bites where a reroll's cost comes out at zero or below (always in the last shop, by
+  noise elsewhere), its ceiling is the ante 8 losses (about 8% of runs), and its likely share is under what +/-1
+  can see here.
 - Green is information for this decision. A candidate level at White and clearly up at Green (its paired 95%
   range above zero, about +/-2 on 2,000 seeds) stays a candidate for the stakes phase, not the White champion.
 
