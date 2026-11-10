@@ -1,0 +1,44 @@
+{
+ "job": "teacher-budget-away",
+ "commit": "da5bb1a787a9ac36e6ec5d130a9977aabc415743",
+ "started": "2026-11-09T22:08:56+00:00",
+ "finished": "2026-11-10T01:36:06+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   16.1,
+   17.3,
+   17.5
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 10,
+  "w2.5-flat-between": 1119,
+  "compare-w2.5-flat-between": 0,
+  "w2.5-flat-round": 4644,
+  "compare-w2.5-flat-round": 0,
+  "w2.5-flat-deals": 4026,
+  "compare-w2.5-flat-deals": 0,
+  "w2.5-flat-looks": 2630,
+  "compare-w2.5-flat-looks": 0,
+  "compare-between-vs-round": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "w2.5-flat-between": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,flat-between --runs 2000 --seed 1 --salt 1 --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+flat-between-2k-w2.5-salt1-on-ensemble8-w1.5.json",
+  "compare-w2.5-flat-between": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-2k-w2.5-salt1-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+flat-between-2k-w2.5-salt1-on-ensemble8-w1.5.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+flat-between-2k-w2.5-salt1-on-ensemble8-w1.5-vs-f3-precise+late-x-3+boss-x-4+late-from-1-2k-w2.5-salt1-on-ensemble8-w1.5.json",
+  "w2.5-flat-round": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,flat-round --runs 2000 --seed 1 --salt 1 --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+flat-round-2k-w2.5-salt1-on-ensemble8-w1.5.json",
+  "compare-w2.5-flat-round": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-2k-w2.5-salt1-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+flat-round-2k-w2.5-salt1-on-ensemble8-w1.5.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+flat-round-2k-w2.5-salt1-on-ensemble8-w1.5-vs-f3-precise+late-x-3+boss-x-4+late-from-1-2k-w2.5-salt1-on-ensemble8-w1.5.json",
+  "w2.5-flat-deals": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,flat-deals --runs 2000 --seed 1 --salt 1 --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+flat-deals-2k-w2.5-salt1-on-ensemble8-w1.5.json",
+  "compare-w2.5-flat-deals": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-2k-w2.5-salt1-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+flat-deals-2k-w2.5-salt1-on-ensemble8-w1.5.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+flat-deals-2k-w2.5-salt1-on-ensemble8-w1.5-vs-f3-precise+late-x-3+boss-x-4+late-from-1-2k-w2.5-salt1-on-ensemble8-w1.5.json",
+  "w2.5-flat-looks": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,flat-looks --runs 2000 --seed 1 --salt 1 --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+flat-looks-2k-w2.5-salt1-on-ensemble8-w1.5.json",
+  "compare-w2.5-flat-looks": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-2k-w2.5-salt1-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+flat-looks-2k-w2.5-salt1-on-ensemble8-w1.5.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+flat-looks-2k-w2.5-salt1-on-ensemble8-w1.5-vs-f3-precise+late-x-3+boss-x-4+late-from-1-2k-w2.5-salt1-on-ensemble8-w1.5.json",
+  "compare-between-vs-round": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+flat-round-2k-w2.5-salt1-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+flat-between-2k-w2.5-salt1-on-ensemble8-w1.5.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+flat-between-2k-w2.5-salt1-on-ensemble8-w1.5-vs-f3-precise+late-x-3+boss-x-4+late-from-1+flat-round-2k-w2.5-salt1-on-ensemble8-w1.5.json"
+ }
+}
