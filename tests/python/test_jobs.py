@@ -1318,3 +1318,31 @@ def test_the_budget_taken_away_one_part_at_a_time_against_the_salted_champion(tm
     again = [n for n, *_ in jobs.budget_away_steps(tmp_path)]
     assert "champion" not in again and len([n for n in again if n.startswith("compare-")]) == 5
     assert champion[2] not in {a[1] for n, a in steps.items() if n.startswith("compare-")}
+
+
+def test_the_overnight_bundle_plays_the_champion_and_one_candidate_at_a_fresh_salt(tmp_path):
+    champion_in(tmp_path)
+    steps = {n: a for n, a, *_ in jobs.bundle_steps(tmp_path)}
+    assert list(steps) == ["build", "white-champion", "white-candidate", "compare-white",
+                           "green-champion", "green-candidate", "compare-green"], "each pair compared as it finishes"
+    pair = "models/value-11.bin,models/value-11b.bin"
+    for name, runs, stake in (("white", jobs.BIG_RUNS, None), ("green", jobs.SCREEN_RUNS, "3")):
+        c, k = steps[f"{name}-champion"], steps[f"{name}-candidate"]
+        for a in (c, k):
+            assert [a[a.index(x) + 1] for x in ("--runs", "--seed", "--salt")] == [
+                str(runs), "1", str(jobs.BUNDLE_SALT)]
+            assert (a[a.index("--stake") + 1] if "--stake" in a else None) == stake
+            assert a[a.index("--value-weight") + 1] == "2.5"
+        assert c[c.index("--value-net") + 1] == jobs.ensemble(8)
+        assert c[c.index("--teacher-options") + 1] == "precise"
+        assert k[k.index("--value-net") + 1] == f"{jobs.ensemble(8)},{pair}"
+        assert k[k.index("--teacher-options") + 1] == "precise,reroll-best"
+        cmp = steps[f"compare-{name}"]
+        assert cmp[1:3] == [c[c.index("--out") + 1], k[k.index("--out") + 1]]
+    # A salted 8,000-seed report never becomes the champion by a higher rate: champions change on a rule.
+    out = steps["white-candidate"][steps["white-candidate"].index("--out") + 1]
+    (tmp_path / out).write_text(json.dumps({"kind": "baseline", "runs": 8000, "win_rate": 0.99, "seed_base": 1,
+                                            "salt": 2, "value_net": jobs.ensemble(8), "value_weight": 2.5,
+                                            "teacher_options": ["precise", "reroll-best"]}))
+    assert jobs.best_8k_report(tmp_path)[2].endswith("-on-ensemble8-w1.5.json")
+    assert "white-candidate" not in [n for n, *_ in jobs.bundle_steps(tmp_path)], "a finished arm isn't played again"

@@ -105,6 +105,11 @@ pub const OPTIONS: &[&str] = &[
     "flat-tries",
     "flat-between",
     "flat-round",
+    // A reroll when the money is worth nothing (the last shop: the long run's money term is zero there): valued as
+    // the best of the sample shops the money can still buy (`free_search`), not one shop's average. Without it
+    // `search` drops the chance to reroll again exactly where rerolling is free, and the sign of the noise in its
+    // cost decides between "best of many" and "one draw" (lab issue #12).
+    "reroll-best",
     // With a joker that pays on the round's final hand (Dusk retriggers its cards, Acrobat x3): when the best
     // hand beats the blind only as the final hand, play single spare cards until one hand is left, then the
     // best; and the value's sample rounds try that way of playing too (the discards dig for the final hand
@@ -2336,6 +2341,41 @@ fn search(best: &[f64], cost: f64, again: bool) -> f64 {
     v
 }
 
+/// What rerolling is worth when the money buys nothing else ("reroll-best"): the best of `n` sample shops, as the
+/// mean of the best of `n` draws from the samples (each draw a sample shop's best, buying nothing included).
+fn free_search(best: &[f64], n: usize) -> f64 {
+    if best.is_empty() {
+        return f64::MIN;
+    }
+    let mut b = best.to_vec();
+    b.sort_by(f64::total_cmp);
+    let k = b.len() as f64;
+    let n = n.max(1) as i32;
+    b.iter()
+        .enumerate()
+        .map(|(i, v)| v * (((i + 1) as f64 / k).powi(n) - (i as f64 / k).powi(n)))
+        .sum()
+}
+
+/// Rerolls the money pays for in a row, keeping $3 (each costs a dollar more than the one before).
+fn rerolls_affordable(run: &Run) -> usize {
+    let (mut money, mut cost, mut n) = (run.spendable(), run.reroll_cost.max(1), 0);
+    while money - cost >= 3 && n < 64 {
+        money -= cost;
+        cost += 1;
+        n += 1;
+    }
+    n
+}
+
+/// A reroll's worth from its samples: `search`, or with "reroll-best" and money worth nothing, `free_search`.
+fn reroll_worth(run: &Run, best: &[f64], cost: f64, again: bool) -> f64 {
+    if again && cost <= 0.0 && on("reroll-best") {
+        return free_search(best, rerolls_affordable(run));
+    }
+    search(best, cost, again)
+}
+
 /// Judge options in two passes: a quick value for each, then the full value for the three best that beat
 /// doing nothing. Returns the first move of the winner, or None if nothing beats doing nothing.
 /// Doing nothing is judged as the position `base` when given (the run after skipping a pack: "fair-skip"), else
@@ -2378,7 +2418,7 @@ fn choose_against(
                     .map(|(c, follow)| sampled_value(c, follow, vs))
                     .unzip();
                 let cost = here_full(run, vs) - bare.iter().sum::<f64>() / bare.len().max(1) as f64;
-                search(&best, cost, *again)
+                reroll_worth(run, &best, cost, *again)
             }
         }
     };
@@ -2684,7 +2724,7 @@ fn shop_option_list(
             // Another reroll after this one, while the money allows it (its cost goes up by one).
             let again = run.spendable() - 2 * run.reroll_cost > 3;
             let cost = crate::value::quick(run, vs) - bare.iter().sum::<f64>() / bare.len() as f64;
-            let q = search(&best, cost, again);
+            let q = reroll_worth(run, &best, cost, again);
             options.push(((MoveKind::Reroll, 0), q, Judge::Rerolled(samples, again)));
         }
     }
@@ -4225,6 +4265,34 @@ mod tests {
         // Nothing to scale, nothing changed.
         with_options(&["precise", "flat-tries"], || {
             assert_eq!(move_scales(&small), None)
+        });
+    }
+
+    #[test]
+    fn a_free_reroll_is_worth_the_best_of_the_shops_the_money_buys() {
+        // One sample shop in four holds the answer: one look is worth a quarter of it, two looks 7/16, many nearly all.
+        let best = [0.0, 0.0, 0.0, 1.0];
+        assert!((free_search(&best, 1) - 0.25).abs() < 1e-12);
+        assert!((free_search(&best, 2) - 0.4375).abs() < 1e-12);
+        assert!(free_search(&best, 60) > 0.99);
+        assert!(
+            (free_search(&best, 1) - search(&best, 0.0, true)).abs() < 1e-12,
+            "one draw is search's mean"
+        );
+        // The money: $32 with rerolls from $5 keeps $3 after 4 of them (5 + 6 + 7 + 8 = 26).
+        let mut run = Run::scenario("FREE1", crate::blinds::BlindKind::Small);
+        run.money = 32;
+        run.reroll_cost = 5;
+        assert_eq!(rerolls_affordable(&run), 4);
+        // Only with the option, only when the money is worth nothing and another reroll is affordable.
+        assert_eq!(reroll_worth(&run, &best, 0.0, true), 0.25);
+        with_options(&["reroll-best"], || {
+            assert!((reroll_worth(&run, &best, 0.0, true) - free_search(&best, 4)).abs() < 1e-12);
+            assert_eq!(reroll_worth(&run, &best, 0.0, false), 0.25);
+            assert_eq!(
+                reroll_worth(&run, &best, 0.1, true),
+                search(&best, 0.1, true)
+            );
         });
     }
 

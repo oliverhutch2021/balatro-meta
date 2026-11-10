@@ -1039,6 +1039,47 @@ cd /mnt/h/balatro-meta && make sync && make test && make teacher-budget-away
 
 Ctrl+C stops it whenever you need the PC; the same line carries on from the step it was in.
 
+## Step 37: overnight, the bundle on 8,000 seeds (about 12.5 hours)
+
+Step 36's first two arms (information only until all four are in): every count between rounds flat lost 5.45 points
+(95% -7.75 to -3.15) and ran in 19 minutes; every count in a round flat lost 0.80 (-2.96 to +1.36) in 77 against
+the control's 74. The budget's gain and its time are between rounds, which is where the losses to Violet Vessel
+point too: those runs start ante 8 with a median $39.50, see the 6x from its start, and lose holding $32.50.
+
+One reason, found in the code: in the last shop the long run's money term is zero (value.rs `spend`), so a
+reroll's cost in value is about zero, and `search` (teacher.rs) values a reroll as one sample shop's average
+whenever that cost is zero or below, dropping the chance to reroll again exactly where rerolling is free. The sign
+of the noise in the cost picks between "best of many shops" and "one shop". Teacher option `reroll-best` values it
+instead as the best of the sample shops the money can still buy (`free_search`, `rerolls_affordable`); it changes
+nothing elsewhere.
+
+`make teacher-bundle`, on seeds 1 to 8,000 at a fresh salt (2), each pair compared as soon as its second arm ends:
+
+- the champion (the control; also the control of the longer chain to come), about 5.1 hours;
+- one combined candidate at the champion's budget: its 14 networks with round 11's pair (+1.70 on 2,000 seeds,
+  95% -0.28 to +3.68) and `reroll-best`, about 5.1 to 5.5 hours;
+- then both on 2,000 Green seeds at the same salt (`--stake 3`), about 0.85 hours each, a second gauge.
+
+A salted report never becomes the champion by a higher rate (`best_8k_report` leaves them out): a champion changes
+on this rule. The decision, stated before the run (the White paired difference with its 95% range, about +/-1):
+
+- **Gain** if the candidate is +1 point or more with its range above zero: it becomes the base the longer chain
+  builds on, and its own next screens use a new salt (3). The exam follows only for a combined bot 3 points or more
+  above its control with the range above zero.
+- **Worse** if the range is below zero: the combination is dropped and the parts split to find the one that costs.
+- **Level** otherwise: nothing is adopted, and the parts are split next (the pair alone and the reroll fix alone;
+  the shop audit says whether the fix earns its own arm).
+- Green is information for this decision. A candidate level at White and clearly up at Green (range above zero)
+  stays a candidate for the stakes phase, not the White champion.
+
+It starts once step 36 has finished (the sync needs its results committed); this line waits for it:
+
+```
+cd /mnt/h/balatro-meta && while grep -q '"state": "running"' .sync/watch/current.json; do sleep 60; done; sleep 120; make sync && make test && make teacher-bundle
+```
+
+Ctrl+C stops it whenever you need the PC; `make teacher-bundle` carries on from the arm it was in.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

@@ -156,6 +156,10 @@ def best_8k_report(root: Path = ROOT, leave_out: str = "") -> tuple[float, list[
                 continue
             if runs < 8000 or base != 1 or not r.get("value_net") or any(o.startswith("explore") for o in options):
                 continue
+            # A salted report draws the bot's samples afresh: its rate is not paired with the others', so a
+            # champion changes on a rule (RUNNING step 37), not by a higher number at another salt.
+            if r.get("salt", 0):
+                continue
             if (best is None or rate > best[0]) and f.name != leave_out:
                 best = (rate, report_args(r), str(f.relative_to(root)))
     return best
@@ -1378,6 +1382,55 @@ def budget_parts_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple
 AWAY_TRIALS = ((None, "flat-between"), (None, "flat-round"), (None, "flat-deals"), (None, "flat-looks"))
 
 
+# make teacher-bundle: the overnight test of the bundle (the lab's direction 1, as the user asked for one night's
+# run). On 8,000 White seeds at a fresh salt, where a paired difference reads to about a point: the champion (the
+# control, also the control of the longer chain to come) and one combined candidate, the champion's networks with
+# round 11's pair and the reroll fix ("reroll-best"), at the champion's budget. Then both on 2,000 Green seeds, a
+# second gauge. Each comparison is written as soon as its arm finishes. If the candidate is level or worse, its
+# parts are split afterwards.
+BUNDLE_SALT = 2
+BUNDLE_GREEN = 3
+
+
+def bundle_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
+    """make teacher-bundle: the champion and the combined candidate at BUNDLE_SALT on `runs` White seeds, each pair
+    compared at once, then both on `green_runs` Green seeds."""
+    steps: list[tuple] = [("build", [*MAKE, "build"])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    args = list(best[1])
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
+    w = args[args.index("--value-weight") + 1]
+    nets = args[args.index("--value-net") + 1]
+    stem = Path(best[2]).stem.split("-on-")[-1]
+    pair = "models/value-11.bin,models/value-11b.bin"
+    cand_opts = f"{opts},reroll-best"
+    salt = ["--salt", str(BUNDLE_SALT)]
+
+    def play(o: str, n: str, count: int, out: str, stake: list[str]) -> list[str]:
+        a = list(args)
+        a[a.index("--value-net") + 1] = n
+        a[a.index("--teacher-options") + 1] = o
+        return [*BASELINE, "--bot", "teacher", *a, "--runs", str(count), "--seed", "1", *salt, *stake, "--out", out]
+
+    size, gsize = f"{runs // 1000}k", f"{green_runs // 1000}k"
+    tag, s = f"f{FORMULA}", f"salt{BUNDLE_SALT}"
+    white = (f"results/tune/{tag}-{file_safe(opts)}-{size}-w{w}-{s}-on-{stem}.json",
+             f"results/tune/{tag}-{file_safe(cand_opts)}-{size}-w{w}-{s}-on-champion+round11.json")
+    green = (f"results/stakes/stake{BUNDLE_GREEN}-{gsize}-{tag}-{file_safe(opts)}-w{w}-{s}-on-{stem}.json",
+             f"results/stakes/stake{BUNDLE_GREEN}-{gsize}-{tag}-{file_safe(cand_opts)}-w{w}-{s}-on-champion+round11.json")
+    for name, (control, cand), count, stake in (("white", white, runs, []),
+                                                ("green", green, green_runs, ["--stake", str(BUNDLE_GREEN)])):
+        if not (root / control).exists():
+            steps.append((f"{name}-champion", play(opts, nets, count, control, stake)))
+        if not (root / cand).exists():
+            steps.append((f"{name}-candidate", play(cand_opts, f"{nets},{pair}", count, cand, stake)))
+        steps.append((f"compare-{name}", ["scripts/compare_runs.py", control, cand, "--out",
+                                          f"{Path(cand).parent}/{Path(cand).stem}-vs-{Path(control).stem}.json"]))
+    return steps
+
+
 def budget_away_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     """make teacher-budget-away: the AWAY_TRIALS against the champion at the screens' salt (champion_trials), and
     the two halves set against each other run by run: every count between rounds kept flat against every count in a
@@ -1855,6 +1908,7 @@ JOBS: dict[str, list[tuple]] = {
     "diagnose-control": diagnose_control_steps(),
     "teacher-budget-parts": budget_parts_steps(),
     "teacher-budget-away": budget_away_steps(),
+    "teacher-bundle": bundle_steps(),
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
     "diagnose": diagnose_steps(),
