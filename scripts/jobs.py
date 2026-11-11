@@ -1502,6 +1502,44 @@ def looks_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREE
     return kept
 
 
+# make shop-audit: why the runs leave the last shops with money (the lab's direction 1, track 2). The champion plays
+# step 37's salt-2 seeds again with `--audit-shops`, so its runs are the control's own, move for move (checked: the
+# comparison with the control must show no seed that differs), and every shop decision of antes 6 to 8 (Green: 3 to
+# 5) is written with what the teacher saw: the shop, the money, every option's quick value, the reroll's samples and
+# its cost in value, the finalists' full values and the move. The lines are large, so they stay in .sync/audit
+# (gzipped); `scripts/audit_shops.py` writes the summary into results/audit. A diagnosis, never play.
+AUDIT_DIR = ".sync/audit"
+
+
+def audit_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
+    """make shop-audit: the champion at BUNDLE_SALT with the shop audit on, White antes 6-8 and Green antes 3-5."""
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", AUDIT_DIR])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    args = list(best[1])
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
+    w = args[args.index("--value-weight") + 1]
+    stem = Path(best[2]).stem.split("-on-")[-1]
+    tag, s = f"f{FORMULA}", f"salt{BUNDLE_SALT}"
+    for name, count, antes, stake, control in (
+            ("white", runs, "6-8", [], f"results/tune/{tag}-{file_safe(opts)}-{runs // 1000}k-w{w}-{s}-on-{stem}.json"),
+            ("green", green_runs, "3-5", ["--stake", str(BUNDLE_GREEN)],
+             f"results/stakes/stake{BUNDLE_GREEN}-{green_runs // 1000}k-{tag}-{file_safe(opts)}-w{w}-{s}-on-{stem}.json")):
+        lines = f"{AUDIT_DIR}/{name}-{count // 1000}k-{s}.jsonl"
+        report = f"results/audit/{name}-{count // 1000}k-{s}.json"
+        if not (root / report).exists():
+            steps.append((f"{name}-audit", [*BASELINE, "--bot", "teacher", *args, "--runs", str(count), "--seed", "1",
+                                            "--salt", str(BUNDLE_SALT), *stake, "--audit-shops", lines,
+                                            "--audit-antes", antes, "--out", report]))
+            steps.append((f"{name}-gzip", ["gzip", "-f", lines]))
+        steps.append((f"{name}-same-runs", ["scripts/compare_runs.py", control, report, "--out",
+                                            f"results/audit/{name}-{count // 1000}k-{s}-vs-control.json"]))
+        steps.append((f"{name}-summary", ["scripts/audit_shops.py", f"{lines}.gz", report, "--out",
+                                          f"results/audit/{name}-{count // 1000}k-{s}-summary.json"]))
+    return steps
+
+
 def budget_away_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     """make teacher-budget-away: the AWAY_TRIALS against the champion at the screens' salt (champion_trials), and
     the two halves set against each other run by run: every count between rounds kept flat against every count in a
@@ -1981,6 +2019,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-budget-away": budget_away_steps(),
     "teacher-bundle": bundle_steps(),
     "teacher-looks": looks_steps(),
+    "shop-audit": audit_steps(),
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
     "diagnose": diagnose_steps(),

@@ -1380,3 +1380,31 @@ def test_the_long_run_buys_looks_and_then_6x_between_rounds_against_the_salted_c
         (tmp_path / c).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / c).write_text("{}")
     assert not [n for n, *_ in jobs.looks_steps(tmp_path) if n.endswith("-control")]
+
+
+def test_the_shop_audit_replays_the_salted_control_and_summarises_the_late_shops(tmp_path):
+    champion_in(tmp_path)
+    steps = {n: a for n, a, *_ in jobs.audit_steps(tmp_path)}
+    assert list(steps) == ["build", "folder", "white-audit", "white-gzip", "white-same-runs", "white-summary",
+                           "green-audit", "green-gzip", "green-same-runs", "green-summary"]
+    bundle = {n: a for n, a, *_ in jobs.bundle_steps(tmp_path)}
+    for name, control, antes, runs in (("white", bundle["white-champion"][-1], "6-8", jobs.BIG_RUNS),
+                                       ("green", bundle["green-champion"][-1], "3-5", jobs.SCREEN_RUNS)):
+        a = steps[f"{name}-audit"]
+        champ = bundle[f"{name}-champion"]
+        # The control's own command, with the audit added: the same runs, move for move.
+        stripped = [x for x in a if x not in ("--audit-shops", "--audit-antes", antes)
+                    and not x.startswith(jobs.AUDIT_DIR)]
+        assert stripped[:-2] == champ[:-2] and stripped[-2] == "--out"
+        assert a[a.index("--audit-antes") + 1] == antes and a[a.index("--runs") + 1] == str(runs)
+        lines = a[a.index("--audit-shops") + 1]
+        assert lines.startswith(jobs.AUDIT_DIR + "/"), "the big lines stay out of git"
+        assert steps[f"{name}-gzip"] == ["gzip", "-f", lines]
+        report = a[a.index("--out") + 1]
+        assert steps[f"{name}-same-runs"][1:3] == [control, report]
+        assert steps[f"{name}-summary"][1:3] == [lines + ".gz", report]
+    # A report already there is not played again.
+    report = steps["white-audit"][steps["white-audit"].index("--out") + 1]
+    (tmp_path / report).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / report).write_text("{}")
+    assert "white-audit" not in [n for n, *_ in jobs.audit_steps(tmp_path)]

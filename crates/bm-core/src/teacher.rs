@@ -2341,6 +2341,33 @@ fn search(best: &[f64], cost: f64, again: bool) -> f64 {
     v
 }
 
+thread_local! {
+    /// The shop audit (`baseline --audit-shops`): while on, each shop decision notes its options and values here.
+    static AUDIT: std::cell::RefCell<Option<Vec<String>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Start noting this thread's shop decisions (the shop audit). Play doesn't change.
+pub fn audit_begin() {
+    AUDIT.with(|a| *a.borrow_mut() = Some(Vec::new()));
+}
+
+/// Stop noting, and what was noted since `audit_begin`, each a JSON object.
+pub fn audit_take() -> Vec<String> {
+    AUDIT.with(|a| a.borrow_mut().take().unwrap_or_default())
+}
+
+fn audit(note: impl FnOnce() -> String) {
+    AUDIT.with(|a| {
+        if let Some(v) = a.borrow_mut().as_mut() {
+            v.push(note());
+        }
+    });
+}
+
+fn audit_move(m: Option<(MoveKind, u64)>) -> String {
+    m.map_or("\"leave\"".to_string(), |(k, a)| format!("\"{k:?} {a}\""))
+}
+
 /// What rerolling is worth when the money buys nothing else ("reroll-best"): the best of `n` sample shops, as the
 /// mean of the best of `n` draws from the samples (each draw a sample shop's best, buying nothing included).
 fn free_search(best: &[f64], n: usize) -> f64 {
@@ -2392,6 +2419,16 @@ fn choose_against(
     use crate::value::{quick, value};
     let here = base.unwrap_or(run);
     let here_quick = quick(here, vs);
+    audit(|| {
+        let all: Vec<String> = options
+            .iter()
+            .map(|(m, q, _)| format!("[{},{q:.5}]", audit_move(Some(*m))))
+            .collect();
+        format!(
+            "{{\"quick\":{{\"here\":{here_quick:.5},\"options\":[{}]}}}}",
+            all.join(",")
+        )
+    });
     let mut options: Vec<_> = options
         .into_iter()
         .filter(|o| o.1 > here_quick + MIN_GAIN)
@@ -2464,7 +2501,19 @@ fn choose_against(
             };
         }
     }
-    explore(run, vs, &judged, best).1
+    let chosen = explore(run, vs, &judged, best).1;
+    audit(|| {
+        let all: Vec<String> = judged
+            .iter()
+            .map(|(v, m)| format!("[{},{v:.5}]", audit_move(*m)))
+            .collect();
+        format!(
+            "{{\"full\":{{\"judged\":[{}],\"chosen\":{}}}}}",
+            all.join(","),
+            audit_move(chosen)
+        )
+    });
+    chosen
 }
 
 /// How close the two best options' values must be for "close-x" to judge them again ("close-gap", in the
@@ -2725,6 +2774,16 @@ fn shop_option_list(
             let again = run.spendable() - 2 * run.reroll_cost > 3;
             let cost = crate::value::quick(run, vs) - bare.iter().sum::<f64>() / bare.len() as f64;
             let q = reroll_worth(run, &best, cost, again);
+            audit(|| {
+                let n = best.len().max(1) as f64;
+                let max = best.iter().copied().fold(f64::MIN, f64::max);
+                format!(
+                    "{{\"reroll\":{{\"q\":{q:.5},\"cost\":{cost:.6},\"again\":{again},\"samples\":{},\"mean\":{:.5},\"max\":{max:.5},\"here\":{:.5}}}}}",
+                    best.len(),
+                    best.iter().sum::<f64>() / n,
+                    crate::value::quick(run, vs)
+                )
+            });
             options.push(((MoveKind::Reroll, 0), q, Judge::Rerolled(samples, again)));
         }
     }
@@ -4307,6 +4366,36 @@ mod tests {
                 search(&best, 0.1, true)
             );
         });
+    }
+
+    #[test]
+    fn the_shop_audit_notes_without_changing_the_move() {
+        // A shop to decide in: the greedy bot plays a fresh run up to its first shop, with money to spend.
+        let mut shop_run = Run::new(RunConfig::new("AUDIT1"));
+        for _ in 0..400 {
+            if shop_run.phase == Phase::Shop || shop_run.is_over() {
+                break;
+            }
+            let m = crate::bots::greedy_move(&shop_run, 1);
+            assert!(apply(&mut shop_run, m.0, m.1).is_ok());
+        }
+        assert_eq!(
+            shop_run.phase,
+            Phase::Shop,
+            "the greedy bot reaches the first shop"
+        );
+        shop_run.money = 40;
+        let plain = with_options(&["light"], || teacher_move(&shop_run, 7));
+        let (noted, notes) = with_options(&["light"], || {
+            audit_begin();
+            let m = teacher_move(&shop_run, 7);
+            (m, audit_take())
+        });
+        assert_eq!(plain, noted, "noting changes nothing");
+        assert!(!notes.is_empty(), "a shop decision by value is noted");
+        assert!(notes.iter().all(|n| n.starts_with('{') && n.ends_with('}')));
+        assert!(notes.iter().any(|n| n.starts_with("{\"quick\"")));
+        assert!(audit_take().is_empty(), "off once taken");
     }
 
     #[test]

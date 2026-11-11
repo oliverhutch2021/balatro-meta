@@ -316,6 +316,14 @@ fn play(
             }
             _ => false,
         };
+        let audited = AUDIT_OUT.get().is_some()
+            && script.is_none()
+            && run.phase == Phase::Shop
+            && (AUDIT_LO.load(Ordering::Relaxed)..=AUDIT_HI.load(Ordering::Relaxed))
+                .contains(&(run.ante as u64));
+        if audited {
+            bm_core::teacher::audit_begin();
+        }
         let (k, a) = match script {
             None => bot(&run, salt << 20 | step),
             Some(m) => match m.get(step as usize) {
@@ -329,6 +337,15 @@ fn play(
                 }
             },
         };
+        if audited {
+            let notes = bm_core::teacher::audit_take();
+            if let Some(out) = AUDIT_OUT.get() {
+                use std::io::Write as _;
+                let line = audit_line(&run, index, step, (k, a), &notes);
+                let mut w = out.lock().unwrap();
+                writeln!(w, "{line}").expect("--audit-shops: writing");
+            }
+        }
         if keep_this && moves {
             let legal = legal_kinds(&run)
                 .iter()
@@ -739,6 +756,61 @@ fn endless_depth(run: &Run) -> u32 {
 
 /// Whether runs keep a `--runs-csv` row.
 static DETAIL: AtomicBool = AtomicBool::new(false);
+/// `--audit-shops FILE`: each shop decision of the antes `--audit-antes LO-HI` (6-8) as a JSON line: the shop, the
+/// money, and what the teacher noted (`teacher::audit_begin`): every option's quick value, the reroll's samples
+/// and cost, the finalists' full values and the move chosen. Play doesn't change.
+static AUDIT_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> =
+    std::sync::OnceLock::new();
+static AUDIT_LO: AtomicU64 = AtomicU64::new(6);
+static AUDIT_HI: AtomicU64 = AtomicU64::new(8);
+
+/// One audited shop decision as a JSON line.
+fn audit_line(
+    run: &Run,
+    index: u64,
+    step: u64,
+    chosen: (MoveKind, u64),
+    notes: &[String],
+) -> String {
+    use bm_core::shop::RowItem;
+    let shop = run.shop.as_ref();
+    let row: Vec<String> = shop.map_or_else(Vec::new, |s| {
+        s.row
+            .iter()
+            .map(|r| {
+                let what = match &r.item {
+                    RowItem::Joker(j) => format!("joker {}", j.kind.name()),
+                    RowItem::Consumable(c) => format!("{:?}", c.kind),
+                    RowItem::Card(_) => "card".to_string(),
+                };
+                format!("[{},{}]", esc(&what), r.cost)
+            })
+            .collect()
+    });
+    let packs: Vec<String> = shop.map_or_else(Vec::new, |s| {
+        s.boosters
+            .iter()
+            .flatten()
+            .map(|b| format!("[{},{}]", esc(&format!("{:?}", b.booster)), b.cost))
+            .collect()
+    });
+    format!(
+        "{{\"seed\":{},\"run\":{index},\"step\":{step},\"ante\":{},\"stake\":{},\"money\":{},\"interest_cap\":{},\"reroll_cost\":{},\"jokers\":{},\"joker_slots\":{},\"row\":[{}],\"packs\":[{}],\"chosen\":\"{:?} {}\",\"notes\":[{}]}}",
+        esc(&run.cfg.seed),
+        run.ante,
+        run.cfg.stake,
+        run.money,
+        run.interest_cap,
+        run.reroll_cost,
+        run.jokers.len(),
+        run.joker_slots,
+        row.join(","),
+        packs.join(","),
+        chosen.0,
+        chosen.1,
+        notes.join(",")
+    )
+}
 /// `--forks DIR`: fork decisions as the runs go (forks.rs), and how (`--fork-chance` in parts per million,
 /// `--fork-antes`, `--fork-best`, `--fork-copies`).
 static FORKS: AtomicBool = AtomicBool::new(false);
@@ -1991,6 +2063,15 @@ fn main() {
     DETAIL.store(runs_csv.is_some(), Ordering::Relaxed);
     // `--diagnose OUT.csv`: a row about every run, the lost blind played again with `--deep` times the samples for
     // a share `--deep-share` of the lost runs.
+    if let Some(path) = opt("--audit-shops") {
+        let f = std::fs::File::create(&path).expect("--audit-shops: creating the file");
+        let _ = AUDIT_OUT.set(Mutex::new(std::io::BufWriter::new(f)));
+        if let Some(r) = opt("--audit-antes") {
+            let (lo, hi) = r.split_once('-').expect("--audit-antes takes LO-HI");
+            AUDIT_LO.store(lo.parse().expect("--audit-antes LO"), Ordering::Relaxed);
+            AUDIT_HI.store(hi.parse().expect("--audit-antes HI"), Ordering::Relaxed);
+        }
+    }
     let diagnose = opt("--diagnose");
     DIAGNOSE.store(diagnose.is_some(), Ordering::Relaxed);
     if let Some(x) = opt("--deep") {
@@ -2534,6 +2615,10 @@ fn main() {
         bot: bot_name,
         done: true,
     };
+    if let Some(out) = AUDIT_OUT.get() {
+        use std::io::Write as _;
+        out.lock().unwrap().flush().expect("--audit-shops: writing");
+    }
     let mut text = report_json(&r);
     // What the runs were played with, so two reports can be checked to pair seed by seed
     // (scripts/compare_runs.py), and each run's ending in seed order.

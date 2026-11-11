@@ -1140,6 +1140,44 @@ cd /mnt/h/balatro-meta && make sync && make test && make teacher-looks
 
 Ctrl+C stops it whenever you need the PC; `make teacher-looks` carries on from the arm it was in.
 
+What step 38 found (salt 2, 8,000 seeds, against the champion's 75.98%): `looks12` 75.86%, -0.11 (-1.19 to
++0.97); `looks24` 76.46%, +0.49 (-0.59 to +1.56); **`between6` 78.00%, +2.02 (+0.99 to +3.06)**, and +1.54 (+0.48
+to +2.60) above `looks24`. Green: `looks12` -1.25, `looks24` -0.90, both spanning zero. Times 0.71 to 0.88 of the
+estimates (none void). By the rule `between6` is the arm: **6x every count between rounds is the final bot's
+setting** (B's review, 11 November); the research base stays the 3x champion; no exam (under +3). The looks arms
+also dropped the deals to 1, so they show only that more looks with fewer deals is level; `between6` ends runs
+richer ($58.2 against $54.9), so it wins by choosing better, not by spending more.
+
+## Step 39: the shop audit (about 6 hours)
+
+Runs lost at the last ante start it with a median $39.50, see the 6x Violet Vessel from its start, and lose holding
+$32.50; `reroll-best` barely moved what the bot does (step 37). So: what does the teacher see and decide in the late
+shops? `baseline --audit-shops FILE --audit-antes LO-HI` writes every shop decision of those antes as a JSON line:
+the shop's row and packs with prices, the money, the interest cap, the reroll's price, the jokers and slots, and
+what the teacher noted (`teacher::audit_begin`): every option's quick value against staying, the reroll's sample
+shops (their mean and best), its cost in value (where `search` drops rerolling again when it is zero or below), the
+finalists' full values against leaving, and the move. Play doesn't change: a unit test and a cloud run (8 runs, the
+same endings and moves with and without it) check that.
+
+`make shop-audit`: the champion plays step 37's control again with the audit on, so the runs are the control's own
+move for move (`white-same-runs` and `green-same-runs` compare them: no seed may differ): 8,000 White seeds at
+salt 2 with antes 6 to 8 audited, then 2,000 Green seeds with antes 3 to 5 (where Green's losses gather). The lines
+stay in `.sync/audit` (gzipped; too large for git); `scripts/audit_shops.py` writes a summary into results/audit:
+for the runs won, lost at the win ante and lost earlier, how often a shop was left with $20 or more while a reroll
+was on offer, the reroll's value against leaving, how often its cost came out at zero or below, and what was chosen.
+
+What it decides: if the runs lost at the last ante leave rich shops with a reroll on offer that the teacher rates
+near or above leaving, the reroll's valuation (or its gate) is where the fix goes, and the spend-down fork (each
+such shop played out both ways on fair copies) is built next to measure it; if they leave because nothing rated
+helps, preparation has to start earlier and `blinds_ahead`'s mixture gets its screen. The 12x reference and the
+spend-down fork are the audit's second part, after this one is read.
+
+```
+cd /mnt/h/balatro-meta && make sync && make test && make shop-audit
+```
+
+Ctrl+C stops it whenever you need the PC; `make shop-audit` carries on from the step it was in.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001
