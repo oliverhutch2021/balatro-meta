@@ -1,0 +1,44 @@
+{
+ "job": "shop-audit",
+ "commit": "33203612b1a516b9c181d0ae648b71a62bdec296",
+ "started": "2026-11-12T00:29:56+00:00",
+ "finished": "2026-11-12T05:48:18+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   13.0,
+   16.0,
+   16.5
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 19,
+  "folder": 0,
+  "white-audit": 16350,
+  "white-gzip": 5,
+  "white-same-runs": 0,
+  "white-summary": 3,
+  "green-audit": 2723,
+  "green-gzip": 1,
+  "green-same-runs": 0,
+  "green-summary": 1
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "folder": "mkdir -p .sync/audit",
+  "white-audit": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 8000 --seed 1 --salt 2 --audit-shops .sync/audit/white-8k-salt2.jsonl --audit-antes 6-8 --out results/audit/white-8k-salt2.json",
+  "white-gzip": "gzip -f .sync/audit/white-8k-salt2.jsonl",
+  "white-same-runs": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-salt2-on-ensemble8-w1.5.json results/audit/white-8k-salt2.json --out results/audit/white-8k-salt2-vs-control.json",
+  "white-summary": "scripts/audit_shops.py .sync/audit/white-8k-salt2.jsonl.gz results/audit/white-8k-salt2.json --out results/audit/white-8k-salt2-summary.json",
+  "green-audit": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 2000 --seed 1 --salt 2 --stake 3 --audit-shops .sync/audit/green-2k-salt2.jsonl --audit-antes 3-5 --out results/audit/green-2k-salt2.json",
+  "green-gzip": "gzip -f .sync/audit/green-2k-salt2.jsonl",
+  "green-same-runs": "scripts/compare_runs.py results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1-w2.5-salt2-on-ensemble8-w1.5.json results/audit/green-2k-salt2.json --out results/audit/green-2k-salt2-vs-control.json",
+  "green-summary": "scripts/audit_shops.py .sync/audit/green-2k-salt2.jsonl.gz results/audit/green-2k-salt2.json --out results/audit/green-2k-salt2-summary.json"
+ }
+}

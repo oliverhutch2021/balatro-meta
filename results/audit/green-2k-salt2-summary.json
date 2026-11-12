@@ -1,0 +1,95 @@
+{
+ "lines": "green-2k-salt2.jsonl.gz",
+ "report": "results/audit/green-2k-salt2.json",
+ "runs": 2000,
+ "win_rate": 0.282,
+ "groups": {
+  "lost earlier": {
+   "runs": 1163,
+   "decisions": 54145,
+   "decisions_by_ante": {
+    "3": 20008,
+    "4": 20012,
+    "5": 14125
+   },
+   "chosen": {
+    "MoveJoker": 21015,
+    "LeaveShop": 9071,
+    "Buy": 6350,
+    "OpenBooster": 6086,
+    "Reroll": 5442,
+    "SellJoker": 3635,
+    "UseConsumable": 1364,
+    "RedeemVoucher": 829,
+    "SellConsumable": 353
+   },
+   "left": 10574,
+   "left_with_20_or_more": 4088,
+   "left_with_20_or_more_while_a_reroll_was_offered": 744,
+   "median_money_when_leaving": 16,
+   "reroll_offered": 29456,
+   "reroll_chosen": 5442,
+   "reroll_cost_at_or_below_zero": 1018,
+   "reroll_quick_minus_leave_median": -0.04150000000000009,
+   "share_of_decisions_leaving_rich": 0.0755
+  },
+  "won": {
+   "runs": 564,
+   "decisions": 33394,
+   "decisions_by_ante": {
+    "3": 10877,
+    "4": 11389,
+    "5": 11128
+   },
+   "chosen": {
+    "MoveJoker": 12230,
+    "LeaveShop": 5320,
+    "OpenBooster": 4526,
+    "Reroll": 3884,
+    "Buy": 3558,
+    "SellJoker": 2095,
+    "UseConsumable": 927,
+    "RedeemVoucher": 661,
+    "SellConsumable": 193
+   },
+   "left": 6160,
+   "left_with_20_or_more": 3843,
+   "left_with_20_or_more_while_a_reroll_was_offered": 631,
+   "median_money_when_leaving": 23,
+   "reroll_offered": 19818,
+   "reroll_chosen": 3884,
+   "reroll_cost_at_or_below_zero": 1240,
+   "reroll_quick_minus_leave_median": -0.012199999999999989,
+   "share_of_decisions_leaving_rich": 0.1151
+  },
+  "lost at the win ante": {
+   "runs": 228,
+   "decisions": 12963,
+   "decisions_by_ante": {
+    "3": 4077,
+    "4": 4488,
+    "5": 4398
+   },
+   "chosen": {
+    "MoveJoker": 4897,
+    "LeaveShop": 2121,
+    "Reroll": 1580,
+    "OpenBooster": 1535,
+    "Buy": 1388,
+    "SellJoker": 845,
+    "UseConsumable": 327,
+    "RedeemVoucher": 214,
+    "SellConsumable": 56
+   },
+   "left": 2451,
+   "left_with_20_or_more": 1387,
+   "left_with_20_or_more_while_a_reroll_was_offered": 218,
+   "median_money_when_leaving": 21,
+   "reroll_offered": 7467,
+   "reroll_chosen": 1580,
+   "reroll_cost_at_or_below_zero": 482,
+   "reroll_quick_minus_leave_median": -0.015399999999999636,
+   "share_of_decisions_leaving_rich": 0.107
+  }
+ }
+}
