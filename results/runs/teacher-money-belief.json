@@ -1,0 +1,44 @@
+{
+ "job": "teacher-money-belief",
+ "commit": "72cfc49255949fb72b823edccb33e12b80bfb584",
+ "started": "2026-11-12T11:25:04+00:00",
+ "finished": "2026-11-12T21:43:25+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   13.3,
+   16.3,
+   16.8
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 10,
+  "folder": 0,
+  "last": 17683,
+  "last-gzip": 2,
+  "compare-last": 0,
+  "all": 16563,
+  "all-gzip": 1,
+  "compare-all": 0,
+  "green-all": 2842,
+  "compare-green-all": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "folder": "mkdir -p .sync/audit",
+  "last": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,freeze-money-last --runs 8000 --seed 1 --salt 2 --audit-shops .sync/audit/belief-last-8k-salt2.jsonl --audit-antes 8-8 --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+freeze-money-last-8k-w2.5-salt2-on-ensemble8-w1.5.json",
+  "last-gzip": "gzip -f .sync/audit/belief-last-8k-salt2.jsonl",
+  "compare-last": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-salt2-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+freeze-money-last-8k-w2.5-salt2-on-ensemble8-w1.5.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+freeze-money-last-8k-w2.5-salt2-on-ensemble8-w1.5-vs-f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-salt2-on-ensemble8-w1.5.json",
+  "all": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,freeze-money --runs 8000 --seed 1 --salt 2 --audit-shops .sync/audit/belief-all-8k-salt2.jsonl --audit-antes 8-8 --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+freeze-money-8k-w2.5-salt2-on-ensemble8-w1.5.json",
+  "all-gzip": "gzip -f .sync/audit/belief-all-8k-salt2.jsonl",
+  "compare-all": "scripts/compare_runs.py results/tune/f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-salt2-on-ensemble8-w1.5.json results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+freeze-money-8k-w2.5-salt2-on-ensemble8-w1.5.json --out results/tune/f3-precise+late-x-3+boss-x-4+late-from-1+freeze-money-8k-w2.5-salt2-on-ensemble8-w1.5-vs-f3-precise+late-x-3+boss-x-4+late-from-1-8k-w2.5-salt2-on-ensemble8-w1.5.json",
+  "green-all": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,freeze-money --runs 2000 --seed 1 --salt 2 --stake 3 --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+freeze-money-w2.5-salt2-on-ensemble8-w1.5.json",
+  "compare-green-all": "scripts/compare_runs.py results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1-w2.5-salt2-on-ensemble8-w1.5.json results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+freeze-money-w2.5-salt2-on-ensemble8-w1.5.json --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+freeze-money-w2.5-salt2-on-ensemble8-w1.5-vs-stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1-w2.5-salt2-on-ensemble8-w1.5.json"
+ }
+}
