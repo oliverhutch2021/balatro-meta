@@ -36,7 +36,7 @@ setup-gpu:  ## Install PyTorch with CUDA for the RTX 4070 Ti (used from phase 4)
 build:  ## Rebuild the Rust engine module after a code change (jobs do this themselves)
 	VIRTUAL_ENV=$(VENV) $(PY) -m maturin develop --release --uv
 
-test:  ## Run all tests, Rust and Python
+test: build  ## Run all tests, Rust and Python (the engine module rebuilt first, so Python tests see today's engine)
 	$(CARGO) test --release
 	$(PY) -m pytest -q -p no:cacheprovider
 
