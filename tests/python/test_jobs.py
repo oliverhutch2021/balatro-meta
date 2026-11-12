@@ -1475,3 +1475,13 @@ def test_the_boss_reroll_arms_play_the_option_against_the_salted_controls(tmp_pa
     lines = steps["white"][steps["white"].index("--leaks") + 1]
     assert steps["white-gzip"] == ["gzip", "-f", lines] and steps["white-tally"][1] == lines + ".gz"
     assert "--leaks" not in steps["green"]
+
+
+def test_the_reroll_demo_plays_the_champion_with_the_reroll_and_keeps_its_samples_out_of_results(tmp_path):
+    champion_in(tmp_path)
+    steps = {n: a for n, a, *_ in jobs.reroll_demo_steps(tmp_path)}
+    assert list(steps) == ["build", "folder", "demo", "tally"]
+    a = steps["demo"]
+    assert a[a.index("--teacher-options") + 1] == "precise,boss-reroll"
+    assert a[a.index("--runs") + 1] == str(jobs.REROLL_DEMO_RUNS)
+    assert all(not x.startswith("results/") for x in a), "a look, not a measurement"

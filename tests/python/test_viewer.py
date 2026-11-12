@@ -496,3 +496,14 @@ def test_a_boss_reroll_is_named_with_the_bosses_and_the_cost():
     assert viewer.outcome(20, before, after) == "Violet Vessel → The Wall, -$10"
     boss = Game("REROLLV", 1).view()["blinds"]["boss"]
     assert boss["reroll_shown"] is False and boss["reroll"] is False and boss["rerolled"] is False
+
+
+def test_boss_reroll_runs_come_round_in_turn_when_asked_for(tmp_path):
+    folder = tmp_path / "watch" / "reroll-demo" / "samples"
+    for i in (3, 7):
+        save(folder, f"reroll-{i:010}.json", seed=f"S{i}", moves=[[0, 0]], pick="reroll", won=False)
+    save(folder, "typical-000000000000001.json", seed="T1", moves=[[0, 0]], pick="typical")
+    jobs = viewer.JobFiles(tmp_path / "watch", tmp_path / "logs")
+    seen = [jobs.next_sample("rerolls")["seed"] for _ in range(3)]
+    assert seen == ["S3", "S7", "S3"], "in run order, round and round"
+    assert jobs.next_sample("typical")["seed"] == "T1", "typical runs never show the reroll runs"

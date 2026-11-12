@@ -70,7 +70,7 @@
 //! runs, the jokers bought and held, the hands played, the best runs so far), and runs to replay in
 //! `samples/` (a seed and every move; the viewer replays them move by move with the same engine):
 //! the best runs so far (`best-*.json`, kept up to date as better runs turn up) and every few seconds a
-//! typical one picked at random (`typical-*.json`). Best means: won first, and among wins the biggest
+//! typical one picked at random (`typical-*.json`), and the first 30 runs that rerolled a boss (`reroll-*.json`). Best means: won first, and among wins the biggest
 //! single hand; among losses, the furthest blind reached, then how close the run came to its target.
 //! The final numbers go to `--out`; for up to 50,000 runs they include `run_stages`, one letter per run in
 //! seed order for paired comparisons between bots on the same seeds: the blind the run ended at, `A` (ante
@@ -108,6 +108,7 @@ const MAX_STEPS: u64 = 3000;
 const SAMPLE_EVERY: Duration = Duration::from_secs(3);
 const KEEP_TYPICAL: usize = 40;
 const KEEP_BEST: usize = 30;
+const KEEP_REROLLS: u64 = 30;
 
 /// One run's summary.
 #[derive(Default)]
@@ -121,6 +122,8 @@ struct RunSummary {
     blinds_beaten: u64,
     money_end: i64,
     rerolls: u64,
+    /// Boss rerolls made (Director's Cut, Retcon).
+    boss_rerolls: u64,
     skips: u64,
     packs: u64,
     vouchers: u64,
@@ -428,6 +431,7 @@ fn play(
                 }
             }
             MoveKind::Reroll => s.rerolls += 1,
+            MoveKind::RerollBoss => s.boss_rerolls += 1,
             MoveKind::SkipBlind => s.skips += 1,
             MoveKind::OpenBooster => s.packs += 1,
             MoveKind::RedeemVoucher => s.vouchers += 1,
@@ -2179,7 +2183,11 @@ fn sample_json(s: &RunSummary, record: &[(u8, u64)], pick: &str, run: u64, bot: 
         STAKE.load(Ordering::Relaxed),
         esc(bot),
         esc(pick),
-        esc(&if pick == "best" { format!("one of the {bot}'s best runs") } else { format!("a typical run by the {bot}") }),
+        esc(&match pick {
+            "best" => format!("one of the {bot}'s best runs"),
+            "reroll" => format!("a run in which the {bot} rerolled a boss"),
+            _ => format!("a typical run by the {bot}"),
+        }),
         esc(&s.result()),
         s.won,
         s.end,
@@ -2568,12 +2576,15 @@ fn main() {
         for f in sample_files(&dir, "best-")
             .into_iter()
             .chain(sample_files(&dir, "typical-"))
+            .chain(sample_files(&dir, "reroll-"))
         {
             let _ = std::fs::remove_file(f); // a rerun of the job replaces the last run's samples
         }
     }
 
     let next = AtomicU64::new(0);
+    // Runs that rerolled a boss, saved for the viewer's "Boss rerolls" (up to KEEP_REROLLS).
+    let rerolls_saved = AtomicU64::new(0);
     let finished = AtomicBool::new(false);
     let totals = Mutex::new(Totals::new());
     let offer: Mutex<Option<(u64, RunSummary)>> = Mutex::new(None);
@@ -2671,6 +2682,16 @@ fn main() {
                             });
                         }
                         local.add(&s);
+                        if let (Some(w), Some(rec)) = (&watch, &s.record) {
+                            if s.boss_rerolls > 0
+                                && rerolls_saved.fetch_add(1, Ordering::Relaxed) < KEEP_REROLLS
+                            {
+                                write_atomic(
+                                    &w.join("samples").join(format!("reroll-{i:010}.json")),
+                                    &sample_json(&s, rec, "reroll", i, bot_name),
+                                );
+                            }
+                        }
                         let mut b = best.lock().unwrap();
                         if b.wants(&s) {
                             b.add(i, s);

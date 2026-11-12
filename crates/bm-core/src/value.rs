@@ -221,6 +221,10 @@ pub const PARAMS: &[(&str, f64)] = &[
     // gain in value it must show over keeping the boss.
     ("boss-reroll-copies", 6.0),
     ("boss-reroll-margin", 0.02),
+    // ... and a reroll voucher's worth: bosses drawn per tier (this ante's, the later regular antes', the
+    // showdown's), and how much the antes after this one count.
+    ("boss-reroll-draws", 6.0),
+    ("reroll-later-x", 1.0),
 ];
 
 /// A number of the formula: as an option set it, else its usual value.

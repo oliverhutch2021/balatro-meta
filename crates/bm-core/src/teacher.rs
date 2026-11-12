@@ -121,7 +121,8 @@ pub const OPTIONS: &[&str] = &[
     // real-game checks can't follow it: at each blind choice where the button works, the boss is rerolled when the
     // value after a reroll beats keeping it (`boss_reroll_gains`: fair copies, so each new boss is a fresh draw from
     // the ones still possible). And a reroll voucher in the shop is worth what rerolling this ante's boss, if still
-    // ahead, would gain (`reroll_voucher_worth`; nothing yet for the antes after). From the user: "the boss reroll
+    // ahead, would gain, and each later ante's boss drawn as the game would draw it (`reroll_voucher_worth`). From
+    // the user: "the boss reroll
     // can be game changing, since that is where we struggle most" (lab #19).
     "boss-reroll",
     // With a joker that pays on the round's final hand (Dusk retriggers its cards, Acrobat x3): when the best
@@ -2762,7 +2763,8 @@ fn shop_option_list(
         lists.push(vec![(MoveKind::SellJoker, w as u64)]);
     }
     let mut options = judged_moves(run, vs, lists);
-    // A boss reroll voucher: what rerolling this ante's boss would gain, on top of the position ("boss-reroll").
+    // A boss reroll voucher: what rerolling the bosses still to come would gain, on top of the position
+    // ("boss-reroll").
     if on("boss-reroll") {
         for o in options.iter_mut() {
             let Judge::Moves(m) = &o.2 else { continue };
@@ -2774,7 +2776,9 @@ fn shop_option_list(
             if !reroll_voucher {
                 continue;
             }
-            let worth = after(run, vs ^ 0x5EED, m).map_or(0.0, |c| reroll_voucher_worth(&c, vs));
+            let kind = shop.vouchers[m[0].1 as usize].voucher;
+            let worth =
+                after(run, vs ^ 0x5EED, m).map_or(0.0, |c| reroll_voucher_worth(run, &c, vs, kind));
             if worth > 0.0 {
                 o.1 += worth;
                 o.2 = Judge::MovesPlus(m.clone(), worth);
@@ -2996,17 +3000,159 @@ pub(crate) fn boss_reroll_gains(run: &Run, vs: u64) -> Vec<f64> {
         .collect()
 }
 
-/// What a boss reroll voucher just redeemed (`after`: the shop with it redeemed) is worth for this ante's boss, if it
-/// is still ahead: on a fair copy the run leaves the shop for the blind choice, and the reroll's mean gain there
-/// beyond its margin, if positive (the reroll is made only then). Nothing for the antes after: their bosses aren't
-/// known yet, so the voucher's worth there is left out (it can only be under-rated).
-fn reroll_voucher_worth(after: &Run, vs: u64) -> f64 {
+/// Bosses drawn for each tier behind a reroll voucher's worth ("boss-reroll-draws").
+const BOSS_REROLL_DRAWS: f64 = 6.0;
+
+thread_local! {
+    /// A reroll voucher's worth, by the shop position it was judged in (`shop_key`) and the voucher: the same
+    /// position judges it once. Forgotten at each run's start (`new_run`).
+    static VOUCHER_WORTH: std::cell::RefCell<std::collections::HashMap<(u64, u8), f64>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// The run's value at a blind choice facing each of `n` bosses drawn as the game would draw one at `ante` (each on
+/// its own fair copy, so from the bosses still possible by the use counts a player can follow, never the real next
+/// one), no money spent.
+fn values_facing(at: &Run, vs: u64, ante: i32, n: u64, tier: u64) -> Vec<f64> {
+    (0..n)
+        .map(|i| {
+            let mut c = fair_copy(at, vs ^ (0xB0_5D00 + (tier << 8) + i));
+            let win = c.win_ante;
+            c.boss = c.bosses.draw(&mut c.rng, ante, win);
+            crate::value::value(&c, vs)
+        })
+        .collect()
+}
+
+/// What having a reroll is worth, in the value's units, facing a boss the run values at `x`, when a reroll's outcome
+/// is valued as `after` (each sample: the value facing a fresh boss) and costs `price` in value ($10): the gain of
+/// the reroll the bot would make (only above the margin, `boss_reroll_gains`). `again`: as many rerolls as the
+/// money allows (Retcon): the reservation value R of a search costing `price` a draw (the mean of `max(v - R, 0)`
+/// over the samples equals the price), which is what rerolling until a boss worth R or more is worth.
+fn reroll_gain(x: f64, after: &[f64], price: f64, again: bool, margin: f64) -> f64 {
+    if after.is_empty() {
+        return 0.0;
+    }
+    let target = if again {
+        reservation(after, price)
+    } else {
+        mean_or_zero(after) - price
+    };
+    let g = target - x;
+    if g > margin {
+        g
+    } else {
+        0.0
+    }
+}
+
+/// The reservation value of drawing from `samples` at `price` a draw: R with mean(max(v - R, 0)) = price (bisection).
+fn reservation(samples: &[f64], price: f64) -> f64 {
+    let hi0 = samples.iter().copied().fold(f64::MIN, f64::max);
+    if price <= 0.0 {
+        return hi0;
+    }
+    let excess =
+        |r: f64| samples.iter().map(|v| (v - r).max(0.0)).sum::<f64>() / samples.len() as f64;
+    let (mut lo, mut hi) = (hi0 - 100.0, hi0);
+    for _ in 0..60 {
+        let mid = 0.5 * (lo + hi);
+        if excess(mid) > price {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    0.5 * (lo + hi)
+}
+
+/// What a boss reroll voucher just redeemed is worth on top of the position (`before`: the shop as it is; `after`:
+/// with the voucher redeemed), over the bosses still to come (option "boss-reroll"). On a fair copy the run leaves
+/// the shop for its next blind choice, where the next boss is known; there:
+/// - this boss: the reroll's gain against it, if the bot would make it;
+/// - each later ante before the last: the mean gain over regular bosses drawn as the last regular ante would draw
+///   them, and the last ante the same over its showdown bosses (Violet Vessel and the like), each the gain the bot
+///   would take facing that boss (`reroll_gain`), times "reroll-later-x" (1);
+/// - every value at this position with only the boss changed, and $10 priced by the value of $10 less here.
+///
+/// Director's Cut is one reroll an ante; Retcon, bought on top of it, is worth what rerolling as often as needed adds
+/// to one. Cached per shop position.
+fn reroll_voucher_worth(before: &Run, after: &Run, vs: u64, kind: VoucherKind) -> f64 {
+    // The shop's key leaves out the boss, which the worth turns on.
+    let key = (
+        shop_key(before, vs) ^ (before.boss as u64).wrapping_mul(0x9E37_79B9),
+        kind as u8,
+    );
+    if let Some(w) = VOUCHER_WORTH.with(|m| m.borrow().get(&key).copied()) {
+        return w;
+    }
+    let w = reroll_voucher_worth_now(after, vs, kind);
+    VOUCHER_WORTH.with(|m| {
+        let mut m = m.borrow_mut();
+        if m.len() > 256 {
+            m.clear();
+        }
+        m.insert(key, w);
+    });
+    w
+}
+
+fn reroll_voucher_worth_now(after: &Run, vs: u64, kind: VoucherKind) -> f64 {
     let mut c = fair_copy(after, vs ^ 0xB0_55EE);
     if c.phase == Phase::Shop && crate::env::apply(&mut c, MoveKind::LeaveShop, 0).is_err() {
         return 0.0;
     }
-    let gains = boss_reroll_gains(&c, vs);
-    (mean_or_zero(&gains) - param("boss-reroll-margin").unwrap_or(BOSS_REROLL_MARGIN)).max(0.0)
+    if c.phase != Phase::BlindSelect {
+        return 0.0;
+    }
+    let margin = param("boss-reroll-margin").unwrap_or(BOSS_REROLL_MARGIN);
+    let n = param("boss-reroll-draws")
+        .unwrap_or(BOSS_REROLL_DRAWS)
+        .max(1.0) as u64;
+    let later = param("reroll-later-x").unwrap_or(1.0).max(0.0);
+    let (ante, win) = (c.ante, c.win_ante);
+    let here = crate::value::value(&c, vs);
+    let mut poorer = c.clone();
+    poorer.money -= 10;
+    let price = (here - crate::value::value(&poorer, vs)).max(0.0);
+    // Rerolls of this boss come from this ante's draw; later antes', from the last regular ante's and the showdown's.
+    let now = values_facing(&c, vs, ante, n, 0);
+    let regular_later = (win - 1 - ante).max(0);
+    let regular = if regular_later > 0 {
+        values_facing(&c, vs, win - 1, n, 1)
+    } else {
+        Vec::new()
+    };
+    let showdown = if ante < win {
+        values_facing(&c, vs, win, n, 2)
+    } else {
+        Vec::new()
+    };
+    let worth = |again: bool| -> f64 {
+        let mean_gain = |faced: &[f64]| -> f64 {
+            mean_or_zero(
+                &faced
+                    .iter()
+                    .map(|&x| reroll_gain(x, faced, price, again, margin))
+                    .collect::<Vec<_>>(),
+            )
+        };
+        reroll_gain(here, &now, price, again, margin)
+            + later * (regular_later as f64 * mean_gain(&regular) + mean_gain(&showdown))
+    };
+    if std::env::var_os("BM_REROLL_DEBUG").is_some() {
+        eprintln!(
+            "reroll worth at ante {ante}: here {here:.3}, price {price:.3}, now {now:?}, regular x{regular_later} \
+             {regular:?}, showdown {showdown:?}: once {:.3}, again {:.3}",
+            worth(false),
+            worth(true)
+        );
+    }
+    match kind {
+        VoucherKind::DirectorsCut => worth(false),
+        VoucherKind::Retcon => (worth(true) - worth(false)).max(0.0),
+        _ => 0.0,
+    }
 }
 
 /// Whether a play-out has reached the checkpoint (`skip_checkpoint`).
@@ -3298,6 +3444,7 @@ pub fn new_run() {
     CHOICES.with(|c| c.borrow_mut().clear());
     HAND_ORDERS.with(|c| c.borrow_mut().clear());
     WEAKEST.with(|c| c.borrow_mut().clear());
+    VOUCHER_WORTH.with(|c| c.borrow_mut().clear());
     LEAVING.with(|c| c.borrow_mut().clear());
     crate::value::clear_caches();
 }
@@ -4593,17 +4740,46 @@ mod tests {
             assert!(!gains.is_empty() && mean_or_zero(&gains) > 0.0, "{gains:?}");
             assert_eq!(teacher_move(&run, 3), (MoveKind::RerollBoss, 0));
         });
-        // The voucher's worth, from a shop facing the same boss: the run in a shop with the voucher just redeemed.
-        let mut shop_run = run.clone();
-        shop_run.vouchers[VoucherKind::Retcon.index()] = false;
-        shop_run.vouchers[VoucherKind::DirectorsCut.index()] = true;
+        // The vouchers' worth facing the same boss (the run with Director's Cut just redeemed, then Retcon too): the
+        // reroll of this boss and of the bosses to come.
+        let mut before = run.clone();
+        before.vouchers[VoucherKind::Retcon.index()] = false;
+        before.vouchers[VoucherKind::DirectorsCut.index()] = false;
+        let mut dc = before.clone();
+        dc.vouchers[VoucherKind::DirectorsCut.index()] = true;
+        let mut both = dc.clone();
+        both.vouchers[VoucherKind::Retcon.index()] = true;
         with_options(&opts, || {
+            let w = reroll_voucher_worth(&before, &dc, 7, VoucherKind::DirectorsCut);
             assert!(
-                reroll_voucher_worth(&shop_run, 7) > 0.0,
-                "facing Violet Vessel, the reroll is worth something"
+                w > 0.0,
+                "facing Violet Vessel, Director's Cut is worth something"
             );
+            // Facing an ordinary boss, it is still worth the bosses to come, but less.
+            let mut mild = dc.clone();
+            mild.boss = crate::blinds::Boss::Club;
+            let mut mild_before = before.clone();
+            mild_before.boss = crate::blinds::Boss::Club;
+            let m = reroll_voucher_worth(&mild_before, &mild, 7, VoucherKind::DirectorsCut);
+            eprintln!("worth facing Violet Vessel {w}, facing The Club {m}");
+            assert!(m < w, "{m} against {w}");
+            assert!(reroll_voucher_worth(&dc, &both, 7, VoucherKind::Retcon) >= 0.0);
         });
         new_run();
+    }
+
+    /// A reroll's worth: once, the mean outcome less the price; as often as needed, the reservation value, never
+    /// below once; nothing when the boss faced is already as good as a reroll.
+    #[test]
+    fn a_reroll_is_worth_the_draw_less_its_price_and_more_when_it_can_be_repeated() {
+        let after = [0.0, -1.0, -2.0, -3.0];
+        let once = reroll_gain(-4.0, &after, 0.1, false, 0.02);
+        assert!((once - (-1.5 - 0.1 + 4.0)).abs() < 1e-9);
+        let again = reroll_gain(-4.0, &after, 0.1, true, 0.02);
+        assert!(again >= once, "{again} {once}");
+        // R with mean(max(v - R, 0)) = 0.1: (0 - R) / 4 = 0.1 gives R = -0.4.
+        assert!((reservation(&after, 0.1) + 0.4).abs() < 1e-9);
+        assert_eq!(reroll_gain(0.0, &after, 0.1, false, 0.02), 0.0);
     }
 
     #[test]

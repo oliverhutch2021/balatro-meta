@@ -1286,11 +1286,21 @@ user: "the boss reroll can be game changing, since that is where we struggle mos
   `teacher::boss_reroll_gains` values the run with and without a reroll on six fair copies (a fresh hidden future
   each, so every new boss is a fresh draw from the bosses still possible, never the real next one), and rerolls when
   the mean gain beats `boss-reroll-margin` (0.02). Within the skip option's look-ahead it never rerolls.
-- In a shop, a Director's Cut or Retcon on offer is worth, on top of the position, what rerolling this ante's boss
-  (if still ahead) would gain (`reroll_voucher_worth`). The antes after count nothing yet: the voucher can only be
-  under-rated, so the arm is a floor for what the reroll is worth.
-- The viewer shows the Reroll Boss button under the boss (red when it works, "rerolled" once used) and names each
-  reroll in the move log ("Violet Vessel → The Wall, -$10"). The real-game checks still stop before a reroll.
+- In a shop, a Director's Cut or Retcon on offer is worth, on top of the position, what rerolling the bosses still
+  to come would gain (`reroll_voucher_worth`): on a fair copy the run leaves the shop for its next blind choice, and
+  there the run is valued facing six bosses drawn as the game would draw them (this ante's, the last regular ante's,
+  the showdown's: from the bosses still possible by the use counts a player can follow), each only the boss
+  changed. This boss's reroll counts its own gain; each later regular ante the mean gain over the regular draws, the
+  last ante the mean over the showdown draws, each gain the one the bot would take (`reroll_gain`: the mean of a
+  fresh draw less $10, priced as the value of $10 less here; above the margin only). Retcon, bought on top of
+  Director's Cut, is worth what rerolling as often as needed adds (the reservation value of drawing at $10 a draw).
+  In 64 light runs in the cloud Director's Cut was bought in 12 of the 59 shops that could afford it (1 of 49 when
+  only this ante's boss counted), and 5 bosses were rerolled in 4 runs.
+- The viewer shows the Reroll Boss button under the boss (red when it works, "rerolled" once used), names each
+  reroll in the move log ("Violet Vessel → Cerulean Bell, -$10"), and its "Boss rerolls" button replays the runs
+  that rerolled one (a job keeps the first 30 as `reroll-*.json`). The real-game checks still stop before a reroll.
+- `make reroll-demo` (about 15 minutes) plays the champion with the option on 400 seeds, only to look at: its reroll
+  runs in the viewer and its tally of vouchers bought and bosses rerolled.
 - The leak tally counts the bosses rerolled away.
 
 `make teacher-boss-reroll` on step 37's salt-2 seeds against its controls: 8,000 White seeds with the leak tally on
@@ -1298,13 +1308,14 @@ user: "the boss reroll can be game changing, since that is where we struggle mos
 
 The decision, stated before the run:
 
-- Adopted at +1 point or more on White with its range above zero. Worse (a range below zero): dropped. Level: kept
-  as an option, not adopted; the tally says how often the vouchers were bought and the bosses rerolled, and if that
-  is rare the next step values the voucher for the antes after this one (the arm can't see a reroll it never has).
+- Adopted at +1 point or more on White with its range above zero. Worse (a range below zero): dropped. Level: read
+  how often the voucher was bought and which bosses were rerolled into what before deciding anything. Bought in under
+  a tenth of the runs that could afford it: the valuation is still too low and the arm is unmeasured, not Level (S).
 - Green is for information (its bosses come at antes 4 and 5).
 
 ```
-cd /mnt/h/balatro-meta && make sync && make test && make teacher-boss-reroll
+cd /mnt/h/balatro-meta && make sync && make test && make reroll-demo
+cd /mnt/h/balatro-meta && make teacher-boss-reroll
 ```
 
 ## Later steps

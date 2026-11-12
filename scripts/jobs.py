@@ -1645,6 +1645,29 @@ def leak_steps(root: Path = ROOT, runs: int = LEAK_RUNS) -> list[tuple]:
 BOSS_REROLL = "boss-reroll"
 
 
+# make reroll-demo: a quarter of an hour of the champion with "boss-reroll" on, for the eye before any arm: the viewer's
+# "Boss rerolls" button replays the runs that rerolled a boss (baseline saves the first 30 as reroll-*.json), and the
+# leak tally says how often the vouchers were bought and which bosses went. Nothing is measured against anything.
+REROLL_DEMO_RUNS = 400
+
+
+def reroll_demo_steps(root: Path = ROOT, runs: int = REROLL_DEMO_RUNS) -> list[tuple]:
+    """make reroll-demo: the champion with "boss-reroll" on the first `runs` salt-2 seeds, its samples kept for the
+    viewer, and the tally's summary."""
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    a = list(best[1])
+    opts = a[a.index("--teacher-options") + 1] if "--teacher-options" in a else "precise"
+    a[a.index("--teacher-options") + 1] = f"{opts},{BOSS_REROLL}"
+    lines = f"{LEAK_DIR}/reroll-demo.jsonl"
+    steps.append(("demo", [*BASELINE, "--bot", "teacher", *a, "--runs", str(runs), "--seed", "1", "--salt",
+                           str(BUNDLE_SALT), "--leaks", lines, "--out", f"{LEAK_DIR}/reroll-demo.json"]))
+    steps.append(("tally", ["scripts/leaks.py", lines, "--out", f"{LEAK_DIR}/reroll-demo-summary.json"]))
+    return steps
+
+
 def boss_reroll_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
     """make teacher-boss-reroll: the champion with "boss-reroll" at BUNDLE_SALT against step 37's controls."""
     steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR])]
@@ -2162,6 +2185,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-money-belief": money_belief_steps(),
     "leak-tally": leak_steps(),
     "teacher-boss-reroll": boss_reroll_steps(),
+    "reroll-demo": reroll_demo_steps(),
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
     "diagnose": diagnose_steps(),

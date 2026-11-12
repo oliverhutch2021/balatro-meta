@@ -47,7 +47,7 @@ DEFAULT_PORT = 8790
 SPEEDS = {"1": 1.1, "2": 0.55, "4": 0.28, "max": 0.04}
 DEFAULT_SPEED = "1"
 SAMPLE_FRESH = 900  # a job's typical run is replayed if it is at most this many seconds old
-PICKS = ("best", "typical")  # which of the job's runs the replay shows first
+PICKS = ("best", "typical", "rerolls")  # which of the job's runs the replay shows first
 
 
 # ---------------------------------------------------------------------- the run on screen
@@ -110,7 +110,7 @@ class RunRecord:
         self.stake = stake
         self.expected = expected  # what the job recorded for this run
         self.started = time.time()
-        self.pick: str | None = None  # "best" or "typical" (from a job), None for a demo
+        self.pick: str | None = None  # "best", "typical" or "reroll" (from a job), None for a demo
         self.rank: int | None = None  # place among the job's best runs when the replay began
         self.moves: list[dict] = []
         self.move_list: list[tuple[int, int]] = []
@@ -287,7 +287,22 @@ class JobFiles:
 
     def next_sample(self, pick: str = "best") -> dict | None:
         """The next run to replay. "best": the best run kept that hasn't been shown yet (when every one
-        has, the list starts again from the top). "typical": the newest typical run not shown yet."""
+        has, the list starts again from the top). "typical": the newest typical run not shown yet. "rerolls": the
+        running (else newest) job's runs that rerolled a boss, in run order, round and round (typical runs when it
+        has none)."""
+        if pick == "rerolls":
+            files = self.samples(fresh=None, pattern="reroll-*.json")
+            job = self.running_job() or (files[0].parent.parent.name if files else None)
+            files = sorted(p for p in files if p.parent.parent.name == job)
+            unseen = [p for p in files if str(p) not in self.shown]
+            if files and not unseen:
+                self.shown -= {str(p) for p in files}
+                unseen = files
+            for p in unseen:
+                self.shown.add(str(p))
+                s = self.read_sample(p)
+                if s:
+                    return s
         if pick == "best":
             best = self.best()
             for _, p in best:
@@ -300,7 +315,7 @@ class JobFiles:
                 self.shown.add(str(p))
                 return self.read_sample(p)
         for p in self.samples():
-            if str(p) in self.shown or p.name.startswith("best-"):
+            if str(p) in self.shown or p.name.startswith(("best-", "reroll-")):
                 continue
             s = self.read_sample(p)
             self.shown.add(str(p))
