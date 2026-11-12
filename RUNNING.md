@@ -1217,6 +1217,51 @@ cd /mnt/h/balatro-meta && make sync && make test && make teacher-money-belief
 
 Ctrl+C stops it whenever you need the PC; `make teacher-money-belief` carries on from the arm it was in.
 
+## Step 41: the leak tally and the forced-buy forks (about 9 hours)
+
+Two diagnoses in one night, neither changing a move (the lab's direction 2: the bot plays the position in front of it
+and builds towards nothing). `make leak-tally` plays the champion on the first 3,000 of step 37's salt-2 seeds,
+move for move the same runs as its 8,000-seed control (`same-runs` checks it), with two things noted:
+
+- **The leak tally** (`baseline --leaks`, `leaks.rs`), a line per run: Blue and Purple Seals drawn and what became of
+  each (thrown while digging or as a spare, played, held at the end, the Planet or Tarot made or not made for want of
+  a slot); won rounds that had a winning hand in hand with two or more hands or a discard to spare, and whether the
+  round ended on that very move; what each way of finishing fared in `planner::finish_choice` (a new note: not
+  offered, failed a try, passed every try but gained too little, kept); consumables held through rounds by kind;
+  rounds ended with every slot full; which card each targeted consumable went on (its rank by `card_value`, already
+  sealed or not); Spectral packs' kinds offered and taken; shops left with money at the interest cap after the
+  cheapest pack still on sale; the last shop's money with and without Bull or Bootstraps; jokers bought and sold by
+  ante; vouchers offered, affordable and redeemed; hands by type. `scripts/leaks.py` sums it.
+- **The forced-buy forks** (`baseline --force-buy`, `forks::forced_fork`). Where the run passes Blueprint,
+  Brainstorm, Bloodstone, Campfire, Photograph, Sock and Buskin or Lucky Cat (antes 2-8), or Mr. Bones or Luchador
+  (antes 7-8), on sale and affordable (leaving the shop or rerolling with it in the row, or skipping it in a Buffoon
+  pack), one such position per joker and run is picked by a hash and forked once the run has ended: the run's own
+  move against taking the joker (selling first the held joker the value says it would miss least, if the row is
+  full: `teacher::take_joker_anyway`), both lines on the same two fair copies, each played to the end by the champion
+  as it is. `scripts/forced_buys.py` gives per joker the forced line less the run's own in win rate and in blinds,
+  with 95% ranges over the forks, and how often the bought joker was still held as that shop closed and at the end.
+  From step 39's audit, about 5,700 such (run, joker) pairs come up in antes 6-8 of 8,000 runs; with the earlier
+  antes, about 1.5 forks a run (a small test in the cloud: 13 in 8 runs), so roughly 4,000 to 4,500 forks on 3,000
+  runs, Photograph the most (about a quarter), Blueprint the fewest (under 100). The forks take about three
+  quarters of the time.
+
+The decision, stated before the run (S, #19 and #20):
+
+- Leaks: one present in a fifth of runs or more and collected less than half the time gets a fix. The fixes (seals,
+  held cards, targets: #19's spec) go in as one bundle on one 8,000-seed arm; this tally run again on the fixed bot
+  is the proof the behaviour changed, and the win rate only has to not fall.
+- Forks: a joker worth 3 points of win rate or more from the states where it was passed, its range above zero, is
+  valued wrong by the judge (class A: fixed in the value). A joker the user calls strong that shows nothing needs a
+  way of playing the bot lacks (class B: Plan v0, #20). Below 3 points with the range above zero, or Level: no change
+  from this alone.
+
+```
+cd /mnt/h/balatro-meta && make sync && make test && make leak-tally
+```
+
+Ctrl+C stops it whenever you need the PC; `make leak-tally` starts the tally again from its first run (the lines are
+written as it goes, but a run's forks only once it ends, so a stopped tally is played again whole).
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

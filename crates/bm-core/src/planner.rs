@@ -824,8 +824,95 @@ pub fn finish(run: &Run, best: (f64, u64), salt: u64) -> (MoveKind, u64) {
     finish_choice(run, best, salt).0
 }
 
+/// How one way of finishing a beatable round fared in `finish_choice` (the leak tally, `leaks.rs`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct FarmNote {
+    /// "win", "win4", "throw", "throw1", "extra5", "extra4", "extra1".
+    pub name: &'static str,
+    pub tries: u32,
+    /// Tries that failed to beat the blind (any one drops the way).
+    pub fails: u32,
+    /// Its mean gain over the tries (what the round added besides, `value::round_gain`).
+    pub gain: f64,
+    pub outcome: FarmOutcome,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FarmOutcome {
+    /// Its first move is one an earlier way already makes (never tried on its own).
+    SameMove,
+    /// Failed one or more tries.
+    Failed,
+    /// Beat the blind every try but didn't gain enough over the way kept (`FARM_MARGIN`).
+    Passed,
+    /// Kept so far (the last one kept is the move).
+    Kept,
+}
+
+/// One `finish_choice` at the top of a decision: the ways offered and how each fared, and the move made.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FinishNote {
+    pub ways: Vec<FarmNote>,
+    pub chosen: (MoveKind, u64),
+    pub extra: bool,
+}
+
+thread_local! {
+    /// While set (`finish_log_begin`), each outermost `finish_choice` notes how its ways fared. Play doesn't change.
+    static FINISH_LOG: std::cell::RefCell<Option<Vec<FinishNote>>> = const { std::cell::RefCell::new(None) };
+    static IN_FINISH: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Start noting this thread's `finish_choice` calls (the leak tally).
+pub fn finish_log_begin() {
+    FINISH_LOG.with(|l| *l.borrow_mut() = Some(Vec::new()));
+}
+
+/// Stop noting, and the notes since `finish_log_begin`.
+pub fn finish_log_take() -> Vec<FinishNote> {
+    FINISH_LOG.with(|l| l.borrow_mut().take().unwrap_or_default())
+}
+
 /// `finish`'s move, and whether it is an extra hand (played for what playing it gives, the round to go on).
 pub(crate) fn finish_choice(run: &Run, best: (f64, u64), salt: u64) -> ((MoveKind, u64), bool) {
+    let logging = FINISH_LOG.with(|l| l.borrow().is_some()) && !IN_FINISH.with(|f| f.get());
+    if !logging {
+        return finish_choice_noted(run, best, salt, None);
+    }
+    IN_FINISH.with(|f| f.set(true));
+    let mut ways = Vec::new();
+    let out = finish_choice_noted(run, best, salt, Some(&mut ways));
+    IN_FINISH.with(|f| f.set(false));
+    FINISH_LOG.with(|l| {
+        if let Some(v) = l.borrow_mut().as_mut() {
+            v.push(FinishNote {
+                ways,
+                chosen: out.0,
+                extra: out.1,
+            });
+        }
+    });
+    out
+}
+
+fn farm_name(f: Farm) -> &'static str {
+    match f {
+        Farm::Win { four: false } => "win",
+        Farm::Win { four: true } => "win4",
+        Farm::Throw { single: false } => "throw",
+        Farm::Throw { single: true } => "throw1",
+        Farm::Extra { cards: 5 } => "extra5",
+        Farm::Extra { cards: 4 } => "extra4",
+        Farm::Extra { .. } => "extra1",
+    }
+}
+
+fn finish_choice_noted(
+    run: &Run,
+    best: (f64, u64),
+    salt: u64,
+    mut notes: Option<&mut Vec<FarmNote>>,
+) -> ((MoveKind, u64), bool) {
     use crate::joker_data::JokerKind as J;
     if run.forced_card().is_some() {
         return ((MoveKind::Play, best.1), false);
@@ -860,7 +947,19 @@ pub(crate) fn finish_choice(run: &Run, best: (f64, u64), salt: u64) -> ((MoveKin
     let mut chosen: Option<(f64, (MoveKind, u64), bool)> = None;
     for (n, f) in options.into_iter().enumerate() {
         let (first, extra) = farm_step(&fair, f);
+        let mut note = |tries: u64, fails: u32, gain: f64, outcome: FarmOutcome| {
+            if let Some(v) = notes.as_mut() {
+                v.push(FarmNote {
+                    name: farm_name(f),
+                    tries: tries as u32,
+                    fails,
+                    gain,
+                    outcome,
+                });
+            }
+        };
         if chosen.as_ref().is_some_and(|(_, m, _)| *m == first) {
+            note(0, 0, f64::NAN, FarmOutcome::SameMove);
             continue;
         }
         let tries = if matches!(f, Farm::Win { .. }) {
@@ -868,7 +967,7 @@ pub(crate) fn finish_choice(run: &Run, best: (f64, u64), salt: u64) -> ((MoveKin
         } else {
             try_count(FARM_TRIES)
         };
-        let (mut all, mut gain) = (true, 0.0);
+        let (mut fails, mut gain) = (0u32, 0.0);
         for t in 0..tries {
             let (beat, _, g) = try_policy(
                 run,
@@ -877,16 +976,20 @@ pub(crate) fn finish_choice(run: &Run, best: (f64, u64), salt: u64) -> ((MoveKin
                 salt.wrapping_mul(0x51ED).wrapping_add((n as u64) << 32 | t),
                 Some(reference),
             );
-            all &= beat;
+            fails += u32::from(!beat);
             gain += g;
         }
-        if !all {
+        let g = gain / tries as f64;
+        if fails > 0 {
+            note(tries, fails, g, FarmOutcome::Failed);
             continue;
         }
-        let g = gain / tries as f64;
         let margin = if chosen.is_none() { 0.0 } else { FARM_MARGIN };
         if chosen.as_ref().is_none_or(|(b, _, _)| g > *b + margin) {
+            note(tries, 0, g, FarmOutcome::Kept);
             chosen = Some((g, first, extra));
+        } else {
+            note(tries, 0, g, FarmOutcome::Passed);
         }
     }
     chosen.map_or(((MoveKind::Play, best.1), false), |(_, m, e)| (m, e))

@@ -148,24 +148,90 @@ pub fn play_out(run: Run, salt: u64) -> Outcome {
     }
 }
 
-fn play_out_plain(mut run: Run, salt: u64) -> Outcome {
+fn play_out_plain(run: Run, salt: u64) -> Outcome {
+    play_out_watched(run, salt, None).0
+}
+
+/// A play-out that also says whether the run held joker `watch` when it first left the shop (or pack) it
+/// started in, and when it ended.
+fn play_out_watched(
+    mut run: Run,
+    salt: u64,
+    watch: Option<crate::joker_data::JokerKind>,
+) -> (Outcome, bool, bool) {
     new_run();
+    let holds = |r: &Run| watch.is_some_and(|w| r.count_jokers(w) > 0);
+    let mut kept_shop: Option<bool> = None;
     let mut step = 0u64;
     while run.phase != Phase::GameOver && !run.won && step < MAX_STEPS {
+        if kept_shop.is_none() && !matches!(run.phase, Phase::Shop | Phase::Pack) {
+            kept_shop = Some(holds(&run));
+        }
         let (k, a) = teacher_move(&run, salt << 20 | step);
         if apply(&mut run, k, a).is_err() {
             break;
         }
         step += 1;
     }
-    Outcome {
+    let out = Outcome {
         won: run.won,
         stage: if run.won {
             24
         } else {
             blinds_behind(&run) as u32
         },
+    };
+    let end = holds(&run);
+    (out, kept_shop.unwrap_or(end), end)
+}
+
+/// How one line of a forced fork went on one copy: the play-out's outcome, and whether the watched joker was
+/// held as the shop closed and at the end.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LineEnd {
+    pub outcome: Outcome,
+    pub kept_shop: bool,
+    pub kept_end: bool,
+}
+
+/// A decision forked between lines named from outside (the forced-buy forks, lab #20): each line's moves applied
+/// to the same `copies` fair copies, then the teacher plays each copy to the end, as `play_out` does (with the
+/// play-outs' options). The copies' hidden futures and the play-outs' own salts are the same for every line, so
+/// the lines are compared pair by pair. None if a line's moves can't be made on a copy (the first copy decides:
+/// the copies differ only in what is hidden). `watch`: a joker whose keeping each play-out reports.
+pub fn forced_fork(
+    run: &Run,
+    lines: &[Vec<(MoveKind, u64)>],
+    watch: Option<crate::joker_data::JokerKind>,
+    salt: u64,
+    copies: usize,
+) -> Option<Vec<Vec<LineEnd>>> {
+    let mut out = vec![Vec::with_capacity(copies); lines.len()];
+    for c in 0..copies {
+        let base = fair_copy(run, salt ^ (0xF0_4000 + c as u64));
+        for (i, moves) in lines.iter().enumerate() {
+            let mut copy = base.clone();
+            if moves.iter().any(|&(k, a)| apply(&mut copy, k, a).is_err()) {
+                new_run();
+                return None;
+            }
+            let ps = (salt << 8 | c as u64) & ((1 << 44) - 1);
+            let (outcome, kept_shop, kept_end) = match PLAY_OPTIONS.get() {
+                Some(names) => {
+                    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+                    crate::teacher::with_options(&names, || play_out_watched(copy, ps, watch))
+                }
+                None => play_out_watched(copy, ps, watch),
+            };
+            out[i].push(LineEnd {
+                outcome,
+                kept_shop,
+                kept_end,
+            });
+        }
     }
+    new_run();
+    Some(out)
 }
 
 /// Fork the decision here: the `best` options by the teacher's quick look, doing nothing, the teacher's own choice
@@ -317,6 +383,28 @@ mod tests {
         let made: Vec<_> = f.options.iter().filter(|o| o.made).collect();
         assert_eq!(made.len(), 1);
         assert_eq!(made[0].moves, [(MoveKind::LeaveShop, 0)]);
+    }
+
+    #[test]
+    fn a_forced_fork_plays_named_lines_on_shared_copies() {
+        let run = crate::teacher::with_options(&["light"], || at_first_shop("FORK4"));
+        let lines = vec![
+            vec![(MoveKind::LeaveShop, 0)],
+            vec![(MoveKind::LeaveShop, 0)],
+        ];
+        let ends =
+            crate::teacher::with_options(&["light"], || forced_fork(&run, &lines, None, 5, 2))
+                .expect("leaving can be made");
+        assert_eq!(ends.len(), 2);
+        assert!(ends.iter().all(|l| l.len() == 2));
+        // The same line on the same copies and salts plays out the same.
+        assert_eq!(ends[0], ends[1]);
+        // A line that can't be made gives no fork.
+        let bad = vec![vec![(MoveKind::LeaveShop, 0)], vec![(MoveKind::Buy, 99)]];
+        assert!(
+            crate::teacher::with_options(&["light"], || forced_fork(&run, &bad, None, 5, 1))
+                .is_none()
+        );
     }
 
     #[test]

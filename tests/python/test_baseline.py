@@ -117,3 +117,31 @@ def test_the_teacher_bot_runs_in_the_job_and_its_runs_replay(tmp_path):
         s = jobs.read_sample(p)
         got = replay(s)
         assert got["over"] and got["won"] == s["won"] and got["ante"] == s["ante"], s["seed"]
+
+
+def test_the_leak_tally_and_the_forced_forks_leave_the_runs_as_they_were(tmp_path):
+    """--leaks and --force-buy only watch: the runs end exactly as without them (the forks run after each run), one
+    tally line per run, and each fork line pairs the run's own move with taking the named joker on the same copies."""
+    if not shutil.which("cargo"):
+        pytest.skip("cargo is not installed")
+    base = ["cargo", "run", "--release", "-q", "-p", "bm-core", "--example", "baseline", "--", "--bot", "teacher",
+            "--teacher-options", "light", "--runs", "8", "--threads", "2", "--seed", "1", "--salt", "3"]
+    plain, watched = tmp_path / "plain.json", tmp_path / "watched.json"
+    leaks, forced = tmp_path / "leaks.jsonl", tmp_path / "forced.jsonl"
+    for out, extra in ((plain, []), (watched, ["--leaks", str(leaks), "--force-buy",
+                                                "Abstract Joker@1-8,Supernova@1-8,Photograph@1-8",
+                                                "--force-out", str(forced), "--force-copies", "1",
+                                                "--fork-play-options", "light"])):
+        r = subprocess.run([*base, *extra, "--out", str(out)], cwd=ROOT, capture_output=True, text=True,
+                           check=False, timeout=900)
+        assert r.returncode == 0, r.stdout + r.stderr
+    assert json.loads(watched.read_text())["run_stages"] == json.loads(plain.read_text())["run_stages"]
+    lines = [json.loads(x) for x in leaks.read_text().splitlines()]
+    assert sorted(x["run"] for x in lines) == list(range(8))
+    assert all(x["tally"]["rounds"]["begun"] >= 1 for x in lines)
+    assert any(x["tally"]["ways"] for x in lines), "played live, finish_choice's ways are noted"
+    for f in (json.loads(x) for x in forced.read_text().splitlines()):
+        assert f["joker"] in ("Abstract Joker", "Supernova", "Photograph") and f["passes"] >= 1
+        if "skipped" not in f:
+            assert len(f["own_ends"]) == len(f["forced_ends"]) == 1
+            assert f["forced"][-1].split()[0] in ("Buy", "PackChoose")

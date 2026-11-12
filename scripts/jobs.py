@@ -1586,6 +1586,54 @@ def money_belief_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int 
     return steps
 
 
+# make leak-tally: two diagnoses in one night, neither changing play (the lab's direction 2, #19 and #20). The champion
+# replays step 37's salt-2 seeds (the first LEAK_RUNS of its 8,000-seed control, move for move: same-runs checks it)
+# with two things noted as it goes:
+# - the leak tally (#19, `baseline --leaks`, leaks.rs): seals drawn, thrown, played and held; consumables held
+#   through rounds; won rounds ended at once with hands and discards to spare, and what each way of finishing fared;
+#   shops left rich with a pack unopened; seal Spectrals' targets; Spectral packs; jokers and vouchers. S's rule: a
+#   leak present in a fifth of runs or more and collected less than half the time gets a fix (scripts/leaks.py).
+# - the forced-buy forks (#20 part 1, `baseline --force-buy`): where the run passed one of FORCED_JOKERS on sale and
+#   affordable, one such position per joker and run, after the run: its own move against taking the joker, each line
+#   on FORCE_COPIES shared fair copies played out by the champion as it is. S's rule: a joker worth 3 points or more
+#   from those states, range above zero, is valued wrong (class A, fixed in the value); a strong one that shows
+#   nothing needs a way of playing the bot lacks (class B, Plan v0) (scripts/forced_buys.py).
+LEAK_DIR = ".sync/leaks"
+LEAK_RUNS = 3000
+FORCED_JOKERS = ("Blueprint,Brainstorm,Bloodstone,Campfire,Photograph,Sock and Buskin,Lucky Cat,"
+                 "Mr. Bones@7-8,Luchador@7-8")
+FORCE_COPIES = 2
+
+
+def leak_steps(root: Path = ROOT, runs: int = LEAK_RUNS) -> list[tuple]:
+    """make leak-tally: the champion on the first `runs` of step 37's salt-2 seeds with the leak tally and the
+    forced-buy forks on, the runs checked against that control, then both summaries."""
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    args = list(best[1])
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
+    w = args[args.index("--value-weight") + 1]
+    stem = Path(best[2]).stem.split("-on-")[-1]
+    tag, s = f"f{FORMULA}", f"salt{BUNDLE_SALT}"
+    control = f"results/tune/{tag}-{file_safe(opts)}-{BIG_RUNS // 1000}k-w{w}-{s}-on-{stem}.json"
+    k = f"{runs // 1000}k" if runs % 1000 == 0 else str(runs)
+    leaks, forced = f"{LEAK_DIR}/leaks-{k}-{s}.jsonl", f"{LEAK_DIR}/forced-{k}-{s}.jsonl"
+    report = f"results/leaks/white-{k}-{s}.json"
+    if not (root / report).exists():
+        steps.append(("tally", [*BASELINE, "--bot", "teacher", *args, "--runs", str(runs), "--seed", "1",
+                                "--salt", str(BUNDLE_SALT), "--leaks", leaks, "--force-buy", FORCED_JOKERS,
+                                "--force-out", forced, "--force-copies", str(FORCE_COPIES), "--out", report]))
+        steps.append(("gzip", ["gzip", "-f", leaks, forced]))
+    steps.append(("same-runs", ["scripts/compare_runs.py", control, report, "--out",
+                                f"results/leaks/white-{k}-{s}-vs-control.json"]))
+    steps.append(("leaks", ["scripts/leaks.py", f"{leaks}.gz", "--out", f"results/leaks/leaks-{k}-{s}.json"]))
+    steps.append(("forced", ["scripts/forced_buys.py", f"{forced}.gz", "--out",
+                             f"results/leaks/forced-{k}-{s}.json"]))
+    return steps
+
+
 def budget_away_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     """make teacher-budget-away: the AWAY_TRIALS against the champion at the screens' salt (champion_trials), and
     the two halves set against each other run by run: every count between rounds kept flat against every count in a
@@ -2067,6 +2115,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-looks": looks_steps(),
     "shop-audit": audit_steps(),
     "teacher-money-belief": money_belief_steps(),
+    "leak-tally": leak_steps(),
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
     "diagnose": diagnose_steps(),

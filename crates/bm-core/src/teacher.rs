@@ -2239,6 +2239,23 @@ fn joker_entries(
     }
 }
 
+/// The moves that take a joker with `take` whatever the teacher thinks of it (the forced-buy forks, lab #20): at
+/// once if there's room, else after selling the held joker the run would miss least by the value model
+/// (`weakest_jokers`, as the teacher's own buys do). None when nothing can be sold to make room.
+pub fn take_joker_anyway(
+    run: &Run,
+    vs: u64,
+    edition: Edition,
+    take: (MoveKind, u64),
+) -> Option<Vec<(MoveKind, u64)>> {
+    if joker_room(run, edition) {
+        return Some(vec![take]);
+    }
+    weakest_jokers(run, vs, 1)
+        .first()
+        .map(|&w| vec![(MoveKind::SellJoker, w as u64), take])
+}
+
 /// What can be bought in the shop now, each as the moves that do it.
 fn shop_buys(run: &Run, vs: u64) -> Vec<Vec<(MoveKind, u64)>> {
     let mut out = Vec::new();

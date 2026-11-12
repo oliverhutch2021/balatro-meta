@@ -39,6 +39,19 @@
 //! (`chunk-NNNNN-{idx,val,ptr,lab}.npy`, `FORK_LABELS`), for `train_value.py --forks`; the report says how often
 //! the teacher's own choice was the option that went best and what its choices gave away (`forks`).
 //!
+//! `--leaks FILE` writes one JSON line per run with the leak tally (`leaks.rs`, lab #19): what the run did with its
+//! seals, consumables, rounds already won, shops and packs, counted move by move; played live, it also notes how each
+//! way of finishing a won round fared in `planner::finish_choice`. Play doesn't change: the runs are the same runs.
+//!
+//! `--force-buy SPEC --force-out FILE` (with `--bot teacher`): the forced-buy forks (lab #20). SPEC names jokers,
+//! each optionally with its antes (`Blueprint,Campfire,Mr. Bones@7-8`; antes 2-8 by default; names as the game shows
+//! them, case and spaces ignored). Wherever the run passes one that was on sale and affordable (leaves the shop or
+//! rerolls with it in the row; or skips it in a Buffoon pack), once per joker and shop, the position is kept; when the
+//! run has ended, one kept position per joker (picked by a hash) is forked: the run's own move against taking the joker (after selling the held
+//! joker the run would miss least, if the row is full: `teacher::take_joker_anyway`), each line on the same
+//! `--force-copies` (2) fair copies played out by the teacher (`forks::forced_fork`, with `--fork-play-options`).
+//! One JSON line per fork. The forks run after the run, so the run itself is played exactly as without them.
+//!
 //! `--diagnose OUT.csv` (usually on a `--replay`, with the teacher's networks) writes one row per run about how
 //! it went: where it ended and by how much it fell short, its build then, and ante by ante its biggest hand, money
 //! and x mult jokers; for a share `--deep-share` (0.25) of the lost runs, the blind they lost is played again from
@@ -260,6 +273,10 @@ fn play(
     // `--diagnose`: the run at the start of the blind it is in, its biggest hand in that blind, and ante by ante its
     // biggest hand, its money and its x mult jokers as the ante began.
     let mut diag = diagnose.then(Diagnosis::default);
+    let mut leaks = LEAKS_OUT.get().is_some().then(bm_core::leaks::Leaks::new);
+    let force = FORCE_SPEC.get().filter(|_| FORCE_OUT.get().is_some());
+    let mut passed: Vec<Passed> = Vec::new();
+    let mut forced_at: std::collections::HashSet<(i32, usize, JokerKind)> = Default::default();
     let mut prev_phase = run.phase;
     let mut step = 0u64;
     while run.phase != Phase::GameOver
@@ -324,6 +341,10 @@ fn play(
         if audited {
             bm_core::teacher::audit_begin();
         }
+        let tallied = leaks.is_some() && at_win.is_none();
+        if tallied && script.is_none() && run.phase == Phase::Round {
+            bm_core::planner::finish_log_begin();
+        }
         let (k, a) = match script {
             None => bot(&run, salt << 20 | step),
             Some(m) => match m.get(step as usize) {
@@ -344,6 +365,37 @@ fn play(
                 let line = audit_line(&run, index, step, (k, a), &notes);
                 let mut w = out.lock().unwrap();
                 writeln!(w, "{line}").expect("--audit-shops: writing");
+            }
+        }
+        let finish = if tallied {
+            bm_core::planner::finish_log_take()
+        } else {
+            Vec::new()
+        };
+        let before = tallied.then(|| run.clone());
+        if let Some(spec) = force.filter(|_| at_win.is_none()) {
+            for (kind, edition, take) in passed_jokers(&run, (k, a), spec) {
+                let behind = run
+                    .slots
+                    .iter()
+                    .filter(|x| {
+                        matches!(
+                            x,
+                            bm_core::blinds::SlotState::Defeated
+                                | bm_core::blinds::SlotState::Skipped
+                        )
+                    })
+                    .count();
+                if forced_at.insert((run.ante, behind, kind)) {
+                    passed.push(Passed {
+                        run: run.clone(),
+                        step,
+                        own: (k, a),
+                        kind,
+                        edition,
+                        take,
+                    });
+                }
             }
         }
         if keep_this && moves {
@@ -393,6 +445,9 @@ fn play(
             );
             s.refused = true;
             break;
+        }
+        if let (Some(l), Some(b)) = (leaks.as_mut(), before.as_ref()) {
+            l.observe(b, (k, a), &run, &finish);
         }
         if k == MoveKind::Play {
             if let Some(h) = run.last_hand {
@@ -461,6 +516,22 @@ fn play(
         });
     }
     s.money_end = run.money;
+    if let (Some(l), Some(out)) = (leaks.as_ref(), LEAKS_OUT.get()) {
+        if !s.refused && !s.unfinished {
+            use std::io::Write as _;
+            let line = format!(
+                "{{\"seed\":{},\"run\":{index},\"won\":{},\"stage\":{},\"tally\":{}}}",
+                esc(&s.seed),
+                s.won,
+                s.stage,
+                l.json()
+            );
+            writeln!(out.lock().unwrap(), "{line}").expect("--leaks: writing");
+        }
+    }
+    if !passed.is_empty() {
+        force_forks(&s.seed, index, salt, passed);
+    }
     s.held = run.jokers.iter().map(|j| j.kind).collect();
     if DETAIL.load(Ordering::Relaxed) {
         s.detail = Some(detail_row(&run, &s));
@@ -763,6 +834,199 @@ static AUDIT_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> 
     std::sync::OnceLock::new();
 static AUDIT_LO: AtomicU64 = AtomicU64::new(6);
 static AUDIT_HI: AtomicU64 = AtomicU64::new(8);
+/// `--leaks FILE`: one leak tally line per run (leaks.rs).
+static LEAKS_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> =
+    std::sync::OnceLock::new();
+/// `--force-buy SPEC --force-out FILE`: the jokers forced (each with its antes) and where the forks go.
+static FORCE_SPEC: std::sync::OnceLock<Vec<(JokerKind, i32, i32)>> = std::sync::OnceLock::new();
+static FORCE_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> =
+    std::sync::OnceLock::new();
+static FORCE_COPIES: AtomicU64 = AtomicU64::new(2);
+
+/// A position where the run passed a named joker, kept for its fork after the run.
+struct Passed {
+    run: Run,
+    step: u64,
+    own: (MoveKind, u64),
+    kind: JokerKind,
+    edition: bm_core::card::Edition,
+    take: (MoveKind, u64),
+}
+
+/// A joker named in `--force-buy`: case, spaces, dots and dashes ignored.
+fn joker_by_name(name: &str) -> Option<JokerKind> {
+    let norm = |x: &str| {
+        x.chars()
+            .filter(|c| c.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect::<String>()
+    };
+    let want = norm(name);
+    JokerKind::ALL
+        .iter()
+        .copied()
+        .find(|k| norm(k.name()) == want)
+}
+
+/// `--force-buy SPEC`: `Name` or `Name@LO-HI`, comma-separated.
+fn force_spec(spec: &str) -> Vec<(JokerKind, i32, i32)> {
+    spec.split(',')
+        .filter(|x| !x.trim().is_empty())
+        .map(|item| {
+            let (name, antes) = item.split_once('@').unwrap_or((item, "2-8"));
+            let kind = joker_by_name(name.trim())
+                .unwrap_or_else(|| panic!("--force-buy: no joker called {name:?}"));
+            let (lo, hi) = antes.split_once('-').expect("--force-buy: antes as LO-HI");
+            (
+                kind,
+                lo.trim().parse().expect("--force-buy: ante"),
+                hi.trim().parse().expect("--force-buy: ante"),
+            )
+        })
+        .collect()
+}
+
+/// The named jokers the move passes: on sale in the shop the run leaves or rerolls (affordable, counting what
+/// selling a held joker would bring when the row is full), or in a Buffoon pack it skips or takes something
+/// else from. Each with the move that would take it.
+fn passed_jokers(
+    run: &Run,
+    mv: (MoveKind, u64),
+    spec: &[(JokerKind, i32, i32)],
+) -> Vec<(JokerKind, bm_core::card::Edition, (MoveKind, u64))> {
+    let named = |k: JokerKind| {
+        spec.iter()
+            .any(|&(n, lo, hi)| n == k && (lo..=hi).contains(&run.ante))
+    };
+    let mut out = Vec::new();
+    match (run.phase, mv.0) {
+        (Phase::Shop, MoveKind::LeaveShop | MoveKind::Reroll) => {
+            let Some(shop) = run.shop.as_ref() else {
+                return out;
+            };
+            let sale = run
+                .jokers
+                .iter()
+                .filter(|j| !j.eternal)
+                .map(|j| j.sell_cost)
+                .max()
+                .unwrap_or(0);
+            for (i, slot) in shop.row.iter().enumerate() {
+                if let RowItem::Joker(j) = &slot.item {
+                    let room = run.jokers.len() as i32
+                        + i32::from(j.edition != bm_core::card::Edition::Negative)
+                        <= run.joker_slots;
+                    let money = run.spendable() + if room { 0 } else { sale };
+                    if named(j.kind) && (slot.cost <= 0 || slot.cost <= money) {
+                        out.push((j.kind, j.edition, (MoveKind::Buy, i as u64)));
+                    }
+                }
+            }
+        }
+        (Phase::Pack, MoveKind::PackChoose | MoveKind::PackSkip) => {
+            let Some(p) = run.pack.as_ref() else {
+                return out;
+            };
+            for (i, c) in p.cards.iter().enumerate() {
+                if let PackCard::Joker(j) = c {
+                    let taken = mv.0 == MoveKind::PackChoose && (mv.1 & 0xFF) as usize == i;
+                    if named(j.kind) && !taken {
+                        out.push((j.kind, j.edition, (MoveKind::PackChoose, i as u64)));
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    out
+}
+
+/// A fork's salt: from the run, its salt, the step and the joker, so a run forks the same way on any thread.
+fn force_salt(index: u64, salt: u64, step: u64, kind: JokerKind) -> u64 {
+    let mut z = index ^ salt.rotate_left(17) ^ step << 32 ^ (kind as u64) << 52 ^ 0xF0C3_D00B;
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    (z ^ (z >> 31)) & ((1 << 36) - 1)
+}
+
+/// Fork the kept positions (after the run), one per joker, picked among that joker's passes in the run by a hash
+/// (the run's passes of one joker are alike, and one each keeps the forks' states independent): its own move
+/// against taking the joker. One JSON line each, with how many passes it was picked from.
+fn force_forks(seed: &str, index: u64, salt: u64, passed: Vec<Passed>) {
+    use std::io::Write as _;
+    let Some(out) = FORCE_OUT.get() else {
+        return;
+    };
+    let mut by_kind: BTreeMap<u16, Vec<Passed>> = BTreeMap::new();
+    for p in passed {
+        by_kind.entry(p.kind as u16).or_default().push(p);
+    }
+    let passed: Vec<(Passed, usize)> = by_kind
+        .into_values()
+        .map(|mut v| {
+            let n = v.len();
+            let pick = (force_salt(index, salt, 0, v[0].kind) % n as u64) as usize;
+            (v.swap_remove(pick), n)
+        })
+        .collect();
+    let copies = FORCE_COPIES.load(Ordering::Relaxed) as usize;
+    let mv = |m: &(MoveKind, u64)| format!("\"{:?} {}\"", m.0, m.1);
+    for (p, passes) in passed {
+        bm_core::teacher::new_run();
+        let fs = force_salt(index, salt, p.step, p.kind);
+        let head = format!(
+            "{{\"seed\":{},\"run\":{index},\"passes\":{passes},\"step\":{},\"ante\":{},\"phase\":\"{}\",\"joker\":{},\"money\":{},\"jokers\":{},\"joker_slots\":{},\"own\":{}",
+            esc(seed),
+            p.step,
+            p.run.ante,
+            if p.run.phase == Phase::Shop { "shop" } else { "pack" },
+            esc(p.kind.name()),
+            p.run.money,
+            p.run.jokers.len(),
+            p.run.joker_slots,
+            mv(&p.own),
+        );
+        let forced = bm_core::teacher::take_joker_anyway(&p.run, fs << 20, p.edition, p.take);
+        let line = match forced {
+            None => format!("{head},\"skipped\":\"nothing to sell\"}}"),
+            Some(forced) => {
+                let sold = forced
+                    .iter()
+                    .find(|m| m.0 == MoveKind::SellJoker)
+                    .and_then(|m| p.run.jokers.get(m.1 as usize))
+                    .map_or("null".to_string(), |j| esc(j.kind.name()));
+                let lines = vec![vec![p.own], forced.clone()];
+                match bm_core::forks::forced_fork(&p.run, &lines, Some(p.kind), fs, copies) {
+                    None => format!("{head},\"skipped\":\"can't be made\"}}"),
+                    Some(ends) => {
+                        let fmt = |l: &[bm_core::forks::LineEnd]| {
+                            l.iter()
+                                .map(|e| {
+                                    format!(
+                                        "[{},{},{},{}]",
+                                        u8::from(e.outcome.won),
+                                        e.outcome.stage,
+                                        u8::from(e.kept_shop),
+                                        u8::from(e.kept_end)
+                                    )
+                                })
+                                .collect::<Vec<_>>()
+                                .join(",")
+                        };
+                        format!(
+                            "{head},\"forced\":[{}],\"sold\":{sold},\"copies\":{copies},\"own_ends\":[{}],\"forced_ends\":[{}]}}",
+                            forced.iter().map(mv).collect::<Vec<_>>().join(","),
+                            fmt(&ends[0]),
+                            fmt(&ends[1]),
+                        )
+                    }
+                }
+            }
+        };
+        writeln!(out.lock().unwrap(), "{line}").expect("--force-out: writing");
+    }
+    bm_core::teacher::new_run();
+}
 
 /// One audited shop decision as a JSON line.
 fn audit_line(
@@ -2141,6 +2405,26 @@ fn main() {
         }
         println!("Fork play-outs add: {}", names.join(", "));
     }
+    // `--leaks FILE`: the leak tally, a line per run; `--force-buy SPEC --force-out FILE`: the forced-buy forks.
+    if let Some(path) = opt("--leaks") {
+        let f = std::fs::File::create(&path).expect("--leaks: creating the file");
+        let _ = LEAKS_OUT.set(Mutex::new(std::io::BufWriter::new(f)));
+    }
+    match (opt("--force-buy"), opt("--force-out")) {
+        (Some(spec), Some(path)) => {
+            let f = std::fs::File::create(&path).expect("--force-out: creating the file");
+            let _ = FORCE_OUT.set(Mutex::new(std::io::BufWriter::new(f)));
+            let _ = FORCE_SPEC.set(force_spec(&spec));
+            if let Some(c) = opt("--force-copies") {
+                FORCE_COPIES.store(
+                    c.parse().expect("--force-copies takes a number"),
+                    Ordering::Relaxed,
+                );
+            }
+        }
+        (None, None) => {}
+        _ => panic!("--force-buy and --force-out go together"),
+    }
     let details: Mutex<Vec<String>> = Mutex::new(Vec::new());
     // `--replay`: runs that went another way than recorded.
     let diverged: Mutex<Vec<(u64, String)>> = Mutex::new(Vec::new());
@@ -2193,8 +2477,9 @@ fn main() {
         (other, _) => panic!("unknown bot {other:?}: greedy or teacher"),
     };
     assert!(
-        !(FORKS.load(Ordering::Relaxed) || diagnose.is_some()) || bot_label == "teacher",
-        "--forks and --diagnose play options out with the teacher: give --bot teacher"
+        !(FORKS.load(Ordering::Relaxed) || diagnose.is_some() || FORCE_OUT.get().is_some())
+            || bot_label == "teacher",
+        "--forks, --force-buy and --diagnose play options out with the teacher: give --bot teacher"
     );
     let bot_name = if replay.is_some() {
         "replayed runs"
@@ -2618,6 +2903,18 @@ fn main() {
     if let Some(out) = AUDIT_OUT.get() {
         use std::io::Write as _;
         out.lock().unwrap().flush().expect("--audit-shops: writing");
+    }
+    for (out, what) in [
+        (LEAKS_OUT.get(), "--leaks"),
+        (FORCE_OUT.get(), "--force-out"),
+    ] {
+        if let Some(out) = out {
+            use std::io::Write as _;
+            out.lock()
+                .unwrap()
+                .flush()
+                .unwrap_or_else(|e| panic!("{what}: writing: {e}"));
+        }
     }
     let mut text = report_json(&r);
     // What the runs were played with, so two reports can be checked to pair seed by seed

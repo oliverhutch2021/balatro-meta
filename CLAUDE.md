@@ -107,7 +107,11 @@ what it found.
   `scenario.rs` (building test positions), `tally.rs` (what a run did and how it ended, counted as
   `examples/baseline.rs` counts it; `env::Env` hands each finished run's `RunEnd` to `VecEnv.take_endings`, so
   `scripts/train_policy.py`'s `RunBook` shows the network's runs like the teacher's: all, the latest 1,000 and
-  block by block).
+  block by block), `leaks.rs` (the leak tally, `baseline --leaks`: what a run did with its seals, consumables, won
+  rounds, shops and packs, move by move, with `planner::finish_choice`'s notes when played live; a diagnosis, never
+  play; `scripts/leaks.py`); `baseline --force-buy`: the forced-buy forks (`forks::forced_fork`, lines named from
+  outside on shared fair copies: where a run passed a named joker, its own move against taking it, after the run,
+  so the run itself is unchanged; `scripts/forced_buys.py`), `make leak-tally`.
 - `crates/bm-py`: Python bindings (`VecEnv`, `Game`); `python/balatro_meta`.
 - Jobs (`scripts/jobs.py`, like monopoly-strategy's) leave live files in
   `.sync/watch/<job>/`: `progress.json` and `samples/` (runs to replay:

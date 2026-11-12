@@ -1431,3 +1431,29 @@ def test_the_money_belief_arms_freeze_the_networks_money_against_the_salted_cont
             assert steps[f"{name}-gzip"] == ["gzip", "-f", a[a.index("--audit-shops") + 1]]
         else:
             assert "--audit-shops" not in a
+
+
+def test_the_leak_tally_replays_the_salted_control_with_the_tally_and_the_forced_forks(tmp_path):
+    champion_in(tmp_path)
+    steps = {n: a for n, a, *_ in jobs.leak_steps(tmp_path)}
+    assert list(steps) == ["build", "folder", "tally", "gzip", "same-runs", "leaks", "forced"]
+    bundle = {n: a for n, a, *_ in jobs.bundle_steps(tmp_path)}
+    champ, a = bundle["white-champion"], steps["tally"]
+    # The control's own command with the tally and the forks added and fewer runs: the same runs, move for move.
+    added = ("--leaks", "--force-buy", "--force-out", "--force-copies")
+    stripped = [x for i, x in enumerate(a) if x not in added and (i == 0 or a[i - 1] not in added)]
+    runs_at = champ.index("--runs")
+    assert stripped[:-2] == champ[:runs_at + 1] + [str(jobs.LEAK_RUNS)] + champ[runs_at + 2:-2]
+    assert [a[a.index(x) + 1] for x in ("--seed", "--salt")] == ["1", str(jobs.BUNDLE_SALT)]
+    assert a[a.index("--force-buy") + 1] == jobs.FORCED_JOKERS
+    assert a[a.index("--force-copies") + 1] == str(jobs.FORCE_COPIES)
+    leaks, forced = a[a.index("--leaks") + 1], a[a.index("--force-out") + 1]
+    assert leaks.startswith(jobs.LEAK_DIR + "/") and forced.startswith(jobs.LEAK_DIR + "/"), "big lines stay out of git"
+    assert steps["gzip"] == ["gzip", "-f", leaks, forced]
+    report = a[a.index("--out") + 1]
+    assert steps["same-runs"][1:3] == [bundle["white-champion"][-1], report]
+    assert steps["leaks"][1] == leaks + ".gz" and steps["forced"][1] == forced + ".gz"
+    # A report already there is not played again.
+    (tmp_path / report).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / report).write_text("{}")
+    assert "tally" not in [n for n, *_ in jobs.leak_steps(tmp_path)]
