@@ -5,7 +5,8 @@ shops and packs, from the lines `baseline --leaks` wrote (one per run, gzipped o
 For each leak: the share of runs where it could happen ("present") and how often the value was collected when it
 could be. S's rule (stated before the tally): a leak present in a fifth of runs or more and collected less than half
 the time gets a fix; the fixes go in as one bundle on one 8,000-seed arm, and this tally run again on the fixed bot is
-the proof the behaviour changed. Each leak is also split by runs won and lost. A diagnosis, never play.
+the proof the behaviour changed, and the win rate must not fall: the lower end of that arm's 8,000-seed paired 95%
+range above -1.0 point (B, #21). Each leak is also split by runs won and lost. A diagnosis, never play.
 
     scripts/leaks.py LINES.jsonl[.gz] --out SUMMARY.json
 """

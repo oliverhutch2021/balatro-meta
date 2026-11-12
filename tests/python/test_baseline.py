@@ -129,7 +129,7 @@ def test_the_leak_tally_and_the_forced_forks_leave_the_runs_as_they_were(tmp_pat
     plain, watched = tmp_path / "plain.json", tmp_path / "watched.json"
     leaks, forced = tmp_path / "leaks.jsonl", tmp_path / "forced.jsonl"
     for out, extra in ((plain, []), (watched, ["--leaks", str(leaks), "--force-buy",
-                                                "Abstract Joker@1-8,Supernova@1-8,Photograph@1-8",
+                                                "Abstract Joker@1-8,Supernova@1-8*2,Photograph@1-8%50",
                                                 "--force-out", str(forced), "--force-copies", "1",
                                                 "--fork-play-options", "light"])):
         r = subprocess.run([*base, *extra, "--out", str(out)], cwd=ROOT, capture_output=True, text=True,
@@ -143,5 +143,6 @@ def test_the_leak_tally_and_the_forced_forks_leave_the_runs_as_they_were(tmp_pat
     for f in (json.loads(x) for x in forced.read_text().splitlines()):
         assert f["joker"] in ("Abstract Joker", "Supernova", "Photograph") and f["passes"] >= 1
         if "skipped" not in f:
-            assert len(f["own_ends"]) == len(f["forced_ends"]) == 1
+            assert len(f["own_ends"]) == len(f["held_ends"]) == len(f["forced_ends"]) == f["copies"]
+            assert all(e[2] == 1 for e in f["held_ends"]), "the held joker is still there as the shop closes"
             assert f["forced"][-1].split()[0] in ("Buy", "PackChoose")

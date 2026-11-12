@@ -48,8 +48,11 @@
 //! them, case and spaces ignored). Wherever the run passes one that was on sale and affordable (leaves the shop or
 //! rerolls with it in the row; or skips it in a Buffoon pack), once per joker and shop, the position is kept; when the
 //! run has ended, one kept position per joker (picked by a hash) is forked: the run's own move against taking the joker (after selling the held
-//! joker the run would miss least, if the row is full: `teacher::take_joker_anyway`), each line on the same
-//! `--force-copies` (2) fair copies played out by the teacher (`forks::forced_fork`, with `--fork-play-options`).
+//! joker the run would miss least, if the row is full: `teacher::take_joker_anyway`), once held (the game's Eternal
+//! sticker put on it in that line, so it can't be sold again: the primary line) and once as the bot then plays it,
+//! each line on the same `--force-copies` (2) fair copies played out by the teacher (`forks::forced_fork`, with
+//! `--fork-play-options`). SPEC items are `Name[@LO-HI][*COPIES][%SHARE]`: a joker's own copies, and the share of runs
+//! whose pass is forked (a cap for the commonest).
 //! One JSON line per fork. The forks run after the run, so the run itself is played exactly as without them.
 //!
 //! `--diagnose OUT.csv` (usually on a `--replay`, with the teacher's networks) writes one row per run about how
@@ -838,10 +841,21 @@ static AUDIT_HI: AtomicU64 = AtomicU64::new(8);
 static LEAKS_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> =
     std::sync::OnceLock::new();
 /// `--force-buy SPEC --force-out FILE`: the jokers forced (each with its antes) and where the forks go.
-static FORCE_SPEC: std::sync::OnceLock<Vec<(JokerKind, i32, i32)>> = std::sync::OnceLock::new();
+static FORCE_SPEC: std::sync::OnceLock<Vec<Forced>> = std::sync::OnceLock::new();
 static FORCE_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> =
     std::sync::OnceLock::new();
 static FORCE_COPIES: AtomicU64 = AtomicU64::new(2);
+
+/// A joker named in `--force-buy`: its antes, its copies (None: `--force-copies`) and the share of runs whose pass
+/// is forked, in percent (a cap for the commonest, by a hash).
+#[derive(Clone, Copy, Debug)]
+struct Forced {
+    kind: JokerKind,
+    lo: i32,
+    hi: i32,
+    copies: Option<usize>,
+    share: u64,
+}
 
 /// A position where the run passed a named joker, kept for its fork after the run.
 struct Passed {
@@ -868,20 +882,30 @@ fn joker_by_name(name: &str) -> Option<JokerKind> {
         .find(|k| norm(k.name()) == want)
 }
 
-/// `--force-buy SPEC`: `Name` or `Name@LO-HI`, comma-separated.
-fn force_spec(spec: &str) -> Vec<(JokerKind, i32, i32)> {
+/// `--force-buy SPEC`: comma-separated `Name[@LO-HI][*COPIES][%SHARE]` (antes 2-8, `--force-copies`, 100% by
+/// default), e.g. `Photograph%60,Blueprint*4,Mr. Bones@7-8*4`.
+fn force_spec(spec: &str) -> Vec<Forced> {
     spec.split(',')
         .filter(|x| !x.trim().is_empty())
         .map(|item| {
+            let (item, share) = item.split_once('%').unwrap_or((item, "100"));
+            let (item, copies) = match item.split_once('*') {
+                Some((a, c)) => (a, Some(c.trim().parse().expect("--force-buy: copies"))),
+                None => (item, None),
+            };
             let (name, antes) = item.split_once('@').unwrap_or((item, "2-8"));
             let kind = joker_by_name(name.trim())
                 .unwrap_or_else(|| panic!("--force-buy: no joker called {name:?}"));
             let (lo, hi) = antes.split_once('-').expect("--force-buy: antes as LO-HI");
-            (
+            let share: u64 = share.trim().parse().expect("--force-buy: share in percent");
+            assert!((1..=100).contains(&share), "--force-buy: share 1-100");
+            Forced {
                 kind,
-                lo.trim().parse().expect("--force-buy: ante"),
-                hi.trim().parse().expect("--force-buy: ante"),
-            )
+                lo: lo.trim().parse().expect("--force-buy: ante"),
+                hi: hi.trim().parse().expect("--force-buy: ante"),
+                copies,
+                share,
+            }
         })
         .collect()
 }
@@ -892,11 +916,11 @@ fn force_spec(spec: &str) -> Vec<(JokerKind, i32, i32)> {
 fn passed_jokers(
     run: &Run,
     mv: (MoveKind, u64),
-    spec: &[(JokerKind, i32, i32)],
+    spec: &[Forced],
 ) -> Vec<(JokerKind, bm_core::card::Edition, (MoveKind, u64))> {
     let named = |k: JokerKind| {
         spec.iter()
-            .any(|&(n, lo, hi)| n == k && (lo..=hi).contains(&run.ante))
+            .any(|f| f.kind == k && (f.lo..=f.hi).contains(&run.ante))
     };
     let mut out = Vec::new();
     match (run.phase, mv.0) {
@@ -961,17 +985,26 @@ fn force_forks(seed: &str, index: u64, salt: u64, passed: Vec<Passed>) {
     for p in passed {
         by_kind.entry(p.kind as u16).or_default().push(p);
     }
+    let spec = FORCE_SPEC.get().map_or(&[][..], Vec::as_slice);
+    let rule = |k: JokerKind| spec.iter().find(|f| f.kind == k).copied();
     let passed: Vec<(Passed, usize)> = by_kind
         .into_values()
+        .filter(|v| {
+            // The share of runs forked for this joker (a cap for the commonest), by a hash of its own.
+            let share = rule(v[0].kind).map_or(100, |f| f.share);
+            force_salt(index, salt, 1, v[0].kind) % 100 < share
+        })
         .map(|mut v| {
             let n = v.len();
             let pick = (force_salt(index, salt, 0, v[0].kind) % n as u64) as usize;
             (v.swap_remove(pick), n)
         })
         .collect();
-    let copies = FORCE_COPIES.load(Ordering::Relaxed) as usize;
     let mv = |m: &(MoveKind, u64)| format!("\"{:?} {}\"", m.0, m.1);
     for (p, passes) in passed {
+        let copies = rule(p.kind)
+            .and_then(|f| f.copies)
+            .unwrap_or(FORCE_COPIES.load(Ordering::Relaxed) as usize);
         bm_core::teacher::new_run();
         let fs = force_salt(index, salt, p.step, p.kind);
         let head = format!(
@@ -995,8 +1028,11 @@ fn force_forks(seed: &str, index: u64, salt: u64, passed: Vec<Passed>) {
                     .find(|m| m.0 == MoveKind::SellJoker)
                     .and_then(|m| p.run.jokers.get(m.1 as usize))
                     .map_or("null".to_string(), |j| esc(j.kind.name()));
-                let lines = vec![vec![p.own], forced.clone()];
-                match bm_core::forks::forced_fork(&p.run, &lines, Some(p.kind), fs, copies) {
+                // The run's own move; taking the joker and keeping it (Eternal in that line); taking it, the bot
+                // free to sell it again.
+                let lines = vec![vec![p.own], forced.clone(), forced.clone()];
+                let held = [false, true, false];
+                match bm_core::forks::forced_fork(&p.run, &lines, &held, Some(p.kind), fs, copies) {
                     None => format!("{head},\"skipped\":\"can't be made\"}}"),
                     Some(ends) => {
                         let fmt = |l: &[bm_core::forks::LineEnd]| {
@@ -1014,10 +1050,11 @@ fn force_forks(seed: &str, index: u64, salt: u64, passed: Vec<Passed>) {
                                 .join(",")
                         };
                         format!(
-                            "{head},\"forced\":[{}],\"sold\":{sold},\"copies\":{copies},\"own_ends\":[{}],\"forced_ends\":[{}]}}",
+                            "{head},\"forced\":[{}],\"sold\":{sold},\"copies\":{copies},\"own_ends\":[{}],\"held_ends\":[{}],\"forced_ends\":[{}]}}",
                             forced.iter().map(mv).collect::<Vec<_>>().join(","),
                             fmt(&ends[0]),
                             fmt(&ends[1]),
+                            fmt(&ends[2]),
                         )
                     }
                 }

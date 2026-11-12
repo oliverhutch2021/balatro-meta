@@ -198,10 +198,14 @@ pub struct LineEnd {
 /// to the same `copies` fair copies, then the teacher plays each copy to the end, as `play_out` does (with the
 /// play-outs' options). The copies' hidden futures and the play-outs' own salts are the same for every line, so
 /// the lines are compared pair by pair. None if a line's moves can't be made on a copy (the first copy decides:
-/// the copies differ only in what is hidden). `watch`: a joker whose keeping each play-out reports.
+/// the copies differ only in what is hidden). `watch`: a joker whose keeping each play-out reports. A line marked
+/// in `held` puts the game's own Eternal sticker on the watched joker once its moves are made (the rightmost one of
+/// that kind), so the play-out can't sell it: the joker bought *and kept*, as a value that rated it rightly would.
+/// The sticker is on screen, so the bot plays knowing it.
 pub fn forced_fork(
     run: &Run,
     lines: &[Vec<(MoveKind, u64)>],
+    held: &[bool],
     watch: Option<crate::joker_data::JokerKind>,
     salt: u64,
     copies: usize,
@@ -214,6 +218,16 @@ pub fn forced_fork(
             if moves.iter().any(|&(k, a)| apply(&mut copy, k, a).is_err()) {
                 new_run();
                 return None;
+            }
+            if held.get(i).copied().unwrap_or(false) {
+                let kept = watch.and_then(|w| copy.jokers.iter_mut().rev().find(|j| j.kind == w));
+                match kept {
+                    Some(j) => j.eternal = true,
+                    None => {
+                        new_run();
+                        return None;
+                    }
+                }
             }
             let ps = (salt << 8 | c as u64) & ((1 << 44) - 1);
             let (outcome, kept_shop, kept_end) = match PLAY_OPTIONS.get() {
@@ -393,7 +407,7 @@ mod tests {
             vec![(MoveKind::LeaveShop, 0)],
         ];
         let ends =
-            crate::teacher::with_options(&["light"], || forced_fork(&run, &lines, None, 5, 2))
+            crate::teacher::with_options(&["light"], || forced_fork(&run, &lines, &[], None, 5, 2))
                 .expect("leaving can be made");
         assert_eq!(ends.len(), 2);
         assert!(ends.iter().all(|l| l.len() == 2));
@@ -401,10 +415,23 @@ mod tests {
         assert_eq!(ends[0], ends[1]);
         // A line that can't be made gives no fork.
         let bad = vec![vec![(MoveKind::LeaveShop, 0)], vec![(MoveKind::Buy, 99)]];
-        assert!(
-            crate::teacher::with_options(&["light"], || forced_fork(&run, &bad, None, 5, 1))
-                .is_none()
-        );
+        assert!(crate::teacher::with_options(&["light"], || {
+            forced_fork(&run, &bad, &[], None, 5, 1)
+        })
+        .is_none());
+        // A held line whose watched joker isn't held can't be made either.
+        let leave = vec![vec![(MoveKind::LeaveShop, 0)]];
+        assert!(crate::teacher::with_options(&["light"], || {
+            forced_fork(
+                &run,
+                &leave,
+                &[true],
+                Some(crate::joker_data::JokerKind::Blueprint),
+                5,
+                1,
+            )
+        })
+        .is_none());
     }
 
     #[test]

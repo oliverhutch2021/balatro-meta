@@ -1594,14 +1594,17 @@ def money_belief_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int 
 #   shops left rich with a pack unopened; seal Spectrals' targets; Spectral packs; jokers and vouchers. S's rule: a
 #   leak present in a fifth of runs or more and collected less than half the time gets a fix (scripts/leaks.py).
 # - the forced-buy forks (#20 part 1, `baseline --force-buy`): where the run passed one of FORCED_JOKERS on sale and
-#   affordable, one such position per joker and run, after the run: its own move against taking the joker, each line
-#   on FORCE_COPIES shared fair copies played out by the champion as it is. S's rule: a joker worth 3 points or more
-#   from those states, range above zero, is valued wrong (class A, fixed in the value); a strong one that shows
-#   nothing needs a way of playing the bot lacks (class B, Plan v0) (scripts/forced_buys.py).
+#   affordable, one such position per joker and run, after the run: its own move against taking the joker and keeping
+#   it (the game's Eternal sticker on it in that line: the primary line, B's change on #21) and against taking it with
+#   the bot free to sell it again (information), each on FORCE_COPIES shared fair copies played out by the champion as
+#   it is. B's counts (#21): Photograph, about 1,000 passes in 3,000 runs, forked in 60% of them (about 600); the
+#   jokers under about 200 forks on 4 copies. S's rule: a joker worth 3 points or more from those states on the held
+#   line, range above zero, is valued wrong (class A, fixed in the value); a strong one that shows nothing needs a way
+#   of playing the bot lacks (class B, Plan v0); a range wider than +-3 points is unmeasured (scripts/forced_buys.py).
 LEAK_DIR = ".sync/leaks"
 LEAK_RUNS = 3000
-FORCED_JOKERS = ("Blueprint,Brainstorm,Bloodstone,Campfire,Photograph,Sock and Buskin,Lucky Cat,"
-                 "Mr. Bones@7-8,Luchador@7-8")
+FORCED_JOKERS = ("Blueprint*4,Brainstorm*4,Bloodstone,Campfire,Photograph%60,Sock and Buskin,Lucky Cat*4,"
+                 "Mr. Bones@7-8*4,Luchador@7-8")
 FORCE_COPIES = 2
 
 

@@ -47,19 +47,25 @@ def test_a_leak_present_often_and_rarely_collected_is_flagged_by_the_rule(tmp_pa
 
 def test_the_forced_forks_summary_pairs_each_fork_and_reads_the_rule(tmp_path):
     lines = []
-    for i in range(40):
+    for i in range(400):
         own = [[0, 20, 0, 0], [0, 20, 0, 0]]
         forced = [[1, 24, 1, 1], [0, 21, 1, 0]] if i % 2 == 0 else [[0, 20, 1, 0], [0, 20, 0, 0]]
-        lines.append({"run": i, "joker": "Campfire", "ante": 3 + i % 5, "own_ends": own, "forced_ends": forced,
-                      "sold": None})
+        lines.append({"run": i, "joker": "Campfire", "ante": 3 + i % 5, "own_ends": own, "held_ends": forced,
+                      "forced_ends": own, "sold": None})
+    # A rare joker: a handful of forks reads as unmeasured, not as showing nothing.
+    for i in range(5):
+        lines.append({"run": i, "joker": "Blueprint", "ante": 6, "own_ends": [[0, 20, 0, 0]],
+                      "held_ends": [[i % 2, 22, 1, 1]], "forced_ends": [[0, 20, 0, 0]], "sold": None})
     lines.append({"run": 99, "joker": "Campfire", "ante": 7, "skipped": "can't be made"})
     p = tmp_path / "f.jsonl"
     p.write_text("\n".join(json.dumps(x) for x in lines) + "\n")
     out = tmp_path / "s.json"
     assert forced_buys.main([str(p), "--out", str(out)]) == 0
     g = json.loads(out.read_text())["jokers"]["Campfire"]
-    assert g["forks"] == 40 and g["skipped"] == 1
+    assert g["forks"] == 400 and g["skipped"] == 1
     assert abs(g["win_rate_diff"] - 0.25) < 1e-9 and g["win_rate_diff_ci"][0] > 0.03
     assert g["arithmetic"].startswith("A:")
     assert g["forced_kept_as_shop_closed"] == 0.75
     assert set(g["by_ante"]) <= {"2-4", "5-6", "7-8"}
+    assert g["as_is"]["win_rate_diff"] == 0.0, "the as-is line is summarised beside the held one"
+    assert json.loads(out.read_text())["jokers"]["Blueprint"]["arithmetic"].startswith("unmeasured")

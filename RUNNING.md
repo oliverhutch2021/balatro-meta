@@ -1217,7 +1217,16 @@ cd /mnt/h/balatro-meta && make sync && make test && make teacher-money-belief
 
 Ctrl+C stops it whenever you need the PC; `make teacher-money-belief` carries on from the arm it was in.
 
-## Step 41: the leak tally and the forced-buy forks (about 9 hours)
+**What it found (12 November; salt 2, paired against step 37's controls):**
+
+- `last`: 75.98% → 76.38%, **+0.40 (95% +0.09 to +0.71)**, p 0.015. Real but under the +1 bar stated before the run:
+  not adopted as the research base; B to rule on adding it to the final bot's settings beside 6x between rounds.
+- `all`: 75.98% → 70.36%, **-5.61 (-6.71 to -4.52)**. Worse.
+- `green-all`: 28.20% → 23.10%, **-5.10 (-7.14 to -3.06)**. Worse.
+- So outside the last shop the networks' charge for money does real work, and spending more freely without knowing
+  what the money is for costs about five points: the problem is not the willingness to spend (lab #20).
+
+## Step 41: the leak tally and the forced-buy forks (about 11 hours)
 
 Two diagnoses in one night, neither changing a move (the lab's direction 2: the bot plays the position in front of it
 and builds towards nothing). `make leak-tally` plays the champion on the first 3,000 of step 37's salt-2 seeds,
@@ -1235,25 +1244,31 @@ move for move the same runs as its 8,000-seed control (`same-runs` checks it), w
 - **The forced-buy forks** (`baseline --force-buy`, `forks::forced_fork`). Where the run passes Blueprint,
   Brainstorm, Bloodstone, Campfire, Photograph, Sock and Buskin or Lucky Cat (antes 2-8), or Mr. Bones or Luchador
   (antes 7-8), on sale and affordable (leaving the shop or rerolling with it in the row, or skipping it in a Buffoon
-  pack), one such position per joker and run is picked by a hash and forked once the run has ended: the run's own
-  move against taking the joker (selling first the held joker the value says it would miss least, if the row is
-  full: `teacher::take_joker_anyway`), both lines on the same two fair copies, each played to the end by the champion
-  as it is. `scripts/forced_buys.py` gives per joker the forced line less the run's own in win rate and in blinds,
-  with 95% ranges over the forks, and how often the bought joker was still held as that shop closed and at the end.
+  pack), one such position per joker and run is picked by a hash and forked once the run has ended, three lines on
+  the same fair copies, each played to the end by the champion as it is: the run's own move; taking the joker
+  (selling first the held joker the value says it would miss least, if the row is full:
+  `teacher::take_joker_anyway`) and keeping it, the game's own Eternal sticker put on it in that line so it can't be
+  sold again (the primary line: a value that rated the joker rightly would buy it and keep it; the bot sees the
+  sticker); and taking it with the bot free to sell it again (information: in the cloud test it sold a Bloodstone
+  straight back). Two copies each, four for the rarer jokers (Blueprint, Brainstorm, Lucky Cat, Mr. Bones);
+  Photograph is forked in 60% of the runs that pass it (about 600 forks). `scripts/forced_buys.py` gives per joker
+  each forced line less the run's own in win rate and in blinds, with 95% ranges over the forks, and how often the
+  bought joker was still held as that shop closed and at the end.
   From step 39's audit, about 5,700 such (run, joker) pairs come up in antes 6-8 of 8,000 runs; with the earlier
   antes, about 1.5 forks a run (a small test in the cloud: 13 in 8 runs), so roughly 4,000 to 4,500 forks on 3,000
-  runs, Photograph the most (about a quarter), Blueprint the fewest (under 100). The forks take about three
-  quarters of the time.
+  runs before Photograph's cap, Blueprint the fewest (under 100). The forks take most of the time (in the cloud
+  test, five times the runs themselves).
 
 The decision, stated before the run (S, #19 and #20):
 
 - Leaks: one present in a fifth of runs or more and collected less than half the time gets a fix. The fixes (seals,
   held cards, targets: #19's spec) go in as one bundle on one 8,000-seed arm; this tally run again on the fixed bot
-  is the proof the behaviour changed, and the win rate only has to not fall.
-- Forks: a joker worth 3 points of win rate or more from the states where it was passed, its range above zero, is
-  valued wrong by the judge (class A: fixed in the value). A joker the user calls strong that shows nothing needs a
-  way of playing the bot lacks (class B: Plan v0, #20). Below 3 points with the range above zero, or Level: no change
-  from this alone.
+  is the proof the behaviour changed, and the win rate must not fall: the lower end of that arm's paired 95% range
+  above -1.0 point.
+- Forks, on the held line: a joker worth 3 points of win rate or more from the states where it was passed, its range
+  above zero, is valued wrong by the judge (class A: fixed in the value). A joker the user calls strong that shows
+  nothing needs a way of playing the bot lacks (class B: Plan v0, #20). A range wider than +-3 points is unmeasured,
+  never class B. Below 3 points with the range above zero, or Level: no change from this alone.
 
 ```
 cd /mnt/h/balatro-meta && make sync && make test && make leak-tally

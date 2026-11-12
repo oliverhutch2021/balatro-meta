@@ -214,7 +214,7 @@ shop-audit:  ## Why runs leave the late shops with money: the champion replays s
 teacher-money-belief:  ## The judge's belief about money: the networks read the money as the shop opened, in the last shop and in every shop (8,000 White seeds each at salt 2, ante 8 audited), and every shop on 2,000 Green seeds, against step 37's controls (about 11 hours)
 	$(PY) scripts/jobs.py run teacher-money-belief $(JOB_FLAGS)
 
-leak-tally:  ## Two diagnoses, no change to play: the champion replays the first 3,000 of step 37's salt-2 seeds counting what it does with seals, consumables, won rounds and shops (the leak tally), and forks each run's passes of nine named jokers, its own move against taking the joker, to the end (about 9 hours)
+leak-tally:  ## Two diagnoses, no change to play: the champion replays the first 3,000 of step 37's salt-2 seeds counting what it does with seals, consumables, won rounds and shops (the leak tally), and forks each run's passes of nine named jokers, its own move against taking the joker and keeping it, to the end (about 11 hours)
 	$(PY) scripts/jobs.py run leak-tally $(JOB_FLAGS)
 
 teacher-money:  ## The value formula's money numbers retuned on the champion, each leaning towards spending, 2,000 seeds each (about 7 hours)

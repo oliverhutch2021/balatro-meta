@@ -4,15 +4,17 @@ where the bot passed it, from the lines `baseline --force-buy ... --force-out` w
 
 Each fork is one position where the bot passed the joker (on sale and affordable: it left the shop or rerolled; or it
 skipped it in a Buffoon pack), one per joker and run. Two lines from there on the same fair copies, each played out
-by the bot as it is: its own move, and taking the joker (selling the held joker it would miss least if the row was
-full). Per joker: the forks, the win rate of each line, the paired difference (forced less own: per fork the mean
-over its copies, then the mean over forks, its 95% range from the forks' spread), the blinds beaten likewise, how
-often the forced joker was still held as that shop closed and at the end, and the same by ante.
+by the bot as it is: its own move; taking the joker (selling the held joker it would miss least if the row was full)
+and keeping it, the game's Eternal sticker on it in that line ("held", the primary line: a value that rated the joker
+rightly would buy it and keep it); and taking it with the bot free to sell it again ("as is", for information). Per
+joker and line: the forks, the win rates, the paired difference (that line less own: per fork the mean over its
+copies, then the mean over forks, its 95% range from the forks' spread), the blinds beaten likewise, how often the
+forced joker was still held as that shop closed and at the end, and the same by ante.
 
 S's rule (#20, stated before the forks): a joker worth 3 points of win rate or more from those states, its range
 above zero, is valued wrong by the judge (class A: fixed in the value); a joker the user calls strong that shows
-nothing needs a way of playing the bot lacks (class B: Plan v0). The class here is the arithmetic only; reading it is
-B's.
+nothing needs a way of playing the bot lacks (class B: Plan v0). B's addition: a range wider than +-3 points is
+"unmeasured", never class B on noise. The class here is the arithmetic only, on the held line; reading it is B's.
 
     scripts/forced_buys.py LINES.jsonl[.gz] --out SUMMARY.json
 """
@@ -25,6 +27,7 @@ import math
 from pathlib import Path
 
 CLASS_A = 0.03
+UNMEASURED = 0.03  # a 95% range wider than +-3 points says nothing either way
 BANDS = (("2-4", 2, 4), ("5-6", 5, 6), ("7-8", 7, 8))
 
 
@@ -46,11 +49,11 @@ def mean_ci(xs: list[float]) -> tuple[float | None, list[float] | None]:
     return m, [m - h, m + h]
 
 
-def group(forks: list[dict]) -> dict:
-    done = [f for f in forks if "own_ends" in f]
+def group(forks: list[dict], line: str = "held_ends") -> dict:
+    done = [f for f in forks if "own_ends" in f and line in f]
     wins_d, stage_d, own_w, forced_w, kept_shop, kept_end = [], [], [], [], [], []
     for f in done:
-        o, x = f["own_ends"], f["forced_ends"]
+        o, x = f["own_ends"], f[line]
         n = min(len(o), len(x))
         ow = sum(e[0] for e in o[:n]) / n
         fw = sum(e[0] for e in x[:n]) / n
@@ -79,7 +82,8 @@ def group(forks: list[dict]) -> dict:
         "row_full_share": r(sum(1 for f in done if f.get("sold") is not None) / len(done)) if done else None,
     }
     if ci is not None:
-        out["arithmetic"] = ("A: worth 3+ points, range above zero" if d >= CLASS_A and ci[0] > 0 else
+        out["arithmetic"] = ("unmeasured: range wider than +-3 points" if (ci[1] - ci[0]) / 2 > UNMEASURED else
+                             "A: worth 3+ points, range above zero" if d >= CLASS_A and ci[0] > 0 else
                              "above zero, under 3 points" if ci[0] > 0 else
                              "below zero" if ci[1] < 0 else "level")
     return out
@@ -93,6 +97,7 @@ def summarise(forks: list[dict]) -> dict:
         g = group(fs)
         g["by_ante"] = {name: group([f for f in fs if lo <= f["ante"] <= hi]) for name, lo, hi in BANDS}
         g["by_ante"] = {k: v for k, v in g["by_ante"].items() if v["forks"]}
+        g["as_is"] = group(fs, "forced_ends")
         out[j] = g
     return out
 
@@ -111,8 +116,10 @@ def main(argv: list[str] | None = None) -> int:
         ci = g["win_rate_diff_ci"]
         rng = f"{100 * ci[0]:+.1f} to {100 * ci[1]:+.1f}" if ci else "n/a"
         diff = f"{100 * g['win_rate_diff']:+.1f}" if g["win_rate_diff"] is not None else "n/a"
-        print(f"  {j}: {g['forks']} forks, forced less own {diff} points ({rng}); "
-              f"{g.get('arithmetic', '')}")
+        ai = g["as_is"]
+        asis = f"{100 * ai['win_rate_diff']:+.1f}" if ai["win_rate_diff"] is not None else "n/a"
+        print(f"  {j}: {g['forks']} forks, held less own {diff} points ({rng}); {g.get('arithmetic', '')}; "
+              f"as is {asis}, kept as the shop closed {ai['forced_kept_as_shop_closed']}")
     print(f"Summary: {a.out}")
     return 0
 
