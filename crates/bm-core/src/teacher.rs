@@ -110,6 +110,13 @@ pub const OPTIONS: &[&str] = &[
     // `search` drops the chance to reroll again exactly where rerolling is free, and the sign of the noise in its
     // cost decides between "best of many" and "one draw" (lab issue #12).
     "reroll-best",
+    // The networks read the money as it stood when the shop opened, while its decisions are weighed: spending
+    // inside a shop isn't read as becoming poorer, so only the formula's own money terms price it. In the last
+    // shop of the run (where money can't matter afterwards) with "freeze-money-last", in every shop with
+    // "freeze-money". The shop audit found the judge charging for a $5 reroll in the last shop, four times as much
+    // in the runs about to lose (lab issue #12).
+    "freeze-money-last",
+    "freeze-money",
     // With a joker that pays on the round's final hand (Dusk retriggers its cards, Acrobat x3): when the best
     // hand beats the blind only as the final hand, play single spare cards until one hand is left, then the
     // best; and the value's sample rounds try that way of playing too (the discards dig for the final hand
@@ -2777,8 +2784,15 @@ fn shop_option_list(
             audit(|| {
                 let n = best.len().max(1) as f64;
                 let max = best.iter().copied().fold(f64::MIN, f64::max);
+                // The cost's formula part alone (the networks' part is the rest).
+                let bare_formula = samples
+                    .iter()
+                    .map(|(c, _)| crate::value::quick_formula(c, vs))
+                    .sum::<f64>()
+                    / samples.len().max(1) as f64;
+                let cost_formula = crate::value::quick_formula(run, vs) - bare_formula;
                 format!(
-                    "{{\"reroll\":{{\"q\":{q:.5},\"cost\":{cost:.6},\"again\":{again},\"samples\":{},\"mean\":{:.5},\"max\":{max:.5},\"here\":{:.5}}}}}",
+                    "{{\"reroll\":{{\"q\":{q:.5},\"cost\":{cost:.6},\"cost_formula\":{cost_formula:.6},\"again\":{again},\"samples\":{},\"mean\":{:.5},\"max\":{max:.5},\"here\":{:.5}}}}}",
                     best.len(),
                     best.iter().sum::<f64>() / n,
                     crate::value::quick(run, vs)
@@ -3177,6 +3191,7 @@ pub fn decision(run: &Run, salt: u64) -> (Run, Vec<(MoveKind, u64)>, (MoveKind, 
 /// Tarots used, say), so a run must not meet another run's: each run then plays the same however many runs
 /// came before it on its thread, and a job's results don't depend on how its runs fell to its threads.
 pub fn new_run() {
+    OPEN_MONEY.with(|c| c.borrow_mut().clear());
     COMMIT.with(|c| c.set(None));
     CHOICES.with(|c| c.borrow_mut().clear());
     HAND_ORDERS.with(|c| c.borrow_mut().clear());
@@ -3189,6 +3204,47 @@ pub fn new_run() {
 /// scaled by that much (`value::Scales`, rounds included): the late antes are where most runs are lost, and a
 /// decision there has fewer to come after it.
 pub fn teacher_move(run: &Run, salt: u64) -> (MoveKind, u64) {
+    let frozen = frozen_money(run);
+    crate::learned::with_frozen_money(frozen, || scaled_move(run, salt))
+}
+
+thread_local! {
+    /// The money each shop of this run opened with, by (ante, blinds behind it) ("freeze-money").
+    static OPEN_MONEY: std::cell::RefCell<std::collections::HashMap<(i32, usize), i64>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// The money the networks read while this decision is weighed: with "freeze-money" (any shop) or
+/// "freeze-money-last" (the run's last shop), in a shop or a pack opened from it, the money the shop opened with;
+/// else None (the run's own).
+pub(crate) fn frozen_money(run: &Run) -> Option<i64> {
+    let wanted =
+        on("freeze-money") || (on("freeze-money-last") && crate::value::shops_left(run) <= 0.0);
+    if !wanted || !matches!(run.phase, Phase::Shop | Phase::Pack) {
+        return None;
+    }
+    let behind = run
+        .slots
+        .iter()
+        .filter(|s| {
+            matches!(
+                s,
+                crate::blinds::SlotState::Defeated | crate::blinds::SlotState::Skipped
+            )
+        })
+        .count();
+    let key = (run.ante, behind);
+    OPEN_MONEY.with(|c| {
+        let mut c = c.borrow_mut();
+        if run.phase == Phase::Shop {
+            Some(*c.entry(key).or_insert(run.money))
+        } else {
+            c.get(&key).copied() // a pack opened from this shop; not one from a tag
+        }
+    })
+}
+
+fn scaled_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     match move_scales(run) {
         Some(scaled) => crate::value::with_scales(scaled, || plain_move(run, salt)),
         None => plain_move(run, salt),
@@ -4396,6 +4452,48 @@ mod tests {
         assert!(notes.iter().all(|n| n.starts_with('{') && n.ends_with('}')));
         assert!(notes.iter().any(|n| n.starts_with("{\"quick\"")));
         assert!(audit_take().is_empty(), "off once taken");
+    }
+
+    #[test]
+    fn frozen_money_is_what_the_shop_opened_with_and_only_where_asked() {
+        let mut shop_run = Run::new(RunConfig::new("FREEZE1"));
+        for _ in 0..400 {
+            if shop_run.phase == Phase::Shop || shop_run.is_over() {
+                break;
+            }
+            let m = crate::bots::greedy_move(&shop_run, 1);
+            assert!(apply(&mut shop_run, m.0, m.1).is_ok());
+        }
+        assert_eq!(shop_run.phase, Phase::Shop);
+        new_run();
+        shop_run.money = 20;
+        assert_eq!(frozen_money(&shop_run), None, "off without the option");
+        with_options(&["freeze-money"], || {
+            assert_eq!(
+                frozen_money(&shop_run),
+                Some(20),
+                "the money as the shop opened"
+            );
+            let mut spent = shop_run.clone();
+            spent.money = 9;
+            assert_eq!(
+                frozen_money(&spent),
+                Some(20),
+                "spending inside the shop doesn't change it"
+            );
+        });
+        // Ante 1's first shop is not the run's last.
+        with_options(&["freeze-money-last"], || {
+            assert_eq!(frozen_money(&shop_run), None)
+        });
+        // A new run forgets the shops it saw.
+        new_run();
+        with_options(&["freeze-money"], || {
+            let mut other = shop_run.clone();
+            other.money = 31;
+            assert_eq!(frozen_money(&other), Some(31));
+        });
+        new_run();
     }
 
     #[test]

@@ -363,6 +363,29 @@ fn input_key(x: &[f32]) -> u64 {
     h.finish()
 }
 
+thread_local! {
+    /// The money the networks read while a shop's decision is weighed ("freeze-money", teacher.rs): what the run
+    /// held as the shop opened, so spending inside it isn't read as becoming poorer.
+    static FROZEN_MONEY: std::cell::Cell<Option<i64>> = const { std::cell::Cell::new(None) };
+}
+
+/// Run `f` with the networks reading `money` in place of the run's own (None: the run's own).
+pub fn with_frozen_money<T>(money: Option<i64>, f: impl FnOnce() -> T) -> T {
+    let before = FROZEN_MONEY.with(|c| c.replace(money));
+    let out = f();
+    FROZEN_MONEY.with(|c| c.set(before));
+    out
+}
+
+/// The screen as the networks read it: the run's own, with the money frozen while a shop is weighed.
+fn networks_screen(run: &Run) -> crate::observe::Screen {
+    let mut s = screen(run);
+    if let Some(m) = FROZEN_MONEY.with(|c| c.get()) {
+        s.money = m;
+    }
+    s
+}
+
 /// The chance of winning the run from this position, by the loaded network (None if none is loaded).
 pub fn win_chance(run: &Run) -> Option<f64> {
     chance(run, None)
@@ -374,7 +397,7 @@ fn chance(run: &Run, reach: Option<usize>) -> Option<f64> {
     let nets = NET.get()?;
     Some(INPUT.with(|x| {
         let mut x = x.borrow_mut();
-        encode_value(&screen(run), &mut x);
+        encode_value(&networks_screen(run), &mut x);
         let key = input_key(&x)
             ^ reach.map_or(0, |k| (k as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15))
             ^ disagreement_lean().to_bits().rotate_left(17)
@@ -697,7 +720,7 @@ pub fn base_logit(x: &[f32]) -> Option<f32> {
 pub fn chance_with(net: &Net, run: &Run) -> f64 {
     INPUT.with(|x| {
         let mut x = x.borrow_mut();
-        encode_value(&screen(run), &mut x);
+        encode_value(&networks_screen(run), &mut x);
         chance_of(net, &x)
     })
 }
@@ -1210,6 +1233,43 @@ mod tests {
                 net.forward(&zero)[0].to_bits()
             );
         }
+    }
+
+    #[test]
+    fn the_networks_read_the_frozen_money_while_it_is_set() {
+        let mut run = Run::new(crate::RunConfig::new("FROZEN1"));
+        run.money = 12;
+        assert_eq!(networks_screen(&run).money, 12);
+        with_frozen_money(Some(40), || assert_eq!(networks_screen(&run).money, 40));
+        assert_eq!(networks_screen(&run).money, 12, "restored");
+        assert_eq!(
+            networks_screen(&run),
+            screen(&run),
+            "otherwise the very screen"
+        );
+        // A network that reads the money gives another chance with the money frozen: the freeze bites.
+        let (mut a, mut b) = (Vec::new(), Vec::new());
+        let mut rich = screen(&run);
+        rich.money = 60;
+        encode_value(&screen(&run), &mut a);
+        encode_value(&rich, &mut b);
+        let n = VALUE_LEN;
+        let money_inputs: Vec<usize> = (0..n).filter(|&i| a[i] != b[i]).collect();
+        assert!(
+            !money_inputs.is_empty(),
+            "the networks' input carries the money"
+        );
+        let mut w1 = vec![0.0f32; n];
+        for &i in &money_inputs {
+            w1[i] = 1.0;
+        }
+        let net = Net::from_bytes(&file(&[(n, 1, false, w1, vec![0.0])])).unwrap();
+        let own = chance_with(&net, &run);
+        let frozen = with_frozen_money(Some(60), || chance_with(&net, &run));
+        assert!(
+            frozen > own,
+            "read as richer with the shop's opening money: {frozen} against {own}"
+        );
     }
 
     #[test]

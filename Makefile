@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late teacher-boss teacher-budget teacher-budget-big teacher-budget-confirm teacher-skips skips-stakes teacher-budget-6 teacher-budget-confirm-6 teacher-close teacher-close-2 diagnose-fresh diagnose-control teacher-budget-parts teacher-budget-away teacher-bundle teacher-looks shop-audit teacher-money teacher-long recheck diagnose forks-quick forks-night forks-table forks-now
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late teacher-boss teacher-budget teacher-budget-big teacher-budget-confirm teacher-skips skips-stakes teacher-budget-6 teacher-budget-confirm-6 teacher-close teacher-close-2 diagnose-fresh diagnose-control teacher-budget-parts teacher-budget-away teacher-bundle teacher-looks shop-audit teacher-money-belief teacher-money teacher-long recheck diagnose forks-quick forks-night forks-table forks-now
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -210,6 +210,9 @@ teacher-looks:  ## The long run: twice and four times the looks with the deals a
 
 shop-audit:  ## Why runs leave the late shops with money: the champion replays step 37's salt-2 seeds (8,000 White, 2,000 Green) noting every shop decision of antes 6-8 (Green 3-5), then a summary (about 6 hours)
 	$(PY) scripts/jobs.py run shop-audit $(JOB_FLAGS)
+
+teacher-money-belief:  ## The judge's belief about money: the networks read the money as the shop opened, in the last shop and in every shop (8,000 White seeds each at salt 2, ante 8 audited), and every shop on 2,000 Green seeds, against step 37's controls (about 11 hours)
+	$(PY) scripts/jobs.py run teacher-money-belief $(JOB_FLAGS)
 
 teacher-money:  ## The value formula's money numbers retuned on the champion, each leaning towards spending, 2,000 seeds each (about 7 hours)
 	$(PY) scripts/jobs.py run teacher-money $(JOB_FLAGS)

@@ -1408,3 +1408,26 @@ def test_the_shop_audit_replays_the_salted_control_and_summarises_the_late_shops
     (tmp_path / report).parent.mkdir(parents=True, exist_ok=True)
     (tmp_path / report).write_text("{}")
     assert "white-audit" not in [n for n, *_ in jobs.audit_steps(tmp_path)]
+
+
+def test_the_money_belief_arms_freeze_the_networks_money_against_the_salted_controls(tmp_path):
+    champion_in(tmp_path)
+    steps = {n: a for n, a, *_ in jobs.money_belief_steps(tmp_path)}
+    assert list(steps) == ["build", "folder", "last", "last-gzip", "compare-last", "all", "all-gzip", "compare-all",
+                           "green-all", "compare-green-all"], "cheapest decision first, Green last"
+    bundle = {n: a for n, a, *_ in jobs.bundle_steps(tmp_path)}
+    for name, extra, control, runs, stake in (
+            ("last", "freeze-money-last", bundle["white-champion"][-1], jobs.BIG_RUNS, None),
+            ("all", "freeze-money", bundle["white-champion"][-1], jobs.BIG_RUNS, None),
+            ("green-all", "freeze-money", bundle["green-champion"][-1], jobs.SCREEN_RUNS, "3")):
+        a = steps[name]
+        assert a[a.index("--teacher-options") + 1] == f"precise,{extra}"
+        assert [a[a.index(x) + 1] for x in ("--runs", "--seed", "--salt")] == [str(runs), "1", str(jobs.BUNDLE_SALT)]
+        assert (a[a.index("--stake") + 1] if "--stake" in a else None) == stake
+        assert a[a.index("--value-net") + 1] == jobs.ensemble(8)
+        assert steps[f"compare-{name}"][1:3] == [control, a[a.index("--out") + 1]]
+        if stake is None:
+            assert a[a.index("--audit-antes") + 1] == "8-8"
+            assert steps[f"{name}-gzip"] == ["gzip", "-f", a[a.index("--audit-shops") + 1]]
+        else:
+            assert "--audit-shops" not in a

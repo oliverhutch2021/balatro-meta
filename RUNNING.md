@@ -1178,6 +1178,45 @@ cd /mnt/h/balatro-meta && make sync && make test && make shop-audit
 
 Ctrl+C stops it whenever you need the PC; `make shop-audit` carries on from the step it was in.
 
+What step 39 found. Both audit runs reproduced their controls exactly (no seed differs). Over all of antes 6 to 8
+winners and the runs lost at the last ante shop alike. The last shop before the ante-8 boss is where they part
+(6,078 won, 559 lost there; medians): money on leaving $37 against $24; the reroll's sample shops average -0.004
+against -0.029 below staying, their best +0.048 against +0.155; and **a $5 reroll costs 0.0135 in value for the
+winners and 0.060 for the runs about to lose**, where the formula prices money at nothing (value.rs `spend`). The
+cost is zero or below in 12% and 2% (so `reroll-best`'s gate hardly mattered). The likeliest source of the charge is
+the networks, which read the money from the screen (`observe::encode_value`) and learned that rich runs win.
+
+## Step 40: the judge's belief about money (about 11 hours)
+
+Teacher option `freeze-money` has the networks read the money as it stood when the shop opened while the shop's
+decisions are weighed (`teacher::frozen_money`, `learned::with_frozen_money`), so spending inside a shop isn't read
+as becoming poorer and only the formula's own money terms price it; `freeze-money-last` does so only in the run's
+last shop, where money can't matter afterwards. The shop audit's reroll note now also splits the cost: the
+formula's part (`cost_formula`) and the rest (the networks').
+
+`make teacher-money-belief`, on step 37's salt-2 seeds against its controls, each compared as it ends:
+
+- `last`: `freeze-money-last`, 8,000 White seeds, ante 8 audited, about 5 hours;
+- `all`: `freeze-money`, 8,000 White seeds, ante 8 audited, about 5 hours;
+- `green-all`: `freeze-money`, 2,000 Green seeds (Green dies at antes 4 and 5, where `last` does nothing), about
+  0.8 hours.
+
+The decision, stated before the run (S, #12; each difference with its 95% range):
+
+- `last` is adopted at +1 or more with its range above zero; its ceiling is the ante-8 boss losses (about 7% of
+  runs), so a Level doesn't close it: part 2's fork measures it more sharply on the same states.
+- `all` at +1.5 or more with its range above zero; then Green and a retune of `buying-power` (tuned while the
+  networks charged too) decide the next step. Clearly down: outside the last shop the charge does real work.
+  Level: the money belief is not where the under-building comes from, and that question closes.
+- Worse is a range below zero. A Level is a Level: nothing adopted on logic alone.
+- For information: the audit's `cost_formula` against the cost says where the charge comes from.
+
+```
+cd /mnt/h/balatro-meta && make sync && make test && make teacher-money-belief
+```
+
+Ctrl+C stops it whenever you need the PC; `make teacher-money-belief` carries on from the arm it was in.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

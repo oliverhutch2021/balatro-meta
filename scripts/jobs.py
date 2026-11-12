@@ -1540,6 +1540,52 @@ def audit_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREE
     return steps
 
 
+# make teacher-money-belief: the judge's belief about money (the shop audit, step 39: in the last shop before the
+# ante-8 boss a $5 reroll cost 0.060 in value for the runs about to lose, 0.0135 for winners, where the formula prices
+# money at nothing). Teacher options "freeze-money-last" and "freeze-money" have the networks read the money as the
+# shop opened while its decisions are weighed, in the last shop or in every shop. Arms on step 37's salt-2 seeds
+# against its controls, the White ones with the audit on at ante 8 (the reroll's cost now split into the formula's
+# part and the rest): the last shop, every shop, and every shop on 2,000 Green seeds.
+BELIEF_ARMS = (("last", "freeze-money-last", "white"), ("all", "freeze-money", "white"),
+               ("green-all", "freeze-money", "green"))
+
+
+def money_belief_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
+    """make teacher-money-belief: the BELIEF_ARMS at BUNDLE_SALT against step 37's controls."""
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", AUDIT_DIR])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    args = list(best[1])
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
+    w = args[args.index("--value-weight") + 1]
+    stem = Path(best[2]).stem.split("-on-")[-1]
+    tag, s = f"f{FORMULA}", f"salt{BUNDLE_SALT}"
+    for name, extra, stake in BELIEF_ARMS:
+        o = f"{opts},{extra}"
+        a = list(args)
+        a[a.index("--teacher-options") + 1] = o
+        if stake == "white":
+            count, stake_args = runs, []
+            control = f"results/tune/{tag}-{file_safe(opts)}-{runs // 1000}k-w{w}-{s}-on-{stem}.json"
+            out = f"results/tune/{tag}-{file_safe(o)}-{runs // 1000}k-w{w}-{s}-on-{stem}.json"
+            lines = f"{AUDIT_DIR}/belief-{name}-{runs // 1000}k-{s}.jsonl"
+            audit = ["--audit-shops", lines, "--audit-antes", "8-8"]
+        else:
+            count, stake_args = green_runs, ["--stake", str(BUNDLE_GREEN)]
+            g = f"results/stakes/stake{BUNDLE_GREEN}-{green_runs // 1000}k-{tag}"
+            control, out = f"{g}-{file_safe(opts)}-w{w}-{s}-on-{stem}.json", f"{g}-{file_safe(o)}-w{w}-{s}-on-{stem}.json"
+            lines, audit = None, []
+        if not (root / out).exists():
+            steps.append((name, [*BASELINE, "--bot", "teacher", *a, "--runs", str(count), "--seed", "1", "--salt",
+                                 str(BUNDLE_SALT), *stake_args, *audit, "--out", out]))
+            if lines:
+                steps.append((f"{name}-gzip", ["gzip", "-f", lines]))
+        steps.append((f"compare-{name}", ["scripts/compare_runs.py", control, out, "--out",
+                                          f"{Path(out).parent}/{Path(out).stem}-vs-{Path(control).stem}.json"]))
+    return steps
+
+
 def budget_away_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     """make teacher-budget-away: the AWAY_TRIALS against the champion at the screens' salt (champion_trials), and
     the two halves set against each other run by run: every count between rounds kept flat against every count in a
@@ -2020,6 +2066,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-bundle": bundle_steps(),
     "teacher-looks": looks_steps(),
     "shop-audit": audit_steps(),
+    "teacher-money-belief": money_belief_steps(),
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
     "diagnose": diagnose_steps(),

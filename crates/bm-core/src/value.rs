@@ -717,7 +717,7 @@ fn blinds_ahead(run: &Run) -> Vec<(f64, f64, f64, bool)> {
 }
 
 /// Shops still to come before the run's last blind (one after each blind but the winning boss).
-fn shops_left(run: &Run) -> f64 {
+pub(crate) fn shops_left(run: &Run) -> f64 {
     (rounds_left(run) - 1.0).max(0.0)
 }
 
@@ -1242,6 +1242,11 @@ pub fn value_with(run: &Run, salt: u64, samples: usize) -> f64 {
     } else {
         v
     }
+}
+
+/// The hand-made part of the quick value alone, without the learned term (the shop audit's split of a cost).
+pub(crate) fn quick_formula(run: &Run, salt: u64) -> f64 {
+    formula(run, salt, quick_samples())
 }
 
 /// The hand-made part of the value (cached).
