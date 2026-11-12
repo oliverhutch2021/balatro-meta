@@ -1,0 +1,32 @@
+{
+ "job": "reroll-demo",
+ "commit": "79e95f8e0fcb1acc17d910895f6ea75fba13d0e5",
+ "started": "2026-11-12T23:26:20+00:00",
+ "finished": "2026-11-12T23:42:01+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   12.9,
+   15.6,
+   11.3
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 1,
+  "folder": 0,
+  "demo": 939,
+  "tally": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "folder": "mkdir -p .sync/leaks",
+  "demo": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,boss-reroll --runs 400 --seed 1 --salt 2 --leaks .sync/leaks/reroll-demo.jsonl --out .sync/leaks/reroll-demo.json",
+  "tally": "scripts/leaks.py .sync/leaks/reroll-demo.jsonl --out .sync/leaks/reroll-demo-summary.json"
+ }
+}
