@@ -1277,6 +1277,36 @@ cd /mnt/h/balatro-meta && make sync && make test && make leak-tally
 Ctrl+C stops it whenever you need the PC; `make leak-tally` starts the tally again from its first run (the lines are
 written as it goes, but a run's forks only once it ends, so a stopped tally is played again whole).
 
+## Step 42: the boss reroll (about 6.5 hours)
+
+The bot never rerolled a boss: the real-game checks (BalatroBot) have no call for it, so the move was kept out. The
+user: "the boss reroll can be game changing, since that is where we struggle most". Teacher option `boss-reroll`:
+
+- At each blind choice where the Reroll Boss button works (Director's Cut once an ante, Retcon any time, $10),
+  `teacher::boss_reroll_gains` values the run with and without a reroll on six fair copies (a fresh hidden future
+  each, so every new boss is a fresh draw from the bosses still possible, never the real next one), and rerolls when
+  the mean gain beats `boss-reroll-margin` (0.02). Within the skip option's look-ahead it never rerolls.
+- In a shop, a Director's Cut or Retcon on offer is worth, on top of the position, what rerolling this ante's boss
+  (if still ahead) would gain (`reroll_voucher_worth`). The antes after count nothing yet: the voucher can only be
+  under-rated, so the arm is a floor for what the reroll is worth.
+- The viewer shows the Reroll Boss button under the boss (red when it works, "rerolled" once used) and names each
+  reroll in the move log ("Violet Vessel → The Wall, -$10"). The real-game checks still stop before a reroll.
+- The leak tally counts the bosses rerolled away.
+
+`make teacher-boss-reroll` on step 37's salt-2 seeds against its controls: 8,000 White seeds with the leak tally on
+(about 5.5 hours), then 2,000 Green (about 1 hour).
+
+The decision, stated before the run:
+
+- Adopted at +1 point or more on White with its range above zero. Worse (a range below zero): dropped. Level: kept
+  as an option, not adopted; the tally says how often the vouchers were bought and the bosses rerolled, and if that
+  is rare the next step values the voucher for the antes after this one (the arm can't see a reroll it never has).
+- Green is for information (its bosses come at antes 4 and 5).
+
+```
+cd /mnt/h/balatro-meta && make sync && make test && make teacher-boss-reroll
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

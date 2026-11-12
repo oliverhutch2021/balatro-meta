@@ -486,3 +486,13 @@ def test_the_page_draws_the_run(tmp_path):
     finally:
         stop.set()
         srv.shutdown()
+
+
+def test_a_boss_reroll_is_named_with_the_bosses_and_the_cost():
+    """The move log says which boss went and which came, and what it cost; the view says whether the Reroll Boss
+    button is there (Director's Cut or Retcon) and works."""
+    before = {"money": 30, "blinds": {"boss": {"name": "Violet Vessel"}}}
+    after = {"money": 20, "blinds": {"boss": {"name": "The Wall"}}}
+    assert viewer.outcome(20, before, after) == "Violet Vessel → The Wall, -$10"
+    boss = Game("REROLLV", 1).view()["blinds"]["boss"]
+    assert boss["reroll_shown"] is False and boss["reroll"] is False and boss["rerolled"] is False

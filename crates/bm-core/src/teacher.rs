@@ -117,6 +117,13 @@ pub const OPTIONS: &[&str] = &[
     // in the runs about to lose (lab issue #12).
     "freeze-money-last",
     "freeze-money",
+    // The boss reroll (Director's Cut once an ante, Retcon any time; $10), which the bot never made because the
+    // real-game checks can't follow it: at each blind choice where the button works, the boss is rerolled when the
+    // value after a reroll beats keeping it (`boss_reroll_gains`: fair copies, so each new boss is a fresh draw from
+    // the ones still possible). And a reroll voucher in the shop is worth what rerolling this ante's boss, if still
+    // ahead, would gain (`reroll_voucher_worth`; nothing yet for the antes after). From the user: "the boss reroll
+    // can be game changing, since that is where we struggle most" (lab #19).
+    "boss-reroll",
     // With a joker that pays on the round's final hand (Dusk retriggers its cards, Acrobat x3): when the best
     // hand beats the blind only as the final hand, play single spare cards until one hand is left, then the
     // best; and the value's sample rounds try that way of playing too (the discards dig for the final hand
@@ -2304,6 +2311,9 @@ enum Judge {
     /// A reroll: sample shops each with its best buy, and the option of rerolling again (`search`) while
     /// the money lasts.
     Rerolled(Vec<(Run, Vec<(MoveKind, u64)>)>, bool),
+    /// Moves made on a copy, plus a worth the value can't see in the position (a boss reroll voucher's reroll of
+    /// this ante's boss, "boss-reroll").
+    MovesPlus(Vec<(MoveKind, u64)>, f64),
 }
 
 /// The best follow-up among `options` on a sample outcome, by the quick value: (its value, its moves; none
@@ -2465,6 +2475,9 @@ fn choose_against(
     let judge_of = |judge: &Judge| -> f64 {
         match judge {
             Judge::Moves(m) => after(run, vs ^ 0x5EED, m).map_or(f64::MIN, |c| value(&c, vs)),
+            Judge::MovesPlus(m, plus) => {
+                after(run, vs ^ 0x5EED, m).map_or(f64::MIN, |c| value(&c, vs) + plus)
+            }
             Judge::Sampled(samples) => {
                 let n = samples.len().max(1) as f64;
                 samples
@@ -2749,6 +2762,25 @@ fn shop_option_list(
         lists.push(vec![(MoveKind::SellJoker, w as u64)]);
     }
     let mut options = judged_moves(run, vs, lists);
+    // A boss reroll voucher: what rerolling this ante's boss would gain, on top of the position ("boss-reroll").
+    if on("boss-reroll") {
+        for o in options.iter_mut() {
+            let Judge::Moves(m) = &o.2 else { continue };
+            let reroll_voucher = m.len() == 1
+                && m[0].0 == MoveKind::RedeemVoucher
+                && shop.vouchers.get(m[0].1 as usize).is_some_and(|v| {
+                    matches!(v.voucher, VoucherKind::DirectorsCut | VoucherKind::Retcon)
+                });
+            if !reroll_voucher {
+                continue;
+            }
+            let worth = after(run, vs ^ 0x5EED, m).map_or(0.0, |c| reroll_voucher_worth(&c, vs));
+            if worth > 0.0 {
+                o.1 += worth;
+                o.2 = Judge::MovesPlus(m.clone(), worth);
+            }
+        }
+    }
     // Packs, by sample contents and the best pick in each.
     for (b, slot) in shop.boosters.iter().enumerate() {
         let Some(pk) = slot else { continue };
@@ -2849,7 +2881,7 @@ pub fn candidates(run: &Run, salt: u64, n: usize) -> Vec<Vec<(MoveKind, u64)>> {
     let mut out: Vec<Vec<(MoveKind, u64)>> = judged
         .into_iter()
         .map(|(first, _, judge)| match judge {
-            Judge::Moves(m) => m,
+            Judge::Moves(m) | Judge::MovesPlus(m, _) => m,
             Judge::Sampled(_) | Judge::Rerolled(..) => vec![first],
         })
         .collect();
@@ -2930,6 +2962,53 @@ fn skip_checkpoint(run: &Run) -> (i32, bool) {
     (run.ante, boss_choice)
 }
 
+/// Fair copies behind a boss reroll's decision ("boss-reroll-copies").
+const BOSS_REROLL_COPIES: f64 = 6.0;
+/// The gain in value a boss reroll must show over keeping the boss ("boss-reroll-margin").
+const BOSS_REROLL_MARGIN: f64 = 0.02;
+
+fn mean_or_zero(xs: &[f64]) -> f64 {
+    if xs.is_empty() {
+        0.0
+    } else {
+        xs.iter().sum::<f64>() / xs.len() as f64
+    }
+}
+
+/// What rerolling the boss gains here, copy by copy (option "boss-reroll"): on each fair copy (a fresh hidden future,
+/// so the new boss is a fresh draw from the bosses still possible, never the real next one), the value after the
+/// reroll (its $10 spent) less the value of the same copy without it. Empty where the button doesn't work.
+pub(crate) fn boss_reroll_gains(run: &Run, vs: u64) -> Vec<f64> {
+    if run.phase != Phase::BlindSelect || !run.can_reroll_boss() {
+        return Vec::new();
+    }
+    let n = param("boss-reroll-copies")
+        .unwrap_or(BOSS_REROLL_COPIES)
+        .max(1.0) as u64;
+    (0..n)
+        .filter_map(|i| {
+            let copy = fair_copy(run, vs ^ (0xB055_0000 + i));
+            let stay = crate::value::value(&copy, vs);
+            let mut rerolled = copy;
+            crate::env::apply(&mut rerolled, MoveKind::RerollBoss, 0).ok()?;
+            Some(crate::value::value(&rerolled, vs) - stay)
+        })
+        .collect()
+}
+
+/// What a boss reroll voucher just redeemed (`after`: the shop with it redeemed) is worth for this ante's boss, if it
+/// is still ahead: on a fair copy the run leaves the shop for the blind choice, and the reroll's mean gain there
+/// beyond its margin, if positive (the reroll is made only then). Nothing for the antes after: their bosses aren't
+/// known yet, so the voucher's worth there is left out (it can only be under-rated).
+fn reroll_voucher_worth(after: &Run, vs: u64) -> f64 {
+    let mut c = fair_copy(after, vs ^ 0xB0_55EE);
+    if c.phase == Phase::Shop && crate::env::apply(&mut c, MoveKind::LeaveShop, 0).is_err() {
+        return 0.0;
+    }
+    let gains = boss_reroll_gains(&c, vs);
+    (mean_or_zero(&gains) - param("boss-reroll-margin").unwrap_or(BOSS_REROLL_MARGIN)).max(0.0)
+}
+
 /// Whether a play-out has reached the checkpoint (`skip_checkpoint`).
 fn at_checkpoint(run: &Run, (ante, boss_choice): (i32, bool)) -> bool {
     use crate::blinds::BlindSlot;
@@ -2949,6 +3028,12 @@ fn at_checkpoint(run: &Run, (ante, boss_choice): (i32, bool)) -> bool {
 /// tags as spent, and judge the run by what it holds, which is what differs between the two ways.
 fn value_blind_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     let play = (MoveKind::SelectBlind, 0);
+    if on("boss-reroll") && SKIP_DEPTH.with(|d| d.get()) == 0 && run.can_reroll_boss() {
+        let gains = boss_reroll_gains(run, value_salt(run, salt));
+        if mean_or_zero(&gains) > param("boss-reroll-margin").unwrap_or(BOSS_REROLL_MARGIN) {
+            return (MoveKind::RerollBoss, 0);
+        }
+    }
     let slot = run.on_deck();
     if !on("skips")
         || slot == crate::blinds::BlindSlot::Boss
@@ -4469,6 +4554,56 @@ mod tests {
         assert!(notes.iter().all(|n| n.starts_with('{') && n.ends_with('}')));
         assert!(notes.iter().any(|n| n.starts_with("{\"quick\"")));
         assert!(audit_take().is_empty(), "off once taken");
+    }
+
+    /// "boss-reroll": with Retcon and the money, a boss far worse than any other (Violet Vessel's six times the score
+    /// at ante 1) is rerolled at the blind choice, and a reroll voucher in a shop facing it is worth something; without
+    /// the option, or without a voucher, the bot never rerolls.
+    #[test]
+    fn a_dreadful_boss_is_rerolled_with_the_option_and_never_without() {
+        let mut run = Run::new(RunConfig::new("REROLL1"));
+        while run.phase != Phase::BlindSelect {
+            let m = crate::bots::greedy_move(&run, 1);
+            apply(&mut run, m.0, m.1).unwrap();
+        }
+        new_run();
+        run.boss = crate::blinds::Boss::VioletVessel;
+        run.money = 60;
+        assert!(!run.can_reroll_boss());
+        let opts = ["light", "boss-reroll"];
+        with_options(&opts, || {
+            assert!(
+                boss_reroll_gains(&run, 7).is_empty(),
+                "no voucher, no reroll"
+            );
+            assert_ne!(teacher_move(&run, 3).0, MoveKind::RerollBoss);
+        });
+        run.vouchers[VoucherKind::DirectorsCut.index()] = true;
+        run.vouchers[VoucherKind::Retcon.index()] = true;
+        assert!(run.can_reroll_boss());
+        with_options(&["light"], || {
+            assert_ne!(
+                teacher_move(&run, 3).0,
+                MoveKind::RerollBoss,
+                "off by default"
+            );
+        });
+        with_options(&opts, || {
+            let gains = boss_reroll_gains(&run, 7);
+            assert!(!gains.is_empty() && mean_or_zero(&gains) > 0.0, "{gains:?}");
+            assert_eq!(teacher_move(&run, 3), (MoveKind::RerollBoss, 0));
+        });
+        // The voucher's worth, from a shop facing the same boss: the run in a shop with the voucher just redeemed.
+        let mut shop_run = run.clone();
+        shop_run.vouchers[VoucherKind::Retcon.index()] = false;
+        shop_run.vouchers[VoucherKind::DirectorsCut.index()] = true;
+        with_options(&opts, || {
+            assert!(
+                reroll_voucher_worth(&shop_run, 7) > 0.0,
+                "facing Violet Vessel, the reroll is worth something"
+            );
+        });
+        new_run();
     }
 
     #[test]

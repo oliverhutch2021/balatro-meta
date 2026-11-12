@@ -85,6 +85,10 @@ def outcome(kind: int, before: dict, after: dict) -> str:
     if kind == 0:
         target = after.get("blind_score")
         return f"{after.get('blind_name') or 'blind'}" + (f", needs {target:,.0f}" if target else "")
+    if kind == 20:
+        old = ((before.get("blinds") or {}).get("boss") or {}).get("name") or "the boss"
+        new = ((after.get("blinds") or {}).get("boss") or {}).get("name") or "a new boss"
+        return f"{old} → {new}" + (f", {money}" if money else "")
     if kind == 1:
         gained = list(after.get("tags") or [])
         for t in before.get("tags") or []:

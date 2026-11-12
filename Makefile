@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late teacher-boss teacher-budget teacher-budget-big teacher-budget-confirm teacher-skips skips-stakes teacher-budget-6 teacher-budget-confirm-6 teacher-close teacher-close-2 diagnose-fresh diagnose-control teacher-budget-parts teacher-budget-away teacher-bundle teacher-looks shop-audit teacher-money-belief leak-tally teacher-money teacher-long recheck diagnose forks-quick forks-night forks-table forks-now
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late teacher-boss teacher-budget teacher-budget-big teacher-budget-confirm teacher-skips skips-stakes teacher-budget-6 teacher-budget-confirm-6 teacher-close teacher-close-2 diagnose-fresh diagnose-control teacher-budget-parts teacher-budget-away teacher-bundle teacher-looks shop-audit teacher-money-belief leak-tally teacher-boss-reroll teacher-money teacher-long recheck diagnose forks-quick forks-night forks-table forks-now
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -216,6 +216,9 @@ teacher-money-belief:  ## The judge's belief about money: the networks read the 
 
 leak-tally:  ## Two diagnoses, no change to play: the champion replays the first 3,000 of step 37's salt-2 seeds counting what it does with seals, consumables, won rounds and shops (the leak tally), and forks each run's passes of nine named jokers, its own move against taking the joker and keeping it, to the end (about 11 hours)
 	$(PY) scripts/jobs.py run leak-tally $(JOB_FLAGS)
+
+teacher-boss-reroll:  ## The boss reroll (Director's Cut, Retcon) made by value: 8,000 White seeds with the leak tally on, then 2,000 Green, at salt 2 against step 37's controls (about 6.5 hours)
+	$(PY) scripts/jobs.py run teacher-boss-reroll $(JOB_FLAGS)
 
 teacher-money:  ## The value formula's money numbers retuned on the champion, each leaning towards spending, 2,000 seeds each (about 7 hours)
 	$(PY) scripts/jobs.py run teacher-money $(JOB_FLAGS)

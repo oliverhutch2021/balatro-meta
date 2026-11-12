@@ -731,6 +731,13 @@ impl Game {
             b.set_item("reward", kind.reward(r.cfg.stake))?;
             if s != BlindSlot::Boss {
                 b.set_item("tag_name", r.tags_offered[s.index()].name())?;
+            } else {
+                // The Reroll Boss button: shown with Director's Cut or Retcon, working when `reroll` is true.
+                use bm_core::content::VoucherKind as V;
+                let shown = r.vouchers[V::DirectorsCut.index()] || r.vouchers[V::Retcon.index()];
+                b.set_item("reroll_shown", shown)?;
+                b.set_item("reroll", r.can_reroll_boss())?;
+                b.set_item("rerolled", r.boss_rerolled)?;
             }
             blinds.set_item(["small", "big", "boss"][s.index()], b)?;
         }

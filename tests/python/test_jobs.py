@@ -1457,3 +1457,21 @@ def test_the_leak_tally_replays_the_salted_control_with_the_tally_and_the_forced
     (tmp_path / report).parent.mkdir(parents=True, exist_ok=True)
     (tmp_path / report).write_text("{}")
     assert "tally" not in [n for n, *_ in jobs.leak_steps(tmp_path)]
+
+
+def test_the_boss_reroll_arms_play_the_option_against_the_salted_controls(tmp_path):
+    champion_in(tmp_path)
+    steps = {n: a for n, a, *_ in jobs.boss_reroll_steps(tmp_path)}
+    assert list(steps) == ["build", "folder", "white", "white-gzip", "compare-white", "white-tally", "green",
+                           "compare-green"]
+    bundle = {n: a for n, a, *_ in jobs.bundle_steps(tmp_path)}
+    for name, control, runs, stake in (("white", bundle["white-champion"][-1], jobs.BIG_RUNS, None),
+                                       ("green", bundle["green-champion"][-1], jobs.SCREEN_RUNS, "3")):
+        a = steps[name]
+        assert a[a.index("--teacher-options") + 1] == "precise,boss-reroll"
+        assert [a[a.index(x) + 1] for x in ("--runs", "--seed", "--salt")] == [str(runs), "1", str(jobs.BUNDLE_SALT)]
+        assert (a[a.index("--stake") + 1] if "--stake" in a else None) == stake
+        assert steps[f"compare-{name}"][1:3] == [control, a[a.index("--out") + 1]]
+    lines = steps["white"][steps["white"].index("--leaks") + 1]
+    assert steps["white-gzip"] == ["gzip", "-f", lines] and steps["white-tally"][1] == lines + ".gz"
+    assert "--leaks" not in steps["green"]

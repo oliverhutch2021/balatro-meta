@@ -224,6 +224,7 @@ header .where { color: #a9c2c6; font-size: 13px; }
 .bl { width: 14cqw; border-radius: 1cqw; background: rgba(0,0,0,.28); padding: 1cqw; text-align: center; border: .2cqw solid transparent; }
 .bl.SELECT, .bl.CURRENT { border-color: #ffc94d; background: rgba(0,0,0,.4); }
 .bl.DEFEATED, .bl.SKIPPED { opacity: .45; }
+.bl .brr { color: #ff6b5b; font-weight: 700; } .bl .brr.off { opacity: .5; }
 .bl .bn { font: 700 1.5cqw/1.15 var(--display); }
 .bl .bt { font: 700 2cqw/1.2 var(--display); color: #ff8a6b; }
 .bl .br { font-size: 1.1cqw; color: var(--money); }
@@ -729,7 +730,9 @@ function middle(v, m) {
       `<div class="bs">Score at least</div><div class="bt">${num(x.score)}</div>` +
       `<div class="br">Reward ${'$'.repeat(Math.max(0, Math.min(8, x.reward || 0)))}</div>` +
       `<div class="bs">${esc((x.status || '').toLowerCase())}</div>` +
-      (x.tag_name && k !== 'boss' ? `<div class="bg">Skip for: ${ART ? tagHTML(x.tag_name) + ' ' : ''}${esc(x.tag_name)}</div>` : '') + `</div>`;
+      (x.tag_name && k !== 'boss' ? `<div class="bg">Skip for: ${ART ? tagHTML(x.tag_name) + ' ' : ''}${esc(x.tag_name)}</div>` : '') +
+      (k === 'boss' && x.reroll_shown ? `<div class="bg brr${x.reroll ? '' : ' off'}" title="Director's Cut once an ante, Retcon any time">` +
+        `Reroll Boss $10${x.rerolled ? ' &middot; rerolled' : ''}</div>` : '') + `</div>`;
     return `<div class="title">Choose your next blind</div><div class="blinds3">${one('small', b.small)}${one('big', b.big)}${one('boss', b.boss)}</div>` +
       ((v.tags || []).length ? `<div class="subt">Tags: ${ART ? v.tags.map(tagHTML).join(' ') : esc(v.tags.join(', '))}</div>` : '');
   }

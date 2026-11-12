@@ -1637,6 +1637,48 @@ def leak_steps(root: Path = ROOT, runs: int = LEAK_RUNS) -> list[tuple]:
     return steps
 
 
+# make teacher-boss-reroll: the boss reroll the bot never made (teacher option "boss-reroll": Director's Cut once an
+# ante, Retcon any time, $10, rerolled when the value after a reroll on fair copies beats keeping the boss; a reroll
+# voucher worth what rerolling this ante's boss would gain). On step 37's salt-2 seeds against its controls: 8,000
+# White seeds with the leak tally on (how often the vouchers are bought and which bosses are rerolled away), then
+# 2,000 Green. The real-game checks can't follow a boss reroll (BalatroBot has no call for it): a check stops there.
+BOSS_REROLL = "boss-reroll"
+
+
+def boss_reroll_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
+    """make teacher-boss-reroll: the champion with "boss-reroll" at BUNDLE_SALT against step 37's controls."""
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    args = list(best[1])
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
+    w = args[args.index("--value-weight") + 1]
+    stem = Path(best[2]).stem.split("-on-")[-1]
+    tag, s = f"f{FORMULA}", f"salt{BUNDLE_SALT}"
+    o = f"{opts},{BOSS_REROLL}"
+    a = list(args)
+    a[a.index("--teacher-options") + 1] = o
+    lines = f"{LEAK_DIR}/boss-reroll-{runs // 1000}k-{s}.jsonl"
+    g = f"results/stakes/stake{BUNDLE_GREEN}-{green_runs // 1000}k-{tag}"
+    for name, count, stake, control, out, extra in (
+            ("white", runs, [], f"results/tune/{tag}-{file_safe(opts)}-{runs // 1000}k-w{w}-{s}-on-{stem}.json",
+             f"results/tune/{tag}-{file_safe(o)}-{runs // 1000}k-w{w}-{s}-on-{stem}.json", ["--leaks", lines]),
+            ("green", green_runs, ["--stake", str(BUNDLE_GREEN)], f"{g}-{file_safe(opts)}-w{w}-{s}-on-{stem}.json",
+             f"{g}-{file_safe(o)}-w{w}-{s}-on-{stem}.json", [])):
+        if not (root / out).exists():
+            steps.append((name, [*BASELINE, "--bot", "teacher", *a, "--runs", str(count), "--seed", "1", "--salt",
+                                 str(BUNDLE_SALT), *stake, *extra, "--out", out]))
+            if extra:
+                steps.append((f"{name}-gzip", ["gzip", "-f", lines]))
+        steps.append((f"compare-{name}", ["scripts/compare_runs.py", control, out, "--out",
+                                          f"{Path(out).parent}/{Path(out).stem}-vs-{Path(control).stem}.json"]))
+        if extra:
+            steps.append((f"{name}-tally", ["scripts/leaks.py", f"{lines}.gz", "--out",
+                                            f"results/leaks/boss-reroll-{runs // 1000}k-{s}.json"]))
+    return steps
+
+
 def budget_away_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     """make teacher-budget-away: the AWAY_TRIALS against the champion at the screens' salt (champion_trials), and
     the two halves set against each other run by run: every count between rounds kept flat against every count in a
@@ -2119,6 +2161,7 @@ JOBS: dict[str, list[tuple]] = {
     "shop-audit": audit_steps(),
     "teacher-money-belief": money_belief_steps(),
     "leak-tally": leak_steps(),
+    "teacher-boss-reroll": boss_reroll_steps(),
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
     "diagnose": diagnose_steps(),

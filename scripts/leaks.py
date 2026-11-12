@@ -159,6 +159,8 @@ def summarise(runs: list[dict]) -> dict:
                          "redeemed_when_affordable": ratio(redeemed.get(v, 0), affordable.get(v, 0))}
                      for v in sorted(offered)},
         "vouchers_per_run": ratio(sum(redeemed.values()), len(runs)),
+        "boss_rerolled_away": dict(total(runs, "boss_rerolled_away").most_common()),
+        "runs_with_a_boss_reroll": sum(1 for r in runs if r["tally"].get("boss_rerolled_away")),
     }
 
 

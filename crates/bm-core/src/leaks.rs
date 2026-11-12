@@ -78,6 +78,8 @@ pub struct Leaks {
     vouchers_offered: Counts,
     vouchers_affordable: Counts,
     vouchers_redeemed: Counts,
+    /// Boss rerolls, by the boss rerolled away.
+    boss_rerolled_away: Counts,
     hands: Counts,
     sealed_by_ante4: Option<bool>,
     // State within the run.
@@ -223,6 +225,7 @@ impl Leaks {
                     self.jokers.push((before.ante, j.kind.name(), "sell"));
                 }
             }
+            MoveKind::RerollBoss => bump(&mut self.boss_rerolled_away, before.boss.name()),
             _ => {}
         }
     }
@@ -587,7 +590,8 @@ impl Leaks {
             "{{\"seals\":{},\"rounds\":{},\"ways\":{},\"left_at_win\":{{{}}},\"held_at_start\":{},\
              \"held_through\":{},\"used\":{},\"sold\":{},\"targets\":[{}],\"spectral_offered\":{},\
              \"spectral_taken\":{},\"shops\":{},\"last_shop\":{},\"jokers\":[{}],\"vouchers_offered\":{},\
-             \"vouchers_affordable\":{},\"vouchers_redeemed\":{},\"hands\":{},\"blue_or_purple_by_ante4\":{}}}",
+             \"vouchers_affordable\":{},\"vouchers_redeemed\":{},\"boss_rerolled_away\":{},\"hands\":{},\
+             \"blue_or_purple_by_ante4\":{}}}",
             json_counts(&self.seals),
             json_counts(&self.rounds),
             {
@@ -608,6 +612,7 @@ impl Leaks {
             json_counts(&self.vouchers_offered),
             json_counts(&self.vouchers_affordable),
             json_counts(&self.vouchers_redeemed),
+            json_counts(&self.boss_rerolled_away),
             json_counts(&self.hands),
             by4,
         )

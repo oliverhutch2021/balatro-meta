@@ -217,6 +217,10 @@ pub const PARAMS: &[(&str, f64)] = &[
     ("skip-x", 0.5),
     ("skip-z", 2.5),
     ("skip-loss", 2.0),
+    // Option "boss-reroll" (teacher.rs `boss_reroll_gains`): the fair copies a boss reroll is judged on, and the
+    // gain in value it must show over keeping the boss.
+    ("boss-reroll-copies", 6.0),
+    ("boss-reroll-margin", 0.02),
 ];
 
 /// A number of the formula: as an option set it, else its usual value.
