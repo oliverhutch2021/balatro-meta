@@ -1668,8 +1668,11 @@ def reroll_demo_steps(root: Path = ROOT, runs: int = REROLL_DEMO_RUNS) -> list[t
     return steps
 
 
-def boss_reroll_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
-    """make teacher-boss-reroll: the champion with "boss-reroll" at BUNDLE_SALT against step 37's controls."""
+def option_arm_steps(option: str, root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS,
+                     green_first: bool = False, tally_green: bool = False) -> list[tuple]:
+    """The champion with teacher `option` added, at BUNDLE_SALT against step 37's controls: 8,000 White seeds with the
+    leak tally on and 2,000 Green (with the tally too if `tally_green`), Green first if `green_first`; each compared
+    as it ends, each tally summarised."""
     steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR])]
     best = best_8k_report(root)
     if best is None:
@@ -1679,16 +1682,20 @@ def boss_reroll_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int =
     w = args[args.index("--value-weight") + 1]
     stem = Path(best[2]).stem.split("-on-")[-1]
     tag, s = f"f{FORMULA}", f"salt{BUNDLE_SALT}"
-    o = f"{opts},{BOSS_REROLL}"
+    o = f"{opts},{option}"
     a = list(args)
     a[a.index("--teacher-options") + 1] = o
-    lines = f"{LEAK_DIR}/boss-reroll-{runs // 1000}k-{s}.jsonl"
     g = f"results/stakes/stake{BUNDLE_GREEN}-{green_runs // 1000}k-{tag}"
-    for name, count, stake, control, out, extra in (
-            ("white", runs, [], f"results/tune/{tag}-{file_safe(opts)}-{runs // 1000}k-w{w}-{s}-on-{stem}.json",
-             f"results/tune/{tag}-{file_safe(o)}-{runs // 1000}k-w{w}-{s}-on-{stem}.json", ["--leaks", lines]),
+    arms = [("white", runs, [], f"results/tune/{tag}-{file_safe(opts)}-{runs // 1000}k-w{w}-{s}-on-{stem}.json",
+             f"results/tune/{tag}-{file_safe(o)}-{runs // 1000}k-w{w}-{s}-on-{stem}.json", True),
             ("green", green_runs, ["--stake", str(BUNDLE_GREEN)], f"{g}-{file_safe(opts)}-w{w}-{s}-on-{stem}.json",
-             f"{g}-{file_safe(o)}-w{w}-{s}-on-{stem}.json", [])):
+             f"{g}-{file_safe(o)}-w{w}-{s}-on-{stem}.json", tally_green)]
+    if green_first:
+        arms.reverse()
+    for name, count, stake, control, out, tallied in arms:
+        prefix = option if name == "white" else f"{option}-green"
+        lines = f"{LEAK_DIR}/{prefix}-{count // 1000}k-{s}.jsonl"
+        extra = ["--leaks", lines] if tallied else []
         if not (root / out).exists():
             steps.append((name, [*BASELINE, "--bot", "teacher", *a, "--runs", str(count), "--seed", "1", "--salt",
                                  str(BUNDLE_SALT), *stake, *extra, "--out", out]))
@@ -1698,8 +1705,27 @@ def boss_reroll_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int =
                                           f"{Path(out).parent}/{Path(out).stem}-vs-{Path(control).stem}.json"]))
         if extra:
             steps.append((f"{name}-tally", ["scripts/leaks.py", f"{lines}.gz", "--out",
-                                            f"results/leaks/boss-reroll-{runs // 1000}k-{s}.json"]))
+                                            f"results/leaks/{prefix}-{count // 1000}k-{s}.json"]))
     return steps
+
+
+def boss_reroll_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
+    """make teacher-boss-reroll: the champion with "boss-reroll" at BUNDLE_SALT against step 37's controls."""
+    return option_arm_steps(BOSS_REROLL, root, runs, green_runs)
+
+
+# make teacher-held-cards: the leak bundle's first part (lab #19), teacher option "held-cards": a held Tarot or
+# Spectral used whenever using it beats losing it, the user's use-at-once cards used at once, a card a round never
+# used worth nothing held (sold at the next shop), a full slot costing what it blocks. Green first (the development
+# ground, #20), White the guard, both with the tally on: the behaviour test is the tally (each kind still held at a
+# round's end in under 5% of the rounds it was held at the start, the user's figure), the win rate's bar White's paired
+# lower end above -1.0.
+HELD_CARDS = "held-cards"
+
+
+def held_cards_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
+    """make teacher-held-cards: the champion with "held-cards", Green first, both stakes tallied."""
+    return option_arm_steps(HELD_CARDS, root, runs, green_runs, green_first=True, tally_green=True)
 
 
 def budget_away_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
@@ -2186,6 +2212,7 @@ JOBS: dict[str, list[tuple]] = {
     "leak-tally": leak_steps(),
     "teacher-boss-reroll": boss_reroll_steps(),
     "reroll-demo": reroll_demo_steps(),
+    "teacher-held-cards": held_cards_steps(),
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
     "diagnose": diagnose_steps(),

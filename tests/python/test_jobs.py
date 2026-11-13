@@ -1485,3 +1485,16 @@ def test_the_reroll_demo_plays_the_champion_with_the_reroll_and_keeps_its_sample
     assert a[a.index("--teacher-options") + 1] == "precise,boss-reroll"
     assert a[a.index("--runs") + 1] == str(jobs.REROLL_DEMO_RUNS)
     assert all(not x.startswith("results/") for x in a), "a look, not a measurement"
+
+
+def test_the_held_card_arms_run_green_first_with_both_stakes_tallied(tmp_path):
+    champion_in(tmp_path)
+    steps = {n: a for n, a, *_ in jobs.held_cards_steps(tmp_path)}
+    assert list(steps) == ["build", "folder", "green", "green-gzip", "compare-green", "green-tally", "white",
+                           "white-gzip", "compare-white", "white-tally"]
+    for name in ("green", "white"):
+        a = steps[name]
+        assert a[a.index("--teacher-options") + 1] == "precise,held-cards"
+        lines = a[a.index("--leaks") + 1]
+        assert steps[f"{name}-tally"][1] == lines + ".gz"
+    assert steps["green"][steps["green"].index("--leaks") + 1] != steps["white"][steps["white"].index("--leaks") + 1]

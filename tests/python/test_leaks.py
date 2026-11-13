@@ -43,6 +43,9 @@ def test_a_leak_present_often_and_rarely_collected_is_flagged_by_the_rule(tmp_pa
     assert s["two_pair_share"] == 0.25
     assert s["seal_spectral_targets"]["Talisman"]["share_on_most_valuable"] == 0.5
     assert s["vouchers"]["Overstock"]["redeemed_when_affordable"] == 0.0
+    held = s["held_through_share"]
+    assert held["kinds"]["The High Priestess"] == {"rounds": 10, "through": 10, "share": 1.0}
+    assert held["over_bar"] == ["The High Priestess"]
 
 
 def test_the_forced_forks_summary_pairs_each_fork_and_reads_the_rule(tmp_path):

@@ -1318,6 +1318,42 @@ cd /mnt/h/balatro-meta && make sync && make test && make reroll-demo
 cd /mnt/h/balatro-meta && make teacher-boss-reroll
 ```
 
+## Step 43: held Tarots and Spectrals, the leak bundle's first part (about 6.5 hours)
+
+The user, watching `make reroll-demo`'s runs: "it is holding Death and Devil much longer than it should... trying to
+find the perfect hand and taking up slots it doesn't need to". In those 400 runs a Tarot or Spectral held as a round
+began was still held at its end 61% of the time (S's count, lab #19; The Sun 96%, The Devil 82%, Death 39%), 573
+rounds ended with every slot full, and 95 Purple-Seal Tarots and 52 Blue-Seal Planets were never made for want of a
+slot. Teacher option `held-cards`:
+
+- In a round a held card is used whenever using it beats losing it (`value_consumable_in_round`: no longer only when
+  that realises half its held worth, and no margin to beat), so it goes in the first round that offers a use.
+- The cards the user uses at once whenever they can be are: The High Priestess, The Emperor, The Wheel of Fortune,
+  Temperance, and The Hermit at $20 or more.
+- A card held through a whole round unused is worth nothing held from then on (`teacher::stale_card`,
+  `value::consumable_dollars`), so the next shop sells it.
+- With every consumable slot full, the Planets and Tarots the run's seals and jokers would make count for nothing in
+  the value (`flows_for`), so a full slot costs what it blocks.
+
+In 96 light runs in the cloud (no networks): Tarots and Spectrals still held at a round's end 130 of 236 rounds
+(55%) before, 9 of 111 (8%) with the option; rounds ended slots-full 19 before, 2 after.
+
+`make teacher-held-cards` on step 37's salt-2 seeds against its controls, both with the leak tally on: 2,000 Green
+seeds first (the development ground, #20), then 8,000 White (the guard).
+
+The decision, stated before the run (S and the user, #19):
+
+- Behaviour: each Tarot and Spectral kind still held at a round's end in under 5% of the rounds it was held at the
+  start (`leaks.py`'s `held_through_share`), any kind above it named with its reason; rounds ended slots-full and
+  cards not made for want of a slot falling towards zero.
+- Win rate: White's paired 95% range's lower end above -1.0 point; Green for direction.
+- Both met: it goes into the base with the rest of the leak bundle. Behaviour met and the win rate below the bar: what
+  the freed slots and early uses cost is read from the tally before anything else.
+
+```
+cd /mnt/h/balatro-meta && make sync && make test && make teacher-held-cards
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

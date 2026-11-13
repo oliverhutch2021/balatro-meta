@@ -62,6 +62,24 @@ def g(t: dict, part: str, key: str) -> int:
     return t.get(part, {}).get(key, 0)
 
 
+HELD_BAR = 0.05  # the user's acceptance figure for held cards (#19)
+
+
+def held_through_share(runs: list[dict]) -> dict:
+    """Per Tarot or Spectral kind: rounds held at the start, still held at the end, and the share (the user's figure:
+    under 5% for each kind, or a named reason). Planets apart (used at once unless Observatory)."""
+    start, through = total(runs, "held_at_start"), total(runs, "held_through")
+    planets = {"Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "Planet X",
+               "Ceres", "Eris"}
+    kinds = {k: {"rounds": n, "through": through.get(k, 0), "share": ratio(through.get(k, 0), n)}
+             for k, n in start.most_common() if k not in planets}
+    all_n = sum(v["rounds"] for v in kinds.values())
+    all_t = sum(v["through"] for v in kinds.values())
+    return {"all": {"rounds": all_n, "through": all_t, "share": ratio(all_t, all_n)},
+            "over_bar": sorted(k for k, v in kinds.items() if v["share"] is not None and v["share"] >= HELD_BAR),
+            "kinds": kinds}
+
+
 def summarise(runs: list[dict]) -> dict:
     seals, rounds, ways = total(runs, "seals"), total(runs, "rounds"), total(runs, "ways")
     leaks = {
@@ -136,6 +154,7 @@ def summarise(runs: list[dict]) -> dict:
         "finish_ways": {w: {o: ways.get(f"{w}:{o}", 0) for o in ("same_move", "failed", "passed", "kept", "made")}
                         for w in way_names},
         "left_at_win": dict(total(runs, "left_at_win").most_common(15)),
+        "held_through_share": held_through_share(runs),
         "held_at_start": dict(total(runs, "held_at_start").most_common()),
         "held_through": dict(total(runs, "held_through").most_common()),
         "used": dict(total(runs, "used").most_common()),
@@ -177,6 +196,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {name}: present in {100 * (l['present_share'] or 0):.1f}% of runs, collected "
               f"{l['collected']} of {l['chances']} ({100 * (l['collected_share'] or 0):.1f}%)"
               f"{'  -> fix (rule)' if l['fix_by_rule'] else ''}")
+    h = s["held_through_share"]["all"]
+    print(f"  Tarots and Spectrals still held at a round's end: {h['through']} of {h['rounds']} rounds held "
+          f"({100 * (h['share'] or 0):.1f}%); kinds at 5% or more: {', '.join(s['held_through_share']['over_bar']) or 'none'}")
     print(f"Summary: {a.out}")
     return 0
 

@@ -637,6 +637,13 @@ pub fn flows_for(run: &Run, shares: &[f64; 12]) -> Flows {
         + 3.0 * gold_cards * held_at_end
         + 20.0 / 15.0 * lucky * scored / deck;
     f.tarots += purple * thrown / deck;
+    // "held-cards": with every consumable slot full, what the seals and jokers would make is lost (a Blue Seal's
+    // Planet, a Purple Seal's Tarot, Cartomancer's...), so a full slot costs what it blocks.
+    if crate::teacher::on("held-cards") && run.consumables.len() as i32 >= run.consumable_slots {
+        f.levels -= blue * held_at_end;
+        f.tarots = 0.0;
+        f.spectrals = 0.0;
+    }
     f
 }
 
@@ -806,6 +813,11 @@ fn tag_dollars(t: crate::tags::TagKind) -> f64 {
 /// with Steel Joker, Mime or Baron, Magician's lucky cards with Lucky Cat...). Which cards they change, and
 /// whether a suit or a rank is worth building, is judged when they are used, by what the deck then deals.
 pub fn consumable_dollars(run: &Run, c: &crate::create::Consumable) -> f64 {
+    // "held-cards": a card held through a round that never used it is worth nothing held (selling it is what it is
+    // still good for: the user's "anything to be sold is sold at the next shop").
+    if crate::teacher::stale_card(c.sort_id) && c.kind.set() != ConsumableSet::Planet {
+        return 0.0;
+    }
     // A card that pays money (Hermit, Temperance...): what the engine pays for it.
     if let Some(d) = money_card_dollars(run, c) {
         return d;

@@ -125,6 +125,16 @@ pub const OPTIONS: &[&str] = &[
     // the user: "the boss reroll
     // can be game changing, since that is where we struggle most" (lab #19).
     "boss-reroll",
+    // Held Tarots and Spectrals (the leak bundle's first part, lab #19): the user, watching the bot sit on Death, The
+    // Devil and The Sun for rounds "trying to find the perfect hand and taking up slots it doesn't need to". In a
+    // round a held card is used whenever using it beats losing it (no longer only when that realises half its held
+    // worth), so it goes in the first round that offers a use, and the ones the user uses at once whenever they can
+    // be are (High Priestess, Emperor, Wheel of Fortune, Temperance, Hermit at $20); a card held through a whole
+    // round unused is worth nothing held from then on, so the next shop sells it (`stale_card`); and with every slot
+    // full, the cards the run's seals and jokers would
+    // make count for nothing (value.rs `flows_for`), so a full slot costs what it blocks. Acceptance (the user): each
+    // kind still held at a round's end in under 5% of the rounds it was held at the start (the leak tally).
+    "held-cards",
     // With a joker that pays on the round's final hand (Dusk retriggers its cards, Acrobat x3): when the best
     // hand beats the blind only as the final hand, play single spare cards until one hand is left, then the
     // best; and the value's sample rounds try that way of playing too (the discards dig for the final hand
@@ -1036,6 +1046,24 @@ fn value_consumable_in_round(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
             return Some((MoveKind::UseConsumable, i as u64));
         }
     }
+    // "held-cards": the cards the user uses at once whenever they can be (no target needed): The High Priestess and
+    // The Emperor (they free their own slot), The Wheel of Fortune (a joker without an edition is held: the engine's
+    // own condition), Temperance, and The Hermit at $20 or more.
+    if on("held-cards") {
+        for (i, c) in run.consumables.iter().enumerate() {
+            let at_once = match c.kind {
+                ConsumableKind::HighPriestess
+                | ConsumableKind::Emperor
+                | ConsumableKind::WheelOfFortune
+                | ConsumableKind::Temperance => true,
+                ConsumableKind::Hermit => run.money >= 20,
+                _ => false,
+            };
+            if at_once && run.can_use_consumable(c, &[], UseFrom::Slots) {
+                return Some((MoveKind::UseConsumable, i as u64));
+            }
+        }
+    }
     let vs = value_salt(run, salt);
     // Each option: its moves, the consumable it uses, and its quick value.
     let mut options: Vec<(Moves, usize, f64)> = Vec::new();
@@ -1062,7 +1090,8 @@ fn value_consumable_in_round(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
     }
     // A held card's worth stands for using it well later. It is used now when that realises at least half
     // of that worth: the run after using it beats the halfway mark between the card gone unused and the
-    // card kept.
+    // card kept. With "held-cards", when using it beats the card gone: any use that helps is taken now.
+    let half = if on("held-cards") { 0.0 } else { 0.5 };
     let with_quick = value_in_round(run, vs, crate::value::quick_samples());
     let with_full = std::cell::OnceCell::new();
     let without = |i: usize, samples: usize| {
@@ -1074,7 +1103,7 @@ fn value_consumable_in_round(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
         } else {
             *with_full.get_or_init(|| value_in_round(run, vs, crate::value::samples()))
         };
-        gone + 0.5 * (kept - gone).max(0.0)
+        gone + half * (kept - gone).max(0.0)
     };
     let mut base_quick = std::collections::HashMap::new();
     for o in &mut options {
@@ -1086,10 +1115,12 @@ fn value_consumable_in_round(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
         });
         o.2 = v - b;
     }
-    options.retain(|o| o.2 > MIN_GAIN);
+    // With "held-cards" a use is taken when it is no worse than the card gone (no margin to beat).
+    let margin = if on("held-cards") { 0.0 } else { MIN_GAIN };
+    options.retain(|o| o.2 > margin);
     options.sort_by(|a, b| b.2.total_cmp(&a.2));
     options.truncate(finalists());
-    let mut best = (MIN_GAIN, None);
+    let mut best = (margin, None);
     let mut base_full = std::collections::HashMap::new();
     for (moves, i, _) in options {
         let b = *base_full
@@ -3445,6 +3476,8 @@ pub fn new_run() {
     HAND_ORDERS.with(|c| c.borrow_mut().clear());
     WEAKEST.with(|c| c.borrow_mut().clear());
     VOUCHER_WORTH.with(|c| c.borrow_mut().clear());
+    ROUND_START_CARDS.with(|c| *c.borrow_mut() = (-1, Vec::new()));
+    STALE_CARDS.with(|c| c.borrow_mut().clear());
     LEAVING.with(|c| c.borrow_mut().clear());
     crate::value::clear_caches();
 }
@@ -3453,8 +3486,50 @@ pub fn new_run() {
 /// scaled by that much (`value::Scales`, rounds included): the late antes are where most runs are lost, and a
 /// decision there has fewer to come after it.
 pub fn teacher_move(run: &Run, salt: u64) -> (MoveKind, u64) {
+    if on("held-cards") {
+        note_held_cards(run);
+    }
     let frozen = frozen_money(run);
     crate::learned::with_frozen_money(frozen, || scaled_move(run, salt))
+}
+
+thread_local! {
+    /// "held-cards": the consumables held as this run's current round began (by `sort_id`), and those held through a
+    /// whole round unused. Forgotten at each run's start (`new_run`).
+    static ROUND_START_CARDS: std::cell::RefCell<(i32, Vec<u64>)> = const { std::cell::RefCell::new((-1, Vec::new())) };
+    static STALE_CARDS: std::cell::RefCell<Vec<u64>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// "held-cards": note the cards held as a round begins (its first decision) and, once it has ended, those still
+/// held: held through a round that never used them.
+fn note_held_cards(run: &Run) {
+    let held: Vec<u64> = run.consumables.iter().map(|c| c.sort_id).collect();
+    let fresh_round = run.phase == Phase::Round
+        && run.hands_played_round == 0
+        && run.discards_used_round == 0
+        && ROUND_START_CARDS.with(|r| r.borrow().0) != run.round;
+    if fresh_round {
+        ROUND_START_CARDS.with(|r| *r.borrow_mut() = (run.round, held));
+        return;
+    }
+    if run.phase != Phase::Round {
+        let start = ROUND_START_CARDS.with(|r| std::mem::take(&mut r.borrow_mut().1));
+        if !start.is_empty() {
+            STALE_CARDS.with(|s| {
+                let mut s = s.borrow_mut();
+                for id in start.into_iter().filter(|id| held.contains(id)) {
+                    if !s.contains(&id) {
+                        s.push(id);
+                    }
+                }
+            });
+        }
+    }
+}
+
+/// "held-cards": a held card that a whole round passed without using (`note_held_cards`): worth its sale only.
+pub(crate) fn stale_card(sort_id: u64) -> bool {
+    on("held-cards") && STALE_CARDS.with(|s| s.borrow().contains(&sort_id))
 }
 
 thread_local! {
@@ -4766,6 +4841,47 @@ mod tests {
             assert!(reroll_voucher_worth(&dc, &both, 7, VoucherKind::Retcon) >= 0.0);
         });
         new_run();
+    }
+
+    /// "held-cards": The High Priestess is used at the round's first decision; a card held through a round unused is
+    /// worth nothing held from the next shop on; without the option neither.
+    #[test]
+    fn held_cards_are_used_at_once_and_a_card_a_round_never_used_goes_stale() {
+        let mut run = Run::new(RunConfig::new("HELD1"));
+        while run.phase != Phase::Round {
+            let m = crate::bots::greedy_move(&run, 1);
+            apply(&mut run, m.0, m.1).unwrap();
+        }
+        new_run();
+        run.consumables.clear();
+        let hp = run.give_consumable(ConsumableKind::HighPriestess);
+        let tower = run.give_consumable(ConsumableKind::Tower);
+        let tower_id = run.consumables[tower].sort_id;
+        with_options(&["light", "held-cards"], || {
+            assert_eq!(teacher_move(&run, 5), (MoveKind::UseConsumable, hp as u64));
+            // The round passes with The Tower still held: in the shop it is stale, worth nothing held.
+            let mut later = run.clone();
+            later.consumables.remove(hp);
+            while later.phase == Phase::Round {
+                let m = crate::bots::greedy_move(&later, 2);
+                apply(&mut later, m.0, m.1).unwrap();
+            }
+            if later.phase != Phase::GameOver {
+                let _ = teacher_move(&later, 6);
+                assert!(stale_card(tower_id), "held through the round unused");
+                let c = later
+                    .consumables
+                    .iter()
+                    .find(|c| c.sort_id == tower_id)
+                    .unwrap()
+                    .clone();
+                assert_eq!(crate::value::consumable_dollars(&later, &c), 0.0);
+            }
+        });
+        new_run();
+        with_options(&["light"], || {
+            assert!(!stale_card(tower_id));
+        });
     }
 
     /// A reroll's worth: once, the mean outcome less the price; as often as needed, the reservation value, never
