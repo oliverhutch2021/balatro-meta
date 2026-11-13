@@ -1,0 +1,42 @@
+{
+ "job": "night-green",
+ "commit": "50da290f2c9afc74df3fcb6e124d6374485e7fa8",
+ "started": "2026-11-13T13:08:24+00:00",
+ "finished": "2026-11-13T16:44:48+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   10.2,
+   15.3,
+   16.5
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 20,
+  "batch1-compare-green": 0,
+  "batch1-green-tally": 0,
+  "e1-green-ahead2": 4288,
+  "e1-compare-green-ahead2": 0,
+  "e1-green-ahead3": 4125,
+  "e1-compare-green-ahead3": 0,
+  "e1-green-ahead8": 4549,
+  "e1-compare-green-ahead8": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "batch1-compare-green": "scripts/compare_runs.py results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1-w2.5-salt2-on-ensemble8-w1.5.json results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes-w2.5-salt2-on-ensemble8-w1.5.json --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes-w2.5-salt2-on-ensemble8-w1.5-vs-control.json",
+  "batch1-green-tally": "scripts/leaks.py .sync/leaks/batch1-green-2k-salt2.jsonl.gz --out results/leaks/batch1-green-2k-salt2.json",
+  "e1-green-ahead2": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,boss-reroll,held-cards,glass,five-kind,freeze-money-last,round-fixes,shop-fixes,joker-fixes,ahead=2 --runs 2000 --seed 1 --salt 2 --stake 3 --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+ahead-2-w2.5-salt2-on-ensemble8-w1.5.json",
+  "e1-compare-green-ahead2": "scripts/compare_runs.py results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes-w2.5-salt2-on-ensemble8-w1.5.json results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+ahead-2-w2.5-salt2-on-ensemble8-w1.5.json --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+ahead-2-w2.5-salt2-on-ensemble8-w1.5-vs-batch1.json",
+  "e1-green-ahead3": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,boss-reroll,held-cards,glass,five-kind,freeze-money-last,round-fixes,shop-fixes,joker-fixes,ahead=3 --runs 2000 --seed 1 --salt 2 --stake 3 --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+ahead-3-w2.5-salt2-on-ensemble8-w1.5.json",
+  "e1-compare-green-ahead3": "scripts/compare_runs.py results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes-w2.5-salt2-on-ensemble8-w1.5.json results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+ahead-3-w2.5-salt2-on-ensemble8-w1.5.json --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+ahead-3-w2.5-salt2-on-ensemble8-w1.5-vs-batch1.json",
+  "e1-green-ahead8": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,boss-reroll,held-cards,glass,five-kind,freeze-money-last,round-fixes,shop-fixes,joker-fixes,ahead=8 --runs 2000 --seed 1 --salt 2 --stake 3 --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+ahead-8-w2.5-salt2-on-ensemble8-w1.5.json",
+  "e1-compare-green-ahead8": "scripts/compare_runs.py results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes-w2.5-salt2-on-ensemble8-w1.5.json results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+ahead-8-w2.5-salt2-on-ensemble8-w1.5.json --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+ahead-8-w2.5-salt2-on-ensemble8-w1.5-vs-batch1.json"
+ }
+}

@@ -1,0 +1,35 @@
+{
+ "kind": "comparison",
+ "a": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.3175,
+  "wins": 635,
+  "blinds_beaten": 17.75,
+  "report": "results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes-w2.5-salt2-on-ensemble8-w1.5.json"
+ },
+ "b": {
+  "bot": "teacher bot with a learned value",
+  "win_rate": 0.254,
+  "wins": 508,
+  "blinds_beaten": 16.53,
+  "report": "results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+ahead-8-w2.5-salt2-on-ensemble8-w1.5.json"
+ },
+ "seeds": 2000,
+ "salts": [
+  2,
+  2
+ ],
+ "win_rate_diff": -0.0635,
+ "win_rate_diff_ci": [
+  -0.08650257494716625,
+  -0.040497425052833755
+ ],
+ "only_a_won": 343,
+ "only_b_won": 216,
+ "p_value": 8.727105969750801e-08,
+ "blinds_beaten_diff": -1.22,
+ "blinds_beaten_diff_ci": [
+  -1.5184700632715693,
+  -0.9215299367284306
+ ]
+}
