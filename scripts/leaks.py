@@ -222,6 +222,13 @@ def bars(s: dict) -> list[dict]:
         ratio(e.get("purple_played_with_discards", 0), purple), "under 0.05",
         None if purple < 20 else e.get("purple_played_with_discards", 0) / purple < 0.05)
     missed = e.get("purple_tarot_missed", 0) + e.get("blue_planet_missed", 0)
+    free = e.get("purple_played_with_discards_slot_free", 0)
+    add("P3c", "Purple Seals played with discards left and a slot free, per draw", ratio(free, purple), "under 0.05",
+        None if purple < 20 else free / purple < 0.05)
+    wins_in_hand = r.get("with_winning_hand", 0)
+    add("B1", "rounds lost after a winning hand was in hand, per such round",
+        ratio(r.get("lost_after_winning_hand", 0), wins_in_hand), "not above all-off's (the night's gate: under 2x)",
+        None)
     add("P4", "cards not made for want of a slot, per seal draw", ratio(missed, blue + purple), "under 0.005",
         None if blue + purple < 20 else missed / (blue + purple) < 0.005)
     add("P6a", "Two Pair's share of hands", s["two_pair_share"], "under 0.05",

@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late teacher-boss teacher-budget teacher-budget-big teacher-budget-confirm teacher-skips skips-stakes teacher-budget-6 teacher-budget-confirm-6 teacher-close teacher-close-2 diagnose-fresh diagnose-control teacher-budget-parts teacher-budget-away teacher-bundle teacher-looks shop-audit teacher-money-belief leak-tally teacher-boss-reroll reroll-demo teacher-held-cards teacher-defaults teacher-batch1 look teacher-money teacher-long recheck diagnose forks-quick forks-night forks-table forks-now
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late teacher-boss teacher-budget teacher-budget-big teacher-budget-confirm teacher-skips skips-stakes teacher-budget-6 teacher-budget-confirm-6 teacher-close teacher-close-2 diagnose-fresh diagnose-control teacher-budget-parts teacher-budget-away teacher-bundle teacher-looks shop-audit teacher-money-belief leak-tally teacher-boss-reroll reroll-demo teacher-held-cards teacher-defaults teacher-batch1 look night e1-white-ahead2 e1-white-ahead3 e1-white-ahead8 teacher-money teacher-long recheck diagnose forks-quick forks-night forks-table forks-now
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -234,6 +234,12 @@ teacher-batch1:  ## The bot with every default on (batch 1 of the master list) a
 
 look:  ## The gate before a long run: 400 Green and 400 White runs of the bot as it now plays, tallied, the bars printed pass or fail, the runs kept for the viewer (about 30 minutes)
 	$(PY) scripts/jobs.py run look $(JOB_FLAGS)
+
+night:  ## One night, set and forget: the look (400 Green, 400 White, 400 White all-off, tallied), the gate, then teacher-batch1 and E1 on 2,000 Green (ahead=2, 3 and every ante); on a stop, make leak-tally instead (about 9.5 hours)
+	$(PY) scripts/jobs.py run night $(JOB_FLAGS)
+
+e1-white-ahead2 e1-white-ahead3 e1-white-ahead8:  ## E1's White guard for one setting (2,000 White seeds against the first 2,000 of batch1's White arm, about 1.2 hours)
+	$(PY) scripts/jobs.py run $@ $(JOB_FLAGS)
 
 teacher-money:  ## The value formula's money numbers retuned on the champion, each leaning towards spending, 2,000 seeds each (about 7 hours)
 	$(PY) scripts/jobs.py run teacher-money $(JOB_FLAGS)

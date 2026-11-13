@@ -224,6 +224,8 @@ pub const PARAMS: &[(&str, f64)] = &[
     // ... and a reroll voucher's worth: bosses drawn per tier (this ante's, the later regular antes', the
     // showdown's), and how much the antes after this one count.
     ("boss-reroll-draws", 6.0),
+    // E1 (lab #27): the antes after the next counted in the near term too, at their real targets (`blinds_ahead`).
+    ("ahead", 0.0),
     ("reroll-later-x", 1.0),
 ];
 
@@ -731,6 +733,23 @@ fn blinds_ahead(run: &Run) -> Vec<(f64, f64, f64, bool)> {
     if run.ante < run.win_ante {
         for mult in [1.0, 1.5, 2.0] {
             out.push((base_amount(run.ante + 1, scaling) * mult, n, 0.7, false));
+            n += 1.0;
+        }
+    }
+    // "ahead=K" (E1, lab #27): the three blinds of each of the K antes after the next too, at their real targets, each
+    // with the growth and shopping the value projects to that round, weighted 0.7 per ante further off. What it reads
+    // is the stake's table of base scores by ante (Small 1, Big 1.5, a boss 2), the same in every run, as for the
+    // next ante: never which boss a later ante holds, nor any later shop, pack or card (the user: "giving it any seed
+    // info is a no").
+    let ahead = p("ahead", 0.0).max(0.0) as i32;
+    for d in 2..=ahead + 1 {
+        let ante = run.ante + d;
+        if ante > run.win_ante {
+            break;
+        }
+        let w = 0.7f64.powi(d);
+        for mult in [1.0, 1.5, 2.0] {
+            out.push((base_amount(ante, scaling) * mult, n, w, false));
             n += 1.0;
         }
     }
@@ -1341,6 +1360,17 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
             bought(run, money + per_round * n)
         } else {
             0.0
+        };
+        // Luchador sold disables the boss, which also halves The Wall's target and divides Violet Vessel's by 3
+        // (rules/blinds.md section 11.4; B, #27).
+        let target = if luchador && boss {
+            match run.boss {
+                crate::blinds::Boss::Wall => target / 2.0,
+                crate::blinds::Boss::VioletVessel => target / 3.0,
+                _ => target,
+            }
+        } else {
+            target
         };
         let p = chance(samples, growth(&f, &o, run, n) + shopping, target);
         v += w * p.max(1e-6).ln();

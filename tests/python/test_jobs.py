@@ -1536,3 +1536,45 @@ def test_the_look_tallies_both_stakes_and_batch1_names_every_default(tmp_path):
     o = batch["white"][batch["white"].index("--teacher-options") + 1]
     assert o == "precise," + ",".join(jobs.CODE_DEFAULTS)
     assert jobs.only_default("glass").startswith("glass,no-boss-reroll")
+
+
+def test_the_night_looks_gates_then_runs_batch1_and_e1_or_the_tally(tmp_path):
+    champion_in(tmp_path)
+    steps = {n: a for n, a, *_ in jobs.night_steps(tmp_path)}
+    names = list(steps)
+    assert names[:9] == ["build", "folder", "look-green", "look-green-bars", "look-white", "look-white-bars",
+                         "look-white-off", "look-white-off-bars", "gate"]
+    off = steps["look-white-off"]
+    assert off[off.index("--teacher-options") + 1] == f"precise,{jobs.DEFAULTS_OFF}"
+    batch = {n: a for n, a, *_ in jobs.batch1_steps(tmp_path)}
+    for n, a in batch.items():
+        if n not in ("build", "folder"):
+            assert steps[f"batch1-{n}"] == ["scripts/gated.py", jobs.NIGHT_GATE, "pass", "--", *a]
+    e1 = steps["e1-green-ahead3"][4:]
+    assert e1[e1.index("--teacher-options") + 1].endswith(",ahead=3") and e1[e1.index("--stake") + 1] == "3"
+    green_out = batch["compare-green"][2]
+    assert steps["e1-compare-green-ahead2"][5] == green_out, "E1 pairs against batch1's Green arm"
+    assert "e1-green-ahead8" in steps and not any(n.startswith("e1-white") for n in names), "the guard is a morning job"
+    guard = {n: a for n, a, *_ in jobs.e1_white_steps(8, tmp_path)}
+    assert guard["compare-white-ahead8"][1] == batch["compare-white"][2]
+    assert guard["white-ahead8"][guard["white-ahead8"].index("--runs") + 1] == "2000"
+    assert all(steps[n][2] == "stop" for n in names if n.startswith("tally-")), "the tally runs only on a stop"
+    assert names.index("gate") < names.index("batch1-green") < names.index("e1-green-ahead2") < names.index("tally-tally")
+
+
+def test_the_gate_stops_on_a_big_drop_or_on_losses_with_a_winning_hand(tmp_path):
+    import gated
+    import night_gate
+    control = {"seed_base": 1, "run_stages": "Y" * 300 + "A" * 100}
+    good, bad = dict(control), {"seed_base": 1, "run_stages": "Y" * 250 + "A" * 150}
+    calm = {"rounds": {"with_winning_hand": 1000, "lost_after_winning_hand": 10}}
+    worse = {"rounds": {"with_winning_hand": 1000, "lost_after_winning_hand": 30}}
+    assert night_gate.decide(good, control, calm, calm)["pass"]
+    assert not night_gate.decide(bad, control, calm, calm)["pass"], "12.5 points under the control"
+    assert not night_gate.decide(good, control, worse, calm)["pass"], "three times all-off's rate"
+    gate = tmp_path / "gate.json"
+    gate.write_text(json.dumps({"pass": False}))
+    marker = tmp_path / "ran"
+    cmd = [sys.executable, "-c", f"open({str(marker)!r}, 'w').write('x')"]
+    assert gated.main([str(gate), "pass", "--", *cmd]) == 0 and not marker.exists()
+    assert gated.main([str(gate), "stop", "--", *cmd]) == 0 and marker.exists()

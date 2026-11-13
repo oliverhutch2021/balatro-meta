@@ -368,9 +368,14 @@ fn not_to_throw(run: &Run, i: usize) -> bool {
     if c.face_down || pays_thrown(run, i) {
         return false;
     }
+    // A Stone card is thrown like any other unless Stone Joker pays for it (B, #27: Stone is an enhancement, and a
+    // Marble Joker run would otherwise fill its hand with Stones it won't throw).
+    let stone_kept = c.enhancement == Enhancement::Stone
+        && run.count_jokers(crate::joker_data::JokerKind::StoneJoker) > 0;
     worth_holding(run, i)
         || c.seal != crate::card::Seal::None
-        || !matches!(c.enhancement, Enhancement::None)
+        || stone_kept
+        || !matches!(c.enhancement, Enhancement::None | Enhancement::Stone)
         || c.edition != crate::card::Edition::None
 }
 

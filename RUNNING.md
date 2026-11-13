@@ -1422,6 +1422,48 @@ end above -1.0). `make leak-tally` turns every default off and stays the "before
 cd /mnt/h/balatro-meta && make sync && make test && make look
 ```
 
+## Step 46: the night (about 9.5 hours; S's order, lab #27)
+
+B's two findings on batch 1 are fixed:
+- with Luchador held, The Wall's target is halved and Violet Vessel's divided by 3 in that blind's term
+  (rules/blinds.md section 11.4);
+- a Stone card is thrown while digging unless Stone Joker pays for it.
+
+The tally adds B's bar (rounds lost after a winning hand was in hand, per such round) and splits Purple Seals played
+with discards left by whether a slot was free.
+
+E1, teacher option `ahead=K` (lab #27, the user's go): `blinds_ahead` also counts the three blinds of each of the K
+antes after the next, at their real targets (the stake's table of base scores, Small 1, Big 1.5, a boss 2: the same in
+every run), each with the growth and shopping the value projects to that round, weighted 0.7 per ante further off.
+It reads nothing of the seed: not which boss a later ante holds, no later shop, pack or card.
+
+`make night`, one resumable job (about 9.5 hours):
+1. **The look:** 400 Green and 400 White runs of the bot as it now plays, and the same 400 White with every default
+   off, all tallied, the bars printed, the runs kept for the viewer.
+2. **The gate** (`scripts/night_gate.py`). It stops the long arms when White's look is more than 8 points under the
+   control on the same seeds, or when rounds lost after a winning hand run at more than twice all-off's rate. On a
+   stop, `make leak-tally` runs instead (`scripts/gated.py`). A crash stops the job.
+3. **`teacher-batch1`:** 2,000 Green, then 8,000 White, against step 37's controls.
+4. **E1 on Green:** `ahead=2`, `ahead=3` and every ante left (`ahead=8`: the antes past the winning one are never
+   counted; the user: "a human player would also know the scoring requirements for every ante"), 2,000 seeds each,
+   paired against batch1's Green arm.
+5. In the morning, **E1's guard** for the setting Green favours: `make e1-white-ahead<K>` (2,000 White seeds against
+   the first 2,000 of batch1's White arm).
+
+The rules, stated before the run:
+- **Batch 1:** White's paired lower end above -1.0. If White's point estimate is below 0, leave-one-group-out arms
+  run on 2,000 Green each before any group is called costless (B). Green is information.
+- **E1:** the best K is adopted into the next base if Green gains 3 points or more with its range above zero (best
+  of three: a little over half a point high) and White's point estimate on 2,000 is above -1.0. The 8,000-seed White pair
+  follows before it is final.
+- **The early gauge:** if the best hand's growth from ante 2 to 5, or the cushion at ante 5, moves and the win rate
+  doesn't, that goes to P1.
+- Nothing from the night is a headline. The look's runs are watched in the morning.
+
+```
+cd /mnt/h/balatro-meta && make sync && make test && make night
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

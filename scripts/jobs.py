@@ -1790,6 +1790,98 @@ def look_steps(root: Path = ROOT, runs: int = LOOK_RUNS) -> list[tuple]:
     return steps
 
 
+# make night (S, #27): one resumable chain for a night, about 10 hours. (1) The look: 400 Green and 400 White runs of the
+# bot as it now plays, tallied, plus the same 400 White with every default off (B's bar needs its rate). (2) The gate
+# (scripts/night_gate.py): White's look more than 8 points under the control, or rounds lost after a winning hand at
+# more than twice all-off's rate, stop the long arms, and make leak-tally runs instead. (3) teacher-batch1. (4) E1 on
+# Green: ahead=2, ahead=3 and every ante left (ahead=8: the antes past the winning one are never counted), 2,000 seeds
+# each at salt 2, paired against batch1's Green arm. E1's White guard is a morning job (make e1-white-ahead<K>) for the
+# setting Green favours (S, #27). Every compare is written as its arm ends.
+NIGHT_GATE = f"{LEAK_DIR}/night-gate.json"
+E1_AHEAD = (2, 3, 8)
+
+
+def night_steps(root: Path = ROOT, look_runs: int = LOOK_RUNS, runs: int = BIG_RUNS,
+                green_runs: int = SCREEN_RUNS) -> list[tuple]:
+    """make night: the look, the gate, then teacher-batch1 and E1 (or make leak-tally on a stop)."""
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    args = list(best[1])
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
+    w = args[args.index("--value-weight") + 1]
+    stem = Path(best[2]).stem.split("-on-")[-1]
+    tag, s = f"f{FORMULA}", f"salt{BUNDLE_SALT}"
+    control = f"results/tune/{tag}-{file_safe(opts)}-{BIG_RUNS // 1000}k-w{w}-{s}-on-{stem}.json"
+    # (1) The look, and White's 400 with every default off.
+    for name, stake, extra in (("look-green", ["--stake", str(BUNDLE_GREEN)], ""), ("look-white", [], ""),
+                               ("look-white-off", [], DEFAULTS_OFF)):
+        a = list(args)
+        if extra:
+            a[a.index("--teacher-options") + 1] = f"{opts},{extra}"
+        lines = f"{LEAK_DIR}/{name}.jsonl"
+        steps.append((name, [*BASELINE, "--bot", "teacher", *a, "--runs", str(look_runs), "--seed", "1", "--salt",
+                             str(BUNDLE_SALT), *stake, "--leaks", lines, "--out", f"{LEAK_DIR}/{name}.json"]))
+        steps.append((f"{name}-bars", ["scripts/leaks.py", lines, "--out", f"{LEAK_DIR}/{name}-summary.json"]))
+    # (2) The gate.
+    steps.append(("gate", ["scripts/night_gate.py", "--look", f"{LEAK_DIR}/look-white.json", "--control", control,
+                           "--on", f"{LEAK_DIR}/look-white-summary.json", "--off",
+                           f"{LEAK_DIR}/look-white-off-summary.json", "--out", NIGHT_GATE]))
+
+    def gated(side: str, chain: list[tuple], prefix: str) -> list[tuple]:
+        return [(f"{prefix}{n}", ["scripts/gated.py", NIGHT_GATE, side, "--", *a])
+                for n, a, *_ in chain if n not in ("build", "folder")]
+    # (3) teacher-batch1.
+    batch = batch1_steps(root, runs, green_runs)
+    steps += gated("pass", batch, "batch1-")
+    # batch1's reports, as its compare steps name them (there whether or not its arms have played yet).
+    outs = {n[len("compare-"):]: a[2] for n, a, *_ in batch if n in ("compare-green", "compare-white")}
+    # (4) and (5): E1 against batch1's arms, same bot and salt.
+    o = f"{opts},{','.join(CODE_DEFAULTS)}"
+    g = f"results/stakes/stake{BUNDLE_GREEN}-{green_runs // 1000}k-{tag}"
+    e1 = []
+    for k in E1_AHEAD:
+        ok = f"{o},ahead={k}"
+        a = list(args)
+        a[a.index("--teacher-options") + 1] = ok
+        out = f"{g}-{file_safe(ok)}-w{w}-{s}-on-{stem}.json"
+        if not (root / out).exists():
+            e1.append((f"e1-green-ahead{k}", [*BASELINE, "--bot", "teacher", *a, "--runs", str(green_runs), "--seed",
+                                              "1", "--salt", str(BUNDLE_SALT), "--stake", str(BUNDLE_GREEN),
+                                              "--out", out]))
+        e1.append((f"e1-compare-green-ahead{k}", ["scripts/compare_runs.py", outs["green"], out, "--out",
+                                                  f"{Path(out).parent}/{Path(out).stem}-vs-batch1.json"]))
+    steps += gated("pass", e1, "")
+    # On a stop: make leak-tally instead (every default off: the "before", and the forks).
+    steps += gated("stop", leak_steps(root), "tally-")
+    return steps
+
+
+def e1_white_steps(k: int, root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
+    """make e1-white-ahead<K>: E1's White guard for one setting, `ahead=K` with every default on on the first `runs`
+    White seeds at salt 2, against the first `runs` of batch1's White arm (S: point estimate above -1.0 on 2,000)."""
+    steps: list[tuple] = [("build", [*MAKE, "build"])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    args = list(best[1])
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
+    w = args[args.index("--value-weight") + 1]
+    stem = Path(best[2]).stem.split("-on-")[-1]
+    tag, s = f"f{FORMULA}", f"salt{BUNDLE_SALT}"
+    batch = {n: a for n, a, *_ in batch1_steps(root)}
+    ok = f"{opts},{','.join(CODE_DEFAULTS)},ahead={k}"
+    args[args.index("--teacher-options") + 1] = ok
+    out = f"results/tune/{tag}-{file_safe(ok)}-{runs // 1000}k-w{w}-{s}-on-{stem}.json"
+    if not (root / out).exists():
+        steps.append((f"white-ahead{k}", [*BASELINE, "--bot", "teacher", *args, "--runs", str(runs), "--seed", "1",
+                                          "--salt", str(BUNDLE_SALT), "--out", out]))
+    steps.append((f"compare-white-ahead{k}", ["scripts/compare_runs.py", batch["compare-white"][2], out, "--out",
+                                              f"{Path(out).parent}/{Path(out).stem}-vs-batch1.json"]))
+    return steps
+
+
 def defaults_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
     """make teacher-defaults: the champion with both new defaults, Green first, both tallied."""
     return option_arm_steps(f"{BOSS_REROLL},{HELD_CARDS}", root, runs, green_runs, green_first=True,
@@ -2284,6 +2376,8 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-defaults": defaults_steps(),
     "teacher-batch1": batch1_steps(),
     "look": look_steps(),
+    "night": night_steps(),
+    **{f"e1-white-ahead{k}": e1_white_steps(k) for k in (2, 3, 8)},
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
     "diagnose": diagnose_steps(),

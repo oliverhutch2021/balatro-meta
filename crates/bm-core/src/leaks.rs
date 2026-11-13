@@ -89,6 +89,8 @@ pub struct Leaks {
     start_kinds: Vec<ConsumableKind>,
     /// The round's first decision with a winning hand in hand and room to take value: (hands, discards) then.
     winning_with_room: Option<(i32, i32)>,
+    /// A winning hand was in hand at some decision of this round.
+    had_winning: bool,
     /// Shops already counted, by (ante, blinds behind).
     shops_seen: HashSet<(i32, usize)>,
     /// The open pack's offer is counted.
@@ -277,6 +279,7 @@ impl Leaks {
         bump(&mut self.rounds, "begun");
         self.seen_round.clear();
         self.winning_with_room = None;
+        self.had_winning = false;
         self.start_kinds = run.consumables.iter().map(|c| c.kind).collect();
         for c in &run.consumables {
             bump(&mut self.held_at_start, c.kind.name());
@@ -306,6 +309,10 @@ impl Leaks {
         let (k, a) = mv;
         let winning = winning_in_hand(before);
         let room = before.hands_left >= 2 || before.discards_left >= 1;
+        if winning && !self.had_winning {
+            self.had_winning = true;
+            bump(&mut self.rounds, "with_winning_hand");
+        }
         let first_winning = winning && room && self.winning_with_room.is_none();
         if first_winning {
             self.winning_with_room = Some((before.hands_left, before.discards_left));
@@ -382,6 +389,17 @@ impl Leaks {
                     bump(&mut self.seals, name);
                     if s == Seal::Purple && before.discards_left > 0 {
                         bump(&mut self.seals, "purple_played_with_discards");
+                        // Split by whether a consumable slot was free (thrown, it would have made a Tarot) or not.
+                        let free =
+                            before.consumables.len() < before.consumable_slots.max(0) as usize;
+                        bump(
+                            &mut self.seals,
+                            if free {
+                                "purple_played_with_discards_slot_free"
+                            } else {
+                                "purple_played_with_discards_slot_full"
+                            },
+                        );
                     }
                 }
                 if let Some(h) = after.last_hand {
@@ -428,6 +446,10 @@ impl Leaks {
         }
         if ended && !won {
             bump(&mut self.rounds, "lost");
+            // B's bar (#27): a round lost after a winning hand was in hand.
+            if self.had_winning {
+                bump(&mut self.rounds, "lost_after_winning_hand");
+            }
         }
         if ended {
             self.round_ends(after);
