@@ -1730,8 +1730,9 @@ def option_arm_steps(option: str, root: Path = ROOT, runs: int = BIG_RUNS, green
                                  str(BUNDLE_SALT), *stake, *extra, "--out", out]))
             if extra:
                 steps.append((f"{name}-gzip", ["gzip", "-f", lines]))
+        # "-vs-control": the two stems together pass the file system's 255 characters once every default is named.
         steps.append((f"compare-{name}", ["scripts/compare_runs.py", control, out, "--out",
-                                          f"{Path(out).parent}/{Path(out).stem}-vs-{Path(control).stem}.json"]))
+                                          f"{Path(out).parent}/{Path(out).stem}-vs-control.json"]))
         if extra:
             steps.append((f"{name}-tally", ["scripts/leaks.py", f"{lines}.gz", "--out",
                                             f"results/leaks/{prefix}-{count // 1000}k-{s}.json"]))
