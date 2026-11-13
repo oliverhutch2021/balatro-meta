@@ -2991,6 +2991,15 @@ fn main() {
         stake_net.as_deref().map_or("null".into(), esc),
         learned::stake_mode().map_or("null".into(), |m| esc(m.name())),
     );
+    // The options the code had on by default and that weren't turned off ("boss-reroll", "held-cards", from
+    // 13 November): a report without this line was played before they existed.
+    if bot_label == "teacher" {
+        let d = bm_core::teacher::defaults_in_force();
+        tail += &format!(
+            ",\n \"teacher_defaults\": [{}]",
+            d.iter().map(|o| esc(o)).collect::<Vec<_>>().join(", ")
+        );
+    }
     if replay.is_some() {
         let ids: Vec<String> = diverged.iter().map(|(i, _)| i.to_string()).collect();
         tail += &format!(

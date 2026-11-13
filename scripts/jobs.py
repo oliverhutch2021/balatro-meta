@@ -1248,12 +1248,17 @@ def champion_trials(root: Path, trials: tuple[tuple, ...], runs: int,
     # The control: the champion's own report (the runs that made it the champion, on the same seeds), unless it was
     # played on an older engine (an "again" report exists or is wanted: CONTROL_AGAIN), when it is played again on
     # today's code once and that is the control every trial shares.
-    again = f"results/tune/{tag}-{file_safe(opts)}-{control_size}-w{w0}-again-on-{nets_stem}.json"
-    salted, salt_args = (f"-salt{salt}", ["--salt", str(salt)]) if salt else ("", [])
+    # Since 13 November "boss-reroll" and "held-cards" are on by default: a champion report played before then (no
+    # "teacher_defaults") is not today's champion, so a screen's control and trials carry DEFAULTS_MARK in their names
+    # and the control is played again on today's code; the older reports are never reused by mistake.
+    old_code = not played_with_defaults(root / report)
+    mark = DEFAULTS_MARK if old_code else ""
+    again = f"results/tune/{tag}-{file_safe(opts)}-{control_size}-w{w0}-again{mark}-on-{nets_stem}.json"
+    salted, salt_args = (f"-salt{salt}{mark}", ["--salt", str(salt)]) if salt else (mark, [])
     if salt:
         control = f"results/tune/{tag}-{file_safe(opts)}-{control_size}-w{w0}{salted}-on-{nets_stem}.json"
     else:
-        control = report if not CONTROL_AGAIN and not (root / again).exists() else again
+        control = report if not (CONTROL_AGAIN or old_code) and not (root / again).exists() else again
     if control != report and not (root / control).exists():
         steps.append(("champion", [*BASELINE, "--bot", "teacher", *with_(w0, opts), "--runs", str(control_runs),
                                    "--seed", "1", *salt_args, "--out", control]))
@@ -1602,6 +1607,19 @@ def money_belief_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int 
 #   line, range above zero, is valued wrong (class A, fixed in the value); a strong one that shows nothing needs a way
 #   of playing the bot lacks (class B, Plan v0); a range wider than +-3 points is unmeasured (scripts/forced_buys.py).
 LEAK_DIR = ".sync/leaks"
+# Screens' file names once the champion's report predates the options on by default (champion_trials).
+DEFAULTS_MARK = "-d1"
+CODE_DEFAULTS = ["boss-reroll", "held-cards"]
+
+
+def played_with_defaults(report: Path) -> bool:
+    """Whether a report was played with today's options on by default (its "teacher_defaults")."""
+    try:
+        return json.loads(report.read_text()).get("teacher_defaults") == CODE_DEFAULTS
+    except (OSError, ValueError):
+        return False
+# The options on by default since 13 November (teacher.rs ON_BY_DEFAULT), turned off: what step 37's controls played.
+DEFAULTS_OFF = "no-boss-reroll,no-held-cards"
 LEAK_RUNS = 3000
 FORCED_JOKERS = ("Blueprint*4,Brainstorm*4,Bloodstone,Campfire,Photograph%60,Sock and Buskin,Lucky Cat*4,"
                  "Mr. Bones@7-8*4,Luchador@7-8")
@@ -1624,6 +1642,9 @@ def leak_steps(root: Path = ROOT, runs: int = LEAK_RUNS) -> list[tuple]:
     k = f"{runs // 1000}k" if runs % 1000 == 0 else str(runs)
     leaks, forced = f"{LEAK_DIR}/leaks-{k}-{s}.jsonl", f"{LEAK_DIR}/forced-{k}-{s}.jsonl"
     report = f"results/leaks/white-{k}-{s}.json"
+    # The control was played before "boss-reroll" and "held-cards" were on by default: off here, so the runs are its runs
+    # move for move (same-runs) and the tally is the "before" for the leak bundle.
+    args[args.index("--teacher-options") + 1] = f"{opts},{DEFAULTS_OFF}"
     if not (root / report).exists():
         steps.append(("tally", [*BASELINE, "--bot", "teacher", *args, "--runs", str(runs), "--seed", "1",
                                 "--salt", str(BUNDLE_SALT), "--leaks", leaks, "--force-buy", FORCED_JOKERS,
@@ -1669,10 +1690,10 @@ def reroll_demo_steps(root: Path = ROOT, runs: int = REROLL_DEMO_RUNS) -> list[t
 
 
 def option_arm_steps(option: str, root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS,
-                     green_first: bool = False, tally_green: bool = False) -> list[tuple]:
-    """The champion with teacher `option` added, at BUNDLE_SALT against step 37's controls: 8,000 White seeds with the
-    leak tally on and 2,000 Green (with the tally too if `tally_green`), Green first if `green_first`; each compared
-    as it ends, each tally summarised."""
+                     green_first: bool = False, tally_green: bool = False, name: str | None = None) -> list[tuple]:
+    """The champion with teacher options `option` added (comma-separated), at BUNDLE_SALT against step 37's controls:
+    8,000 White seeds with the leak tally on and 2,000 Green (with the tally too if `tally_green`), Green first if
+    `green_first`; each compared as it ends, each tally summarised (files named `name`, else `option`)."""
     steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR])]
     best = best_8k_report(root)
     if best is None:
@@ -1692,8 +1713,9 @@ def option_arm_steps(option: str, root: Path = ROOT, runs: int = BIG_RUNS, green
              f"{g}-{file_safe(o)}-w{w}-{s}-on-{stem}.json", tally_green)]
     if green_first:
         arms.reverse()
+    stem_name = name or option
     for name, count, stake, control, out, tallied in arms:
-        prefix = option if name == "white" else f"{option}-green"
+        prefix = stem_name if name == "white" else f"{stem_name}-green"
         lines = f"{LEAK_DIR}/{prefix}-{count // 1000}k-{s}.jsonl"
         extra = ["--leaks", lines] if tallied else []
         if not (root / out).exists():
@@ -1710,8 +1732,8 @@ def option_arm_steps(option: str, root: Path = ROOT, runs: int = BIG_RUNS, green
 
 
 def boss_reroll_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
-    """make teacher-boss-reroll: the champion with "boss-reroll" at BUNDLE_SALT against step 37's controls."""
-    return option_arm_steps(BOSS_REROLL, root, runs, green_runs)
+    """make teacher-boss-reroll: the champion with "boss-reroll" alone ("held-cards" off) against step 37's controls."""
+    return option_arm_steps(f"{BOSS_REROLL},no-held-cards", root, runs, green_runs, name=BOSS_REROLL)
 
 
 # make teacher-held-cards: the leak bundle's first part (lab #19), teacher option "held-cards": a held Tarot or
@@ -1724,8 +1746,19 @@ HELD_CARDS = "held-cards"
 
 
 def held_cards_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
-    """make teacher-held-cards: the champion with "held-cards", Green first, both stakes tallied."""
-    return option_arm_steps(HELD_CARDS, root, runs, green_runs, green_first=True, tally_green=True)
+    """make teacher-held-cards: the champion with "held-cards" alone ("boss-reroll" off), Green first, both tallied."""
+    return option_arm_steps(f"{HELD_CARDS},no-boss-reroll", root, runs, green_runs, green_first=True,
+                            tally_green=True, name=HELD_CARDS)
+
+
+# make teacher-defaults: the bot as it now plays by default, both "boss-reroll" and "held-cards" on (the user: "turn it
+# on"), against step 37's controls (played without either): Green first, then White, both tallied. The rule: White's
+# paired lower end above -1.0 (the leak bundle's bar, S), Green for direction; the two single-option arms say which
+# part did what.
+def defaults_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
+    """make teacher-defaults: the champion with both new defaults, Green first, both tallied."""
+    return option_arm_steps(f"{BOSS_REROLL},{HELD_CARDS}", root, runs, green_runs, green_first=True,
+                            tally_green=True, name="defaults")
 
 
 def budget_away_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
@@ -2213,6 +2246,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-boss-reroll": boss_reroll_steps(),
     "reroll-demo": reroll_demo_steps(),
     "teacher-held-cards": held_cards_steps(),
+    "teacher-defaults": defaults_steps(),
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
     "diagnose": diagnose_steps(),

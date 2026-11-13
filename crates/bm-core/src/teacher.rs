@@ -135,6 +135,10 @@ pub const OPTIONS: &[&str] = &[
     // make count for nothing (value.rs `flows_for`), so a full slot costs what it blocks. Acceptance (the user): each
     // kind still held at a round's end in under 5% of the rounds it was held at the start (the leak tally).
     "held-cards",
+    // "boss-reroll" and "held-cards" are on by default (`ON_BY_DEFAULT`); these turn them off, for the controls that
+    // replay older runs move for move and for arms that measure one without the other.
+    "no-boss-reroll",
+    "no-held-cards",
     // With a joker that pays on the round's final hand (Dusk retriggers its cards, Acrobat x3): when the best
     // hand beats the blind only as the final hand, play single spare cards until one hand is left, then the
     // best; and the value's sample rounds try that way of playing too (the discards dig for the final hand
@@ -407,6 +411,24 @@ pub(crate) fn param(name: &str) -> Option<f64> {
 
 /// Whether an option is switched on.
 pub(crate) fn on(name: &str) -> bool {
+    // On by default (the user, 13 November: "why is it off, turn it on"): turned off by "no-<name>".
+    match name {
+        "boss-reroll" => !given("no-boss-reroll"),
+        "held-cards" => !given("no-held-cards"),
+        _ => given(name),
+    }
+}
+
+/// Options on by default (each off with "no-<name>").
+pub const ON_BY_DEFAULT: &[&str] = &["boss-reroll", "held-cards"];
+
+/// The defaults in force here (for reports: a run's options say what was added, this what the code had on).
+pub fn defaults_in_force() -> Vec<&'static str> {
+    ON_BY_DEFAULT.iter().copied().filter(|d| on(d)).collect()
+}
+
+/// Whether an option was given (on this thread's set if any, else the process's).
+fn given(name: &str) -> bool {
     if let Some(v) = LOCAL.with(|l| l.borrow().as_ref().map(|s| s.on.contains(&name))) {
         return v;
     }
@@ -3651,10 +3673,8 @@ mod tests {
                 "{seed}: refused {k:?} {a:#x} in {:?}",
                 run.phase
             );
-            assert!(
-                !matches!(k, MoveKind::BuyAndUse | MoveKind::RerollBoss),
-                "a move BalatroBot can't make"
-            );
+            // The boss reroll is on by default (the user's call): the real-game checks stop before one.
+            assert!(k != MoveKind::BuyAndUse, "a move BalatroBot can't make");
             kinds.push(k);
             step += 1;
         }
@@ -4779,8 +4799,8 @@ mod tests {
     }
 
     /// "boss-reroll": with Retcon and the money, a boss far worse than any other (Violet Vessel's six times the score
-    /// at ante 1) is rerolled at the blind choice, and a reroll voucher in a shop facing it is worth something; without
-    /// the option, or without a voucher, the bot never rerolls.
+    /// at ante 1) is rerolled at the blind choice, and a reroll voucher in a shop facing it is worth something; with
+    /// "no-boss-reroll", or without a voucher, the bot never rerolls.
     #[test]
     fn a_dreadful_boss_is_rerolled_with_the_option_and_never_without() {
         let mut run = Run::new(RunConfig::new("REROLL1"));
@@ -4803,12 +4823,20 @@ mod tests {
         run.vouchers[VoucherKind::DirectorsCut.index()] = true;
         run.vouchers[VoucherKind::Retcon.index()] = true;
         assert!(run.can_reroll_boss());
-        with_options(&["light"], || {
+        with_options(&["light", "no-boss-reroll"], || {
             assert_ne!(
                 teacher_move(&run, 3).0,
                 MoveKind::RerollBoss,
-                "off by default"
+                "off with no-boss-reroll"
             );
+        });
+        with_options(&["light"], || {
+            assert_eq!(
+                teacher_move(&run, 3),
+                (MoveKind::RerollBoss, 0),
+                "on by default"
+            );
+            assert_eq!(defaults_in_force(), vec!["boss-reroll", "held-cards"]);
         });
         with_options(&opts, || {
             let gains = boss_reroll_gains(&run, 7);
@@ -4879,7 +4907,7 @@ mod tests {
             }
         });
         new_run();
-        with_options(&["light"], || {
+        with_options(&["light", "no-held-cards"], || {
             assert!(!stale_card(tower_id));
         });
     }

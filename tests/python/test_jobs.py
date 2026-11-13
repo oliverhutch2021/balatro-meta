@@ -288,7 +288,7 @@ def test_round_four_records_with_the_trial_that_beat_the_precise_teacher_clearly
                                  (f, "planner-edge=0.3,sharpness=2.5", 0.02, 0.05), (f, "midas=3", 0.03, 0.2)):
         name = pre + jobs.file_safe(f"precise,{change}")
         report = f"results/tune/{name}-on-teacher-w1.json"
-        (tmp_path / report).write_text(json.dumps({"teacher_options": ["precise", *change.split(",")]}))
+        (tmp_path / report).write_text(json.dumps({"teacher_options": ["precise", *change.split(",")], "teacher_defaults": jobs.CODE_DEFAULTS}))
         (tune / f"{name}-vs-{pre}precise-on-teacher-w1.json").write_text(json.dumps(
             {"kind": "comparison", "b": {"report": report}, "win_rate_diff": diff, "p_value": p}))
     assert opts(record()) == "precise,planner-edge=0.3,sharpness=2.5", \
@@ -520,7 +520,7 @@ def test_a_clear_gain_at_another_weight_is_what_the_next_round_records_with(tmp_
     f = jobs.FORMULA
     trial = f"results/tune/f{f}-precise-8k-w2.5-on-teacher-w1.json"
     (tmp_path / trial).write_text(json.dumps({"value_net": "models/value-1.bin", "value_weight": 2.5,
-                                              "teacher_options": ["precise"]}))
+                                              "teacher_options": ["precise"], "teacher_defaults": jobs.CODE_DEFAULTS}))
     (tune / f"f{f}-precise-8k-w2.5-vs-f{f}-precise-8k-on-teacher-w1.json").write_text(json.dumps(
         {"win_rate_diff": 0.012, "p_value": 0.03, "b": {"report": trial}}))
     args = jobs.best_recording(tmp_path)
@@ -646,7 +646,7 @@ def test_a_stake_round_learns_every_stake_and_is_judged_at_white_first(tmp_path,
     best = folder / f"f{jobs.FORMULA}-precise-8k-w2.5-on-ensemble8.json"
     best.write_text(json.dumps({"kind": "baseline", "runs": 8000, "seed_base": 1, "win_rate": 0.66,
                                 "value_net": "models/value-8.bin", "value_weight": 2.5,
-                                "teacher_options": ["precise"]}))
+                                "teacher_options": ["precise"], "teacher_defaults": jobs.CODE_DEFAULTS}))
     r1, r2 = jobs.stake_round(1, tmp_path), jobs.stake_round(2, tmp_path)
     data1 = {n: a for n, a, *_ in r1["stakes-data-1"]}
     data2 = {n: a for n, a, *_ in r2["stakes-data-2"]}
@@ -927,7 +927,7 @@ def test_the_doubt_trials_play_the_champion_again_and_set_each_against_it(tmp_pa
     assert [n for n, *_ in jobs.doubt_steps(tmp_path)] == ["build"], "nothing to doubt before an 8,000-seed champion"
     (tune / f"f{f}-precise-8k-w2.5-on-ensemble8-w1.5.json").write_text(json.dumps(
         {"kind": "baseline", "runs": 8000, "win_rate": 0.6646, "seed_base": 1, "value_net": jobs.ensemble(8),
-         "value_weight": 2.5, "teacher_options": ["precise"]}))
+         "value_weight": 2.5, "teacher_options": ["precise"], "teacher_defaults": jobs.CODE_DEFAULTS}))
     steps = {n: a for n, a, *_ in jobs.doubt_steps(tmp_path)}
     # The control is the champion's own report; played again on today's code only when asked (CONTROL_AGAIN) or
     # when such a report is already there.
@@ -972,7 +972,7 @@ def test_the_margin_trials_play_the_newest_endless_networks_at_the_champions_wei
     (tmp_path / "results" / "value").mkdir()
     (tune / f"f{f}-precise-8k-w2.5-on-ensemble8-w1.5.json").write_text(json.dumps(
         {"kind": "baseline", "runs": 8000, "win_rate": 0.6646, "seed_base": 1, "value_net": jobs.ensemble(8),
-         "value_weight": 2.5, "teacher_options": ["precise"]}))
+         "value_weight": 2.5, "teacher_options": ["precise"], "teacher_defaults": jobs.CODE_DEFAULTS}))
     assert [n for n, *_ in jobs.margin_steps(tmp_path)] == ["build"], "nothing before networks with a depth head"
     n = jobs.ENDLESS_FROM
     for name in (f"value-{n}.bin", f"value-{n}b.bin"):
@@ -1007,7 +1007,20 @@ def champion_in(tmp_path) -> None:
     (tmp_path / "results" / "value").mkdir(exist_ok=True)
     (tune / f"f{jobs.FORMULA}-precise-8k-w2.5-on-ensemble8-w1.5.json").write_text(json.dumps(
         {"kind": "baseline", "runs": 8000, "win_rate": 0.6646, "seed_base": 1, "value_net": jobs.ensemble(8),
-         "value_weight": 2.5, "teacher_options": ["precise"]}))
+         "value_weight": 2.5, "teacher_options": ["precise"], "teacher_defaults": jobs.CODE_DEFAULTS}))
+
+
+def test_a_screen_never_reuses_a_control_played_before_the_defaults(tmp_path):
+    champion_in(tmp_path)
+    today = {n: a for n, a, *_ in jobs.champion_trials(tmp_path, ((None, "x=1"),), 2000, salt=jobs.SCREEN_SALT)}
+    report = tmp_path / "results" / "tune" / f"f{jobs.FORMULA}-precise-8k-w2.5-on-ensemble8-w1.5.json"
+    r = json.loads(report.read_text())
+    del r["teacher_defaults"]
+    report.write_text(json.dumps(r))
+    old = {n: a for n, a, *_ in jobs.champion_trials(tmp_path, ((None, "x=1"),), 2000, salt=jobs.SCREEN_SALT)}
+    assert jobs.DEFAULTS_MARK not in today["champion"][-1]
+    assert jobs.DEFAULTS_MARK in old["champion"][-1], "an older champion's control is played again under a new name"
+    assert all(jobs.DEFAULTS_MARK in x for x in old["compare-w2.5-x=1"][1:3])
 
 
 def test_the_diagnosis_replays_the_newest_recording_with_the_champion_and_tables_it(tmp_path):
@@ -1130,7 +1143,7 @@ def test_the_late_trials_share_the_doubt_trials_control(tmp_path):
     tune = tmp_path / "results" / "tune"
     (tune / f"f{jobs.FORMULA}-precise+late-x-3+late-from-5-8k-w2.5-on-ensemble8-w1.5.json").write_text(json.dumps(
         {"kind": "baseline", "runs": 8000, "win_rate": 0.70675, "seed_base": 1, "value_net": jobs.ensemble(8),
-         "value_weight": 2.5, "teacher_options": ["precise", "late-x=3", "late-from=5"]}))
+         "value_weight": 2.5, "teacher_options": ["precise", "late-x=3", "late-from=5"], "teacher_defaults": jobs.CODE_DEFAULTS}))
     screen = {n: a for n, a, *_ in jobs.budget_steps(tmp_path)}
     assert "champion" not in screen, "the champion's own 8,000-seed report is the control"
     control = f"results/tune/f{jobs.FORMULA}-precise+late-x-3+late-from-5-8k-w2.5-on-ensemble8-w1.5.json"
@@ -1346,7 +1359,7 @@ def test_the_overnight_bundle_plays_the_champion_and_one_candidate_at_a_fresh_sa
     out = steps["white-candidate"][steps["white-candidate"].index("--out") + 1]
     (tmp_path / out).write_text(json.dumps({"kind": "baseline", "runs": 8000, "win_rate": 0.99, "seed_base": 1,
                                             "salt": 2, "value_net": jobs.ensemble(8), "value_weight": 2.5,
-                                            "teacher_options": ["precise", "reroll-best"]}))
+                                            "teacher_options": ["precise", "reroll-best"], "teacher_defaults": jobs.CODE_DEFAULTS}))
     assert jobs.best_8k_report(tmp_path)[2].endswith("-on-ensemble8-w1.5.json")
     assert "white-candidate" not in [n for n, *_ in jobs.bundle_steps(tmp_path)], "a finished arm isn't played again"
 
@@ -1439,7 +1452,11 @@ def test_the_leak_tally_replays_the_salted_control_with_the_tally_and_the_forced
     assert list(steps) == ["build", "folder", "tally", "gzip", "same-runs", "leaks", "forced"]
     bundle = {n: a for n, a, *_ in jobs.bundle_steps(tmp_path)}
     champ, a = bundle["white-champion"], steps["tally"]
-    # The control's own command with the tally and the forks added and fewer runs: the same runs, move for move.
+    # The control's own command with the tally and the forks added, the new defaults off and fewer runs: the same runs,
+    # move for move.
+    assert a[a.index("--teacher-options") + 1] == "precise,no-boss-reroll,no-held-cards"
+    a = list(a)
+    a[a.index("--teacher-options") + 1] = "precise"
     added = ("--leaks", "--force-buy", "--force-out", "--force-copies")
     stripped = [x for i, x in enumerate(a) if x not in added and (i == 0 or a[i - 1] not in added)]
     runs_at = champ.index("--runs")
@@ -1468,7 +1485,7 @@ def test_the_boss_reroll_arms_play_the_option_against_the_salted_controls(tmp_pa
     for name, control, runs, stake in (("white", bundle["white-champion"][-1], jobs.BIG_RUNS, None),
                                        ("green", bundle["green-champion"][-1], jobs.SCREEN_RUNS, "3")):
         a = steps[name]
-        assert a[a.index("--teacher-options") + 1] == "precise,boss-reroll"
+        assert a[a.index("--teacher-options") + 1] == "precise,boss-reroll,no-held-cards"
         assert [a[a.index(x) + 1] for x in ("--runs", "--seed", "--salt")] == [str(runs), "1", str(jobs.BUNDLE_SALT)]
         assert (a[a.index("--stake") + 1] if "--stake" in a else None) == stake
         assert steps[f"compare-{name}"][1:3] == [control, a[a.index("--out") + 1]]
@@ -1494,7 +1511,16 @@ def test_the_held_card_arms_run_green_first_with_both_stakes_tallied(tmp_path):
                            "white-gzip", "compare-white", "white-tally"]
     for name in ("green", "white"):
         a = steps[name]
-        assert a[a.index("--teacher-options") + 1] == "precise,held-cards"
+        assert a[a.index("--teacher-options") + 1] == "precise,held-cards,no-boss-reroll"
         lines = a[a.index("--leaks") + 1]
         assert steps[f"{name}-tally"][1] == lines + ".gz"
     assert steps["green"][steps["green"].index("--leaks") + 1] != steps["white"][steps["white"].index("--leaks") + 1]
+
+
+def test_the_defaults_arm_plays_both_new_options_against_the_old_controls(tmp_path):
+    champion_in(tmp_path)
+    steps = {n: a for n, a, *_ in jobs.defaults_steps(tmp_path)}
+    assert list(steps)[2:4] == ["green", "green-gzip"], "Green first"
+    for name in ("green", "white"):
+        assert steps[name][steps[name].index("--teacher-options") + 1] == "precise,boss-reroll,held-cards"
+    assert "defaults" in steps["white"][steps["white"].index("--leaks") + 1]

@@ -111,7 +111,10 @@ what it found.
   rounds, shops and packs, move by move, with `planner::finish_choice`'s notes when played live; a diagnosis, never
   play; `scripts/leaks.py`); `baseline --force-buy`: the forced-buy forks (`forks::forced_fork`, lines named from
   outside on shared fair copies: where a run passed a named joker, its own move against taking it, after the run,
-  so the run itself is unchanged; `scripts/forced_buys.py`), `make leak-tally`.
+  so the run itself is unchanged; `scripts/forced_buys.py`), `make leak-tally`. Teacher options on by default
+  (`teacher::ON_BY_DEFAULT`, from 13 November): `boss-reroll` (the boss rerolled by value, reroll vouchers valued
+  over the bosses to come) and `held-cards` (held Tarots and Spectrals used, not sat on); `no-<name>` turns one off;
+  reports name them in `teacher_defaults`, and screens never reuse a control played before them (`jobs.DEFAULTS_MARK`).
 - `crates/bm-py`: Python bindings (`VecEnv`, `Game`); `python/balatro_meta`.
 - Jobs (`scripts/jobs.py`, like monopoly-strategy's) leave live files in
   `.sync/watch/<job>/`: `progress.json` and `samples/` (runs to replay:

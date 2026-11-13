@@ -1230,7 +1230,8 @@ Ctrl+C stops it whenever you need the PC; `make teacher-money-belief` carries on
 
 Two diagnoses in one night, neither changing a move (the lab's direction 2: the bot plays the position in front of it
 and builds towards nothing). `make leak-tally` plays the champion on the first 3,000 of step 37's salt-2 seeds,
-move for move the same runs as its 8,000-seed control (`same-runs` checks it), with two things noted:
+move for move the same runs as its 8,000-seed control (`same-runs` checks it; from step 44 with `no-boss-reroll` and
+`no-held-cards`, which that control predates), with two things noted:
 
 - **The leak tally** (`baseline --leaks`, `leaks.rs`), a line per run: Blue and Purple Seals drawn and what became of
   each (thrown while digging or as a spare, played, held at the end, the Planet or Tarot made or not made for want of
@@ -1352,6 +1353,31 @@ The decision, stated before the run (S and the user, #19):
 
 ```
 cd /mnt/h/balatro-meta && make sync && make test && make teacher-held-cards
+```
+
+## Step 44: the boss reroll and the held cards on by default (about 6.5 hours)
+
+The user: "why is it off, turn it on". From 13 November the teacher plays with `boss-reroll` (step 42) and
+`held-cards` (step 43) on by default (`teacher::ON_BY_DEFAULT`); `no-boss-reroll` and `no-held-cards` turn them off.
+What changes with them:
+
+- Every job that plays the champion now plays it with both, the recordings included. A report says so in its
+  `teacher_defaults`; a report without that line was played before them.
+- Screens never reuse a control played before them: once the champion's report predates the defaults, a screen's
+  control and trials carry `-d1` in their names and the control is played again on today's code (`champion_trials`).
+- `make leak-tally` (step 41) turns both off, so it replays step 37's control move for move as before and stays the
+  "before" for the leak bundle; its forks measure the bot without them.
+- The real-game checks stop before a boss reroll, so they follow fewer runs to the end.
+- `make teacher-defaults`: the bot as it now plays, both on, against step 37's controls (played without either):
+  2,000 Green seeds first, then 8,000 White, both with the tally on. `make teacher-boss-reroll` and
+  `make teacher-held-cards` measure one without the other.
+
+The decision, stated before the run: White's paired lower end above -1.0 point (the leak bundle's bar) keeps them on;
+below it, the single-option arms say which part costs it, and that one goes back off until it is fixed. Green is for
+direction. The held cards' behaviour test is step 43's (each kind under 5% held through).
+
+```
+cd /mnt/h/balatro-meta && make sync && make test && make teacher-defaults
 ```
 
 ## Later steps
