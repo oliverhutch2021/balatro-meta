@@ -72,3 +72,15 @@ def test_the_forced_forks_summary_pairs_each_fork_and_reads_the_rule(tmp_path):
     assert set(g["by_ante"]) <= {"2-4", "5-6", "7-8"}
     assert g["as_is"]["win_rate_diff"] == 0.0, "the as-is line is summarised beside the held one"
     assert json.loads(out.read_text())["jokers"]["Blueprint"]["arithmetic"].startswith("unmeasured")
+
+
+def test_tarots_used_count_the_slots_and_the_ones_used_at_once_and_packs_are_summed_by_kind():
+    runs = [{"won": True, "tally": {"used": {"Death": 1, "Mercury": 2}, "used_at_once": {"The Hermit": 2, "Pluto": 1},
+                                    "packs": {"offered:Arcana": 4, "affordable:Arcana": 3, "opened:Arcana": 2,
+                                              "opened:Arcana:a2": 2, "bought:Tarot": 1}}},
+            {"won": False, "tally": {"used": {"The Fool": 1}}}]
+    t = leaks.tarots_used(runs)
+    assert (t["all"], t["from_slots"], t["at_once"], t["won"], t["lost"]) == (2.0, 1.0, 1.0, 3.0, 1.0)
+    p = leaks.packs(runs)
+    assert p["Arcana"]["opened"] == 1.0 and p["Arcana"]["opened_by_ante"][2] == 1.0
+    assert p["shop_consumables_bought"]["Tarot"] == 0.5

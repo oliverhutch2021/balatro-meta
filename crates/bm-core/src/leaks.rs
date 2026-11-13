@@ -88,6 +88,12 @@ pub struct Leaks {
     /// Card Sharp (S, lab #30): "plays_held", "rounds_held" (rounds with a hand played while it was held),
     /// "rounds_fired" (rounds in which its x3 fired at least once), "fired:<hand>", "plays:<hand>".
     sharp: BTreeMap<String, u64>,
+    /// Consumables used the moment they were taken, never held: from a pack (a Tarot or Planet picked is used on the
+    /// spot) or bought and used from the shop, by kind. `used` counts only those used from the consumable slots.
+    used_at_once: Counts,
+    /// Packs (S, lab #30): "offered:<kind>", "affordable:<kind>" (each shop's first look), "opened:<kind>" and
+    /// "opened:<kind>:a<ante>"; shop consumables bought: "bought:<set>".
+    packs: BTreeMap<String, u64>,
     sealed_by_ante4: Option<bool>,
     // State within the run.
     /// Cards seen in hand this round (for "drawn").
@@ -553,6 +559,13 @@ impl Leaks {
         let key = (before.ante, behind(before));
         if self.shops_seen.insert(key) {
             bump(&mut self.shops, "visits");
+            for b in shop.boosters.iter().flatten() {
+                let kind = format!("{:?}", BOOSTERS[b.booster as usize].kind);
+                bump_owned(&mut self.packs, format!("offered:{kind}"));
+                if b.cost <= before.spendable() {
+                    bump_owned(&mut self.packs, format!("affordable:{kind}"));
+                }
+            }
             for v in &shop.vouchers {
                 bump(&mut self.vouchers_offered, v.voucher.name());
                 if v.cost <= 0 || v.cost <= before.spendable() {
@@ -561,9 +574,21 @@ impl Leaks {
             }
         }
         match k {
-            MoveKind::Buy | MoveKind::BuyAndUse => {
-                if let Some(RowItem::Joker(j)) = shop.row.get(a as usize).map(|r| &r.item) {
-                    self.jokers.push((before.ante, j.kind.name(), "buy"));
+            MoveKind::Buy | MoveKind::BuyAndUse => match shop.row.get(a as usize).map(|r| &r.item) {
+                Some(RowItem::Joker(j)) => self.jokers.push((before.ante, j.kind.name(), "buy")),
+                Some(RowItem::Consumable(c)) => {
+                    bump_owned(&mut self.packs, format!("bought:{:?}", c.kind.set()));
+                    if k == MoveKind::BuyAndUse {
+                        bump(&mut self.used_at_once, c.kind.name());
+                    }
+                }
+                _ => {}
+            },
+            MoveKind::OpenBooster => {
+                if let Some(Some(b)) = shop.boosters.get(a as usize) {
+                    let kind = format!("{:?}", BOOSTERS[b.booster as usize].kind);
+                    bump_owned(&mut self.packs, format!("opened:{kind}"));
+                    bump_owned(&mut self.packs, format!("opened:{kind}:a{}", before.ante));
                 }
             }
             MoveKind::RedeemVoucher => {
@@ -622,9 +647,12 @@ impl Leaks {
         if k == MoveKind::PackChoose {
             match p.cards.get((a & 0xFF) as usize) {
                 Some(PackCard::Joker(j)) => self.jokers.push((before.ante, j.kind.name(), "pack")),
-                // A Tarot or Spectral taken from a pack is used at once, on the cards in hand.
-                Some(PackCard::Consumable(c)) if targeted(c.kind) && a >> 8 != 0 => {
-                    self.target(before, c.kind, a >> 8)
+                // A Tarot, Planet or Spectral taken from a pack is used at once (on the cards in hand).
+                Some(PackCard::Consumable(c)) => {
+                    bump(&mut self.used_at_once, c.kind.name());
+                    if targeted(c.kind) && a >> 8 != 0 {
+                        self.target(before, c.kind, a >> 8)
+                    }
                 }
                 _ => {}
             }
@@ -667,7 +695,7 @@ impl Leaks {
              \"held_through\":{},\"used\":{},\"sold\":{},\"targets\":[{}],\"spectral_offered\":{},\
              \"spectral_taken\":{},\"shops\":{},\"last_shop\":{},\"jokers\":[{}],\"vouchers_offered\":{},\
              \"vouchers_affordable\":{},\"vouchers_redeemed\":{},\"boss_rerolled_away\":{},\"hands\":{},\
-             \"card_sharp\":{},\"blue_or_purple_by_ante4\":{}}}",
+             \"card_sharp\":{},\"used_at_once\":{},\"packs\":{},\"blue_or_purple_by_ante4\":{}}}",
             json_counts(&self.seals),
             json_counts(&self.rounds),
             {
@@ -692,6 +720,11 @@ impl Leaks {
             json_counts(&self.hands),
             {
                 let parts: Vec<String> = self.sharp.iter().map(|(k, v)| format!("\"{k}\":{v}")).collect();
+                format!("{{{}}}", parts.join(","))
+            },
+            json_counts(&self.used_at_once),
+            {
+                let parts: Vec<String> = self.packs.iter().map(|(k, v)| format!("\"{k}\":{v}")).collect();
                 format!("{{{}}}", parts.join(","))
             },
             by4,
@@ -787,5 +820,6 @@ mod tests {
         assert_eq!((g("plays_held"), g("rounds_held"), g("rounds_fired")), (2, 1, 1));
         assert_eq!((g("plays:High Card"), g("fired:High Card")), (2, 1));
         assert!(t.json().contains("\"card_sharp\":{"));
+        assert!(t.json().contains("\"used_at_once\":{") && t.json().contains("\"packs\":{"));
     }
 }

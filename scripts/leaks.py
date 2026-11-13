@@ -182,6 +182,7 @@ def summarise(runs: list[dict]) -> dict:
         "runs_with_a_boss_reroll": sum(1 for r in runs if r["tally"].get("boss_rerolled_away")),
         "card_sharp": card_sharp(runs),
         "tarots_used_per_run": tarots_used(runs),
+        "packs_per_run": packs(runs),
     }
 
 
@@ -192,10 +193,30 @@ TAROTS = ("The Fool", "The Magician", "The High Priestess", "The Empress", "The 
 
 
 def tarots_used(runs: list[dict]) -> dict:
-    """Tarots used a run (S, lab #30: a bar reported in every look; the user's own runs use 47 to 69)."""
-    def n(rs):
-        return ratio(sum(v for r in rs for k, v in r["tally"].get("used", {}).items() if k in TAROTS), len(rs))
-    return {"all": n(runs), "won": n([r for r in runs if r["won"]]), "lost": n([r for r in runs if not r["won"]])}
+    """Tarots used a run (S, lab #30: a bar reported in every look): from the slots (`used`) and the moment they were
+    taken (`used_at_once`: picked from an Arcana pack, or bought and used). Tallies written before 13 November have no
+    `used_at_once`, so they count the slots alone."""
+    def n(rs, keys=("used", "used_at_once")):
+        return ratio(sum(v for r in rs for key in keys for k, v in r["tally"].get(key, {}).items() if k in TAROTS),
+                     len(rs))
+    return {"all": n(runs), "won": n([r for r in runs if r["won"]]), "lost": n([r for r in runs if not r["won"]]),
+            "from_slots": n(runs, ("used",)), "at_once": n(runs, ("used_at_once",)),
+            "counted_at_once": any("used_at_once" in r["tally"] for r in runs)}
+
+
+def packs(runs: list[dict]) -> dict:
+    """Packs a run by kind (S, lab #30): offered in a shop's first look, affordable then, opened; and opened by ante."""
+    tot: Counter = Counter()
+    for r in runs:
+        tot.update(r["tally"].get("packs", {}))
+    kinds = sorted({k.split(":")[1] for k in tot if k.split(":")[0] in ("offered", "opened")})
+    out = {kd: {w: ratio(tot.get(f"{w}:{kd}", 0), len(runs)) for w in ("offered", "affordable", "opened")}
+           for kd in kinds}
+    for kd in kinds:
+        out[kd]["opened_by_ante"] = {a: ratio(tot.get(f"opened:{kd}:a{a}", 0), len(runs)) for a in range(1, 9)}
+    out["shop_consumables_bought"] = {k.split(":")[1]: ratio(v, len(runs)) for k, v in tot.items()
+                                      if k.startswith("bought:")}
+    return out
 
 
 def card_sharp(runs: list[dict]) -> dict:
@@ -299,7 +320,12 @@ def main(argv: list[str] | None = None) -> int:
               f"{cs['rounds_held']} rounds played with it ({100 * (cs['rounds_fired_share'] or 0):.1f}%); by hand: "
               + ", ".join(f"{h} {d['fired']}/{d['played']}" for h, d in list(cs["by_hand"].items())[:5]))
     t = s["tarots_used_per_run"]
-    print(f"  Tarots used a run: {t['all']} (wins {t['won']}, losses {t['lost']}; the user's runs 47 to 69)")
+    print(f"  Tarots used a run: {t['all']} (wins {t['won']}, losses {t['lost']}; from the slots {t['from_slots']}, "
+          f"at once {t['at_once'] if t['counted_at_once'] else 'not counted in this tally'})")
+    pk = {k: v for k, v in s["packs_per_run"].items() if k != "shop_consumables_bought"}
+    if pk:
+        print("  Packs a run (offered / affordable / opened): "
+              + "; ".join(f"{k} {v['offered']} / {v['affordable']} / {v['opened']}" for k, v in pk.items()))
     print("Bars (lab #27):")
     for b in s["bars"]:
         mark = {True: "PASS", False: "FAIL", None: "  - "}[b["pass"]]
