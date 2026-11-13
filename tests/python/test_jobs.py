@@ -1616,3 +1616,13 @@ def test_green_next_plays_card_sharp_then_deck_fix_then_the_calibration_against_
     assert opts.endswith(",card-sharp") and "round-fixes" in opts and "ahead" not in opts
     assert d["calib-green"][d["calib-green"].index("--stake") + 1] == str(jobs.BUNDLE_GREEN)
     assert not jobs.path_problems(steps)
+
+
+def test_green_calib_looks_then_records_seeds_2001_to_8000_on_green_with_the_tally(tmp_path):
+    champion_in(tmp_path)
+    steps = {n: a for n, a, *_ in jobs.green_calib_steps(tmp_path)}
+    assert list(steps)[2:4] == ["look-green", "look-green-bars"]
+    c = steps["calib-green"]
+    assert c[c.index("--seed") + 1] == "2001" and c[c.index("--runs") + 1] == "6000"
+    assert c[c.index("--stake") + 1] == str(jobs.BUNDLE_GREEN) and "--calibrate" in c and "--leaks" in c
+    assert "card-sharp" in jobs.CODE_DEFAULTS and not jobs.path_problems(jobs.green_calib_steps(tmp_path))

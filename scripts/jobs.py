@@ -1608,7 +1608,7 @@ def money_belief_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int 
 #   of playing the bot lacks (class B, Plan v0); a range wider than +-3 points is unmeasured (scripts/forced_buys.py).
 LEAK_DIR = ".sync/leaks"
 # Screens' file names once the champion's report predates the options on by default (champion_trials).
-DEFAULTS_MARK = "-d2"
+DEFAULTS_MARK = "-d3"
 
 
 def played_with_defaults(report: Path) -> bool:
@@ -1620,7 +1620,7 @@ def played_with_defaults(report: Path) -> bool:
 # The options on by default (teacher.rs ON_BY_DEFAULT, from 13 November; batch 1 of the master list, lab #27, added
 # the rest), and all of them turned off: what step 37's controls played.
 CODE_DEFAULTS = ["boss-reroll", "held-cards", "glass", "five-kind", "freeze-money-last", "round-fixes", "shop-fixes",
-                 "joker-fixes"]
+                 "joker-fixes", "card-sharp"]
 DEFAULTS_OFF = ",".join(f"no-{d}" for d in CODE_DEFAULTS)
 
 
@@ -1923,6 +1923,36 @@ def green_next_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
                                           f"results/calib/base-green-{runs // 1000}k-{sl}-vs-batch1.json"]))
     steps.append(("calib-green-tally", ["scripts/leaks.py", f"{lines}.gz", "--out",
                                         f"results/leaks/base-green-{runs // 1000}k-{sl}.json"]))
+    return steps
+
+
+CALIB_FROM, CALIB_TO = 2001, 8000
+
+
+def green_calib_steps(root: Path = ROOT, look_runs: int = LOOK_RUNS) -> list[tuple]:
+    """make green-calib (S, lab #30, 13 November): the look on Green with the new counters (Tarots used at once, packs
+    by kind), then the calibration recording on Green seeds 2,001 to 8,000 at salt 2 with the tally: the forecast's
+    data tripled, and with green-next's 2,000 the 8,000-seed Green base. Both play the base as it now is (the code's
+    defaults, Card Sharp's play among them from 13 November)."""
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR, CALIB_DIR])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    a = list(best[1])
+    green = ["--salt", str(BUNDLE_SALT), "--stake", str(BUNDLE_GREEN)]
+    lines = f"{LEAK_DIR}/look-green{DEFAULTS_MARK}.jsonl"
+    steps.append(("look-green", [*BASELINE, "--bot", "teacher", *a, "--runs", str(look_runs), "--seed", "1", *green,
+                                 "--leaks", lines, "--out", f"{LEAK_DIR}/look-green{DEFAULTS_MARK}.json"]))
+    steps.append(("look-green-bars", ["scripts/leaks.py", lines, "--out",
+                                      f"{LEAK_DIR}/look-green{DEFAULTS_MARK}-summary.json"]))
+    name = f"base-green-{CALIB_FROM}-{CALIB_TO}-salt{BUNDLE_SALT}"
+    out, lines, calib = f"results/calib/{name}.json", f"{LEAK_DIR}/{name}.jsonl", f"{CALIB_DIR}/{name}.jsonl"
+    if not (root / out).exists():
+        steps.append(("calib-green", [*BASELINE, "--bot", "teacher", *a, "--runs", str(CALIB_TO - CALIB_FROM + 1),
+                                      "--seed", str(CALIB_FROM), *green, "--leaks", lines, "--calibrate", calib,
+                                      "--out", out]))
+        steps.append(("calib-green-gzip", ["gzip", "-f", lines, calib]))
+    steps.append(("calib-green-tally", ["scripts/leaks.py", f"{lines}.gz", "--out", f"results/leaks/{name}.json"]))
     return steps
 
 
@@ -2447,6 +2477,7 @@ JOBS: dict[str, list[tuple]] = {
     "night": night_steps(),
     "night-green": night_green_steps(),
     "green-next": green_next_steps(),
+    "green-calib": green_calib_steps(),
     **{f"e1-white-ahead{k}": e1_white_steps(k) for k in (2, 3, 8)},
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),

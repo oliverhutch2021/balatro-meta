@@ -1489,6 +1489,24 @@ mult, the deck, drain, money), with what the round then scored. Play is unchange
 cd /mnt/h/balatro-meta && make sync && make green-next
 ```
 
+## Step 48: the look with the new counters, and the calibration to 8,000 Green seeds (about 3.8 hours; S, lab #30)
+
+Read from step 47: `card-sharp` Level (+0.60, -0.09 to +1.29), all of it in the runs holding Card Sharp, and on by default
+from 13 November by the user's judgement, not as a measured gain (`no-card-sharp` turns it off; screens' controls are
+marked `-d3`); `deck-fix` Level, leaning down (-1.30), off. The calibration reproduced batch 1 seed for seed and shows the
+value's growth projection wrong in level (at ante 1 it expects x1.3 over six rounds; the runs grew x7.3) and nearly
+useless in ranking (lab #30).
+
+The tally now also counts Tarots, Planets and Spectrals used the moment they were taken (picked from a pack, bought and
+used), which it had missed, and packs by kind: offered, affordable, opened, by ante.
+
+`make green-calib`: the look on Green (400 seeds) with those counters, then the calibration recording and the tally on
+Green seeds 2,001 to 8,000 at salt 2, the base as it now is.
+
+```
+cd /mnt/h/balatro-meta && make sync && make green-calib
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

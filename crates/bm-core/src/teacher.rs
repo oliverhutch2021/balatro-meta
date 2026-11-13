@@ -179,6 +179,8 @@ pub const OPTIONS: &[&str] = &[
     // score three times as much (planner.rs `sharp_primers`). A player's view: Card Sharp "should be a 100%
     // win"; the teacher's runs holding it at the end win 77%.
     "card-sharp",
+    // Card Sharp's play is on by default (lab #30); this turns it off.
+    "no-card-sharp",
     // A player's rule, "focus on one hand": his wins pile the Planets on the hand the build plays (Pair to level
     // 27), where the teacher's went only a third to its main hand (on 300 runs: 10 levels a run, its main hand
     // ending its wins at a median level 5; when a Celestial pack offered that hand's Planet it took another or
@@ -443,6 +445,9 @@ const DEFAULTS: &[(&str, &str)] = &[
     ("round-fixes", "no-round-fixes"),
     ("shop-fixes", "no-shop-fixes"),
     ("joker-fixes", "no-joker-fixes"),
+    // On by the user's judgement (S, lab #30, 13 November): Level on 2,000 Green seeds (+0.60, -0.09 to +1.29), all of it
+    // in the runs that hold Card Sharp; the user calls the technique critical. Not a measured gain.
+    ("card-sharp", "no-card-sharp"),
 ];
 
 /// Options on by default (each off with "no-<name>").
@@ -455,6 +460,7 @@ pub const ON_BY_DEFAULT: &[&str] = &[
     "round-fixes",
     "shop-fixes",
     "joker-fixes",
+    "card-sharp",
 ];
 
 /// The defaults in force here (for reports: a run's options say what was added, this what the code had on).
