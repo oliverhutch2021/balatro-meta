@@ -291,6 +291,8 @@ def game_view(gs: dict) -> dict:
         "discards_left": rnd.get("discards_left"),
         "chips": rnd.get("chips"),
         "hand": [card_entry(c) for c in hand],
+        # The game's card ids (creation order) to tell twins apart; never compared.
+        "hand_ids": [c.get("id") for c in hand],
         "jokers": [dict({"key": j.get("key"), "edition": norm_mod((j.get("modifier") or {}).get("edition")),
                          "face_down": bool((j.get("state") or {}).get("hidden"))},
                         **({"sell": j["cost"]["sell"]} if isinstance(j.get("cost"), dict)
@@ -308,6 +310,8 @@ def game_view(gs: dict) -> dict:
 
 def engine_view(game) -> dict:
     v = dict(game.view())
+    # The engine's card ids, in creation order, to tell twins apart (`hand_permutation`); never compared.
+    v["hand_ids"] = [c.get("id") for c in v["hand"]]
     v["hand"] = [{k: c[k] for k in ("key", "enhancement", "edition", "seal", "debuff")} for c in v["hand"]]
     v["jokers"] = [{"key": j["key"], "edition": j["edition"], "sell": j["sell"], "face_down": j["face_down"]}
                    for j in v["jokers"]]
@@ -418,12 +422,31 @@ def differences(e: dict, g: dict) -> list[str]:
     return out
 
 
-def hand_permutation(e_hand: list[dict], g_hand: list[dict]) -> list[int] | None:
-    """Indices into the game's hand that put it in the engine's order (None if the cards differ)."""
+def hand_permutation(e_hand: list[dict], g_hand: list[dict], e_ids: list | None = None,
+                     g_ids: list | None = None) -> list[int] | None:
+    """Indices into the game's hand that put it in the engine's order (None if the cards differ).
+
+    Cards that look alike (twins from Death, Cryptid or DNA) are told apart by creation order when both sides' ids
+    are given (`e_ids`: the engine's card ids, `g_ids`: the game's): the n-th oldest of a group of twins in the
+    engine's hand is the n-th oldest in the game's. Matching them by position instead swaps their identities after
+    the bot reorders a hand holding twins, and a later shuffle (sorted by creation) then deals differently in the
+    game and the engine although both played the same moves (lab #27, F1: 10 of the 11 saved deal differences)."""
     used = [False] * len(g_hand)
+    twins = (e_ids is not None and g_ids is not None and len(e_ids) == len(e_hand)
+             and len(g_ids) == len(g_hand) and None not in e_ids and None not in g_ids)
+
+    def oldest_rank(hand: list[dict], ids: list, i: int) -> int:
+        return sorted(ids[j] for j, d in enumerate(hand) if d == hand[i]).index(ids[i])
+
     perm = []
-    for c in e_hand:
-        match = next((i for i, d in enumerate(g_hand) if not used[i] and d == c), None)
+    for k, c in enumerate(e_hand):
+        same = [i for i, d in enumerate(g_hand) if not used[i] and d == c]
+        match = same[0] if same else None
+        if twins and len(same) > 1:
+            group = sorted((i for i, d in enumerate(g_hand) if d == c), key=lambda i: g_ids[i])
+            r = oldest_rank(e_hand, e_ids, k)
+            if r < len(group) and group[r] in same:
+                match = group[r]
         if match is None:  # a face-down card the game doesn't name stands in for any card
             match = next((i for i, d in enumerate(g_hand) if not used[i] and same_card(c, d)), None)
         if match is None:
@@ -547,7 +570,8 @@ def compare(api: Api, game, gs: dict, wait: float = 2.0) -> tuple[dict, list[str
     while True:
         e = engine_view(game)
         if e["state"] in HAND_STATES and gs.get("state") == e["state"] and e["hand"]:
-            perm = hand_permutation(e["hand"], game_view(gs)["hand"])
+            gv = game_view(gs)
+            perm = hand_permutation(e["hand"], gv["hand"], e.get("hand_ids"), gv.get("hand_ids"))
             if perm is not None and perm != list(range(len(perm))):
                 gs = settle(api, api.call("rearrange", {"hand": perm}))
         diff = differences(e, game_view(gs))

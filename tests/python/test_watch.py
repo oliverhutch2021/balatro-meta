@@ -603,3 +603,22 @@ def test_a_saved_difference_replays_on_todays_engine_and_the_checks_keep_a_tally
     s = recheck.summarise(results)
     assert (s["files"], s["fixed"], s["open"], s["errors"]) == (3, 2, 1, 0)
     assert s["open_by_field"] == {"money": 1}
+
+
+def test_twin_cards_keep_their_identities_when_the_hand_is_lined_up():
+    """Two cards that look alike (a Death copy and its original) are matched by creation order, not by position:
+    the engine's older twin is the game's older twin, whatever order either hand holds them in (lab #27, F1)."""
+    ace = {"key": "H_A", "enhancement": "GLASS", "edition": None, "seal": None, "debuff": False}
+    king = {"key": "D_K", "enhancement": None, "edition": None, "seal": None, "debuff": False}
+    # The engine moved its older ace (id 29) to the right; the game still holds its older ace (4450) on the left.
+    e_hand, e_ids = [ace, king, ace], [35, 24, 29]
+    g_hand, g_ids = [ace, king, ace], [4450, 4446, 4456]
+    perm = watch.hand_permutation(e_hand, g_hand, e_ids, g_ids)
+    assert perm == [2, 1, 0], "engine 35 (younger) -> game 4456, engine 29 (older) -> game 4450"
+    # Without ids, as before: alike cards matched left to right.
+    assert watch.hand_permutation(e_hand, g_hand) == [0, 1, 2]
+    # A face-down card the game doesn't name still stands in for any card.
+    hidden = {"key": None, "enhancement": None, "edition": None, "seal": None, "debuff": False}
+    assert watch.hand_permutation([ace, king], [hidden, king], [29, 24], [4450, 4446]) == [0, 1]
+    # Different cards still give None.
+    assert watch.hand_permutation([ace], [king], [29], [4446]) is None

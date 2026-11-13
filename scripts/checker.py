@@ -454,7 +454,8 @@ class Checker:
                 self.wait_idle(cash_out=True)
             gs = api.call("gamestate")
             if gs.get("state") in watch.HAND_STATES and e_before["hand"]:
-                perm = hand_permutation(e_before["hand"], game_view(gs)["hand"])
+                gv = game_view(gs)
+                perm = hand_permutation(e_before["hand"], gv["hand"], e_before.get("hand_ids"), gv.get("hand_ids"))
                 if perm is not None and perm != list(range(len(perm))):
                     # The same cards in another order: set the game's like the engine's, and count it, so an
                     # ordering difference shows instead of passing unseen.
