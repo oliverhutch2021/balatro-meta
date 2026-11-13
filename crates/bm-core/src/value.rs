@@ -1410,6 +1410,93 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
     })
 }
 
+/// The calibration record (E1 step 1, S, lab #27 and #30; `baseline --calibrate`): at a round's start, the power the
+/// value measures now and the power it projects `rounds` rounds on, split by where the growth is supposed to come
+/// from, as one JSON object. A diagnosis and the forecast's dataset, never play: it reads the value's own pieces as
+/// `breakdown_with` combines them (`growth`, then `bought` for the money), on fair copies, and changes nothing.
+///
+/// - `power`: the mean log total of the next round played out with no target (`outlook`'s samples), the measure the
+///   later rounds' records repeat when the run gets there; `deck`: `deck_power`, the long run's other half.
+/// - `proj[n]` for n = 3, 6, 9: `jokers_chips`, `jokers_mult` (flat chips and mult the jokers add a round),
+///   `levels` (hand levels a round, on top of those), `xmult` (each growing x mult joker), `deck` (`deck_growth`),
+///   `drain` (negative), `money` (what the money held plus the income to then buys, `bought`), and `total`, their
+///   sum: the shift the value adds to `power` for a blind n rounds on.
+pub fn calibration(run: &Run, salt: u64, samples: usize) -> Option<String> {
+    let o = outlook(run, salt, samples)?;
+    let deals = DECK_DEALS_PER_SAMPLE * samples as u64;
+    let mut f = flows_for(run, &o.shares);
+    f.deck = deck_growth(run, salt, deals);
+    let money = money_now(run);
+    let per_round = income(run, &f);
+    let (mut level_chips, mut level_mult) = (0.0, 0.0);
+    for h in HandType::ALL {
+        let (_, _, lc, lm) = base_values(h);
+        level_chips += o.shares[h as usize] * lc;
+        level_mult += o.shares[h as usize] * lm;
+    }
+    let x_now: f64 = run
+        .jokers
+        .iter()
+        .filter(|j| !j.debuffed && j.x_mult > 1.0)
+        .map(|j| j.x_mult)
+        .product::<f64>()
+        .max(1.0);
+    let chips = o.chips.max(1.0);
+    let added_mult = (o.mult / x_now).max(1.0);
+    let mut proj = Vec::new();
+    for n in [3.0f64, 6.0, 9.0] {
+        let jc = ((chips + f.chips * n).max(1.0) / chips).ln();
+        let lc = ((chips + (f.chips + f.levels * level_chips) * n).max(1.0) / (chips + f.chips * n).max(1.0)).ln();
+        let jm = ((added_mult + f.mult * n).max(1.0) / added_mult).ln();
+        let lm = ((added_mult + (f.mult + f.levels * level_mult) * n).max(1.0)
+            / (added_mult + f.mult * n).max(1.0))
+        .ln();
+        let xm: f64 = f
+            .xmult
+            .iter()
+            .map(|&(x, rate)| {
+                let x = x.max(0.1);
+                ((x + rate * n).max(0.1) / x).ln()
+            })
+            .sum();
+        let deck = f.deck * n;
+        let drain = -f.drain * n;
+        let shopping = bought(run, money + per_round * n);
+        let total = jc + lc + jm + lm + xm + deck + drain + shopping;
+        debug_assert!((jc + lc + jm + lm + xm + deck + drain - growth(&f, &o, run, n)).abs() < 1e-6);
+        proj.push(format!(
+            "\"{n}\":{{\"jokers_chips\":{jc:.4},\"jokers_mult\":{jm:.4},\"levels\":{:.4},\"xmult\":{xm:.4},\
+             \"deck\":{deck:.4},\"drain\":{drain:.4},\"money\":{shopping:.4},\"total\":{total:.4}}}",
+            lc + lm
+        ));
+    }
+    let jokers: Vec<String> = run
+        .jokers
+        .iter()
+        .map(|j| format!("\"{}\"", j.kind.name()))
+        .collect();
+    let xmult: Vec<String> = f.xmult.iter().map(|(x, r)| format!("[{x:.3},{r:.4}]")).collect();
+    Some(format!(
+        "{{\"power\":{:.4},\"deck\":{:.4},\"main\":\"{}\",\"money\":{},\"money_counted\":{money:.2},\
+         \"income\":{per_round:.2},\"flows\":{{\"chips\":{:.3},\"mult\":{:.3},\"levels\":{:.4},\"xmult\":[{}],\
+         \"money\":{:.3},\"deck\":{:.4},\"drain\":{:.4}}},\"jokers\":[{}],\"cards\":{},\"proj\":{{{}}}}}",
+        mean(&o.next),
+        deck_power(run, salt, deals),
+        o.main.name(),
+        run.money,
+        f.chips,
+        f.mult,
+        f.levels,
+        xmult.join(","),
+        f.money,
+        f.deck,
+        f.drain,
+        jokers.join(","),
+        run.playing_cards.len(),
+        proj.join(",")
+    ))
+}
+
 /// A joker that multiplies the score (x mult), or a Polychrome one (x1.5).
 fn gives_xmult(j: &crate::jokers::Joker) -> bool {
     use JokerKind::*;

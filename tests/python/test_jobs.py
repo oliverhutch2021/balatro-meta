@@ -1599,3 +1599,20 @@ def test_night_green_keeps_batch1s_green_reads_and_e1_without_white_or_a_gate(tm
     assert not any("white" in n or n.startswith("tally-") or n == "gate" for n in steps)
     assert {n for n in steps if n.startswith("e1-green-")} == {"e1-green-ahead2", "e1-green-ahead3", "e1-green-ahead8"}
     assert all(a[0] != "scripts/gated.py" for a in steps.values())
+
+
+def test_green_next_plays_card_sharp_then_deck_fix_then_the_calibration_against_batch1(tmp_path):
+    champion_in(tmp_path)
+    steps = jobs.green_next_steps(tmp_path)
+    names = [n for n, *_ in steps]
+    assert names.index("card-sharp-green") < names.index("deck-fix-green") < names.index("calib-green")
+    d = {n: a for n, a, *_ in steps}
+    control = next(a[2] for n, a, *_ in jobs.batch1_steps(tmp_path, jobs.BIG_RUNS, jobs.SCREEN_RUNS)
+                   if n == "compare-green")
+    for n in ("card-sharp-compare-green", "deck-fix-compare-green", "calib-compare-green"):
+        assert d[n][1] == control
+    assert "--calibrate" in d["calib-green"] and "--leaks" in d["calib-green"]
+    opts = d["card-sharp-green"][d["card-sharp-green"].index("--teacher-options") + 1]
+    assert opts.endswith(",card-sharp") and "round-fixes" in opts and "ahead" not in opts
+    assert d["calib-green"][d["calib-green"].index("--stake") + 1] == str(jobs.BUNDLE_GREEN)
+    assert not jobs.path_problems(steps)

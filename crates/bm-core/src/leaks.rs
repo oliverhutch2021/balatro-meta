@@ -40,6 +40,10 @@ use crate::state::{CardId, Phase, Run};
 /// Counts by name, kept sorted so the line is the same on any thread.
 type Counts = BTreeMap<&'static str, u64>;
 
+fn bump_owned(c: &mut BTreeMap<String, u64>, k: String) {
+    *c.entry(k).or_insert(0) += 1;
+}
+
 fn bump(c: &mut Counts, k: &'static str) {
     *c.entry(k).or_insert(0) += 1;
 }
@@ -81,6 +85,9 @@ pub struct Leaks {
     /// Boss rerolls, by the boss rerolled away.
     boss_rerolled_away: Counts,
     hands: Counts,
+    /// Card Sharp (S, lab #30): "plays_held", "rounds_held" (rounds with a hand played while it was held),
+    /// "rounds_fired" (rounds in which its x3 fired at least once), "fired:<hand>", "plays:<hand>".
+    sharp: BTreeMap<String, u64>,
     sealed_by_ante4: Option<bool>,
     // State within the run.
     /// Cards seen in hand this round (for "drawn").
@@ -95,6 +102,8 @@ pub struct Leaks {
     shops_seen: HashSet<(i32, usize)>,
     /// The open pack's offer is counted.
     pack_counted: bool,
+    /// This round: a hand played with Card Sharp held; its x3 fired.
+    sharp_round: (bool, bool),
 }
 
 fn behind(run: &Run) -> usize {
@@ -275,11 +284,32 @@ impl Leaks {
         });
     }
 
+    /// A hand of type `h` played from `before`: Card Sharp's x3 fires when the type was already played this round.
+    fn card_sharp(&mut self, before: &Run, h: crate::poker::HandType) {
+        if !before.has_joker(JokerKind::CardSharp) {
+            return;
+        }
+        bump_owned(&mut self.sharp, "plays_held".into());
+        bump_owned(&mut self.sharp, format!("plays:{}", h.name()));
+        if !self.sharp_round.0 {
+            self.sharp_round.0 = true;
+            bump_owned(&mut self.sharp, "rounds_held".into());
+        }
+        if before.hand_levels.get(h).played_this_round >= 1 {
+            bump_owned(&mut self.sharp, format!("fired:{}", h.name()));
+            if !self.sharp_round.1 {
+                self.sharp_round.1 = true;
+                bump_owned(&mut self.sharp, "rounds_fired".into());
+            }
+        }
+    }
+
     fn round_begins(&mut self, run: &Run) {
         bump(&mut self.rounds, "begun");
         self.seen_round.clear();
         self.winning_with_room = None;
         self.had_winning = false;
+        self.sharp_round = (false, false);
         self.start_kinds = run.consumables.iter().map(|c| c.kind).collect();
         for c in &run.consumables {
             bump(&mut self.held_at_start, c.kind.name());
@@ -404,6 +434,7 @@ impl Leaks {
                 }
                 if let Some(h) = after.last_hand {
                     bump(&mut self.hands, h.name());
+                    self.card_sharp(before, h);
                 }
                 if won {
                     let held: Vec<CardId> = before
@@ -636,7 +667,7 @@ impl Leaks {
              \"held_through\":{},\"used\":{},\"sold\":{},\"targets\":[{}],\"spectral_offered\":{},\
              \"spectral_taken\":{},\"shops\":{},\"last_shop\":{},\"jokers\":[{}],\"vouchers_offered\":{},\
              \"vouchers_affordable\":{},\"vouchers_redeemed\":{},\"boss_rerolled_away\":{},\"hands\":{},\
-             \"blue_or_purple_by_ante4\":{}}}",
+             \"card_sharp\":{},\"blue_or_purple_by_ante4\":{}}}",
             json_counts(&self.seals),
             json_counts(&self.rounds),
             {
@@ -659,6 +690,10 @@ impl Leaks {
             json_counts(&self.vouchers_redeemed),
             json_counts(&self.boss_rerolled_away),
             json_counts(&self.hands),
+            {
+                let parts: Vec<String> = self.sharp.iter().map(|(k, v)| format!("\"{k}\":{v}")).collect();
+                format!("{{{}}}", parts.join(","))
+            },
             by4,
         )
     }
@@ -727,5 +762,30 @@ mod tests {
                 "full {full}"
             );
         }
+    }
+
+    /// Card Sharp (lab #30): the first hand of a type in a round doesn't fire it, the same type again does.
+    #[test]
+    fn card_sharp_counts_the_rounds_and_hands_its_x3_fired_on() {
+        let mut run = Run::new(RunConfig::new("LEAKS3"));
+        while run.phase != Phase::Round {
+            let m = crate::bots::greedy_move(&run, 1);
+            apply(&mut run, m.0, m.1).unwrap();
+        }
+        run.add_joker(JokerKind::CardSharp);
+        if let Some(b) = run.blind.as_mut() {
+            b.chips = 1e12;
+        }
+        let mut t = Leaks::new();
+        t.round_begins(&run);
+        for _ in 0..2 {
+            let before = run.clone();
+            apply(&mut run, MoveKind::Play, 1).unwrap(); // one card: a High Card each time
+            t.observe(&before, (MoveKind::Play, 1), &run, &[]);
+        }
+        let g = |k: &str| t.sharp.get(k).copied().unwrap_or(0);
+        assert_eq!((g("plays_held"), g("rounds_held"), g("rounds_fired")), (2, 1, 1));
+        assert_eq!((g("plays:High Card"), g("fired:High Card")), (2, 1));
+        assert!(t.json().contains("\"card_sharp\":{"));
     }
 }

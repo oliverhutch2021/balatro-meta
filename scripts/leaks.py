@@ -180,6 +180,41 @@ def summarise(runs: list[dict]) -> dict:
         "vouchers_per_run": ratio(sum(redeemed.values()), len(runs)),
         "boss_rerolled_away": dict(total(runs, "boss_rerolled_away").most_common()),
         "runs_with_a_boss_reroll": sum(1 for r in runs if r["tally"].get("boss_rerolled_away")),
+        "card_sharp": card_sharp(runs),
+        "tarots_used_per_run": tarots_used(runs),
+    }
+
+
+TAROTS = ("The Fool", "The Magician", "The High Priestess", "The Empress", "The Emperor", "The Hierophant",
+          "The Lovers", "The Chariot", "Justice", "The Hermit", "The Wheel of Fortune",
+          "Strength", "The Hanged Man", "Death", "Temperance", "The Devil", "The Tower", "The Star", "The Moon",
+          "The Sun", "Judgement", "The World")
+
+
+def tarots_used(runs: list[dict]) -> dict:
+    """Tarots used a run (S, lab #30: a bar reported in every look; the user's own runs use 47 to 69)."""
+    def n(rs):
+        return ratio(sum(v for r in rs for k, v in r["tally"].get("used", {}).items() if k in TAROTS), len(rs))
+    return {"all": n(runs), "won": n([r for r in runs if r["won"]]), "lost": n([r for r in runs if not r["won"]])}
+
+
+def card_sharp(runs: list[dict]) -> dict:
+    """Card Sharp held (S, lab #30): the rounds in which its x3 fired, and the hands it fired on against the hands
+    played while it was held."""
+    held = [r["tally"].get("card_sharp", {}) for r in runs if r["tally"].get("card_sharp")]
+    tot: Counter = Counter()
+    for c in held:
+        tot.update(c)
+    fired = {k[6:]: v for k, v in tot.items() if k.startswith("fired:")}
+    plays = {k[6:]: v for k, v in tot.items() if k.startswith("plays:")}
+    return {
+        "runs_holding": len(held),
+        "rounds_held": tot.get("rounds_held", 0),
+        "rounds_fired": tot.get("rounds_fired", 0),
+        "rounds_fired_share": ratio(tot.get("rounds_fired", 0), tot.get("rounds_held", 0)),
+        "plays_held": tot.get("plays_held", 0),
+        "by_hand": {h: {"played": plays[h], "fired": fired.get(h, 0), "fired_share": ratio(fired.get(h, 0), plays[h])}
+                    for h in sorted(plays, key=lambda h: -plays[h])},
     }
 
 
@@ -258,6 +293,13 @@ def main(argv: list[str] | None = None) -> int:
     h = s["held_through_share"]["all"]
     print(f"  Tarots and Spectrals still held at a round's end: {h['through']} of {h['rounds']} rounds held "
           f"({100 * (h['share'] or 0):.1f}%); kinds at 5% or more: {', '.join(s['held_through_share']['over_bar']) or 'none'}")
+    cs = s["card_sharp"]
+    if cs["runs_holding"]:
+        print(f"  Card Sharp: held in {cs['runs_holding']} runs, its x3 fired in {cs['rounds_fired']} of "
+              f"{cs['rounds_held']} rounds played with it ({100 * (cs['rounds_fired_share'] or 0):.1f}%); by hand: "
+              + ", ".join(f"{h} {d['fired']}/{d['played']}" for h, d in list(cs["by_hand"].items())[:5]))
+    t = s["tarots_used_per_run"]
+    print(f"  Tarots used a run: {t['all']} (wins {t['won']}, losses {t['lost']}; the user's runs 47 to 69)")
     print("Bars (lab #27):")
     for b in s["bars"]:
         mark = {True: "PASS", False: "FAIL", None: "  - "}[b["pass"]]

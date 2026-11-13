@@ -39,6 +39,9 @@
 //! (`chunk-NNNNN-{idx,val,ptr,lab}.npy`, `FORK_LABELS`), for `train_value.py --forks`; the report says how often
 //! the teacher's own choice was the option that went best and what its choices gave away (`forks`).
 //!
+//! `--calibrate FILE` writes one JSON line per run (E1 step 1, lab #27 and #30): at each round's start the value's
+//! measured power and its projections three, six and nine rounds on, split by source (`value::calibration`), with what
+//! that round then scored; the forecast's dataset. A diagnosis: play is unchanged.
 //! `--leaks FILE` writes one JSON line per run with the leak tally (`leaks.rs`, lab #19): what the run did with its
 //! seals, consumables, rounds already won, shops and packs, counted move by move; played live, it also notes how each
 //! way of finishing a won round fared in `planner::finish_choice`. Play doesn't change: the runs are the same runs.
@@ -280,6 +283,9 @@ fn play(
     // biggest hand, its money and its x mult jokers as the ante began.
     let mut diag = diagnose.then(Diagnosis::default);
     let mut leaks = LEAKS_OUT.get().is_some().then(bm_core::leaks::Leaks::new);
+    // `--calibrate FILE`: each round's start (ante, blind, the value's power now and its projections) and what the
+    // round then scored: (ante, blind, record, round total, best hand).
+    let mut calib: Option<Vec<(i32, usize, String, f64, f64)>> = CALIB_OUT.get().is_some().then(Vec::new);
     let force = FORCE_SPEC.get().filter(|_| FORCE_OUT.get().is_some());
     let mut passed: Vec<Passed> = Vec::new();
     let mut forced_at: std::collections::HashSet<(i32, usize, JokerKind)> = Default::default();
@@ -466,6 +472,10 @@ fn play(
                 run.round_chips
             };
             s.best_hand = s.best_hand.max(scored);
+            if let Some(last) = calib.as_mut().and_then(|c| c.last_mut()) {
+                last.3 = run.round_chips.max(last.3);
+                last.4 = last.4.max(scored);
+            }
             if let Some(d) = diag.as_mut() {
                 d.hand_scored(&run, scored);
             }
@@ -473,6 +483,17 @@ fn play(
         if k == MoveKind::SelectBlind && run.phase == Phase::Round {
             if let Some(d) = diag.as_mut() {
                 d.blind_begins(&run);
+            }
+            if let Some(c) = calib.as_mut().filter(|_| at_win.is_none()) {
+                let slot = run.blind.as_ref().map_or(0, |b| match b.kind {
+                    BlindKind::Small => 0,
+                    BlindKind::Big => 1,
+                    BlindKind::Boss(_) => 2,
+                });
+                // Its own salt, on fair copies: the run and its decisions are untouched.
+                let rec = bm_core::value::calibration(&run, salt << 20 ^ step ^ 0xCA1B, CALIB_SAMPLES)
+                    .unwrap_or_else(|| "null".into());
+                c.push((run.ante, slot, rec, 0.0, 0.0));
             }
         }
         if let Some(r) = s.record.as_mut() {
@@ -534,6 +555,25 @@ fn play(
                 l.json()
             );
             writeln!(out.lock().unwrap(), "{line}").expect("--leaks: writing");
+        }
+    }
+    if let (Some(c), Some(out)) = (calib.as_ref(), CALIB_OUT.get()) {
+        if !s.refused && !s.unfinished {
+            use std::io::Write as _;
+            let rounds: Vec<String> = c
+                .iter()
+                .map(|(ante, slot, rec, total, best)| {
+                    format!("{{\"ante\":{ante},\"blind\":{slot},\"round_total\":{total:.1},\"best_hand\":{best:.1},\"at_start\":{rec}}}")
+                })
+                .collect();
+            let line = format!(
+                "{{\"seed\":{},\"run\":{index},\"won\":{},\"stage\":{},\"rounds\":[{}]}}",
+                esc(&s.seed),
+                s.won,
+                s.stage,
+                rounds.join(",")
+            );
+            writeln!(out.lock().unwrap(), "{line}").expect("--calibrate: writing");
         }
     }
     if !passed.is_empty() {
@@ -844,6 +884,12 @@ static AUDIT_HI: AtomicU64 = AtomicU64::new(8);
 /// `--leaks FILE`: one leak tally line per run (leaks.rs).
 static LEAKS_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> =
     std::sync::OnceLock::new();
+/// `--calibrate FILE`: one line per run, each round's start with the value's power and projections (value::calibration)
+/// and what that round scored.
+static CALIB_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> =
+    std::sync::OnceLock::new();
+/// Sample rounds behind each calibration record (twice the value's usual, for a steadier measure).
+const CALIB_SAMPLES: usize = 12;
 /// `--force-buy SPEC --force-out FILE`: the jokers forced (each with its antes) and where the forks go.
 static FORCE_SPEC: std::sync::OnceLock<Vec<Forced>> = std::sync::OnceLock::new();
 static FORCE_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> =
@@ -2451,6 +2497,10 @@ fn main() {
         println!("Fork play-outs add: {}", names.join(", "));
     }
     // `--leaks FILE`: the leak tally, a line per run; `--force-buy SPEC --force-out FILE`: the forced-buy forks.
+    if let Some(path) = opt("--calibrate") {
+        let f = std::fs::File::create(&path).expect("--calibrate: creating the file");
+        let _ = CALIB_OUT.set(Mutex::new(std::io::BufWriter::new(f)));
+    }
     if let Some(path) = opt("--leaks") {
         let f = std::fs::File::create(&path).expect("--leaks: creating the file");
         let _ = LEAKS_OUT.set(Mutex::new(std::io::BufWriter::new(f)));
@@ -2964,6 +3014,7 @@ fn main() {
     }
     for (out, what) in [
         (LEAKS_OUT.get(), "--leaks"),
+        (CALIB_OUT.get(), "--calibrate"),
         (FORCE_OUT.get(), "--force-out"),
     ] {
         if let Some(out) = out {

@@ -1464,6 +1464,31 @@ The rules, stated before the run:
 cd /mnt/h/balatro-meta && make sync && make test && make night
 ```
 
+## Step 47: Card Sharp, deck fixing and the calibration recording (about 3.5 hours; S's order, lab #27 and #30)
+
+E1 read Worse on Green (`ahead=2` -5.05, `ahead=3` -7.05 points against batch 1's 31.75%); `ahead` stays at 0 while
+its cause is found (lab #27: the value's projection of growth, and the shape of the far blinds' term). The user's rule
+from 13 November: a core concept that fails is not dropped; we find why and fix it. White runs are off for now.
+
+New in the tally (`leaks.rs`, `scripts/leaks.py`): Card Sharp held, the rounds in which its x3 fired and the hands it
+fired on; Tarots used a run (the user's own runs use 47 to 69).
+
+New in `baseline`: `--calibrate FILE` (E1 step 1, the forecast's dataset): at each round's start the value's measured
+power (the mean log total of the next round played out with no target, the measure each later round repeats) and its
+projections three, six and nine rounds on, split by source (the jokers' flat chips and mult, hand levels, growing x
+mult, the deck, drain, money), with what the round then scored. Play is unchanged by it.
+
+`make green-next`, one resumable job:
+1. **`card-sharp`** on top of the base (batch 1's defaults), 2,000 Green seeds at salt 2, against batch 1's Green arm,
+   tallied.
+2. **`deck-fix`**, the same.
+3. **The base again with the calibration recording** on the same seeds, tallied. Neither recording changes play, so
+   its compare against batch 1's Green arm is a check: 0.00 points and no seed won by one side only.
+
+```
+cd /mnt/h/balatro-meta && make sync && make green-next
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

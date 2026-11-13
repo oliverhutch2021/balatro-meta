@@ -1873,6 +1873,59 @@ def night_green_steps(root: Path = ROOT) -> list[tuple]:
     return out
 
 
+GREEN_ARMS = ("card-sharp", "deck-fix")
+CALIB_DIR = ".sync/calib"
+
+
+def green_next_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
+    """make green-next (S's work order, lab #27 and #30; Green only): `card-sharp`, then `deck-fix`, each on top of the
+    base (batch 1's defaults) on 2,000 Green seeds at salt 2, paired against batch 1's Green arm, with the tally (Card
+    Sharp's rounds fired, Tarots used a run); then the base as it is on the same seeds with the calibration recording
+    (`baseline --calibrate`, the forecast's dataset) and the tally. Play is unchanged by either recording, so that last
+    arm must match batch 1's Green arm seed for seed: its compare is a check (0.00 points, no seed won by one only)."""
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR, CALIB_DIR])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    args = list(best[1])
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
+    w = args[args.index("--value-weight") + 1]
+    stem = Path(best[2]).stem.split("-on-")[-1]
+    tag, sl = f"f{FORMULA}", f"salt{BUNDLE_SALT}"
+    batch = batch1_steps(root, BIG_RUNS, runs)
+    control = next(a[2] for n, a, *_ in batch if n == "compare-green")
+    base = f"{opts},{','.join(CODE_DEFAULTS)}"
+    g = f"results/stakes/stake{BUNDLE_GREEN}-{runs // 1000}k-{tag}"
+    green = ["--runs", str(runs), "--seed", "1", "--salt", str(BUNDLE_SALT), "--stake", str(BUNDLE_GREEN)]
+    for arm in GREEN_ARMS:
+        o = f"{base},{arm}"
+        a = list(args)
+        a[a.index("--teacher-options") + 1] = o
+        out = f"{g}-{file_safe(o)}-w{w}-{sl}-on-{stem}.json"
+        lines = f"{LEAK_DIR}/{arm}-green-{runs // 1000}k-{sl}.jsonl"
+        if not (root / out).exists():
+            steps.append((f"{arm}-green", [*BASELINE, "--bot", "teacher", *a, *green, "--leaks", lines, "--out", out]))
+            steps.append((f"{arm}-green-gzip", ["gzip", "-f", lines]))
+        steps.append((f"{arm}-compare-green", ["scripts/compare_runs.py", control, out, "--out",
+                                               f"{Path(out).parent}/{Path(out).stem}-vs-batch1.json"]))
+        steps.append((f"{arm}-green-tally", ["scripts/leaks.py", f"{lines}.gz", "--out",
+                                             f"results/leaks/{arm}-green-{runs // 1000}k-{sl}.json"]))
+    a = list(args)
+    a[a.index("--teacher-options") + 1] = base
+    out = f"results/calib/base-green-{runs // 1000}k-{sl}.json"
+    lines = f"{LEAK_DIR}/base-green-{runs // 1000}k-{sl}.jsonl"
+    calib = f"{CALIB_DIR}/base-green-{runs // 1000}k-{sl}.jsonl"
+    if not (root / out).exists():
+        steps.append(("calib-green", [*BASELINE, "--bot", "teacher", *a, *green, "--leaks", lines, "--calibrate", calib,
+                                      "--out", out]))
+        steps.append(("calib-green-gzip", ["gzip", "-f", lines, calib]))
+    steps.append(("calib-compare-green", ["scripts/compare_runs.py", control, out, "--out",
+                                          f"results/calib/base-green-{runs // 1000}k-{sl}-vs-batch1.json"]))
+    steps.append(("calib-green-tally", ["scripts/leaks.py", f"{lines}.gz", "--out",
+                                        f"results/leaks/base-green-{runs // 1000}k-{sl}.json"]))
+    return steps
+
+
 def e1_white_steps(k: int, root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     """make e1-white-ahead<K>: E1's White guard for one setting, `ahead=K` with every default on on the first `runs`
     White seeds at salt 2, against the first `runs` of batch1's White arm (S: point estimate above -1.0 on 2,000)."""
@@ -2393,6 +2446,7 @@ JOBS: dict[str, list[tuple]] = {
     "look": look_steps(),
     "night": night_steps(),
     "night-green": night_green_steps(),
+    "green-next": green_next_steps(),
     **{f"e1-white-ahead{k}": e1_white_steps(k) for k in (2, 3, 8)},
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
