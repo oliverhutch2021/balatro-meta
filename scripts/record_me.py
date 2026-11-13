@@ -469,6 +469,8 @@ def checks_running(folder: Path | None) -> bool:
 class PlayGame(checker.HiddenGame):
     """Balatro in a window, with sound, at the chosen speed, through BalatroBot's launcher on its own port."""
 
+    hide_window = False  # the checks' hider would hide this window too (it finds windows by the launcher's port)
+
     def __init__(self, port: int, save_folder: Path | None, speed: float) -> None:
         super().__init__(port, save_folder)
         self.speed = speed

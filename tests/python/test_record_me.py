@@ -375,3 +375,21 @@ def test_a_green_stake_session_starts_records_and_replays_green_runs(tmp_path, m
     r = replay_me.replay_states(states)
     assert r.ok, r.lost
     assert r.game.stake == 3 and r.game.over
+
+
+def test_the_game_you_play_is_never_hidden_while_the_checks_game_is(monkeypatch):
+    started = []
+
+    class Proc:
+        def __init__(self, cmd, **kw):
+            started.append(cmd)
+
+    monkeypatch.setattr(record_me.checker.subprocess, "Popen", Proc)
+    monkeypatch.setattr(record_me.checker.HiddenGame, "command", lambda self: ["uvx", "balatrobot", "serve"])
+    monkeypatch.setattr(record_me.checker.HiddenGame, "prune_logs", lambda self: None)
+    play = record_me.PlayGame(record_me.PORT, None, 4)
+    assert play.launch()
+    assert not any(c[0] == "powershell.exe" for c in started) and play.hider is None
+    started.clear()
+    assert record_me.checker.HiddenGame(12350, None).launch()
+    assert started[0][0] == "powershell.exe"

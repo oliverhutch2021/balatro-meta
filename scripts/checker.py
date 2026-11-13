@@ -121,6 +121,10 @@ class HiddenGame:
     """The headless Balatro the checks use, started through BalatroBot's launcher (uvx on Windows), its
     window kept out of sight while it loads (`hide_window_script`)."""
 
+    # Whether its window is kept out of sight. make record-me's game (record_me.PlayGame) is played in its window, so
+    # it says no: the hider finds windows by the launcher's port, and would otherwise hide the very game you play.
+    hide_window = True
+
     def __init__(self, port: int = CHECK_PORT, save_folder: Path | None = None) -> None:
         self.port = port
         self.save_folder = save_folder
@@ -157,6 +161,8 @@ class HiddenGame:
         self.prune_logs()
         self.launched_at = time.time()
         try:  # first, so it is watching before the window opens
+            if not self.hide_window:
+                raise OSError("a game played in its window")
             self.hider = subprocess.Popen(["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle",
                                            "Hidden", "-Command", hide_window_script(self.port)], cwd="/mnt/c",
                                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
