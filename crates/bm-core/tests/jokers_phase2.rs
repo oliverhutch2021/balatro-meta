@@ -733,6 +733,30 @@ fn losing_the_ante_8_boss_is_not_a_win() {
 }
 
 #[test]
+fn a_lost_round_does_not_charge_rent() {
+    // The real game's checks (Gold Stake games SLA8IFPQ, W7CDXRST): a run lost with a Rental joker ends with its
+    // money uncharged, and a won round pays $3 per Rental joker.
+    let mut run = with_jokers(&[J::Joker, J::Joker]);
+    run.jokers[0].rental = true;
+    run.jokers[1].rental = true;
+    run.money = 10;
+    run.hands_left = 1;
+    run.blind.as_mut().unwrap().chips = 1e9;
+    pair_of_kings(&mut run);
+    let n = run.hand.len();
+    play(&mut run, &[n - 2, n - 1]);
+    assert_eq!(run.phase, Phase::GameOver);
+    assert_eq!(run.money, 10);
+
+    let mut run = with_jokers(&[J::Joker, J::Joker]);
+    run.jokers[0].rental = true;
+    run.jokers[1].rental = true;
+    run.money = 10;
+    win_round(&mut run);
+    assert_eq!(run.money, 10 - 2 * 3);
+}
+
+#[test]
 fn the_pillar_mark_is_set_once_the_hand_is_scored() {
     // The real game's checks (7 November): a card Midas Mask turns Gold while it is played keeps the "played this
     // ante" mark, and a DNA copy made while it is played is born without it.

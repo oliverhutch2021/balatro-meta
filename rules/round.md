@@ -243,6 +243,10 @@ End-of-round start (about 0.2 s later, one step):
    Mr. Bones, if not debuffed and the loss flag is set and round total /
    target >= 0.25, saves the run: the loss flag is cleared for the jokers
    after it, and Mr. Bones destroys itself. Only one Mr. Bones can save.
+   On a lost round the game shows no Rental charge (Gold Stake checker
+   games SLA8IFPQ and W7CDXRST, $3 per Rental joker). UNSURE why: the
+   charge is a queued money event, and the game-over screen likely pauses
+   the game before it runs.
 3. If this was a Boss blind and the ante equals the winning ante (8), the run
    is marked won.
 4. If the loss flag is still set: game over. (Quirk: losing the ante 8 boss

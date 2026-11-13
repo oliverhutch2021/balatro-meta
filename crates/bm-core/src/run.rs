@@ -984,6 +984,7 @@ impl Run {
     fn end_round(&mut self) {
         let mut game_over = !self.blind_beaten();
         let none = PlayedHand::default();
+        let mut rent = 0;
         for i in 0..self.jokers.len() {
             if let Some(e) = calculate_joker(self, i, Ctx::EndOfRound { game_over }, &none, 0) {
                 if e.saved {
@@ -991,7 +992,7 @@ impl Run {
                 }
             }
             if self.jokers[i].rental {
-                self.money -= RENTAL_COST;
+                rent += RENTAL_COST;
             }
             if self.jokers[i].perishable && self.jokers[i].perish_tally > 0 {
                 self.jokers[i].perish_tally -= 1;
@@ -999,6 +1000,12 @@ impl Run {
                     self.set_joker_debuff(i, true);
                 }
             }
+        }
+        // A lost round keeps its money: the game shows no Rental charge at
+        // game over (Gold Stake checker games SLA8IFPQ, W7CDXRST). The charge
+        // is a queued money event; the game-over pause likely stops it.
+        if !game_over {
+            self.money -= rent;
         }
         let boss_round = self.blind.as_ref().is_some_and(|b| b.boss().is_some());
         if game_over {
