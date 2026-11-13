@@ -1859,6 +1859,20 @@ def night_steps(root: Path = ROOT, look_runs: int = LOOK_RUNS, runs: int = BIG_R
     return steps
 
 
+def night_green_steps(root: Path = ROOT) -> list[tuple]:
+    """make night-green (S, #27, with White dropped for now): what is left of the night on Green alone: batch1's Green
+    compare and tally, then E1's three arms (ahead=2, 3, 8) paired against batch1's Green arm. No gate (the look
+    passed), no White."""
+    night = night_steps(root)
+    keep = ("batch1-compare-green", "batch1-green-tally")
+    out: list[tuple] = [("build", [*MAKE, "build"])]
+    for n, a, *_ in night:
+        inner = a[a.index("--") + 1:] if a and a[0] == "scripts/gated.py" else a
+        if n in keep or n.startswith("e1-"):
+            out.append((n, inner))
+    return out
+
+
 def e1_white_steps(k: int, root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     """make e1-white-ahead<K>: E1's White guard for one setting, `ahead=K` with every default on on the first `runs`
     White seeds at salt 2, against the first `runs` of batch1's White arm (S: point estimate above -1.0 on 2,000)."""
@@ -2378,6 +2392,7 @@ JOBS: dict[str, list[tuple]] = {
     "teacher-batch1": batch1_steps(),
     "look": look_steps(),
     "night": night_steps(),
+    "night-green": night_green_steps(),
     **{f"e1-white-ahead{k}": e1_white_steps(k) for k in (2, 3, 8)},
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
@@ -2596,6 +2611,39 @@ def record_progress(entry: dict | None, path: Path = PROGRESS) -> None:
         fh.write(json.dumps(entry) + "\n")
 
 
+READ_ONLY_STEPS = ("scripts/compare_runs.py", "scripts/leaks.py", "scripts/forced_buys.py", "scripts/audit_shops.py",
+                   "gzip")
+WRITTEN = (".json", ".jsonl", ".gz", ".csv", ".npy", ".bin", ".txt")
+NAME_MAX = 250
+
+
+def read_only(argv: list[str]) -> bool:
+    """A step that only reads results and writes a summary (through scripts/gated.py too)."""
+    if argv and argv[0] == "scripts/gated.py" and "--" in argv:
+        argv = argv[argv.index("--") + 1:]
+    return bool(argv) and argv[0] in READ_ONLY_STEPS
+
+
+def path_problems(steps: list) -> list[str]:
+    """Paths a job's steps would write that the file system refuses: a name over NAME_MAX characters, or a folder
+    that can't be made."""
+    out = []
+    for name, argv, *_ in steps:
+        for x in argv:
+            if not isinstance(x, str) or "/" not in x or not x.endswith(WRITTEN) or x.startswith(("http", "-")):
+                continue
+            p = Path(x)
+            if len(p.name) > NAME_MAX:
+                out.append(f"{name}: a file name of {len(p.name)} characters ({p.name[:60]}...)")
+            elif not p.is_absolute():
+                folder = ROOT / p.parent
+                try:
+                    folder.mkdir(parents=True, exist_ok=True)
+                except OSError as e:
+                    out.append(f"{name}: can't make {p.parent} ({e})")
+    return out
+
+
 def run(job: str, force: bool, watch: bool = True) -> None:
     if job not in JOBS:
         raise SystemExit(f"Unknown job '{job}'. Jobs: {', '.join(JOBS)}")
@@ -2631,6 +2679,12 @@ def run(job: str, force: bool, watch: bool = True) -> None:
         pass
     LOGS.mkdir(parents=True, exist_ok=True)
     steps = [(*step, {})[:3] for step in JOBS[job]]
+    # Every path the job will write, checked before its first step (S, #27: a night once stopped after two hours on
+    # a file name too long for the file system).
+    bad = path_problems(steps)
+    if bad:
+        raise SystemExit("The job would write paths the file system refuses, so it didn't start:\n  "
+                         + "\n  ".join(bad[:10]))
     for i, (name, argv, env) in enumerate(steps, 1):
         if st["steps"].get(name, {}).get("done"):
             print(f"[{i}/{len(steps)}] {name}: already done, skipping")
@@ -2674,6 +2728,14 @@ def run(job: str, force: bool, watch: bool = True) -> None:
             watch_note(job, st, steps, "stopped", step=name)
             raise SystemExit(f"Stopped during step '{name}'. Run `make {job}` to carry on: the steps already done are "
                              "kept, and this one starts again (the network's training carries on from its last save).")
+        if code != 0 and read_only(argv):
+            # A step that only reads results (a compare, a tally, a summary, a gzip) never stops a chain (S, #27):
+            # it is recorded as failed and the next step starts; rerunning the job tries it again.
+            st["steps"][name] = {"done": False, "seconds": secs, "exit_code": code, "read_only": True}
+            save_state(job, st)
+            print(f"    failed (exit code {code}), a read-only step: going on; the log is .sync/logs/{log.name}",
+                  flush=True)
+            continue
         if code != 0:
             st["steps"][name] = {"done": False, "seconds": secs, "exit_code": code}
             save_state(job, st)

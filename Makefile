@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late teacher-boss teacher-budget teacher-budget-big teacher-budget-confirm teacher-skips skips-stakes teacher-budget-6 teacher-budget-confirm-6 teacher-close teacher-close-2 diagnose-fresh diagnose-control teacher-budget-parts teacher-budget-away teacher-bundle teacher-looks shop-audit teacher-money-belief leak-tally teacher-boss-reroll reroll-demo teacher-held-cards teacher-defaults teacher-batch1 look night e1-white-ahead2 e1-white-ahead3 e1-white-ahead8 teacher-money teacher-long recheck diagnose forks-quick forks-night forks-table forks-now
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late teacher-boss teacher-budget teacher-budget-big teacher-budget-confirm teacher-skips skips-stakes teacher-budget-6 teacher-budget-confirm-6 teacher-close teacher-close-2 diagnose-fresh diagnose-control teacher-budget-parts teacher-budget-away teacher-bundle teacher-looks shop-audit teacher-money-belief leak-tally teacher-boss-reroll reroll-demo teacher-held-cards teacher-defaults teacher-batch1 look night night-green e1-white-ahead2 e1-white-ahead3 e1-white-ahead8 teacher-money teacher-long recheck check-saved diagnose forks-quick forks-night forks-table forks-now
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -238,6 +238,9 @@ look:  ## The gate before a long run: 400 Green and 400 White runs of the bot as
 night:  ## One night, set and forget: the look (400 Green, 400 White, 400 White all-off, tallied), the gate, then teacher-batch1 and E1 on 2,000 Green (ahead=2, 3 and every ante); on a stop, make leak-tally instead (about 9.5 hours)
 	$(PY) scripts/jobs.py run night $(JOB_FLAGS)
 
+night-green:  ## What is left of the night on Green alone (White dropped for now): batch1's Green compare and tally, then E1's three arms (ahead=2, 3, every ante) on 2,000 Green seeds each (about 2.4 hours)
+	$(PY) scripts/jobs.py run night-green $(JOB_FLAGS)
+
 e1-white-ahead2 e1-white-ahead3 e1-white-ahead8:  ## E1's White guard for one setting (2,000 White seeds against the first 2,000 of batch1's White arm, about 1.2 hours)
 	$(PY) scripts/jobs.py run $@ $(JOB_FLAGS)
 
@@ -246,6 +249,9 @@ teacher-money:  ## The value formula's money numbers retuned on the champion, ea
 
 teacher-long:  ## The value formula's long run one part at a time (its power, its held money), how far it looks, and the money numbers counted higher, 2,000 seeds each against the champion (about 8.5 hours)
 	$(PY) scripts/jobs.py run teacher-long $(JOB_FLAGS)
+
+check-saved:  ## Saved real-game differences played again through today's checks in the real game (FILES="a.json b.json"; seconds each)
+	$(PY) scripts/check_saved.py $(FILES)
 
 recheck:  ## Every difference the real-game checks saved, replayed on today's engine: fixed or still open (seconds)
 	$(PY) scripts/recheck.py --out results/checks-recheck.json

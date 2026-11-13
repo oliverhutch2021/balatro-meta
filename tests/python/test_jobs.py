@@ -1578,3 +1578,24 @@ def test_the_gate_stops_on_a_big_drop_or_on_losses_with_a_winning_hand(tmp_path)
     cmd = [sys.executable, "-c", f"open({str(marker)!r}, 'w').write('x')"]
     assert gated.main([str(gate), "pass", "--", *cmd]) == 0 and not marker.exists()
     assert gated.main([str(gate), "stop", "--", *cmd]) == 0 and marker.exists()
+
+
+def test_read_only_steps_never_stop_a_chain_and_long_paths_stop_it_before_it_starts(tmp_path):
+    assert jobs.read_only(["scripts/compare_runs.py", "a", "b"])
+    assert jobs.read_only(["scripts/gated.py", "g.json", "pass", "--", "gzip", "-f", "x"])
+    assert not jobs.read_only([*jobs.BASELINE, "--runs", "4"])
+    long_name = "results/tune/" + "x" * 260 + ".json"
+    assert jobs.path_problems([("a", ["scripts/compare_runs.py", "c.json", "o.json", "--out", long_name])])
+    assert not jobs.path_problems([("a", ["scripts/compare_runs.py", "c.json", "o.json", "--out", "results/ok.json"])])
+    champion_in(tmp_path)
+    for job in (jobs.night_steps(tmp_path), jobs.batch1_steps(tmp_path), jobs.leak_steps(tmp_path)):
+        assert all(len(Path(x).name) <= jobs.NAME_MAX for _, a, *_ in job for x in a if isinstance(x, str))
+
+
+def test_night_green_keeps_batch1s_green_reads_and_e1_without_white_or_a_gate(tmp_path):
+    champion_in(tmp_path)
+    steps = {n: a for n, a, *_ in jobs.night_green_steps(tmp_path)}
+    assert list(steps)[:3] == ["build", "batch1-compare-green", "batch1-green-tally"]
+    assert not any("white" in n or n.startswith("tally-") or n == "gate" for n in steps)
+    assert {n for n in steps if n.startswith("e1-green-")} == {"e1-green-ahead2", "e1-green-ahead3", "e1-green-ahead8"}
+    assert all(a[0] != "scripts/gated.py" for a in steps.values())
