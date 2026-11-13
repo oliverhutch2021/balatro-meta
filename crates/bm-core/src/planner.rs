@@ -346,10 +346,93 @@ fn mask_first(mask: u64, k: u32) -> u64 {
     out
 }
 
-/// Up to five hand positions to throw: those outside `keep`, lowest rank first (Stone cards first of all).
+/// A card that pays by staying in hand rather than being played (the leak tally's seals, lab #27): a Blue Seal (a
+/// Planet if held at the round's end), Steel (x1.5 while held), Gold (its $3 if held at the end), and a Purple Seal
+/// while no consumable slot is free (thrown, it would make nothing). Never read off a face-down card.
+pub(crate) fn worth_holding(run: &Run, i: usize) -> bool {
+    use crate::card::Seal;
+    let c = run.card(run.hand[i]);
+    if c.face_down {
+        return false;
+    }
+    let room = run.consumables.len() < run.consumable_slots.max(0) as usize;
+    c.seal == Seal::Blue
+        || matches!(c.enhancement, Enhancement::Steel | Enhancement::Gold)
+        || (c.seal == Seal::Purple && !room)
+}
+
+/// A card never thrown while anything else can go: one that pays held (`worth_holding`), and any card with a seal,
+/// an enhancement or an edition (worth playing or keeping), except a Purple Seal while a slot is free (it pays thrown).
+fn not_to_throw(run: &Run, i: usize) -> bool {
+    let c = run.card(run.hand[i]);
+    if c.face_down || pays_thrown(run, i) {
+        return false;
+    }
+    worth_holding(run, i)
+        || c.seal != crate::card::Seal::None
+        || !matches!(c.enhancement, Enhancement::None)
+        || c.edition != crate::card::Edition::None
+}
+
+/// A Purple Seal card while a consumable slot is free: throwing it makes a Tarot, so it is thrown first.
+fn pays_thrown(run: &Run, i: usize) -> bool {
+    let c = run.card(run.hand[i]);
+    !c.face_down
+        && c.seal == crate::card::Seal::Purple
+        && run.consumables.len() < run.consumable_slots.max(0) as usize
+}
+
+/// "round-fixes": a winning hand that leaves the cards worth holding in hand: `keep` without them if that still
+/// scores `needed`, else the best of the usual shapes that avoids them and scores it, else `keep`. A Purple Seal
+/// with discards left counts as worth holding here too (thrown later it makes a Tarot; played it makes nothing).
+fn winning_keep(run: &Run, keep: u64, needed: f64) -> u64 {
+    let purple_later = |i: usize| run.discards_left > 0 && pays_thrown(run, i);
+    let protect = (0..run.hand.len())
+        .filter(|&i| worth_holding(run, i) || purple_later(i))
+        .fold(0u64, |m, i| m | 1 << i);
+    if keep & protect == 0 {
+        return keep;
+    }
+    let without = keep & !protect;
+    if without != 0 && preview_score(run, without) >= needed {
+        return without;
+    }
+    shape_candidates(run)
+        .into_iter()
+        .filter(|&m| m != 0 && m & protect == 0 && m.count_ones() <= 5)
+        .map(|m| (preview_score(run, m), m))
+        .filter(|&(s, _)| s >= needed)
+        .max_by(|a, b| a.0.total_cmp(&b.0))
+        .map_or(keep, |(_, m)| m)
+}
+
+/// Up to five hand positions to throw: those outside `keep`, lowest rank first (Stone cards first of all). With
+/// "round-fixes" by worth instead (lab #27, P1): a Purple Seal first while a slot is free (it pays), then the cards
+/// worth least to the run, and never a card with a seal, an enhancement or an edition (`not_to_throw`) while anything
+/// else can go.
 pub(crate) fn throw(run: &Run, hand: &[Seen], keep: u64) -> u64 {
     let mut out: Vec<usize> = (0..hand.len()).filter(|&i| keep >> i & 1 == 0).collect();
-    out.sort_by_key(|&i| (!hand[i].stone, hand[i].rank));
+    if crate::teacher::on("round-fixes") && hand.len() == run.hand.len() {
+        let held: Vec<usize> = out
+            .iter()
+            .copied()
+            .filter(|&i| not_to_throw(run, i))
+            .collect();
+        if held.len() < out.len() {
+            out.retain(|i| !held.contains(i));
+        }
+        out.sort_by_key(|&i| {
+            let c = run.card(run.hand[i]);
+            let worth = if c.face_down {
+                hand[i].rank as i64 * 10
+            } else {
+                (crate::value::card_value(run, run.hand[i]) * 10.0) as i64
+            };
+            (!pays_thrown(run, i), !hand[i].stone, worth)
+        });
+    } else {
+        out.sort_by_key(|&i| (!hand[i].stone, hand[i].rank));
+    }
     let mut mask = out.into_iter().take(5).fold(0u64, |m, i| m | 1 << i);
     if let Some(f) = run.forced_card() {
         if mask >> f & 1 == 0 {
@@ -759,21 +842,38 @@ fn dna_pick(run: &Run) -> Option<usize> {
 /// The move of a way to finish a beatable round. If the hand no longer beats the blind (a boss took a card),
 /// it plays to beat it like the planner's best-hand plan.
 pub(crate) fn farm_move(run: &Run, farm: Farm) -> (MoveKind, u64) {
-    farm_step(run, farm).0
+    farm_step(run, farm, None).0
 }
 
 /// `farm_move`, and whether the move is an extra hand (spare cards played, the round to go on).
-fn farm_step(run: &Run, farm: Farm) -> ((MoveKind, u64), bool) {
+fn farm_step(run: &Run, farm: Farm, given: Option<(f64, u64)>) -> ((MoveKind, u64), bool) {
     let plain = |m: (MoveKind, u64)| (m, false);
-    let best = quick_best(run);
+    let best = given.unwrap_or_else(|| quick_best(run));
     let target = run.blind.as_ref().map_or(0.0, |b| b.chips);
     if best.0 < target - run.round_chips {
         return plain(plan_move(run, Plan::Best, best));
     }
-    let keep = best.1;
+    let fixes = crate::teacher::on("round-fixes");
+    // "round-fixes": win with a hand that leaves the cards worth holding in hand when one still beats the blind
+    // (`winning_keep`: a Blue Seal's Planet, Steel's x1.5, Gold's $3, a Purple Seal to throw later).
+    let keep = if fixes {
+        winning_keep(run, best.1, target - run.round_chips)
+    } else {
+        best.1
+    };
     let spare: Vec<usize> = (0..run.hand.len())
         .filter(|&i| keep >> i & 1 == 0)
         .collect();
+    // "round-fixes": throwing for what it pays never throws the cards worth holding.
+    let throwable: Vec<usize> = if fixes {
+        spare
+            .iter()
+            .copied()
+            .filter(|&i| !not_to_throw(run, i))
+            .collect()
+    } else {
+        spare.clone()
+    };
     match farm {
         Farm::Win { four } => {
             if four && keep.count_ones() < 4 && spare.len() + (keep.count_ones() as usize) >= 4 {
@@ -790,9 +890,9 @@ fn farm_step(run: &Run, farm: Farm) -> ((MoveKind, u64), bool) {
         }
         Farm::Throw { single } => {
             let first_throw = run.discards_used_round == 0;
-            if run.discards_left > 0 && !spare.is_empty() && (!single || first_throw) {
+            if run.discards_left > 0 && !throwable.is_empty() && (!single || first_throw) {
                 let n = if single { 1 } else { 5 };
-                let out = throw_order(run, &spare)
+                let out = throw_order(run, &throwable)
                     .into_iter()
                     .take(n)
                     .fold(0u64, |m, i| m | 1 << i);
@@ -807,8 +907,21 @@ fn farm_step(run: &Run, farm: Farm) -> ((MoveKind, u64), bool) {
                 .iter()
                 .any(|&i| run.card(run.hand[i]).seal == crate::card::Seal::Gold);
             let single_done = c == 1 && run.hands_played_round > 0 && !gold_left;
-            if run.hands_left > 1 && spare.len() >= c && !single_done {
-                ((MoveKind::Play, extra_play(run, &spare, c)), true)
+            // "round-fixes": an extra hand never plays away a card that pays held (a Blue Seal, Steel, Gold), nor a
+            // Purple Seal that a discard left could still throw for its Tarot.
+            let pool: Vec<usize> = if fixes {
+                spare
+                    .iter()
+                    .copied()
+                    .filter(|&i| {
+                        !worth_holding(run, i) && !(run.discards_left > 0 && pays_thrown(run, i))
+                    })
+                    .collect()
+            } else {
+                spare.clone()
+            };
+            if run.hands_left > 1 && pool.len() >= c && !single_done {
+                ((MoveKind::Play, extra_play(run, &pool, c)), true)
             } else {
                 plain((MoveKind::Play, keep))
             }
@@ -946,7 +1059,10 @@ fn finish_choice_noted(
     }
     let mut chosen: Option<(f64, (MoveKind, u64), bool)> = None;
     for (n, f) in options.into_iter().enumerate() {
-        let (first, extra) = farm_step(&fair, f);
+        // "round-fixes": the first move acts on the hand the teacher's own search found (`best`), not on a second,
+        // quicker search that may differ (lab #27, P8).
+        let given = crate::teacher::on("round-fixes").then_some(best);
+        let (first, extra) = farm_step(&fair, f, given);
         let mut note = |tries: u64, fails: u32, gain: f64, outcome: FarmOutcome| {
             if let Some(v) = notes.as_mut() {
                 v.push(FarmNote {
@@ -998,7 +1114,7 @@ fn finish_choice_noted(
 /// One move of `policy` in a try, and whether it is an extra hand (see `farm_step`).
 fn policy_step(run: &Run, policy: Policy) -> ((MoveKind, u64), bool) {
     match policy {
-        Policy::Farm(f) => farm_step(run, f),
+        Policy::Farm(f) => farm_step(run, f, None),
         Policy::Plan(_) => (policy_move(run, policy), false),
     }
 }
@@ -1100,7 +1216,7 @@ mod tests {
                 run.add_card_to_hand(s, r);
             }
             let (full, _) = full_best(&run);
-            let (plain, m) = quick_best(&run);
+            let (plain, m) = crate::teacher::with_options(&["no-five-kind"], || quick_best(&run));
             assert!(
                 plain < full,
                 "without the option the quick search misses it"

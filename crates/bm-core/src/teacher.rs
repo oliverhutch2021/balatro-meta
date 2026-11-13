@@ -139,6 +139,20 @@ pub const OPTIONS: &[&str] = &[
     // replay older runs move for move and for arms that measure one without the other.
     "no-boss-reroll",
     "no-held-cards",
+    "no-glass",
+    "no-five-kind",
+    "no-freeze-money-last",
+    // The master list's batch 1 (lab #27), on by default, each group off with its "no-": in rounds (digging by
+    // worth, a winning hand that keeps a Blue or Purple Seal in hand, throwing only what pays, one search), in shops
+    // (an upgrade the sale pays for, a pack's joker with a full row, any joker replaceable, nothing kept back from
+    // rerolls in the last shop, the least useful held card sold first), and jokers the value couldn't see (Mr. Bones,
+    // Luchador, Vampire's ceiling).
+    "round-fixes",
+    "shop-fixes",
+    "joker-fixes",
+    "no-round-fixes",
+    "no-shop-fixes",
+    "no-joker-fixes",
     // With a joker that pays on the round's final hand (Dusk retriggers its cards, Acrobat x3): when the best
     // hand beats the blind only as the final hand, play single spare cards until one hand is left, then the
     // best; and the value's sample rounds try that way of playing too (the discards dig for the final hand
@@ -411,16 +425,37 @@ pub(crate) fn param(name: &str) -> Option<f64> {
 
 /// Whether an option is switched on.
 pub(crate) fn on(name: &str) -> bool {
-    // On by default (the user, 13 November: "why is it off, turn it on"): turned off by "no-<name>".
-    match name {
-        "boss-reroll" => !given("no-boss-reroll"),
-        "held-cards" => !given("no-held-cards"),
-        _ => given(name),
+    // On by default (the user, 13 November: "why is it off, turn it on"; the master list's batch 1, lab #27): turned
+    // off by "no-<name>".
+    match DEFAULTS.iter().find(|(n, _)| *n == name) {
+        Some((_, off)) => !given(off),
+        None => given(name),
     }
 }
 
+/// Options on by default, each with the option that turns it off.
+const DEFAULTS: &[(&str, &str)] = &[
+    ("boss-reroll", "no-boss-reroll"),
+    ("held-cards", "no-held-cards"),
+    ("glass", "no-glass"),
+    ("five-kind", "no-five-kind"),
+    ("freeze-money-last", "no-freeze-money-last"),
+    ("round-fixes", "no-round-fixes"),
+    ("shop-fixes", "no-shop-fixes"),
+    ("joker-fixes", "no-joker-fixes"),
+];
+
 /// Options on by default (each off with "no-<name>").
-pub const ON_BY_DEFAULT: &[&str] = &["boss-reroll", "held-cards"];
+pub const ON_BY_DEFAULT: &[&str] = &[
+    "boss-reroll",
+    "held-cards",
+    "glass",
+    "five-kind",
+    "freeze-money-last",
+    "round-fixes",
+    "shop-fixes",
+    "joker-fixes",
+];
 
 /// The defaults in force here (for reports: a run's options say what was added, this what the code had on).
 pub fn defaults_in_force() -> Vec<&'static str> {
@@ -1137,12 +1172,27 @@ fn value_consumable_in_round(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
         });
         o.2 = v - b;
     }
-    // With "held-cards" a use is taken when it is no worse than the card gone (no margin to beat).
-    let margin = if on("held-cards") { 0.0 } else { MIN_GAIN };
-    options.retain(|o| o.2 > margin);
+    // With "held-cards" a use is taken when it is no worse than the card gone (no margin to beat), and for the cards
+    // the user says to use rather than hold (`use_rather_than_hold`) when it costs at most USE_SLACK: a use the value
+    // calls a hair worse than the card gone is noise, and holding it is the leak.
+    let held = on("held-cards");
+    let margin_of = |i: usize| -> f64 {
+        if !held {
+            MIN_GAIN
+        } else if use_rather_than_hold(run, &run.consumables[i]) {
+            -USE_SLACK
+        } else {
+            0.0
+        }
+    };
+    options.retain(|o| o.2 > margin_of(o.1));
     options.sort_by(|a, b| b.2.total_cmp(&a.2));
     options.truncate(finalists());
-    let mut best = (margin, None);
+    let floor = options
+        .iter()
+        .map(|o| margin_of(o.1))
+        .fold(f64::MAX, f64::min);
+    let mut best = (if held { floor.min(0.0) } else { MIN_GAIN }, None);
     let mut base_full = std::collections::HashMap::new();
     for (moves, i, _) in options {
         let b = *base_full
@@ -1151,11 +1201,29 @@ fn value_consumable_in_round(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
         let v = after(run, vs ^ 0x5EED, &moves).map_or(f64::MIN, |c| {
             value_in_round(&c, vs, crate::value::samples())
         });
-        if v - b > best.0 {
+        if v - b > best.0 && v - b > margin_of(i) {
             best = (v - b, Some(moves[0]));
         }
     }
     best.1
+}
+
+/// How much worse than the card gone a use may look and still be made ("held-cards", `use_rather_than_hold`).
+const USE_SLACK: f64 = 0.01;
+
+/// "held-cards": the cards the user uses rather than holds (#19's verdicts): the enhancers (on the cards that pay),
+/// The Chariot, The Devil, The Lovers, Strength, The Hanged Man, Death, the seal Spectrals and Cryptid, and a suit
+/// Tarot of the suit being built. Not The Fool (held until the last card used is worth copying).
+fn use_rather_than_hold(run: &Run, c: &Consumable) -> bool {
+    use ConsumableKind::*;
+    match c.kind {
+        Magician | Empress | Hierophant | Justice | Lovers | Chariot | Devil | Strength
+        | HangedMan | Death | Talisman | DejaVu | Trance | Medium | Cryptid | Aura => true,
+        Star | Moon | Sun | World => {
+            building_suit(run).is_none_or(|b| c.kind.tarot_suit() == Some(b))
+        }
+        _ => false,
+    }
 }
 
 /// A salt that stays the same while only the jokers' order changes, so a decision and the joker moves
@@ -2172,6 +2240,23 @@ fn target_sets(run: &Run, c: &Consumable) -> Vec<Vec<usize>> {
                 }
             }
         }
+        // "held-cards" (the user's verdicts, #19): the seal Spectrals, Cryptid and Aura go on the run's most valuable
+        // card that can take them (Trance: a Steel card first, held anyway), nowhere else.
+        Talisman | DejaVu | Trance | Medium | Cryptid | Aura if on("held-cards") => {
+            let fits = |i: &usize| match c.kind {
+                Cryptid => true,
+                Aura => card(*i).edition == Edition::None,
+                _ => card(*i).seal == Seal::None,
+            };
+            let steel = high
+                .iter()
+                .copied()
+                .find(|i| fits(i) && card(*i).enhancement == Enhancement::Steel);
+            let top = high.iter().copied().find(fits);
+            if let Some(i) = if c.kind == Trance { steel.or(top) } else { top } {
+                add(vec![i]);
+            }
+        }
         // Seals, editions and copies: on the most valuable card, a main-rank card, a face card.
         Talisman | DejaVu | Trance | Medium | Cryptid | Aura => {
             let unsealed = |i: &usize| match c.kind {
@@ -2254,9 +2339,19 @@ fn pack_options(run: &Run, quick: bool) -> Vec<Vec<(MoveKind, u64)>> {
             PackCard::Joker(j) => {
                 if joker_room(run, j.edition) && !avoided(j) {
                     out.push(vec![(MoveKind::PackChoose, i as u64)]);
+                } else if on("shop-fixes") && !avoided(j) {
+                    // "shop-fixes": with the row full, a joker is still taken by selling one first (selling is
+                    // legal with a pack open, in the game as here).
+                    out.extend(joker_entries(
+                        run,
+                        value_salt(run, 0),
+                        j.edition,
+                        (MoveKind::PackChoose, i as u64),
+                    ));
                 }
             }
             PackCard::Card(_) => out.push(vec![(MoveKind::PackChoose, i as u64)]),
+            PackCard::Consumable(cons) if on("held-cards") && skipped_spectral(cons.kind) => {}
             PackCard::Consumable(cons) => {
                 let mut sets = target_sets(run, cons);
                 if quick {
@@ -2273,6 +2368,13 @@ fn pack_options(run: &Run, quick: bool) -> Vec<Vec<(MoveKind, u64)>> {
         }
     }
     out
+}
+
+/// "held-cards": the Spectrals the user skips (#19): Grim, Incantation, Ouija, Ectoplasm, Ankh. Never taken from a
+/// pack.
+fn skipped_spectral(k: ConsumableKind) -> bool {
+    use ConsumableKind::*;
+    matches!(k, Grim | Incantation | Ouija | Ectoplasm | Ankh)
 }
 
 /// A joker the teacher's options say never to buy or take (`avoid-rental`, `avoid-eternal`, `avoid-perishable`).
@@ -2293,7 +2395,13 @@ fn joker_entries(
     if joker_room(run, edition) {
         vec![vec![take]]
     } else {
-        weakest_jokers(run, vs, 2)
+        // "shop-fixes": any held joker may go, not only the two weakest.
+        let n = if on("shop-fixes") {
+            run.jokers.len()
+        } else {
+            2
+        };
+        weakest_jokers(run, vs, n)
             .into_iter()
             .map(|w| vec![(MoveKind::SellJoker, w as u64), take])
             .collect()
@@ -2323,8 +2431,21 @@ fn shop_buys(run: &Run, vs: u64) -> Vec<Vec<(MoveKind, u64)>> {
     let Some(shop) = run.shop.as_ref() else {
         return out;
     };
+    // "shop-fixes": a joker the money covers only once a held joker is sold is still offered (sold first).
+    let best_sale = if on("shop-fixes") {
+        run.jokers
+            .iter()
+            .filter(|j| !j.eternal)
+            .map(crate::run::joker_sell_value)
+            .max()
+            .unwrap_or(0)
+    } else {
+        0
+    };
     for (i, r) in shop.row.iter().enumerate() {
-        if !(r.cost <= 0 || r.cost <= run.spendable()) {
+        let joker_full = matches!(&r.item, RowItem::Joker(j) if !joker_room(run, j.edition));
+        let money = run.spendable() + if joker_full { best_sale } else { 0 };
+        if !(r.cost <= 0 || r.cost <= money) {
             continue;
         }
         match &r.item {
@@ -2337,11 +2458,24 @@ fn shop_buys(run: &Run, vs: u64) -> Vec<Vec<(MoveKind, u64)>> {
                     out.push(buy_moves(run, i));
                     out.extend(buy_and_use_moves(run, i));
                 } else if !run.consumables.is_empty() {
-                    // Full slots: sell a held one (the last) to make room.
-                    let j = run.consumables.len() - 1;
+                    // Full slots: sell a held one to make room: the last, or with "held-cards" the least useful
+                    // (the lowest worth held, `consumable_dollars`: a stale or useless card first).
+                    let j = if on("held-cards") {
+                        (0..run.consumables.len())
+                            .min_by(|&a, &b| {
+                                crate::value::consumable_dollars(run, &run.consumables[a])
+                                    .total_cmp(&crate::value::consumable_dollars(
+                                        run,
+                                        &run.consumables[b],
+                                    ))
+                            })
+                            .unwrap_or(run.consumables.len() - 1)
+                    } else {
+                        run.consumables.len() - 1
+                    };
                     let mut m = vec![(MoveKind::SellConsumable, j as u64)];
                     let mut after_sale = run.clone();
-                    after_sale.consumables.pop();
+                    after_sale.consumables.remove(j);
                     if let Some(u) = buy_and_use_moves(&after_sale, i) {
                         let mut mu = m.clone();
                         mu.extend(u);
@@ -2474,13 +2608,24 @@ fn free_search(best: &[f64], n: usize) -> f64 {
 
 /// Rerolls the money pays for in a row, keeping $3 (each costs a dollar more than the one before).
 fn rerolls_affordable(run: &Run) -> usize {
+    let keep = reroll_reserve(run);
     let (mut money, mut cost, mut n) = (run.spendable(), run.reroll_cost.max(1), 0);
-    while money - cost >= 3 && n < 64 {
+    while money - cost >= keep && n < 64 {
         money -= cost;
         cost += 1;
         n += 1;
     }
     n
+}
+
+/// Money a reroll leaves at least: $3 (something can still be bought after it), none in the run's last shop with
+/// "shop-fixes" (the money is worth nothing after it).
+fn reroll_reserve(run: &Run) -> i64 {
+    if on("shop-fixes") && crate::value::shops_left(run) <= 0.0 {
+        0
+    } else {
+        3
+    }
 }
 
 /// A reroll's worth from its samples: `search`, or with "reroll-best" and money worth nothing, `free_search`.
@@ -2758,6 +2903,16 @@ fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
     if let Some(want) = leaving {
         return move_towards(run, &want).unwrap_or((MoveKind::LeaveShop, 0));
     }
+    // "held-cards": a held card a round never used, or one with no use now (`useless_card`), is sold before anything
+    // else: the user's "anything to be sold is sold at the next shop". (Its sale alone is too small for the value's
+    // screen to pick, so it would sit in its slot.)
+    if on("held-cards") {
+        if let Some(i) = run.consumables.iter().position(|c| {
+            c.kind.set() != ConsumableSet::Planet && (stale_card(c.sort_id) || useless_card(run, c))
+        }) {
+            return (MoveKind::SellConsumable, i as u64);
+        }
+    }
     if focus_on() {
         if let Some(m) = focus_shop_move(run, salt) {
             return m;
@@ -2871,7 +3026,8 @@ fn shop_option_list(
         }
     }
     // A reroll, by sample shops and the best buy in each (when something could still be bought after it).
-    if afford(run.reroll_cost) && run.spendable() - run.reroll_cost >= 3 {
+    let keep = reroll_reserve(run);
+    if afford(run.reroll_cost) && run.spendable() - run.reroll_cost >= keep {
         let mut samples = Vec::new();
         let (mut best, mut bare) = (Vec::new(), Vec::new());
         for s in 0..looks(REROLL_LOOKS) {
@@ -2884,7 +3040,7 @@ fn shop_option_list(
         }
         if !samples.is_empty() {
             // Another reroll after this one, while the money allows it (its cost goes up by one).
-            let again = run.spendable() - 2 * run.reroll_cost > 3;
+            let again = run.spendable() - 2 * run.reroll_cost > keep;
             let cost = crate::value::quick(run, vs) - bare.iter().sum::<f64>() / bare.len() as f64;
             let q = reroll_worth(run, &best, cost, again);
             audit(|| {
@@ -3182,11 +3338,19 @@ fn reroll_voucher_worth_now(after: &Run, vs: u64, kind: VoucherKind) -> f64 {
         Vec::new()
     };
     let worth = |again: bool| -> f64 {
+        // Facing each drawn boss in turn, a reroll draws from the others (a boss rerolled away can't come back: B).
         let mean_gain = |faced: &[f64]| -> f64 {
             mean_or_zero(
-                &faced
-                    .iter()
-                    .map(|&x| reroll_gain(x, faced, price, again, margin))
+                &(0..faced.len())
+                    .map(|i| {
+                        let others: Vec<f64> = faced
+                            .iter()
+                            .enumerate()
+                            .filter(|&(j, _)| j != i)
+                            .map(|(_, &v)| v)
+                            .collect();
+                        reroll_gain(faced[i], &others, price, again, margin)
+                    })
                     .collect::<Vec<_>>(),
             )
         };
@@ -3552,6 +3716,53 @@ fn note_held_cards(run: &Run) {
 /// "held-cards": a held card that a whole round passed without using (`note_held_cards`): worth its sale only.
 pub(crate) fn stale_card(sort_id: u64) -> bool {
     on("held-cards") && STALE_CARDS.with(|s| s.borrow().contains(&sort_id))
+}
+
+/// "held-cards": a card with no use for this run as it stands, by the user's verdicts (#19): The Tower without Stone
+/// or Marble Joker; a suit Tarot whose suit isn't the one being built; Judgement with every joker slot full; and any
+/// card needing no target that the engine won't let be used now (Wheel of Fortune with every joker editioned...).
+/// Worth nothing held, so the next shop sells it and a pack doesn't take it. Never The Soul, Black Hole or a Planet.
+pub(crate) fn useless_card(run: &Run, c: &Consumable) -> bool {
+    use ConsumableKind::*;
+    if !on("held-cards") || c.kind.set() == ConsumableSet::Planet {
+        return false;
+    }
+    match c.kind {
+        Tower => {
+            run.count_jokers(JokerKind::StoneJoker) + run.count_jokers(JokerKind::MarbleJoker) == 0
+        }
+        Star | Moon | Sun | World => {
+            building_suit(run).is_some_and(|b| c.kind.tarot_suit() != Some(b))
+        }
+        // Cards needing no target and no hand, which the engine can say about outside a round too.
+        Judgement | WheelOfFortune | Emperor | HighPriestess | Fool | Ankh | Ectoplasm | Hex => {
+            !run.can_use_consumable(c, &[], crate::consumables::UseFrom::Slots)
+        }
+        _ => false,
+    }
+}
+
+/// The suit the run is building, if one stands out: the deck's suits counted with what the suit jokers pay (as
+/// `leanings` counts them), the top one at least 4 cards' worth clear of the next. None in an even deck, where any
+/// suit Tarot starts a build.
+fn building_suit(run: &Run) -> Option<Suit> {
+    use JokerKind::*;
+    let mut suits = [0f64; 4];
+    for &id in &run.playing_cards {
+        suits[run.card(id).suit as usize] += 1.0;
+    }
+    for j in &run.jokers {
+        match j.kind {
+            LustyJoker | Bloodstone => suits[Suit::Hearts as usize] += 6.0,
+            GreedyJoker | RoughGem => suits[Suit::Diamonds as usize] += 6.0,
+            WrathfulJoker | Arrowhead => suits[Suit::Spades as usize] += 6.0,
+            GluttonousJoker | OnyxAgate => suits[Suit::Clubs as usize] += 6.0,
+            _ => {}
+        }
+    }
+    let mut order: Vec<Suit> = Suit::ALL.to_vec();
+    order.sort_by(|a, b| suits[*b as usize].total_cmp(&suits[*a as usize]));
+    (suits[order[0] as usize] >= suits[order[1] as usize] + 4.0).then_some(order[0])
 }
 
 thread_local! {
@@ -4836,7 +5047,7 @@ mod tests {
                 (MoveKind::RerollBoss, 0),
                 "on by default"
             );
-            assert_eq!(defaults_in_force(), vec!["boss-reroll", "held-cards"]);
+            assert_eq!(defaults_in_force(), ON_BY_DEFAULT.to_vec());
         });
         with_options(&opts, || {
             let gains = boss_reroll_gains(&run, 7);

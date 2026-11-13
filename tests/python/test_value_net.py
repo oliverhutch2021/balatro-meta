@@ -330,8 +330,11 @@ def test_a_correction_learns_on_the_value_networks_log_odds_and_the_engine_adds_
 def endless(tmp_path_factory):
     """Eight light-teacher runs whose wins play on into Endless (seed base 7: one win, four blinds beyond it)."""
     d = tmp_path_factory.mktemp("endless")
-    baseline("--bot", "teacher", "--teacher-options", "light", "--runs", "8", "--threads", "4", "--seed", "7",
-             "--endless", "--record", str(d / "on"), "--out", str(d / "on.json"))
+    # The defaults off (jobs.DEFAULTS_OFF): seed base 7's runs as they were when this was written.
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import jobs
+    baseline("--bot", "teacher", "--teacher-options", f"light,{jobs.DEFAULTS_OFF}", "--runs", "8", "--threads", "4",
+             "--seed", "7", "--endless", "--record", str(d / "on"), "--out", str(d / "on.json"))
     return d
 
 
@@ -357,8 +360,10 @@ def test_a_win_that_plays_on_labels_its_positions_with_the_blinds_beaten_after_i
     assert report["endless_blinds_per_win"] == pytest.approx(
         sum(k * n for k, n in enumerate(hist)) / sum(hist), abs=1e-6)
     # Playing on changes nothing before the win: the same seeds without it record the same positions.
-    baseline("--bot", "teacher", "--teacher-options", "light", "--runs", "8", "--threads", "4", "--seed", "7",
-             "--record", str(tmp_path / "off"))
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import jobs
+    baseline("--bot", "teacher", "--teacher-options", f"light,{jobs.DEFAULTS_OFF}", "--runs", "8", "--threads", "4",
+             "--seed", "7", "--record", str(tmp_path / "off"))
     off = tv.load_data(tmp_path / "off")
     assert off.rows == data.rows and not off.depth and (off.lab[:, tv.ENDLESS] == -1).all()
     np.testing.assert_array_equal(off.lab[:, :tv.ENDLESS], lab[:, :tv.ENDLESS])

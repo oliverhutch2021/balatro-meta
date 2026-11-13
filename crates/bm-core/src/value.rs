@@ -568,6 +568,12 @@ pub fn flows_for(run: &Run, shares: &[f64; 12]) -> Flows {
             // Growing x-mult.
             Constellation => f.xmult.push((x, 0.08)),
             Hologram => f.xmult.push((x, 0.06)),
+            // "joker-fixes": Vampire eats the enhancements it grows on, so its growth over the long run can't pass
+            // x0.1 per enhanced card there is (it never ran out before).
+            Vampire if crate::teacher::on("joker-fixes") => f.xmult.push((
+                x,
+                (0.1 * (scored * enhanced / deck).min(4.0)).min(0.1 * enhanced / LONG_ROUNDS),
+            )),
             Vampire => f.xmult.push((x, 0.1 * (scored * enhanced / deck).min(4.0))),
             LuckyCat => f.xmult.push((x, 0.25 * scored * lucky / deck / 5.0)),
             GlassJoker => f.xmult.push((x, 0.75 * scored * glass / deck / 4.0)),
@@ -815,7 +821,9 @@ fn tag_dollars(t: crate::tags::TagKind) -> f64 {
 pub fn consumable_dollars(run: &Run, c: &crate::create::Consumable) -> f64 {
     // "held-cards": a card held through a round that never used it is worth nothing held (selling it is what it is
     // still good for: the user's "anything to be sold is sold at the next shop").
-    if crate::teacher::stale_card(c.sort_id) && c.kind.set() != ConsumableSet::Planet {
+    if c.kind.set() != ConsumableSet::Planet
+        && (crate::teacher::stale_card(c.sort_id) || crate::teacher::useless_card(run, c))
+    {
         return 0.0;
     }
     // A card that pays money (Hermit, Temperance...): what the engine pays for it.
@@ -1314,8 +1322,16 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
     let per_round = income(run, &f);
     let mut blinds = Vec::new();
     let mut v = 0.0;
+    // "joker-fixes": jokers whose worth is that a blind's score matters less, which the sample rounds can't see.
+    // Mr. Bones survives a blind scored to a quarter of its target, once: the blind where that gains most counts its
+    // chance at a quarter of the target. Luchador sold disables a boss: this ante's boss is judged without its effect
+    // (on the sample rounds of an ordinary blind), at its own target.
+    let fixes = crate::teacher::on("joker-fixes");
+    let bones = fixes && run.count_jokers(JokerKind::MrBones) > 0;
+    let luchador = fixes && run.count_jokers(JokerKind::Luchador) > 0;
+    let mut bones_gain = 0.0f64;
     for (target, n, w, boss) in blinds_ahead(run) {
-        let samples = if boss && !o.boss.is_empty() {
+        let samples = if boss && !o.boss.is_empty() && !luchador {
             &o.boss
         } else {
             &o.next
@@ -1328,6 +1344,10 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
         };
         let p = chance(samples, growth(&f, &o, run, n) + shopping, target);
         v += w * p.max(1e-6).ln();
+        if bones {
+            let saved = chance(samples, growth(&f, &o, run, n) + shopping, 0.25 * target);
+            bones_gain = bones_gain.max(w * (saved.max(1e-6).ln() - p.max(1e-6).ln()));
+        }
         blinds.push((target, p, w));
     }
     let long = p("long-rounds", LONG_ROUNDS).min(rounds_left(run));
@@ -1350,7 +1370,12 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
         long_run,
         money: long_weight * shopping,
         assets: 0.0,
-        total: v + long_run + xmult_bonus(run) + xmult_fit_bonus(run, &o.shares) + thin_bonus(run),
+        total: v
+            + bones_gain
+            + long_run
+            + xmult_bonus(run)
+            + xmult_fit_bonus(run, &o.shares)
+            + thin_bonus(run),
         flows: f,
     })
 }
@@ -2219,7 +2244,13 @@ mod tests {
             let mut t = r.clone();
             let i = t.give_consumable(kind);
             let c = t.consumables[i].clone();
-            with_options(opts, || consumable_dollars(&t, &c))
+            // As written before "held-cards" and "glass" were on by default: off unless asked for.
+            let mut o: Vec<&str> = opts.to_vec();
+            if !o.contains(&"glass") {
+                o.push("no-glass");
+            }
+            o.push("no-held-cards");
+            with_options(&o, || consumable_dollars(&t, &c))
         };
         // Off: the flat prices. On, a plain deck: about the same (never less).
         assert_eq!(price(&run, C::Death, &[]), 6.0);
@@ -2323,17 +2354,18 @@ mod tests {
         five.enhancement = Enhancement::Glass;
         // Off: as before. On, scored once: 45 for the x2 (30 off).
         assert_eq!(
-            worth(&run, &five, &[]) - worth(&run, &Card::new(0, Suit::Hearts, Rank::Five), &[]),
+            worth(&run, &five, &["no-glass"])
+                - worth(&run, &Card::new(0, Suit::Hearts, Rank::Five), &["no-glass"]),
             30.0
         );
         assert_eq!(
-            worth(&run, &five, &["glass"]) - worth(&run, &five, &[]),
+            worth(&run, &five, &["glass"]) - worth(&run, &five, &["no-glass"]),
             15.0
         );
         // A Red Seal scores it twice, Hack (2 to 5) a third time: the x2 counts three times.
         five.seal = Seal::Red;
         run.add_joker(JokerKind::Hack);
-        let plain_glass = worth(&run, &five, &[]);
+        let plain_glass = worth(&run, &five, &["no-glass"]);
         assert_eq!(
             worth(&run, &five, &["glass"]) - plain_glass,
             3.0 * 45.0 - 30.0
@@ -2344,7 +2376,7 @@ mod tests {
         king.seal = Seal::Red;
         king.edition = Edition::Polychrome;
         assert_eq!(
-            worth(&run, &king, &["glass"]) - worth(&run, &king, &[]),
+            worth(&run, &king, &["glass"]) - worth(&run, &king, &["no-glass"]),
             (2.0 * 45.0 - 30.0) + 30.0
         );
     }
@@ -2444,6 +2476,14 @@ mod tests {
 
     #[test]
     fn the_deck_is_measured_by_the_hands_it_deals() {
+        // Measured as written, before five-kind, glass and the round fixes' digging by worth were on by default.
+        crate::teacher::with_options(
+            &["no-five-kind", "no-glass", "no-round-fixes"],
+            the_deck_is_measured_by_the_hands_it_deals_off,
+        );
+    }
+
+    fn the_deck_is_measured_by_the_hands_it_deals_off() {
         let run = first_shop("VALUE5");
         let base = deck_power(&run, 3, DECK_DEALS);
         assert_eq!(

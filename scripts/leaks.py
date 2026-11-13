@@ -183,12 +183,64 @@ def summarise(runs: list[dict]) -> dict:
     }
 
 
+SUIT_TAROTS = ("The Star", "The Moon", "The Sun", "The World")
+# The user's named holds (#19): The Fool until the last card used is worth copying; The Hermit below $20.
+HELD_EXCEPTIONS = ("The Fool", "The Hermit")
+
+
+def bars(s: dict) -> list[dict]:
+    """The master list's bars (lab #27) read from a summary: each {id, what, value, bar, pass} (pass None when the
+    tally doesn't count it, or there were too few chances to read)."""
+    e, r = s["seal_events"], s["rounds"]
+    out = []
+
+    def add(id_, what, value, bar, ok):
+        out.append({"id": id_, "what": what, "value": value, "bar": bar, "pass": ok})
+
+    held = s["held_through_share"]
+    over = [k for k in held["over_bar"] if k not in HELD_EXCEPTIONS and held["kinds"][k]["rounds"] >= 10]
+    add("C1", "Tarot/Spectral kinds still held at a round's end at 5% or more (10+ rounds held)",
+        ", ".join(over) or "none", "none, or named", not over)
+    suits = [held["kinds"][k]["share"] for k in SUIT_TAROTS if k in held["kinds"] and held["kinds"][k]["rounds"] >= 10]
+    spread = round(max(suits) - min(suits), 3) if len(suits) >= 2 else None
+    add("C2", "spread of the suit Tarots' held-through shares", spread, "under 0.10",
+        None if spread is None else spread < 0.10)
+    seal = s.get("seal_spectral_targets", {})
+    uses = sum(v["uses"] for v in seal.values())
+    top = sum(v["rank0"] for v in seal.values())
+    add("C5", "seal Spectrals on the most valuable card", ratio(top, uses), "0.90 or more",
+        None if uses < 10 else top / uses >= 0.90)
+    blue = e.get("blue_drawn", 0)
+    add("P1", "Blue Seals thrown while digging, per draw", ratio(e.get("blue_thrown_digging", 0), blue), "under 0.05",
+        None if blue < 20 else e.get("blue_thrown_digging", 0) / blue < 0.05)
+    add("P2", "a Planet per Blue Seal draw", ratio(e.get("blue_planet_made", 0), blue), "0.70 or more",
+        None if blue < 20 else e.get("blue_planet_made", 0) / blue >= 0.70)
+    purple = e.get("purple_drawn", 0)
+    add("P3a", "a Tarot per Purple Seal draw", ratio(e.get("purple_tarot_made", 0), purple), "0.80 or more",
+        None if purple < 20 else e.get("purple_tarot_made", 0) / purple >= 0.80)
+    add("P3b", "Purple Seals played with discards left, per draw",
+        ratio(e.get("purple_played_with_discards", 0), purple), "under 0.05",
+        None if purple < 20 else e.get("purple_played_with_discards", 0) / purple < 0.05)
+    missed = e.get("purple_tarot_missed", 0) + e.get("blue_planet_missed", 0)
+    add("P4", "cards not made for want of a slot, per seal draw", ratio(missed, blue + purple), "under 0.005",
+        None if blue + purple < 20 else missed / (blue + purple) < 0.005)
+    add("P6a", "Two Pair's share of hands", s["two_pair_share"], "under 0.05",
+        None if s["two_pair_share"] is None else s["two_pair_share"] < 0.05)
+    add("P6b", "the main hand's share of a run's hands (median)", s["main_hand_share_median"], "over 0.60",
+        None if s["main_hand_share_median"] is None else s["main_hand_share_median"] > 0.60)
+    add("S7", "runs that rerolled a boss", s.get("runs_with_a_boss_reroll"), "counted", None)
+    add("slots", "rounds ended with every consumable slot full, per round begun",
+        ratio(r.get("ended_slots_full", 0), r.get("begun", 0)), "falling", None)
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("lines", type=Path)
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
     s = {"lines": a.lines.name, **summarise(read_lines(a.lines))}
+    s["bars"] = bars(s)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(s, indent=1) + "\n")
     print(f"{s['runs']} runs, {100 * (s['win_rate'] or 0):.2f}% won")
@@ -199,6 +251,10 @@ def main(argv: list[str] | None = None) -> int:
     h = s["held_through_share"]["all"]
     print(f"  Tarots and Spectrals still held at a round's end: {h['through']} of {h['rounds']} rounds held "
           f"({100 * (h['share'] or 0):.1f}%); kinds at 5% or more: {', '.join(s['held_through_share']['over_bar']) or 'none'}")
+    print("Bars (lab #27):")
+    for b in s["bars"]:
+        mark = {True: "PASS", False: "FAIL", None: "  - "}[b["pass"]]
+        print(f"  {mark}  {b['id']:5s} {b['what']}: {b['value']} (bar: {b['bar']})")
     print(f"Summary: {a.out}")
     return 0
 

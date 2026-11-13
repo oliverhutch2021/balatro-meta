@@ -1382,6 +1382,46 @@ costless (a reroll gain could hide a held-card loss).
 cd /mnt/h/balatro-meta && make sync && make test && make teacher-defaults
 ```
 
+## Step 45: the master list's batch 1, on by default (lab #27)
+
+The user: "Let's co-ordinate every fix now, leave no stone unturned", and "why do we keep delaying the fixes, just push
+them now". Issue #27 is the one list of known faults with a bar each; batch 1 is in, each part on by default
+(`teacher::ON_BY_DEFAULT`) and off with its `no-` option:
+
+- **Held cards (C1-C3, C5-C7, `held-cards`).** A held card a round never used, or one with no use for the run as it
+  stands (`useless_card`: The Tower without Stone or Marble Joker, a suit Tarot off the suit being built, Judgement
+  with a full row, a no-target card the engine won't let be used), is sold before anything else in the next shop
+  (its sale alone was too small for the value's screen, so stale cards sat in their slots: the cause of The Sun's
+  78%, which a probe showed is used at the first round as often as the other three). The cards the user uses rather
+  than holds are used when a use costs at most 0.01 in value. The seal Spectrals, Cryptid and Aura go on the most
+  valuable card that can take them (Trance: a Steel card first). A full slot sells the least useful held card, not
+  the last. The Spectrals the user skips (Grim, Incantation, Ouija, Ectoplasm, Ankh) are never taken from a pack.
+  `glass` on: a card's worth counts its retriggers.
+- **Rounds (P1-P3, P5, P8, `round-fixes`).** Digging throws by worth: a Purple Seal first while a slot is free,
+  then the cards worth least, never a card with a seal, enhancement or edition while anything else can go. A winning
+  hand leaves in hand the cards that pay held (a Blue Seal, Steel, Gold, a Purple Seal still to throw) when one that
+  avoids them still wins. Throwing for value and extra hands never spend those cards. The first move of a won round
+  acts on the hand the teacher's own search found. `five-kind` on (P7).
+- **Shops (S1-S4, S6, `shop-fixes`, `freeze-money-last`).** A joker the money covers only once a held joker is sold
+  is offered; a pack's joker with a full row is taken after a sale; any held joker may be the one sold; no $3 kept
+  back from rerolls in the last shop; `freeze-money-last` on (+0.40, step 40). The reroll voucher's worth draws each
+  later boss from the others (B's note).
+- **Jokers the value couldn't see (J1-J3, `joker-fixes`).** Mr. Bones: the blind where it gains most counts its
+  chance at a quarter of the target. Luchador: this ante's boss judged without its effect while it is held.
+  Vampire's growth capped by the enhanced cards there are.
+- Not in batch 1 yet: C4 (digging for a Tarot's target), P6 (the steer away from Two Pair), S5 (a sample shop's
+  second buy, a Mega pack's second pick).
+
+Every tally now prints the bars pass or fail (`leaks.py`, lab #27). The gate before any long run: `make look`
+(400 Green and 400 White runs of the bot as it now plays, tallied, about 30 minutes; the runs kept for the viewer),
+the bars read and ten runs watched. Then `make teacher-batch1` (every default on, named so its reports never meet
+`teacher-defaults`', against step 37's controls: 2,000 Green, then 8,000 White, both tallied; White's paired lower
+end above -1.0). `make leak-tally` turns every default off and stays the "before".
+
+```
+cd /mnt/h/balatro-meta && make sync && make test && make look
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

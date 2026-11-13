@@ -231,11 +231,34 @@ impl Leaks {
     }
 
     fn target(&mut self, run: &Run, kind: ConsumableKind, mask: u64) {
+        // Ranked among the cards that could take it: a seal Spectral's among the unsealed cards (and the target), an
+        // Aura's among the cards without an edition; every card in hand otherwise.
+        let eligible = |i: usize| {
+            let c = run.card(run.hand[i]);
+            mask >> i & 1 == 1
+                || match kind {
+                    ConsumableKind::DejaVu
+                    | ConsumableKind::Talisman
+                    | ConsumableKind::Trance
+                    | ConsumableKind::Medium => c.seal == Seal::None,
+                    ConsumableKind::Aura => c.edition == crate::card::Edition::None,
+                    _ => true,
+                }
+        };
         let mut worth: Vec<(usize, f64)> = (0..run.hand.len())
+            .filter(|&i| eligible(i))
             .map(|i| (i, crate::value::card_value(run, run.hand[i])))
             .collect();
         worth.sort_by(|x, y| y.1.total_cmp(&x.1).then(x.0.cmp(&y.0)));
-        let rank_of = |i: usize| worth.iter().position(|&(j, _)| j == i).unwrap_or(0);
+        // Its rank: how many eligible cards are worth strictly more (cards of equal worth share a rank, so a tie is
+        // never counted as a miss).
+        let rank_of = |i: usize| {
+            let w = worth
+                .iter()
+                .find(|&&(j, _)| j == i)
+                .map_or(0.0, |&(_, w)| w);
+            worth.iter().filter(|&&(_, x)| x > w + 1e-9).count()
+        };
         let chosen: Vec<usize> = (0..run.hand.len())
             .filter(|&i| mask >> i & 1 == 1)
             .collect();

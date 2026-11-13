@@ -1454,7 +1454,7 @@ def test_the_leak_tally_replays_the_salted_control_with_the_tally_and_the_forced
     champ, a = bundle["white-champion"], steps["tally"]
     # The control's own command with the tally and the forks added, the new defaults off and fewer runs: the same runs,
     # move for move.
-    assert a[a.index("--teacher-options") + 1] == "precise,no-boss-reroll,no-held-cards"
+    assert a[a.index("--teacher-options") + 1] == f"precise,{jobs.DEFAULTS_OFF}"
     a = list(a)
     a[a.index("--teacher-options") + 1] = "precise"
     added = ("--leaks", "--force-buy", "--force-out", "--force-copies")
@@ -1485,7 +1485,7 @@ def test_the_boss_reroll_arms_play_the_option_against_the_salted_controls(tmp_pa
     for name, control, runs, stake in (("white", bundle["white-champion"][-1], jobs.BIG_RUNS, None),
                                        ("green", bundle["green-champion"][-1], jobs.SCREEN_RUNS, "3")):
         a = steps[name]
-        assert a[a.index("--teacher-options") + 1] == "precise,boss-reroll,no-held-cards"
+        assert a[a.index("--teacher-options") + 1] == f"precise,{jobs.only_default('boss-reroll')}"
         assert [a[a.index(x) + 1] for x in ("--runs", "--seed", "--salt")] == [str(runs), "1", str(jobs.BUNDLE_SALT)]
         assert (a[a.index("--stake") + 1] if "--stake" in a else None) == stake
         assert steps[f"compare-{name}"][1:3] == [control, a[a.index("--out") + 1]]
@@ -1511,7 +1511,7 @@ def test_the_held_card_arms_run_green_first_with_both_stakes_tallied(tmp_path):
                            "white-gzip", "compare-white", "white-tally"]
     for name in ("green", "white"):
         a = steps[name]
-        assert a[a.index("--teacher-options") + 1] == "precise,held-cards,no-boss-reroll"
+        assert a[a.index("--teacher-options") + 1] == f"precise,{jobs.only_default('held-cards')}"
         lines = a[a.index("--leaks") + 1]
         assert steps[f"{name}-tally"][1] == lines + ".gz"
     assert steps["green"][steps["green"].index("--leaks") + 1] != steps["white"][steps["white"].index("--leaks") + 1]
@@ -1524,3 +1524,15 @@ def test_the_defaults_arm_plays_both_new_options_against_the_old_controls(tmp_pa
     for name in ("green", "white"):
         assert steps[name][steps[name].index("--teacher-options") + 1] == "precise,boss-reroll,held-cards"
     assert "defaults" in steps["white"][steps["white"].index("--leaks") + 1]
+
+
+def test_the_look_tallies_both_stakes_and_batch1_names_every_default(tmp_path):
+    champion_in(tmp_path)
+    look = {n: a for n, a, *_ in jobs.look_steps(tmp_path)}
+    assert list(look) == ["build", "folder", "green", "green-bars", "white", "white-bars"]
+    assert look["green"][look["green"].index("--stake") + 1] == str(jobs.BUNDLE_GREEN)
+    assert all(not x.startswith("results/") for n in ("green", "white") for x in look[n]), "a look, not a result"
+    batch = {n: a for n, a, *_ in jobs.batch1_steps(tmp_path)}
+    o = batch["white"][batch["white"].index("--teacher-options") + 1]
+    assert o == "precise," + ",".join(jobs.CODE_DEFAULTS)
+    assert jobs.only_default("glass").startswith("glass,no-boss-reroll")

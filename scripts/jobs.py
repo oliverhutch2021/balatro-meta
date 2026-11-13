@@ -1608,8 +1608,7 @@ def money_belief_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int 
 #   of playing the bot lacks (class B, Plan v0); a range wider than +-3 points is unmeasured (scripts/forced_buys.py).
 LEAK_DIR = ".sync/leaks"
 # Screens' file names once the champion's report predates the options on by default (champion_trials).
-DEFAULTS_MARK = "-d1"
-CODE_DEFAULTS = ["boss-reroll", "held-cards"]
+DEFAULTS_MARK = "-d2"
 
 
 def played_with_defaults(report: Path) -> bool:
@@ -1618,8 +1617,16 @@ def played_with_defaults(report: Path) -> bool:
         return json.loads(report.read_text()).get("teacher_defaults") == CODE_DEFAULTS
     except (OSError, ValueError):
         return False
-# The options on by default since 13 November (teacher.rs ON_BY_DEFAULT), turned off: what step 37's controls played.
-DEFAULTS_OFF = "no-boss-reroll,no-held-cards"
+# The options on by default (teacher.rs ON_BY_DEFAULT, from 13 November; batch 1 of the master list, lab #27, added
+# the rest), and all of them turned off: what step 37's controls played.
+CODE_DEFAULTS = ["boss-reroll", "held-cards", "glass", "five-kind", "freeze-money-last", "round-fixes", "shop-fixes",
+                 "joker-fixes"]
+DEFAULTS_OFF = ",".join(f"no-{d}" for d in CODE_DEFAULTS)
+
+
+def only_default(option: str) -> str:
+    """Teacher options for `option` alone of the defaults: it on, every other default off."""
+    return ",".join([option, *(f"no-{d}" for d in CODE_DEFAULTS if d != option)])
 LEAK_RUNS = 3000
 FORCED_JOKERS = ("Blueprint*4,Brainstorm*4,Bloodstone,Campfire,Photograph%60,Sock and Buskin,Lucky Cat*4,"
                  "Mr. Bones@7-8*4,Luchador@7-8")
@@ -1733,7 +1740,7 @@ def option_arm_steps(option: str, root: Path = ROOT, runs: int = BIG_RUNS, green
 
 def boss_reroll_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
     """make teacher-boss-reroll: the champion with "boss-reroll" alone ("held-cards" off) against step 37's controls."""
-    return option_arm_steps(f"{BOSS_REROLL},no-held-cards", root, runs, green_runs, name=BOSS_REROLL)
+    return option_arm_steps(only_default(BOSS_REROLL), root, runs, green_runs, name=BOSS_REROLL)
 
 
 # make teacher-held-cards: the leak bundle's first part (lab #19), teacher option "held-cards": a held Tarot or
@@ -1747,7 +1754,7 @@ HELD_CARDS = "held-cards"
 
 def held_cards_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
     """make teacher-held-cards: the champion with "held-cards" alone ("boss-reroll" off), Green first, both tallied."""
-    return option_arm_steps(f"{HELD_CARDS},no-boss-reroll", root, runs, green_runs, green_first=True,
+    return option_arm_steps(only_default(HELD_CARDS), root, runs, green_runs, green_first=True,
                             tally_green=True, name=HELD_CARDS)
 
 
@@ -1755,6 +1762,34 @@ def held_cards_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = 
 # on"), against step 37's controls (played without either): Green first, then White, both tallied. The rule: White's
 # paired lower end above -1.0 (the leak bundle's bar, S), Green for direction; the two single-option arms say which
 # part did what.
+def batch1_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
+    """make teacher-batch1: the bot with every default on (batch 1 of the master list, lab #27), named explicitly so
+    its reports never meet teacher-defaults' (two defaults only), against step 37's controls: Green first, both
+    tallied. The rule (#27): White's paired lower end above -1.0; the bars read on the tallies."""
+    return option_arm_steps(",".join(CODE_DEFAULTS), root, runs, green_runs, green_first=True, tally_green=True,
+                            name="batch1")
+
+
+# make look: the gate before any long run (lab #27): 400 runs at Green and 400 at White with every default on and the
+# tally, each tally's bars printed pass or fail, the runs kept for the viewer. A look, not a measurement.
+LOOK_RUNS = 400
+
+
+def look_steps(root: Path = ROOT, runs: int = LOOK_RUNS) -> list[tuple]:
+    """make look: the champion as it now plays on the first `runs` salt-2 seeds at Green and at White, tallied."""
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    a = list(best[1])
+    for name, stake in (("green", ["--stake", str(BUNDLE_GREEN)]), ("white", [])):
+        lines = f"{LEAK_DIR}/look-{name}.jsonl"
+        steps.append((name, [*BASELINE, "--bot", "teacher", *a, "--runs", str(runs), "--seed", "1", "--salt",
+                             str(BUNDLE_SALT), *stake, "--leaks", lines, "--out", f"{LEAK_DIR}/look-{name}.json"]))
+        steps.append((f"{name}-bars", ["scripts/leaks.py", lines, "--out", f"{LEAK_DIR}/look-{name}-summary.json"]))
+    return steps
+
+
 def defaults_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCREEN_RUNS) -> list[tuple]:
     """make teacher-defaults: the champion with both new defaults, Green first, both tallied."""
     return option_arm_steps(f"{BOSS_REROLL},{HELD_CARDS}", root, runs, green_runs, green_first=True,
@@ -2247,6 +2282,8 @@ JOBS: dict[str, list[tuple]] = {
     "reroll-demo": reroll_demo_steps(),
     "teacher-held-cards": held_cards_steps(),
     "teacher-defaults": defaults_steps(),
+    "teacher-batch1": batch1_steps(),
+    "look": look_steps(),
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
     "diagnose": diagnose_steps(),
