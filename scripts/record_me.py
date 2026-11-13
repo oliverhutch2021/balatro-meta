@@ -3,6 +3,7 @@
     make record-me               Balatro opens at 4x speed; play White Stake, Red Deck runs as you normally would
     make record-me SPEED=fast    the game at 10x (any number works too: SPEED=2)
     make record-me SEEDS=AAAA1111,BBBB2222    the first runs on these seeds (then fresh ones)
+    make record-me STAKE=green   Red Deck runs at Green Stake (any stake by name or number 1-8; White by default)
 
 Balatro opens through BalatroBot's launcher on a port of its own (12351), like the hidden game of the real-game checks
 but in a window with sound. From the main menu each run starts by itself, with a fresh random seed, so the engine can
@@ -51,6 +52,17 @@ START_DELAY = 3.0  # seconds at the main menu before the next run starts
 POLL = 0.12  # seconds between reads of the game's state
 PEEK_EVERY = 0.5  # seconds between reads while the game is busy, to catch a run's end before its screen settles
 SPEEDS = {"fast": 10}
+
+
+def stake_name(s: str | None) -> str:
+    """STAKE=...: a stake by name (white, green, "Green Stake") or number (1 White ... 8 Gold), as BalatroBot names
+    it (WHITE, GREEN...)."""
+    t = str(s or "white").strip().upper().replace(" STAKE", "")
+    if t.isdigit() and 1 <= int(t) <= len(watch.BALATROBOT_STAKES):
+        return watch.BALATROBOT_STAKES[int(t) - 1]
+    if t in watch.BALATROBOT_STAKES:
+        return t
+    raise ValueError(f"STAKE={s}: a stake is one of {', '.join(x.lower() for x in watch.BALATROBOT_STAKES)}, or 1-8")
 
 
 def speed_value(s: str | None) -> float:
@@ -186,8 +198,10 @@ class LiveReplay:
 
 class Recorder:
     def __init__(self, speed: float, port: int = PORT, api: Api | None = None, files=None, game=None, say=print,
-                 auto_start: bool = True, log=None, seeds: list[str] | None = None) -> None:
+                 auto_start: bool = True, log=None, seeds: list[str] | None = None, stake: str = "WHITE") -> None:
         self.speed = speed
+        # The stake every run is started and recorded at (STAKE=..., BalatroBot's name: WHITE, GREEN...).
+        self.stake = stake
         # Seeds asked for (SEEDS=...): the next runs start on them, in order, then on fresh ones.
         self.seeds = list(seeds or [])
         self.port = port
@@ -260,10 +274,10 @@ class Recorder:
     # -- runs
     def begin(self, gs: dict) -> None:
         deck, stake = gs.get("deck"), gs.get("stake")
-        if deck != "RED" or stake != "WHITE":
+        if deck != "RED" or stake != self.stake:
             if self.last_seen != f"skip:{gs.get('seed')}":
                 self.say(f"Not recording this run: it's {str(deck).title()} Deck at {str(stake).title()} Stake "
-                         "(only White Stake, Red Deck runs are recorded).")
+                         f"(this session records Red Deck runs at {self.stake.title()} Stake: STAKE= to change it).")
                 self.last_seen = f"skip:{gs.get('seed')}"
             return
         self.run = RunFile(gs, seeded=self.started_seed == gs.get("seed"), speed=self.speed)
@@ -336,7 +350,7 @@ class Recorder:
         seed = self.seeds[0] if self.seeds else watch.fresh_seed()
         self.started_seed = seed
         try:
-            self.api.call("start", {"deck": "RED", "stake": "WHITE", "seed": seed})
+            self.api.call("start", {"deck": "RED", "stake": self.stake, "seed": seed})
         except RuntimeError as e:
             self.say(f"Couldn't start a run yet ({e}); trying again.")
             self.menu_since = time.time()
@@ -473,7 +487,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--speed", default=os.environ.get("SPEED") or "4", help="4 (default), fast (10x), or a number")
     ap.add_argument("--seeds", default=os.environ.get("SEEDS") or "",
                     help="seeds for the first runs, comma-separated (then fresh ones)")
+    ap.add_argument("--stake", default=os.environ.get("STAKE") or "white",
+                    help="the stake to play and record: white (default), red, green... or 1-8")
     a = ap.parse_args(argv)
+    try:
+        stake = stake_name(a.stake)
+    except ValueError as e:
+        print(e)
+        return 2
     seeds = [x.strip().upper() for x in a.seeds.split(",") if x.strip()]
     bad = [x for x in seeds if len(x) != 8 or not x.isalnum()]
     if bad:
@@ -504,7 +525,7 @@ def main(argv: list[str] | None = None) -> int:
     if msg:
         print("Installed the companion mod.")
     log = log_to(RUNS.parent / "recorder.log")
-    rec = Recorder(speed, say=lambda text: (print(text), log(text)), log=log, seeds=seeds)
+    rec = Recorder(speed, say=lambda text: (print(text), log(text)), log=log, seeds=seeds, stake=stake)
     if seeds:
         rec.say(f"The next runs start on {', '.join(seeds)}, in that order.")
     try:

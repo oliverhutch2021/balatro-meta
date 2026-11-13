@@ -8,7 +8,8 @@
 //!         [--value-net a.bin,b.bin] [--value-weight W] [--teacher-options precise] [--threads N]
 //!         [--phase SHOP]
 //!
-//! The input has one run per line, tab-separated: its name, its seed and its steps; steps are separated by `|`,
+//! The input has one run per line, tab-separated: its name, its seed, its steps and its stake (1-8; White when
+//! missing); steps are separated by `|`,
 //! each a comma-separated list of `kind:arg` moves (the player's reorders first). The output has one line per
 //! decision (JSON).
 
@@ -211,9 +212,13 @@ fn main() {
         let mut parts = line.split('\t');
         let name = parts.next().unwrap_or("").to_string();
         let seed = parts.next().expect("a seed").to_string();
-        let mut run = Run::new(RunConfig::new(&seed));
+        let steps = parts.next().unwrap_or("");
+        // The stake the run was played at (1 White ... 8 Gold; White when the line doesn't say).
+        let mut cfg = RunConfig::new(&seed);
+        cfg.stake = parts.next().and_then(|s| s.trim().parse().ok()).unwrap_or(1);
+        let mut run = Run::new(cfg);
         let mut done = 0u64;
-        for (step, s) in parts.next().unwrap_or("").split('|').enumerate() {
+        for (step, s) in steps.split('|').enumerate() {
             let moves = parse_moves(s);
             let wanted = only.as_deref().is_none_or(|p| p == phase_name(run.phase));
             if wanted

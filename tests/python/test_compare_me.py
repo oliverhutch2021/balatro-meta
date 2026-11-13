@@ -23,8 +23,9 @@ def decision(phase="SHOP", agree=False, player_kind=3, bot_kind=11, pv=1.0, bv=1
 
 def test_the_judge_reads_each_run_as_its_steps_of_moves():
     runs = [{"name": "r1", "seed": "AAAA1111", "steps": [[(8, 513), (6, 3)], [(2, 0)]]},
-            {"name": "r2", "seed": "BBBB2222", "steps": [[(0, 0)]]}]
-    assert cm.judge_input(runs) == "r1\tAAAA1111\t8:513,6:3|2:0\nr2\tBBBB2222\t0:0\n"
+            {"name": "r2", "seed": "BBBB2222", "steps": [[(0, 0)]], "stake": 3}]
+    # The stake last (White when a run doesn't say): the judge rebuilds each run at its own stake.
+    assert cm.judge_input(runs) == "r1\tAAAA1111\t8:513,6:3|2:0\t1\nr2\tBBBB2222\t0:0\t3\n"
 
 
 def test_the_report_counts_agreement_swaps_and_the_largest_gaps():

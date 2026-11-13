@@ -22,7 +22,7 @@ import re
 import sys
 from pathlib import Path
 
-from watch import ROOT, differences, engine_view, game_view, hand_permutation
+from watch import BALATROBOT_STAKES, ROOT, differences, engine_view, game_view, hand_permutation
 
 # Text the game writes about cards and blinds is never kept (nothing from the game's text goes to disk): only ids,
 # keys, names, numbers and flags. A card's effect line keeps just its numbers (a joker's current +Mult, say).
@@ -533,6 +533,16 @@ def explain(line: Line, gs: dict, highlight: list | None, passed: list[dict] | N
     return matches, closest
 
 
+
+def stake_number(name) -> int:
+    """A recorded state's stake (BalatroBot's name, WHITE ... GOLD; runs recorded before stakes were chosen are
+    White's) as the engine numbers it (1 ... 8)."""
+    n = str(name or "WHITE").upper()
+    if n not in BALATROBOT_STAKES:
+        raise ValueError(f"a run recorded at an unknown stake: {name}")
+    return BALATROBOT_STAKES.index(n) + 1
+
+
 class Replay:
     """One recorded run in the engine, state by state. When two moves fit a state equally well (taking a Tarot
     whose effect doesn't show, or skipping the pack), the replay goes on with the likelier one and keeps the other
@@ -549,7 +559,7 @@ class Replay:
         seed = first.get("seed")
         if not seed:
             raise ValueError("the game's state has no seed")
-        game = Game(seed)
+        game = Game(seed, stake_number(first.get("stake")))
         self.lost: str | None = None
         self.why = ""
         self.skipped = 0
@@ -770,7 +780,7 @@ def engine_gamestate(game, id_of=lambda kind, i: i) -> dict:
         "hands": hands,
         "cards": {"cards": deck},
         "state": v["state"], "ante_num": v["ante"], "round_num": v["round"], "money": v["money"],
-        "seed": game.seed, "deck": "RED", "stake": "WHITE", "won": v["won"],
+        "seed": game.seed, "deck": "RED", "stake": BALATROBOT_STAKES[game.stake - 1], "won": v["won"],
         "round": {"hands_left": v["hands_left"], "discards_left": v["discards_left"], "chips": v["chips"],
                   "reroll_cost": v["reroll_cost"]},
         "hand": {"cards": hand}, "jokers": {"cards": jokers}, "consumables": {"cards": consumables},

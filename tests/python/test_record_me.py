@@ -42,7 +42,8 @@ class NoMod:
 class FakeGame:
     """BalatroBot's calls answered by the engine; `person()` makes the next move, cards selected first."""
 
-    def __init__(self, seed: int) -> None:
+    def __init__(self, seed: int, stake: str = "WHITE") -> None:
+        self.stake = stake
         self.rng = random.Random(seed)
         self.game = None
         self.pending = None
@@ -55,8 +56,8 @@ class FakeGame:
             return {"status": "ok"}
         if method == "start":
             assert self.game is None, "a run was started over another"
-            assert params["deck"] == "RED" and params["stake"] == "WHITE"
-            self.game = Game(params["seed"])
+            assert params["deck"] == "RED" and params["stake"] == self.stake
+            self.game = Game(params["seed"], replay_me.stake_number(params["stake"]))
             self.starts += 1
             self.fresh = True  # a person takes a moment to look at a new run
             return {}
@@ -351,3 +352,26 @@ def test_the_recorders_log_has_a_timestamp_per_line(tmp_path):
     log("ABC: another run began; the mod saw it won")
     lines = (tmp_path / "me" / "recorder.log").read_text().splitlines()
     assert len(lines) == 2 and lines[1].endswith("the mod saw it won") and lines[0][:4].isdigit()
+
+
+def test_a_green_stake_session_starts_records_and_replays_green_runs(tmp_path, monkeypatch):
+    monkeypatch.setattr(record_me, "RUNS", tmp_path)
+    monkeypatch.setattr(record_me, "START_DELAY", 0.0)
+    assert record_me.stake_name("green") == record_me.stake_name("3") == record_me.stake_name("Green Stake") == "GREEN"
+    with pytest.raises(ValueError):
+        record_me.stake_name("teal")
+    fake = FakeGame(6, stake="GREEN")
+    rec = record_me.Recorder(4, api=fake, files=NoMod(), game=None, say=lambda s: None, stake="GREEN")
+    for _ in range(20000):
+        rec.step()
+        fake.person()
+        if len(fake.finished) == 1 and fake.game is None:
+            break
+    rec.close()
+    files = sorted(tmp_path.glob("*.jsonl.gz"))
+    assert len(files) == 1
+    header, states = replay_me.read_run(files[0])
+    assert header["stake"] == "GREEN"
+    r = replay_me.replay_states(states)
+    assert r.ok, r.lost
+    assert r.game.stake == 3 and r.game.over

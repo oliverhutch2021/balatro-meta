@@ -51,7 +51,8 @@ def replay_file(path: Path) -> dict:
     first = r.moves[: len(r.moves) - sum(len(s["moves"]) for s in r.steps)]
     steps = ([first] if first else []) + [s["moves"] for s in r.steps]
     v = r.game.view()
-    return {"name": path.name.split(".")[0], "seed": r.game.seed, "steps": steps, "ok": r.ok, "lost": r.lost,
+    return {"name": path.name.split(".")[0], "seed": r.game.seed, "stake": r.game.stake, "steps": steps, "ok": r.ok,
+            "lost": r.lost,
             "states": len(states), "ante": v["ante"], "won": v["won"], "over": r.game.over}
 
 
@@ -59,7 +60,7 @@ def judge_input(runs: list[dict]) -> str:
     lines = []
     for run in runs:
         steps = "|".join(",".join(f"{k}:{a}" for k, a in s) for s in run["steps"])
-        lines.append(f"{run['name']}\t{run['seed']}\t{steps}")
+        lines.append(f"{run['name']}\t{run['seed']}\t{steps}\t{run.get('stake', 1)}")
     return "\n".join(lines) + "\n"
 
 
