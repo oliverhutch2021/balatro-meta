@@ -1374,7 +1374,9 @@ What changes with them:
 
 The decision, stated before the run: White's paired lower end above -1.0 point (the leak bundle's bar) keeps them on;
 below it, the single-option arms say which part costs it, and that one goes back off until it is fixed. Green is for
-direction. The held cards' behaviour test is step 43's (each kind under 5% held through).
+direction. The held cards' behaviour test is step 43's (each kind under 5% held through). B's masking rule (#25): if
+White's point estimate is under +1.0, `make teacher-held-cards` runs on White too before the held cards are taken as
+costless (a reroll gain could hide a held-card loss).
 
 ```
 cd /mnt/h/balatro-meta && make sync && make test && make teacher-defaults
