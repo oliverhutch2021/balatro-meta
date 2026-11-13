@@ -1,0 +1,52 @@
+{
+ "job": "green-next",
+ "commit": "e823d45244cdcc5796ff7158185421139fb35387",
+ "started": "2026-11-13T19:27:30+00:00",
+ "finished": "2026-11-13T23:15:44+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   11.3,
+   15.3,
+   16.4
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 21,
+  "folder": 0,
+  "card-sharp-green": 4448,
+  "card-sharp-green-gzip": 0,
+  "card-sharp-compare-green": 0,
+  "card-sharp-green-tally": 0,
+  "deck-fix-green": 4675,
+  "deck-fix-green-gzip": 0,
+  "deck-fix-compare-green": 0,
+  "deck-fix-green-tally": 0,
+  "calib-green": 4547,
+  "calib-green-gzip": 1,
+  "calib-compare-green": 0,
+  "calib-green-tally": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "folder": "mkdir -p .sync/leaks .sync/calib",
+  "card-sharp-green": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,boss-reroll,held-cards,glass,five-kind,freeze-money-last,round-fixes,shop-fixes,joker-fixes,card-sharp --runs 2000 --seed 1 --salt 2 --stake 3 --leaks .sync/leaks/card-sharp-green-2k-salt2.jsonl --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+card-sharp-w2.5-salt2-on-ensemble8-w1.5.json",
+  "card-sharp-green-gzip": "gzip -f .sync/leaks/card-sharp-green-2k-salt2.jsonl",
+  "card-sharp-compare-green": "scripts/compare_runs.py results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes-w2.5-salt2-on-ensemble8-w1.5.json results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+card-sharp-w2.5-salt2-on-ensemble8-w1.5.json --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+card-sharp-w2.5-salt2-on-ensemble8-w1.5-vs-batch1.json",
+  "card-sharp-green-tally": "scripts/leaks.py .sync/leaks/card-sharp-green-2k-salt2.jsonl.gz --out results/leaks/card-sharp-green-2k-salt2.json",
+  "deck-fix-green": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,boss-reroll,held-cards,glass,five-kind,freeze-money-last,round-fixes,shop-fixes,joker-fixes,deck-fix --runs 2000 --seed 1 --salt 2 --stake 3 --leaks .sync/leaks/deck-fix-green-2k-salt2.jsonl --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+deck-fix-w2.5-salt2-on-ensemble8-w1.5.json",
+  "deck-fix-green-gzip": "gzip -f .sync/leaks/deck-fix-green-2k-salt2.jsonl",
+  "deck-fix-compare-green": "scripts/compare_runs.py results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes-w2.5-salt2-on-ensemble8-w1.5.json results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+deck-fix-w2.5-salt2-on-ensemble8-w1.5.json --out results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+deck-fix-w2.5-salt2-on-ensemble8-w1.5-vs-batch1.json",
+  "deck-fix-green-tally": "scripts/leaks.py .sync/leaks/deck-fix-green-2k-salt2.jsonl.gz --out results/leaks/deck-fix-green-2k-salt2.json",
+  "calib-green": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,boss-reroll,held-cards,glass,five-kind,freeze-money-last,round-fixes,shop-fixes,joker-fixes --runs 2000 --seed 1 --salt 2 --stake 3 --leaks .sync/leaks/base-green-2k-salt2.jsonl --calibrate .sync/calib/base-green-2k-salt2.jsonl --out results/calib/base-green-2k-salt2.json",
+  "calib-green-gzip": "gzip -f .sync/leaks/base-green-2k-salt2.jsonl .sync/calib/base-green-2k-salt2.jsonl",
+  "calib-compare-green": "scripts/compare_runs.py results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes-w2.5-salt2-on-ensemble8-w1.5.json results/calib/base-green-2k-salt2.json --out results/calib/base-green-2k-salt2-vs-batch1.json",
+  "calib-green-tally": "scripts/leaks.py .sync/leaks/base-green-2k-salt2.jsonl.gz --out results/leaks/base-green-2k-salt2.json"
+ }
+}
