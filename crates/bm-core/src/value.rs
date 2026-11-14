@@ -1476,10 +1476,32 @@ pub fn calibration(run: &Run, salt: u64, samples: usize) -> Option<String> {
         .map(|j| format!("\"{}\"", j.kind.name()))
         .collect();
     let xmult: Vec<String> = f.xmult.iter().map(|(x, r)| format!("[{x:.3},{r:.4}]")).collect();
+    // The deck as counts (B, lab #20: Plan v0's "on target" inputs are derived from these exactly): cards by rank
+    // (2 ... Ace) and suit (Spades, Hearts, Clubs, Diamonds), as 52 cells, rank-major; Stone cards, which have
+    // neither, apart. With the hand size and the round's hands and discards.
+    let mut cells = [0u32; 52];
+    let mut stone = 0u32;
+    for &id in &run.playing_cards {
+        let c = run.card(id);
+        if c.enhancement == Enhancement::Stone {
+            stone += 1;
+        } else {
+            let r = (c.rank.id().clamp(2, 14) - 2) as usize;
+            cells[r * 4 + c.suit as usize] += 1;
+        }
+    }
+    let cells: Vec<String> = cells.iter().map(u32::to_string).collect();
+    let counts = format!(
+        "{{\"cells\":[{}],\"stone\":{stone},\"hand_size\":{},\"hands\":{},\"discards\":{}}}",
+        cells.join(","),
+        run.hand_size(),
+        run.hands_per_round,
+        run.discards_per_round
+    );
     Some(format!(
         "{{\"power\":{:.4},\"deck\":{:.4},\"main\":\"{}\",\"money\":{},\"money_counted\":{money:.2},\
          \"income\":{per_round:.2},\"flows\":{{\"chips\":{:.3},\"mult\":{:.3},\"levels\":{:.4},\"xmult\":[{}],\
-         \"money\":{:.3},\"deck\":{:.4},\"drain\":{:.4}}},\"jokers\":[{}],\"cards\":{},\"proj\":{{{}}}}}",
+         \"money\":{:.3},\"deck\":{:.4},\"drain\":{:.4}}},\"jokers\":[{}],\"cards\":{},\"counts\":{counts},\"proj\":{{{}}}}}",
         mean(&o.next),
         deck_power(run, salt, deals),
         o.main.name(),
