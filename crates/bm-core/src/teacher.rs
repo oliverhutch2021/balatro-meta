@@ -181,6 +181,13 @@ pub const OPTIONS: &[&str] = &[
     "card-sharp",
     // Card Sharp's play is on by default (lab #30); this turns it off.
     "no-card-sharp",
+    // S's order (lab #27): from ante 2, where the value would reroll or leave the shop, an affordable Arcana or
+    // Spectral pack is opened instead ("open-packs"); "open-packs-all" adds Buffoon and Standard packs (`forced_pack`).
+    "open-packs",
+    "open-packs-all",
+    // Forecast v0 (S, lab #30): blinds after the next round judged by the forecast's tables (`baseline --forecast
+    // FILE`), in place of today's power plus the projection.
+    "forecast",
     // C8 (lab #30): `card_worth` ranks the enhancements in the user's order (Glass, Lucky, Steel and Gold, Mult and
     // Bonus) for what Death copies, what a seal goes on and what the digging keeps. On by default.
     "card-tiers",
@@ -1257,6 +1264,34 @@ fn fool_worth_using(run: &Run, c: &Consumable) -> bool {
             Some(Temperance) => run.jokers.iter().map(|j| j.sell_cost).sum::<i64>().min(50) > 20,
             _ => false,
         }
+}
+
+/// "open-packs" (S, lab #27; the user opens 86-100% of the affordable Arcana packs from ante 2, the bot 19-67%): from
+/// ante 2, the pack to open before rerolling or leaving: Arcana, then Spectral; with "open-packs-all" also Buffoon,
+/// then Standard (Celestial stays with the value). The cheapest of the first kind on sale that the money pays for.
+fn forced_pack(run: &Run) -> Option<usize> {
+    let (arcana, all) = (on("open-packs"), on("open-packs-all"));
+    if !(arcana || all) || run.ante < 2 {
+        return None;
+    }
+    let shop = run.shop.as_ref()?;
+    let mut kinds = vec![PackKind::Arcana, PackKind::Spectral];
+    if all {
+        kinds.extend([PackKind::Buffoon, PackKind::Standard]);
+    }
+    for kind in kinds {
+        let pick = shop
+            .boosters
+            .iter()
+            .enumerate()
+            .filter_map(|(i, b)| b.as_ref().map(|b| (i, b)))
+            .filter(|(_, b)| BOOSTERS[b.booster as usize].kind == kind && b.cost <= run.spendable())
+            .min_by_key(|(_, b)| b.cost);
+        if let Some((i, _)) = pick {
+            return Some(i);
+        }
+    }
+    None
 }
 
 /// A salt that stays the same while only the jokers' order changes, so a decision and the joker moves
@@ -2686,16 +2721,32 @@ fn choose_against(
     let here = base.unwrap_or(run);
     let here_quick = quick(here, vs);
     audit(|| {
+        // A pack's option also carries its formula part (the hand-made value of each sample opened, at the pick the
+        // quick value preferred), so the formula's and the networks' shares of its worth can be read apart (lab #27).
         let all: Vec<String> = options
             .iter()
-            .map(|(m, q, _)| format!("[{},{q:.5}]", audit_move(Some(*m))))
+            .map(|(m, q, j)| match (m.0, j) {
+                (MoveKind::OpenBooster, Judge::Sampled(samples)) if !samples.is_empty() => {
+                    let f: f64 = samples
+                        .iter()
+                        .map(|(c, follow)| {
+                            let d = if follow.is_empty() { None } else { after(c, vs ^ 0x77, follow) };
+                            crate::value::quick_formula(d.as_ref().unwrap_or(c), vs)
+                        })
+                        .sum::<f64>()
+                        / samples.len() as f64;
+                    format!("[{},{q:.5},{f:.5}]", audit_move(Some(*m)))
+                }
+                _ => format!("[{},{q:.5}]", audit_move(Some(*m))),
+            })
             .collect();
         // Four dollars more, the rest as here: the value's price of money at this position (for reading the options in
         // dollars).
         let mut plus = here.clone();
         plus.money += 4;
         format!(
-            "{{\"quick\":{{\"here\":{here_quick:.5},\"here_plus4\":{:.5},\"options\":[{}]}}}}",
+            "{{\"quick\":{{\"here\":{here_quick:.5},\"here_formula\":{:.5},\"here_plus4\":{:.5},\"options\":[{}]}}}}",
+            crate::value::quick_formula(here, vs),
             quick(&plus, vs),
             all.join(",")
         )
@@ -2957,7 +3008,15 @@ fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
         }
     }
     let options = shop_option_list(run, shop, vs);
-    if let Some(m) = choose_against(run, None, vs, options) {
+    let chosen = choose_against(run, None, vs, options);
+    // "open-packs" (S, lab #27): where the value would reroll or leave, an affordable pack of the kinds asked for is
+    // opened instead (purchases and vouchers the value chose come first; picks inside the pack are by the value).
+    if chosen.is_none_or(|m| m.0 == MoveKind::Reroll) {
+        if let Some(b) = forced_pack(run) {
+            return (MoveKind::OpenBooster, b as u64);
+        }
+    }
+    if let Some(m) = chosen {
         return m;
     }
     // Leaving: first set the jokers for what happens as the shop closes and the blind starts (or for
@@ -3906,6 +3965,32 @@ fn plain_move(run: &Run, salt: u64) -> (MoveKind, u64) {
 
 #[cfg(test)]
 mod tests {
+
+    /// "open-packs" (lab #27): from ante 2, an affordable Arcana pack before a Buffoon one; Buffoon only with
+    /// "open-packs-all"; nothing at ante 1, nothing unaffordable, nothing without the option.
+    #[test]
+    fn open_packs_picks_the_affordable_pack_of_the_kinds_asked_for() {
+        use crate::shop::BoosterSlot;
+        let mut run = crate::state::Run::new(crate::RunConfig::new("PACKS1"));
+        while run.phase != crate::state::Phase::Shop {
+            let m = crate::bots::greedy_move(&run, 1);
+            crate::env::apply(&mut run, m.0, m.1).unwrap();
+        }
+        let id = |k: PackKind| BOOSTERS.iter().position(|b| b.kind == k).unwrap() as u8;
+        let slot = |k: PackKind, cost: i64| Some(BoosterSlot { booster: id(k), sort_id: 1, cost, couponed: false });
+        run.shop.as_mut().unwrap().boosters = vec![slot(PackKind::Buffoon, 4), slot(PackKind::Arcana, 6)];
+        run.money = 10;
+        run.ante = 2;
+        let pick = |opts: &[&str], r: &crate::state::Run| with_options(opts, || forced_pack(r));
+        assert_eq!(pick(&["open-packs"], &run), Some(1), "the Arcana pack");
+        assert_eq!(pick(&[], &run), None, "off by default");
+        run.money = 5;
+        assert_eq!(pick(&["open-packs"], &run), None, "the Arcana pack unaffordable, Buffoon not asked for");
+        assert_eq!(pick(&["open-packs-all"], &run), Some(0), "with -all, the Buffoon pack");
+        run.money = 10;
+        run.ante = 1;
+        assert_eq!(pick(&["open-packs"], &run), None, "ante 1 is the value's");
+    }
 
     /// C10 (lab #30): The Fool is used at once on The Hanged Man, Death, The Hermit, or a Temperance over $20; on
     /// anything else it waits.

@@ -100,3 +100,24 @@ def test_the_pack_audit_reads_each_pack_in_the_values_dollars_and_what_beat_an_a
     end = dict(line, step=11, money=2, chosen="LeaveShop 0")
     assert pack_audit.by_shop([line, end]) == {"shops": 1, "money_ran_out": 1}
     assert pack_audit.by_shop([line, dict(end, money=9)]) == {"shops": 1, "left_affordable": 1}
+
+
+def test_the_pack_audit_groups_shops_by_key_when_threads_interleave_their_lines():
+    import pack_audit
+
+    def at(run, step, money, chosen, behind=0):
+        return {"run": run, "step": step, "ante": 2, "behind": behind, "money": money, "chosen": chosen,
+                "packs": [[0, "Arcana", 4]], "notes": []}
+    lines = [at(1, 10, 9, "Buy 0"), at(2, 10, 9, "OpenBooster 0"), at(1, 11, 9, "LeaveShop 0"),
+             at(2, 12, 5, "LeaveShop 0"), at(1, 30, 3, "LeaveShop 0", behind=1)]
+    assert pack_audit.by_shop(lines) == {"shops": 2, "opened": 1, "left_affordable": 1}
+
+
+def test_the_pack_audit_splits_an_arcana_packs_worth_into_the_formulas_part_and_the_networks():
+    import pack_audit
+    line = {"run": 1, "step": 3, "ante": 3, "behind": 0, "money": 9, "packs": [[0, "Arcana", 4]], "chosen": "LeaveShop 0",
+            "notes": [json.dumps({"quick": {"here": 1.0, "here_formula": 0.6, "here_plus4": 1.2,
+                                            "options": [["OpenBooster 0", 0.9, 0.7]]}})]}
+    s = pack_audit.split([line])
+    # formula +0.1 (0.7 - 0.6); networks -0.2 (the option's -0.1 overall less the formula's +0.1)
+    assert s[3]["formula_median"] == 0.1 and s[3]["networks_median"] == -0.2

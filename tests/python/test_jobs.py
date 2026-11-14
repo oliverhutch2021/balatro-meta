@@ -1535,7 +1535,7 @@ def test_the_look_tallies_both_stakes_and_batch1_names_every_default(tmp_path):
     assert all(not x.startswith("results/") for n in ("green", "white") for x in look[n]), "a look, not a result"
     batch = {n: a for n, a, *_ in jobs.batch1_steps(tmp_path)}
     o = batch["white"][batch["white"].index("--teacher-options") + 1]
-    assert o == "precise," + ",".join(jobs.CODE_DEFAULTS)
+    assert o == "precise," + ",".join(jobs.BATCH1_DEFAULTS)
     assert jobs.only_default("glass").startswith("glass,no-boss-reroll")
 
 
@@ -1660,3 +1660,19 @@ def test_a_play_on_report_is_never_compared_nor_a_progress_line(tmp_path):
         compare_runs.compare(r, dict(r, play_on=False))
     (tmp_path / "r.json").write_text(json.dumps(r))
     assert jobs.progress_entry("x", "s", ["--out", "r.json"], "abc", root=tmp_path) is None
+
+
+def test_the_packs_and_forecast_arms_pair_against_the_d4_base(tmp_path):
+    champion_in(tmp_path)
+    base = {n: a for n, a, *_ in jobs.night_d4_steps(tmp_path)}["d4-base-green"]
+    base_out = base[base.index("--out") + 1]
+    packs = {n: a for n, a, *_ in jobs.green_packs_steps(tmp_path)}
+    fc = {n: a for n, a, *_ in jobs.green_forecast_steps(tmp_path)}
+    for d, arms in ((packs, ("open-packs", "open-packs-all")), (fc, ("forecast", "forecast-ahead3", "forecast-ahead8"))):
+        for arm in arms:
+            assert d[f"{arm}-compare"][1] == base_out
+    assert "--calibrate" in packs["open-packs-green"] and "--calibrate" not in fc["forecast-green"]
+    f8 = fc["forecast-ahead8-green"]
+    assert f8[f8.index("--teacher-options") + 1].endswith(",forecast,ahead=8")
+    assert f8[f8.index("--forecast") + 1] == jobs.FORECAST_TABLES
+    assert not jobs.path_problems(jobs.green_packs_steps(tmp_path) + jobs.green_forecast_steps(tmp_path))

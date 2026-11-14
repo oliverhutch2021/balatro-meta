@@ -1543,6 +1543,25 @@ may be cut short). It is not run again: the base has changed since (C8, C10).
 cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(green-calib): look" || true) && make sync && make night-d4
 ```
 
+## Step 51: opening packs, and forecast v0 (S, lab #27 and #30)
+
+Read from step 50: the `-d4` base against batch 1, +0.35 points (-0.39 to +1.09), Level: `-d4` is the base. The pack
+audit: where the bot left an affordable Arcana pack, the value priced it under its cost (the shop-ordering suspect is
+dead); the user opens 86-100% of affordable Arcana packs from ante 2, the bot 19-67%.
+
+- `open-packs` (teacher option): from ante 2, where the value would reroll or leave the shop, an affordable Arcana or
+  Spectral pack is opened instead; `open-packs-all` adds Buffoon and Standard packs. Purchases and vouchers the value
+  chose come first; picks inside the pack are the value's.
+- `forecast` (teacher option, with `baseline --forecast FILE`): every blind after the next round is judged by forecast
+  v0's tables (centre and spread of ln power at a later blind, from today's power, by ante and rounds on), in place of
+  today's power plus the projection.
+- The shop audit carries each pack option's formula part, so `pack_audit.py` splits an Arcana pack's worth into the
+  formula's part and the networks' part by ante; it groups shops by key (the audit's lines interleave across threads).
+- Batch 1's jobs keep batch 1's defaults in their file names (`BATCH1_DEFAULTS`), which fixes night-d4's compare.
+
+`make green-packs` (about 2.5 hours) and `make green-forecast` (about 3.5 hours), each against the `-d4` base on 2,000
+Green seeds.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

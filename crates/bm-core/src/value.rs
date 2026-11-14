@@ -1372,10 +1372,24 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
         } else {
             target
         };
-        let p = chance(samples, growth(&f, &o, run, n) + shopping, target);
+        // "forecast" (S, lab #30): every blind after the next round by the forecast's centre and spread, in place of
+        // today's power plus the projection.
+        let forecast = (n >= 1.0 && crate::teacher::on("forecast"))
+            .then(|| {
+                FORECAST
+                    .get()
+                    .expect("teacher option \"forecast\" needs baseline --forecast FILE")
+                    .at(mean(&o.next), blind_now(run), n as usize, run.ante)
+            })
+            .flatten();
+        let p_of = |t: f64| match forecast {
+            Some((centre, spread)) => upper_tail((t.max(1.0).ln() - centre) / spread),
+            None => chance(samples, growth(&f, &o, run, n) + shopping, t),
+        };
+        let p = p_of(target);
         v += w * p.max(1e-6).ln();
         if bones {
-            let saved = chance(samples, growth(&f, &o, run, n) + shopping, 0.25 * target);
+            let saved = p_of(0.25 * target);
             bones_gain = bones_gain.max(w * (saved.max(1e-6).ln() - p.max(1e-6).ln()));
         }
         blinds.push((target, p, w));
@@ -1408,6 +1422,102 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
             + thin_bonus(run),
         flows: f,
     })
+}
+
+/// Forecast v0 (S, lab #30): ln power at a later blind = mean[that blind] + rho[rounds on][ante now] * (ln power now -
+/// mean[blind now]), spread sigma[rounds on][ante now]. Fitted from the calibration recordings (`--calibrate`), read
+/// from S's file (`baseline --forecast FILE`); teacher option "forecast" puts it in place of today's power plus the
+/// projection for every blind after the next round.
+#[derive(Clone, Debug)]
+pub struct Forecast {
+    /// By blind, 0 = ante 1's Small ... 23 = ante 8's boss.
+    pub mean: Vec<f64>,
+    /// [rounds on - 1][ante now - 1], rounds on 1..=9, antes 1..=7.
+    pub rho: Vec<Vec<f64>>,
+    pub sigma: Vec<Vec<f64>>,
+}
+
+static FORECAST: std::sync::OnceLock<Forecast> = std::sync::OnceLock::new();
+
+/// Load the forecast's tables (once, for the whole process).
+pub fn load_forecast(text: &str) -> Result<(), String> {
+    let f = Forecast::parse(text)?;
+    FORECAST.set(f).map_err(|_| "the forecast is already loaded".to_string())
+}
+
+impl Forecast {
+    /// The tables from S's JSON (`mean_power_by_blind`, `rho` and `sigma` by rounds on "1" ... "9"), read without a
+    /// JSON library: numbers in brackets after each key.
+    pub fn parse(text: &str) -> Result<Forecast, String> {
+        fn floats(s: &str) -> Result<Vec<f64>, String> {
+            let open = s.find('[').ok_or("no list")?;
+            let close = open + s[open..].find(']').ok_or("an open list")?;
+            s[open + 1..close]
+                .split(',')
+                // null where no run reached that far (ante 7 and nine rounds on): no number there.
+                .map(|x| match x.trim() {
+                    "null" => Ok(f64::NAN),
+                    t => t.parse::<f64>().map_err(|e| format!("{t:?}: {e}")),
+                })
+                .collect()
+        }
+        fn after<'a>(s: &'a str, key: &str) -> Result<&'a str, String> {
+            let k = format!("\"{key}\"");
+            s.find(&k).map(|i| &s[i + k.len()..]).ok_or(format!("no {key}"))
+        }
+        fn table(s: &str, key: &str) -> Result<Vec<Vec<f64>>, String> {
+            let body = after(s, key)?;
+            let end = body.find('}').ok_or(format!("{key}: an open table"))?;
+            let body = &body[..end];
+            (1..=9).map(|h| floats(after(body, &h.to_string())?)).collect()
+        }
+        let f = Forecast {
+            mean: floats(after(text, "mean_power_by_blind")?)?,
+            rho: table(text, "rho")?,
+            sigma: table(text, "sigma")?,
+        };
+        if f.mean.len() != 24 || f.rho.iter().chain(&f.sigma).any(|r| r.len() < 7) {
+            return Err("the forecast's tables have the wrong shape (24 blinds; 9 x 7)".into());
+        }
+        Ok(f)
+    }
+
+    /// (centre, spread) of ln power `h` rounds on, from `power` now at blind `now` (0-23) in ante `ante`.
+    pub fn at(&self, power: f64, now: usize, h: usize, ante: i32) -> Option<(f64, f64)> {
+        let later = now + h;
+        if h == 0 || later >= self.mean.len() {
+            return None;
+        }
+        let (hi, ai) = (h.min(9) - 1, (ante.clamp(1, 7) - 1) as usize);
+        let (rho, sigma) = (self.rho[hi][ai], self.sigma[hi][ai]);
+        if !(rho.is_finite() && sigma.is_finite() && self.mean[later].is_finite()) {
+            return None;
+        }
+        Some((
+            self.mean[later] + rho * (power - self.mean[now.min(23)]),
+            sigma.max(0.05),
+        ))
+    }
+}
+
+/// The normal distribution's upper tail: the chance a draw from N(0, 1) is above `z` (Abramowitz and Stegun 7.1.26).
+fn upper_tail(z: f64) -> f64 {
+    let x = z.abs() / std::f64::consts::SQRT_2;
+    let t = 1.0 / (1.0 + 0.327_591_1 * x);
+    let erf = 1.0
+        - t * (0.254_829_592 + t * (-0.284_496_736 + t * (1.421_413_741 + t * (-1.453_152_027 + t * 1.061_405_429))))
+            * (-x * x).exp();
+    let below = 0.5 * (1.0 + erf.copysign(z));
+    1.0 - below
+}
+
+/// The blind the run plays next, 0 = ante 1's Small ... 23 = ante 8's boss.
+fn blind_now(run: &Run) -> usize {
+    let done = run.slots[..]
+        .iter()
+        .filter(|s| matches!(s, SlotState::Defeated | SlotState::Skipped))
+        .count();
+    ((run.ante.clamp(1, 8) - 1) as usize * 3 + done.min(2)).min(23)
 }
 
 /// The calibration record (E1 step 1, S, lab #27 and #30; `baseline --calibrate`): at a round's start, the power the
@@ -2642,6 +2752,30 @@ mod tests {
             &["no-five-kind", "no-glass", "no-round-fixes"],
             the_deck_is_measured_by_the_hands_it_deals_off,
         );
+    }
+
+    /// Forecast v0's tables read from S's JSON, and the chance they give.
+    #[test]
+    fn the_forecast_reads_its_tables_and_widens_nothing_it_was_not_given() {
+        let row = |x: f64| format!("[{}]", vec![format!("{x}"); 7].join(", "));
+        let tab = |x: f64| {
+            let r: Vec<String> = (1..=9).map(|h| format!("\"{h}\": {}", row(x))).collect();
+            format!("{{{}}}", r.join(", "))
+        };
+        let mean: Vec<String> = (0..24).map(|b| format!("{}", 7.0 + 0.5 * b as f64)).collect();
+        let text = format!(
+            "{{\"what\": \"t\", \"mean_power_by_blind\": [{}], \"spread_by_blind\": [1], \"rho\": {}, \"sigma\": {}}}",
+            mean.join(", "),
+            tab(0.5),
+            tab(0.4)
+        );
+        let f = Forecast::parse(&text).unwrap();
+        // A run 1.0 above the mean at blind 3, three rounds on: 7.0 + 0.5 * 6 + 0.5 * 1.0 = 10.5, spread 0.4.
+        let (c, s) = f.at(7.0 + 0.5 * 3.0 + 1.0, 3, 3, 2).unwrap();
+        assert!((c - 10.5).abs() < 1e-9 && (s - 0.4).abs() < 1e-9);
+        assert!(f.at(9.0, 22, 3, 8).is_none(), "past ante 8's boss");
+        assert!((upper_tail(0.0) - 0.5).abs() < 1e-6 && (upper_tail(1.96) - 0.025).abs() < 1e-3);
+        assert!(Forecast::parse("{}").is_err());
     }
 
     /// C8 (lab #30): the user's tiers rank Lucky above Mult and Steel, Glass at the top; the old table had Mult over

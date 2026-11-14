@@ -41,7 +41,8 @@ def summarise(lines: list[dict]) -> dict:
             continue
         slots = {p[0]: (p[1], p[2]) for p in d.get("packs", [])}
         arcana = []
-        for m, v in q["options"]:
+        for o in q["options"]:
+            m, v = o[0], o[1]
             if m.startswith("OpenBooster"):
                 i = int(m.split()[1])
                 kind = slots.get(i, ("?", 0))[0]
@@ -60,7 +61,7 @@ def summarise(lines: list[dict]) -> dict:
             when["opened"] += 1
         elif ch.startswith("LeaveShop"):
             when["left_the_shop"] += 1
-        elif max(v for _, v in q["options"]) > best + 1e-9:
+        elif max(o[1] for o in q["options"]) > best + 1e-9:
             when["another_move_valued_higher"] += 1
         else:
             when["another_move_the_full_pass_preferred"] += 1
@@ -72,7 +73,31 @@ def summarise(lines: list[dict]) -> dict:
             if v:
                 table[kind][a] = {"n": len(v), "median_dollars": round(statistics.median(v), 2),
                                   "above_zero": round(sum(x > 0 for x in v) / len(v), 3)}
-    return {"by_kind_and_ante": table, "when_arcana_beats_leaving": dict(when), "arcana_by_shop": by_shop(lines)}
+    return {"by_kind_and_ante": table, "when_arcana_beats_leaving": dict(when), "arcana_by_shop": by_shop(lines),
+            "arcana_split_by_ante": split(lines)}
+
+
+def split(lines: list[dict]) -> dict:
+    """An Arcana pack against leaving, by ante, in the value's units: the formula's part (its hand-made value) and the
+    networks' part (the rest), medians and means. Audits from before 14 November don't carry the formula's part."""
+    parts: dict = defaultdict(lambda: ([], []))
+    for d in lines:
+        q = quick_note(d)
+        if not q or "here_formula" not in q:
+            continue
+        slots = {p[0]: p[1] for p in d.get("packs", [])}
+        for o in q["options"]:
+            if len(o) == 3 and o[0].startswith("OpenBooster") and slots.get(int(o[0].split()[1])) == "Arcana":
+                f = o[2] - q["here_formula"]
+                parts[min(d["ante"], 8)][0].append(f)
+                parts[min(d["ante"], 8)][1].append((o[1] - q["here"]) - f)
+    out = {}
+    for a in sorted(parts):
+        f, n = parts[a]
+        out[a] = {"n": len(f), "formula_median": round(statistics.median(f), 4),
+                  "networks_median": round(statistics.median(n), 4),
+                  "formula_mean": round(sum(f) / len(f), 4), "networks_mean": round(sum(n) / len(n), 4)}
+    return out
 
 
 SHOP_GAP = 12  # moves between two audited decisions beyond which they belong to different shops (a round between)
@@ -82,19 +107,21 @@ def by_shop(lines: list[dict]) -> dict:
     """Shops whose first look had an affordable Arcana pack: opened; not opened because the money ran out (the pack
     unaffordable at the shop's last decision); or left with the pack still affordable."""
     out: Counter = Counter()
-    shops: list[list[dict]] = []
-    for d in lines:
-        last = shops[-1][-1] if shops else None
-        # Which shop: the run, the ante and the blinds behind it (audits from before 14 November lack "behind": a gap
-        # of more than SHOP_GAP moves stands for the round between two shops).
+    # Grouped by key, never by line order: the audit is written by every thread at once, so its lines interleave
+    # (S, lab #27). A shop is (run, ante, blinds behind); audits from before 14 November lack "behind", and there a
+    # gap of more than SHOP_GAP moves within the run stands for the round between two shops.
+    groups: dict = {}
+    for d in sorted(lines, key=lambda d: (d["run"], d["step"])):
         if "behind" in d:
-            new = last is None or (last["run"], last["ante"], last.get("behind")) != (d["run"], d["ante"], d["behind"])
+            key = (d["run"], d["ante"], d["behind"])
         else:
-            new = last is None or last["run"] != d["run"] or d["step"] - last["step"] > SHOP_GAP
-        if new:
-            shops.append([d])
-        else:
-            shops[-1].append(d)
+            prev = groups.get(("last", d["run"]))
+            new = prev is None or d["step"] - prev[1] > SHOP_GAP
+            n = (prev[0] + 1 if prev else 0) if new else prev[0]
+            groups[("last", d["run"])] = (n, d["step"])
+            key = (d["run"], n)
+        groups.setdefault(key, []).append(d)
+    shops = [v for k, v in groups.items() if k[0] != "last"]
     for shop in shops:
         first = shop[0]
         arcana = {p[0]: p[2] for p in first.get("packs", []) if p[1] == "Arcana" and p[2] <= first["money"]}
@@ -126,6 +153,10 @@ def main(argv: list[str] | None = None) -> int:
                                          for k, v in t.items()))
     print("Where an Arcana pack beat leaving: " + ", ".join(f"{k} {v}" for k, v in s["when_arcana_beats_leaving"].items()))
     print("Shops opening with an affordable Arcana pack: " + ", ".join(f"{k} {v}" for k, v in s["arcana_by_shop"].items()))
+    if s["arcana_split_by_ante"]:
+        print("An Arcana pack against leaving, formula's part / networks' part (medians, value units): "
+              + "; ".join(f"a{k} {v['formula_median']:+.3f} / {v['networks_median']:+.3f}"
+                          for k, v in s["arcana_split_by_ante"].items()))
     print(f"Summary: {a.out}")
     return 0
 

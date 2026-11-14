@@ -2525,6 +2525,11 @@ fn main() {
         println!("Fork play-outs add: {}", names.join(", "));
     }
     // `--leaks FILE`: the leak tally, a line per run; `--force-buy SPEC --force-out FILE`: the forced-buy forks.
+    // `--forecast FILE`: forecast v0's tables (S, lab #30), for teacher option "forecast".
+    if let Some(path) = opt("--forecast") {
+        let text = std::fs::read_to_string(&path).expect("--forecast: reading the tables");
+        bm_core::value::load_forecast(&text).unwrap_or_else(|e| panic!("--forecast {path}: {e}"));
+    }
     if let Some(path) = opt("--calibrate") {
         let f = std::fs::File::create(&path).expect("--calibrate: creating the file");
         let _ = CALIB_OUT.set(Mutex::new(std::io::BufWriter::new(f)));

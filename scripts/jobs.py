@@ -1619,6 +1619,10 @@ def played_with_defaults(report: Path) -> bool:
         return False
 # The options on by default (teacher.rs ON_BY_DEFAULT, from 13 November; batch 1 of the master list, lab #27, added
 # the rest), and all of them turned off: what step 37's controls played.
+# Batch 1's defaults (lab #27, 13 November): the names batch 1's arms and the jobs paired against them were played
+# under, kept as they were when later defaults joined (Card Sharp, C8, C10).
+BATCH1_DEFAULTS = ["boss-reroll", "held-cards", "glass", "five-kind", "freeze-money-last", "round-fixes", "shop-fixes",
+                   "joker-fixes"]
 CODE_DEFAULTS = ["boss-reroll", "held-cards", "glass", "five-kind", "freeze-money-last", "round-fixes", "shop-fixes",
                  "joker-fixes", "card-sharp", "card-tiers", "fool-copies"]
 DEFAULTS_OFF = ",".join(f"no-{d}" for d in CODE_DEFAULTS)
@@ -1767,7 +1771,7 @@ def batch1_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int = SCRE
     """make teacher-batch1: the bot with every default on (batch 1 of the master list, lab #27), named explicitly so
     its reports never meet teacher-defaults' (two defaults only), against step 37's controls: Green first, both
     tallied. The rule (#27): White's paired lower end above -1.0; the bars read on the tallies."""
-    return option_arm_steps(",".join(CODE_DEFAULTS), root, runs, green_runs, green_first=True, tally_green=True,
+    return option_arm_steps(",".join(BATCH1_DEFAULTS), root, runs, green_runs, green_first=True, tally_green=True,
                             name="batch1")
 
 
@@ -1839,7 +1843,7 @@ def night_steps(root: Path = ROOT, look_runs: int = LOOK_RUNS, runs: int = BIG_R
     # batch1's reports, as its compare steps name them (there whether or not its arms have played yet).
     outs = {n[len("compare-"):]: a[2] for n, a, *_ in batch if n in ("compare-green", "compare-white")}
     # (4) and (5): E1 against batch1's arms, same bot and salt.
-    o = f"{opts},{','.join(CODE_DEFAULTS)}"
+    o = f"{opts},{','.join(BATCH1_DEFAULTS)}"
     g = f"results/stakes/stake{BUNDLE_GREEN}-{green_runs // 1000}k-{tag}"
     e1 = []
     for k in E1_AHEAD:
@@ -1894,7 +1898,7 @@ def green_next_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     tag, sl = f"f{FORMULA}", f"salt{BUNDLE_SALT}"
     batch = batch1_steps(root, BIG_RUNS, runs)
     control = next(a[2] for n, a, *_ in batch if n == "compare-green")
-    base = f"{opts},{','.join(CODE_DEFAULTS)}"
+    base = f"{opts},{','.join(BATCH1_DEFAULTS)}"
     g = f"results/stakes/stake{BUNDLE_GREEN}-{runs // 1000}k-{tag}"
     green = ["--runs", str(runs), "--seed", "1", "--salt", str(BUNDLE_SALT), "--stake", str(BUNDLE_GREEN)]
     for arm in GREEN_ARMS:
@@ -2013,6 +2017,60 @@ def night_d4_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     return steps
 
 
+FORECAST_TABLES = ".sync/lab/out/forecast-v0-tables.json"
+
+
+def d4_arm_steps(arms: list[tuple[str, str, list[str]]], root: Path = ROOT, runs: int = SCREEN_RUNS,
+                 calibrate: bool = False) -> list[tuple]:
+    """Arms on top of the `-d4` base (night-d4's base report, the control), each on batch 1's 2,000 Green seeds at salt
+    2, tallied, paired against it: (name, the options added, extra baseline arguments)."""
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR, CALIB_DIR])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    args = list(best[1])
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
+    w = args[args.index("--value-weight") + 1]
+    stem = Path(best[2]).stem.split("-on-")[-1]
+    sl = f"salt{BUNDLE_SALT}"
+    control = f"results/stakes/stake{BUNDLE_GREEN}-{runs // 1000}k-f{FORMULA}-d4-base-w{w}-{sl}-on-{stem}.json"
+    green = ["--runs", str(runs), "--seed", "1", "--salt", str(BUNDLE_SALT), "--stake", str(BUNDLE_GREEN)]
+    for name, extra, more in arms:
+        a = list(args)
+        a[a.index("--teacher-options") + 1] = f"{opts},{extra}"
+        out = f"results/stakes/stake{BUNDLE_GREEN}-{runs // 1000}k-f{FORMULA}-d4-{name}-w{w}-{sl}-on-{stem}.json"
+        lines = f"{LEAK_DIR}/d4-{name}-green-{runs // 1000}k-{sl}.jsonl"
+        calib = f"{CALIB_DIR}/d4-{name}-green-{runs // 1000}k-{sl}.jsonl"
+        if not (root / out).exists():
+            rec = ["--calibrate", calib] if calibrate else []
+            steps.append((f"{name}-green", [*BASELINE, "--bot", "teacher", *a, *more, *green, "--leaks", lines, *rec,
+                                            "--out", out]))
+            steps.append((f"{name}-gzip", ["gzip", "-f", lines, *([calib] if calibrate else [])]))
+        steps.append((f"{name}-compare", ["scripts/compare_runs.py", control, out, "--out",
+                                          f"{Path(out).parent}/{Path(out).stem}-vs-d4.json"]))
+        steps.append((f"{name}-tally", ["scripts/leaks.py", f"{lines}.gz", "--out",
+                                        f"results/leaks/d4-{name}-green-{runs // 1000}k-{sl}.json"]))
+    return steps
+
+
+def green_packs_steps(root: Path = ROOT) -> list[tuple]:
+    """make green-packs (S, lab #27): `open-packs` (Arcana and Spectral opened, from ante 2, before a reroll or
+    leaving) and `open-packs-all` (Buffoon and Standard too) against the -d4 base, with the calibration recording and
+    its deck counts. Behaviour bar: Arcana opened in 85% or more of the shops that open with one affordable, from
+    ante 2. Result: Level or Better and the better arm is the base; Worse, and it waits for the deck plan."""
+    return d4_arm_steps([("open-packs", "open-packs", []), ("open-packs-all", "open-packs-all", [])], root,
+                        calibrate=True)
+
+
+def green_forecast_steps(root: Path = ROOT) -> list[tuple]:
+    """make green-forecast (S, lab #30): teacher option `forecast` (every blind after the next round by forecast v0's
+    tables, FORECAST_TABLES), then with `ahead=3` and `ahead=8`, against the -d4 base. E1's fault is found if the two
+    ahead arms are not Worse; `forecast` joins the base if Better or Level."""
+    more = ["--forecast", FORECAST_TABLES]
+    return d4_arm_steps([("forecast", "forecast", more), ("forecast-ahead3", "forecast,ahead=3", more),
+                         ("forecast-ahead8", "forecast,ahead=8", more)], root)
+
+
 def e1_white_steps(k: int, root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     """make e1-white-ahead<K>: E1's White guard for one setting, `ahead=K` with every default on on the first `runs`
     White seeds at salt 2, against the first `runs` of batch1's White arm (S: point estimate above -1.0 on 2,000)."""
@@ -2026,7 +2084,7 @@ def e1_white_steps(k: int, root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[t
     stem = Path(best[2]).stem.split("-on-")[-1]
     tag, s = f"f{FORMULA}", f"salt{BUNDLE_SALT}"
     batch = {n: a for n, a, *_ in batch1_steps(root)}
-    ok = f"{opts},{','.join(CODE_DEFAULTS)},ahead={k}"
+    ok = f"{opts},{','.join(BATCH1_DEFAULTS)},ahead={k}"
     args[args.index("--teacher-options") + 1] = ok
     out = f"results/tune/{tag}-{file_safe(ok)}-{runs // 1000}k-w{w}-{s}-on-{stem}.json"
     if not (root / out).exists():
@@ -2537,6 +2595,8 @@ JOBS: dict[str, list[tuple]] = {
     "green-calib": green_calib_steps(),
     "pack-audit": pack_audit_steps(),
     "night-d4": night_d4_steps(),
+    "green-packs": green_packs_steps(),
+    "green-forecast": green_forecast_steps(),
     **{f"e1-white-ahead{k}": e1_white_steps(k) for k in (2, 3, 8)},
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
