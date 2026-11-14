@@ -2073,6 +2073,16 @@ def green_forecast_steps(root: Path = ROOT) -> list[tuple]:
                          ("d5-forecast-ahead8", "forecast,ahead=8", more)], root, control_arm="open-packs")
 
 
+def green_spend_steps(root: Path = ROOT) -> list[tuple]:
+    """make green-spend (S, lab #27): `spend-down=25` and `spend-down=15` (from ante 3, where the value would leave, a
+    reroll while the money after it stays at or above the floor; at most 8 a shop) against the -d5 base (green-packs'
+    open-packs arm on the same 2,000 Green seeds), with the calibration recording (each shop's money in and out,
+    rerolls and buys). Better: the arm is the base and the value's price of money and rerolls is corrected; Level or
+    Worse: rerun with the deck plan."""
+    return d4_arm_steps([("d5-spend-down25", "spend-down=25", []), ("d5-spend-down15", "spend-down=15", [])], root,
+                        calibrate=True, control_arm="open-packs")
+
+
 def e1_white_steps(k: int, root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     """make e1-white-ahead<K>: E1's White guard for one setting, `ahead=K` with every default on on the first `runs`
     White seeds at salt 2, against the first `runs` of batch1's White arm (S: point estimate above -1.0 on 2,000)."""
@@ -2599,6 +2609,7 @@ JOBS: dict[str, list[tuple]] = {
     "night-d4": night_d4_steps(),
     "green-packs": green_packs_steps(),
     "green-forecast": green_forecast_steps(),
+    "green-spend": green_spend_steps(),
     **{f"e1-white-ahead{k}": e1_white_steps(k) for k in (2, 3, 8)},
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),

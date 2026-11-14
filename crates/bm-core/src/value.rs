@@ -226,6 +226,9 @@ pub const PARAMS: &[(&str, f64)] = &[
     ("boss-reroll-draws", 6.0),
     // E1 (lab #27): the antes after the next counted in the near term too, at their real targets (`blinds_ahead`).
     ("ahead", 0.0),
+    // "spend-down=F" (lab #27, a style arm): the money floor a forced reroll keeps (teacher.rs `spend_down`); off unless
+    // given.
+    ("spend-down", 0.0),
     ("reroll-later-x", 1.0),
 ];
 

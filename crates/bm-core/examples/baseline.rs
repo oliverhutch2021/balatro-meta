@@ -288,6 +288,10 @@ fn play(
     // `--calibrate FILE`: each round's start (ante, blind, the value's power now and its projections) and what the
     // round then scored: (ante, blind, record, round total, best hand).
     let mut calib: Option<Vec<(i32, usize, String, f64, f64)>> = CALIB_OUT.get().is_some().then(Vec::new);
+    // With --calibrate, the shop before each round (S, lab #27): money as it opened, rerolls, jokers, Tarots and
+    // other cards bought, packs opened, vouchers, and money as it was left; written into the next round's record.
+    let mut shop_open: Option<(i64, [u32; 6])> = None;
+    let mut shop_done: Option<String> = None;
     let force = FORCE_SPEC.get().filter(|_| FORCE_OUT.get().is_some());
     let mut passed: Vec<Passed> = Vec::new();
     let mut forced_at: std::collections::HashSet<(i32, usize, JokerKind)> = Default::default();
@@ -451,6 +455,32 @@ fn play(
             }
             _ => {}
         }
+        if calib.is_some() && run.phase == Phase::Shop {
+            let (_, n) = shop_open.get_or_insert((run.money, [0; 6]));
+            let row = run.shop.as_ref().and_then(|sh| sh.row.get(a as usize)).map(|r| &r.item);
+            match k {
+                MoveKind::Reroll => n[0] += 1,
+                MoveKind::Buy | MoveKind::BuyAndUse => match row {
+                    Some(bm_core::shop::RowItem::Joker(_)) => n[1] += 1,
+                    Some(bm_core::shop::RowItem::Consumable(c))
+                        if c.kind.set() == bm_core::content::ConsumableSet::Tarot =>
+                    {
+                        n[2] += 1
+                    }
+                    _ => n[3] += 1,
+                },
+                MoveKind::OpenBooster => n[4] += 1,
+                MoveKind::RedeemVoucher => n[5] += 1,
+                MoveKind::LeaveShop => {
+                    let (open, n) = shop_open.take().unwrap_or((run.money, [0; 6]));
+                    shop_done = Some(format!(
+                        "{{\"money_open\":{open},\"money_left\":{},\"rerolls\":{},\"jokers\":{},\"tarots\":{},\"other\":{},\"packs\":{},\"vouchers\":{}}}",
+                        run.money, n[0], n[1], n[2], n[3], n[4], n[5]
+                    ));
+                }
+                _ => {}
+            }
+        }
         let chips_before = run.round_chips;
         if let Err(why) = apply(&mut run, k, a) {
             // Never expected: the bots only make legal moves (tested). Say which, for a fix.
@@ -500,6 +530,10 @@ fn play(
                     rec.replacen('{', &format!("{{\"lost_before\":{},", run.played_on), 1)
                 } else {
                     rec
+                };
+                let rec = match shop_done.take() {
+                    Some(sh) if rec.starts_with('{') => rec.replacen('{', &format!("{{\"shop_before\":{sh},"), 1),
+                    _ => rec,
                 };
                 c.push((run.ante, slot, rec, 0.0, 0.0));
             }

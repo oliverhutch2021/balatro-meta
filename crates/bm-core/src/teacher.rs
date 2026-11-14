@@ -186,6 +186,8 @@ pub const OPTIONS: &[&str] = &[
     "open-packs",
     "no-open-packs",
     "open-packs-all",
+    // "spend-down=F" (S, lab #27): from ante 3, where the value would leave the shop, it rerolls while the money after
+    // the reroll stays at or above $F ($0 in the run's last shop), at most 8 forced rerolls a shop (`spend_down`).
     // Forecast v0 (S, lab #30): blinds after the next round judged by the forecast's tables (`baseline --forecast
     // FILE`), in place of today's power plus the projection.
     "forecast",
@@ -1269,6 +1271,37 @@ fn fool_worth_using(run: &Run, c: &Consumable) -> bool {
             Some(Temperance) => run.jokers.iter().map(|j| j.sell_cost).sum::<i64>().min(50) > 20,
             _ => false,
         }
+}
+
+/// The most rerolls "spend-down" forces in one shop.
+const SPEND_DOWN_MAX: u32 = 8;
+
+/// "spend-down=F": whether to reroll where the value would leave (and count the reroll if so).
+fn spend_down(run: &Run) -> bool {
+    let Some(floor) = param("spend-down") else {
+        return false;
+    };
+    if run.ante < 3 {
+        return false;
+    }
+    let floor = if crate::value::shops_left(run) <= 0.0 { 0 } else { floor as i64 };
+    if run.spendable() - run.reroll_cost < floor {
+        return false;
+    }
+    let behind = run
+        .slots
+        .iter()
+        .filter(|s| matches!(s, crate::blinds::SlotState::Defeated | crate::blinds::SlotState::Skipped))
+        .count();
+    SPEND_REROLLS.with(|c| {
+        let mut c = c.borrow_mut();
+        let n = c.entry((run.ante, behind)).or_insert(0);
+        if *n >= SPEND_DOWN_MAX {
+            return false;
+        }
+        *n += 1;
+        true
+    })
 }
 
 /// "open-packs" (S, lab #27; the user opens 86-100% of the affordable Arcana packs from ante 2, the bot 19-67%): from
@@ -3021,6 +3054,13 @@ fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
             return (MoveKind::OpenBooster, b as u64);
         }
     }
+    // "spend-down=F" (S, lab #27; the player puts $20 to $45 through each shop from ante 3, the bot $7 to $15): from
+    // ante 3, where the value would leave, the shop is rerolled while the money after the reroll stays at or above F
+    // ($0 in the run's last shop), at most SPEND_DOWN_MAX forced rerolls a shop. Packs (above) and the value's
+    // purchases come first.
+    if chosen.is_none() && spend_down(run) {
+        return (MoveKind::Reroll, 0);
+    }
     if let Some(m) = chosen {
         return m;
     }
@@ -3759,6 +3799,7 @@ pub fn decision(run: &Run, salt: u64) -> (Run, Vec<(MoveKind, u64)>, (MoveKind, 
 /// came before it on its thread, and a job's results don't depend on how its runs fell to its threads.
 pub fn new_run() {
     OPEN_MONEY.with(|c| c.borrow_mut().clear());
+    SPEND_REROLLS.with(|c| c.borrow_mut().clear());
     COMMIT.with(|c| c.set(None));
     CHOICES.with(|c| c.borrow_mut().clear());
     HAND_ORDERS.with(|c| c.borrow_mut().clear());
@@ -3869,6 +3910,9 @@ fn building_suit(run: &Run) -> Option<Suit> {
 
 thread_local! {
     /// The money each shop of this run opened with, by (ante, blinds behind it) ("freeze-money").
+    /// The rerolls "spend-down" forced in each shop of this run, by (ante, blinds behind it).
+    static SPEND_REROLLS: std::cell::RefCell<std::collections::HashMap<(i32, usize), u32>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
     static OPEN_MONEY: std::cell::RefCell<std::collections::HashMap<(i32, usize), i64>> =
         std::cell::RefCell::new(std::collections::HashMap::new());
 }
@@ -3996,6 +4040,31 @@ mod tests {
         run.money = 10;
         run.ante = 1;
         assert_eq!(pick(&["open-packs"], &run), None, "ante 1 is the value's");
+    }
+
+    /// "spend-down=F" (lab #27): from ante 3, a reroll where the money after it keeps the floor, at most 8 a shop;
+    /// floor $0 in the run's last shop; nothing without the option or before ante 3.
+    #[test]
+    fn spend_down_rerolls_down_to_its_floor_at_most_eight_times_a_shop() {
+        let mut run = crate::state::Run::new(crate::RunConfig::new("SPEND1"));
+        while run.phase != crate::state::Phase::Shop {
+            let m = crate::bots::greedy_move(&run, 1);
+            crate::env::apply(&mut run, m.0, m.1).unwrap();
+        }
+        new_run();
+        run.ante = 3;
+        run.reroll_cost = 5;
+        run.money = 30;
+        assert!(!with_options(&[], || spend_down(&run)), "off by default");
+        assert!(with_options(&["spend-down=25"], || spend_down(&run)), "30 - 5 keeps 25");
+        run.money = 29;
+        assert!(!with_options(&["spend-down=25"], || spend_down(&run)), "29 - 5 doesn't");
+        run.money = 100;
+        let n = (0..20).filter(|_| with_options(&["spend-down=0"], || spend_down(&run))).count();
+        assert_eq!(n as u32, SPEND_DOWN_MAX - 1, "eight a shop, one already made");
+        new_run();
+        run.ante = 2;
+        assert!(!with_options(&["spend-down=0"], || spend_down(&run)), "not before ante 3");
     }
 
     /// C10 (lab #30): The Fool is used at once on The Hanged Man, Death, The Hermit, or a Temperance over $20; on

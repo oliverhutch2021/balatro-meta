@@ -1678,3 +1678,14 @@ def test_the_packs_and_forecast_arms_pair_against_the_d4_base(tmp_path):
     assert f8[f8.index("--teacher-options") + 1].endswith(",forecast,ahead=8")
     assert f8[f8.index("--forecast") + 1] == jobs.FORECAST_TABLES
     assert not jobs.path_problems(jobs.green_packs_steps(tmp_path) + jobs.green_forecast_steps(tmp_path))
+
+
+def test_green_spend_plays_both_floors_against_the_open_packs_arm_with_the_calibration(tmp_path):
+    champion_in(tmp_path)
+    packs = {n: a for n, a, *_ in jobs.green_packs_steps(tmp_path)}
+    open_out = packs["open-packs-green"][packs["open-packs-green"].index("--out") + 1]
+    d = {n: a for n, a, *_ in jobs.green_spend_steps(tmp_path)}
+    for f in ("25", "15"):
+        a = d[f"d5-spend-down{f}-green"]
+        assert a[a.index("--teacher-options") + 1].endswith(f",spend-down={f}") and "--calibrate" in a
+        assert d[f"d5-spend-down{f}-compare"][1] == open_out

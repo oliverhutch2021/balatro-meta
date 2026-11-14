@@ -1576,6 +1576,24 @@ file's `link`). `make green-forecast` plays `forecast`, `forecast,ahead=3` and `
 cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(green-packs)" || true) && make sync && make green-forecast
 ```
 
+## Step 53: spend-down (S, lab #27)
+
+Read from step 52's line as it ran (started before step 52's bundle reached the PC: the forecast's raw tail, without S's
+link, against `-d4`): `forecast` -5.15 (-7.35 to -2.95), `forecast,ahead=3` -6.80; the value's growth and money
+credits are worth at least five points at Green. `forecast` stays in the code, unused.
+
+- `spend-down=F` (teacher option): from ante 3, where the value would leave the shop, it rerolls while the money after
+  the reroll stays at or above $F ($0 in the run's last shop), at most 8 forced rerolls a shop. Packs and the value's
+  purchases come first.
+- `--calibrate` records the shop before each round: money as it opened and as it was left, rerolls, jokers, Tarots
+  and other cards bought, packs opened, vouchers (`shop_before`).
+- `make green-spend` (about 2.5 hours): `spend-down=25` and `spend-down=15` against the `-d5` base on its 2,000 Green
+  seeds, with the calibration recording.
+
+```
+cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(green-forecast)" || true) && make sync && make green-spend
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001
