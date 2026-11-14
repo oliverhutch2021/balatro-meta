@@ -1626,3 +1626,11 @@ def test_green_calib_looks_then_records_seeds_2001_to_8000_on_green_with_the_tal
     assert c[c.index("--seed") + 1] == "2001" and c[c.index("--runs") + 1] == "6000"
     assert c[c.index("--stake") + 1] == str(jobs.BUNDLE_GREEN) and "--calibrate" in c and "--leaks" in c
     assert "card-sharp" in jobs.CODE_DEFAULTS and not jobs.path_problems(jobs.green_calib_steps(tmp_path))
+
+
+def test_pack_audit_audits_every_ante_on_green_and_summarises_the_packs(tmp_path):
+    champion_in(tmp_path)
+    steps = {n: a for n, a, *_ in jobs.pack_audit_steps(tmp_path)}
+    a = steps["pack-audit-green"]
+    assert a[a.index("--audit-antes") + 1] == "1-8" and a[a.index("--stake") + 1] == str(jobs.BUNDLE_GREEN)
+    assert steps["pack-audit-summary"][0] == "scripts/pack_audit.py" and jobs.read_only(steps["pack-audit-summary"])

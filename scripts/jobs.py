@@ -1956,6 +1956,28 @@ def green_calib_steps(root: Path = ROOT, look_runs: int = LOOK_RUNS) -> list[tup
     return steps
 
 
+PACK_AUDIT_RUNS = 300
+
+
+def pack_audit_steps(root: Path = ROOT, runs: int = PACK_AUDIT_RUNS) -> list[tuple]:
+    """make pack-audit (lab #30, the Arcana gap): the bot as it now plays, networks and all, on the first `runs` Green
+    seeds at salt 2 with the shop audit on at every ante and the tally: what it thinks each pack is worth where it could
+    open one, in its own dollars (scripts/pack_audit.py). The cloud's check had no networks: the formula alone valued
+    an Arcana pack well above its price from ante 4 (median +$8 to +$15) and the bot still opened under half."""
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR, ".sync/audit"])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    audit, lines = ".sync/audit/pack-audit-green.jsonl", f"{LEAK_DIR}/pack-audit-green.jsonl"
+    steps.append(("pack-audit-green", [*BASELINE, "--bot", "teacher", *best[1], "--runs", str(runs), "--seed", "1",
+                                       "--salt", str(BUNDLE_SALT), "--stake", str(BUNDLE_GREEN), "--audit-shops", audit,
+                                       "--audit-antes", "1-8", "--leaks", lines,
+                                       "--out", ".sync/audit/pack-audit-green.json"]))
+    steps.append(("pack-audit-summary", ["scripts/pack_audit.py", audit, "--out", "results/audit/pack-audit-green.json"]))
+    steps.append(("pack-audit-tally", ["scripts/leaks.py", lines, "--out", "results/leaks/pack-audit-green.json"]))
+    return steps
+
+
 def e1_white_steps(k: int, root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     """make e1-white-ahead<K>: E1's White guard for one setting, `ahead=K` with every default on on the first `runs`
     White seeds at salt 2, against the first `runs` of batch1's White arm (S: point estimate above -1.0 on 2,000)."""
@@ -2478,6 +2500,7 @@ JOBS: dict[str, list[tuple]] = {
     "night-green": night_green_steps(),
     "green-next": green_next_steps(),
     "green-calib": green_calib_steps(),
+    "pack-audit": pack_audit_steps(),
     **{f"e1-white-ahead{k}": e1_white_steps(k) for k in (2, 3, 8)},
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
@@ -2697,7 +2720,7 @@ def record_progress(entry: dict | None, path: Path = PROGRESS) -> None:
 
 
 READ_ONLY_STEPS = ("scripts/compare_runs.py", "scripts/leaks.py", "scripts/forced_buys.py", "scripts/audit_shops.py",
-                   "gzip")
+                   "scripts/pack_audit.py", "gzip")
 WRITTEN = (".json", ".jsonl", ".gz", ".csv", ".npy", ".bin", ".txt")
 NAME_MAX = 250
 

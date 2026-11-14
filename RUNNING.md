@@ -1507,6 +1507,22 @@ Green seeds 2,001 to 8,000 at salt 2, the base as it now is.
 cd /mnt/h/balatro-meta && make sync && make green-calib
 ```
 
+## Step 49: C8 and C10 on by default; what the bot thinks a pack is worth (lab #30)
+
+- **C8** (`card-tiers`, on by default): `card_worth` ranks the enhancements in the user's order, Glass, then Lucky (more
+  with Lucky Cat), then Steel and Gold, then Mult and Bonus. It ranks targets (what Death copies, what a seal goes on,
+  what the digging keeps); it adds nothing to the value.
+- **C10** (`fool-copies`, on by default): The Fool is used at once when the card it would make is The Hanged Man,
+  Death, The Hermit, or Temperance paying over $20. The tally counts what each Fool made.
+- C9 as first framed is not in: the deck measure already credits a thinned deck (a test holds it to that).
+- `make pack-audit` (about 20 minutes): 300 Green runs with the shop audit at every ante, read by
+  `scripts/pack_audit.py`: each pack's worth beyond its price in the value's own dollars, by kind and ante, and what
+  the bot did where an Arcana pack beat leaving the shop.
+
+```
+cd /mnt/h/balatro-meta && make sync && make pack-audit
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001
