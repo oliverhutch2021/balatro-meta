@@ -2600,6 +2600,41 @@ mod tests {
         );
     }
 
+    /// C9's premise checked (lab #30): the one-deal measure (a hand dealt, at most two throws) does credit a thinned
+    /// deck. Removing the 2s and 3s is worth about +0.2 in log (x1.22), with four Glass Kings about +0.47; a measure
+    /// over the whole round (every hand and discard, the log of the round's total) credited less in every case tried.
+    #[test]
+    fn a_thinned_deck_already_counts_in_the_deck_measure() {
+        let run = first_shop("VALUE5");
+        let thin_of = |r: &Run| {
+            let mut t = r.clone();
+            let junk: Vec<_> = t
+                .playing_cards
+                .iter()
+                .copied()
+                .filter(|&id| matches!(t.card(id).rank as u8, 2 | 3))
+                .collect();
+            assert_eq!(junk.len(), 8, "the 2s and 3s");
+            t.playing_cards.retain(|id| !junk.contains(id));
+            t.deck.retain(|id| !junk.contains(id));
+            t
+        };
+        let mut glass = run.clone();
+        let kings: Vec<_> = glass
+            .playing_cards
+            .iter()
+            .copied()
+            .filter(|&id| glass.card(id).rank as u8 == 13)
+            .collect();
+        for id in kings {
+            glass.card_mut(id).enhancement = crate::card::Enhancement::Glass;
+        }
+        let gain = |r: &Run| deck_power(&thin_of(r), 3, DECK_DEALS) - deck_power(r, 3, DECK_DEALS);
+        let (plain, glassy) = (gain(&run), gain(&glass));
+        assert!(plain > 0.12, "thinning a plain deck: {plain}");
+        assert!(glassy > plain, "more with cards worth seeing: {glassy} against {plain}");
+    }
+
     fn the_deck_is_measured_by_the_hands_it_deals_off() {
         let run = first_shop("VALUE5");
         let base = deck_power(&run, 3, DECK_DEALS);
