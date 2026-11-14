@@ -831,4 +831,27 @@ mod tests {
         assert!(t.json().contains("\"card_sharp\":{"));
         assert!(t.json().contains("\"used_at_once\":{") && t.json().contains("\"packs\":{"));
     }
+
+    /// `RunConfig::play_on` (recording only, lab #30): a lost blind is played on as if beaten and counted; without it
+    /// the same run ends there.
+    #[test]
+    fn a_lost_blind_is_played_on_only_when_asked() {
+        let play = |on: bool| {
+            let mut cfg = RunConfig::at_stake("PLAYON1", 3);
+            cfg.play_on = on;
+            let mut run = Run::new(cfg);
+            for step in 0..6000 {
+                if run.phase == Phase::GameOver || run.won {
+                    break;
+                }
+                let m = crate::bots::greedy_move(&run, step);
+                apply(&mut run, m.0, m.1).unwrap();
+            }
+            run
+        };
+        let (off, on) = (play(false), play(true));
+        assert!(off.phase == Phase::GameOver && off.played_on == 0, "the greedy bot loses this run");
+        assert!(on.played_on > 0 && on.phase != Phase::GameOver, "played on: {} lost", on.played_on);
+        assert!(on.ante > off.ante);
+    }
 }

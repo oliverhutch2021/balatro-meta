@@ -1979,37 +1979,37 @@ def pack_audit_steps(root: Path = ROOT, runs: int = PACK_AUDIT_RUNS) -> list[tup
 
 
 def night_d4_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
-    """make night-d4 (14 November, Green only, about 4 hours): the pack audit; then the base as it now is (Card Sharp's
-    play, C8's card tiers and C10's Fool on by default since batch 1) on batch 1's 2,000 Green seeds, tallied, against
-    batch 1's Green arm; then each of C8 and C10 turned off alone on the same seeds against that new base."""
-    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR, ".sync/audit"])]
+    """make night-d4 (14 November, Green only, about 3 hours; S's ruling on #27): the pack audit; then the base as it
+    now is (Card Sharp's play, C8's card tiers and C10's Fool on by default since batch 1) on batch 1's 2,000 Green
+    seeds, tallied, against batch 1's Green arm (Level or Better and it is the base; Worse and the new defaults are
+    split); then B's no-death recording on the same seeds: `--play-on --calibrate`, lost blinds played on as if
+    beaten, the forecast's labels free of the stake (never a result: compare_runs refuses it)."""
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR, ".sync/audit", CALIB_DIR])]
     best = best_8k_report(root)
     if best is None:
         return steps
     steps += [st for st in pack_audit_steps(root) if st[0] not in ("build", "folder")]
     args = list(best[1])
-    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
     w = args[args.index("--value-weight") + 1]
     stem = Path(best[2]).stem.split("-on-")[-1]
     sl = f"salt{BUNDLE_SALT}"
     green = ["--runs", str(runs), "--seed", "1", "--salt", str(BUNDLE_SALT), "--stake", str(BUNDLE_GREEN)]
     batch1 = next(a[2] for n, a, *_ in batch1_steps(root, BIG_RUNS, runs) if n == "compare-green")
-    g = f"results/stakes/stake{BUNDLE_GREEN}-{runs // 1000}k-f{FORMULA}-d4"
-    base = f"{g}-base-w{w}-{sl}-on-{stem}.json"
-    arms = [("base", "", base, batch1)] + [(f"no-{o}", f"no-{o}", f"{g}-no-{o}-w{w}-{sl}-on-{stem}.json", base)
-                                           for o in ("card-tiers", "fool-copies")]
-    for name, extra, out, control in arms:
-        a = list(args)
-        a[a.index("--teacher-options") + 1] = f"{opts},{extra}" if extra else opts
-        lines = f"{LEAK_DIR}/d4-{name}-green-{runs // 1000}k-{sl}.jsonl"
-        if not (root / out).exists():
-            steps.append((f"d4-{name}-green", [*BASELINE, "--bot", "teacher", *a, *green, "--leaks", lines,
-                                               "--out", out]))
-            steps.append((f"d4-{name}-gzip", ["gzip", "-f", lines]))
-        steps.append((f"d4-{name}-compare", ["scripts/compare_runs.py", control, out, "--out",
-                                             f"{Path(out).parent}/{Path(out).stem}-vs-control.json"]))
-        steps.append((f"d4-{name}-tally", ["scripts/leaks.py", f"{lines}.gz", "--out",
-                                           f"results/leaks/d4-{name}-green-{runs // 1000}k-{sl}.json"]))
+    base = f"results/stakes/stake{BUNDLE_GREEN}-{runs // 1000}k-f{FORMULA}-d4-base-w{w}-{sl}-on-{stem}.json"
+    lines = f"{LEAK_DIR}/d4-base-green-{runs // 1000}k-{sl}.jsonl"
+    if not (root / base).exists():
+        steps.append(("d4-base-green", [*BASELINE, "--bot", "teacher", *args, *green, "--leaks", lines, "--out", base]))
+        steps.append(("d4-base-gzip", ["gzip", "-f", lines]))
+    steps.append(("d4-base-compare", ["scripts/compare_runs.py", batch1, base, "--out",
+                                      f"{Path(base).parent}/{Path(base).stem}-vs-batch1.json"]))
+    steps.append(("d4-base-tally", ["scripts/leaks.py", f"{lines}.gz", "--out",
+                                    f"results/leaks/d4-base-green-{runs // 1000}k-{sl}.json"]))
+    name = f"play-on-green-{runs // 1000}k-{sl}"
+    out, calib = f"results/calib/{name}.json", f"{CALIB_DIR}/{name}.jsonl"
+    if not (root / out).exists():
+        steps.append(("play-on-green", [*BASELINE, "--bot", "teacher", *args, *green, "--play-on", "--calibrate", calib,
+                                        "--out", out]))
+        steps.append(("play-on-gzip", ["gzip", "-f", calib]))
     return steps
 
 
@@ -2710,6 +2710,8 @@ def progress_entry(job: str, step: str, argv: list[str], commit: str, root: Path
     if not isinstance(r, dict) or r.get("kind") != "baseline" or not r.get("runs"):
         return None
     if r.get("bot") == "replayed runs":  # a recording encoded afresh: the runs it already counted
+        return None
+    if r.get("play_on"):  # lost blinds played on (a recording for the forecast): never a result
         return None
     code, title = code_of(commit)
     net, weight = arg("--value-net"), arg("--value-weight")

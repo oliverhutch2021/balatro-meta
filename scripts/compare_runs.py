@@ -53,6 +53,9 @@ def sign_test(k: int, n: int) -> float:
 
 def compare(a: dict, b: dict) -> dict:
     """B against A on the seeds both played."""
+    for r in (a, b):
+        if r.get("play_on"):
+            raise ValueError("a report played with --play-on (lost blinds played on, recording only) is never compared")
     sa, sb = stages(a), stages(b)
     # A report without a seed base played base 1 (baseline's default; older reports didn't name it), so it never
     # pairs with another base's runs (the exam's, a recording's) by passing unchecked.

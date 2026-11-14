@@ -84,6 +84,7 @@ impl Run {
             round: 0,
             win_ante: 8,
             won: false,
+            played_on: 0,
             phase: Phase::BlindSelect,
             hands_per_round: 4,
             discards_per_round: discards,
@@ -1000,6 +1001,11 @@ impl Run {
                     self.set_joker_debuff(i, true);
                 }
             }
+        }
+        // Recording only (`RunConfig::play_on`): the lost blind is played on as if beaten.
+        if game_over && self.cfg.play_on {
+            game_over = false;
+            self.played_on += 1;
         }
         // A lost round keeps its money: the game shows no Rental charge at
         // game over (Gold Stake checker games SLA8IFPQ, W7CDXRST). The charge

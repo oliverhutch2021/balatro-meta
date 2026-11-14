@@ -1523,16 +1523,24 @@ cd /mnt/h/balatro-meta && make sync && make green-calib
 cd /mnt/h/balatro-meta && make sync && make pack-audit
 ```
 
-## Step 50: the night of 14 November (Green, about 4 hours after green-calib)
+## Step 50: the pack audit, the new base, and the no-death recording (Green, about 3 hours; S's ruling, lab #27)
 
-`make night-d4`: the pack audit (step 49); then the base as it now is (Card Sharp's play, C8's card tiers and C10's
-Fool on by default) on batch 1's 2,000 Green seeds, tallied, against batch 1's Green arm; then C8 and C10 each turned
-off alone on the same seeds against that new base. Also in: the real-game checks confirm the game's seed after
-`start` (lab #31); the calibration record keeps the deck as counts (lab #20); the pack audit counts, per shop, an
-affordable Arcana pack opened, left while still affordable, or given up for want of money.
+`green-calib` stopped at 03:47 on 14 November with 5,690 of its 6,000 calibration runs written (the PC stopped
+mid-run); the 5,693 lines in `.sync/calib/base-green-2001-8000-salt2.jsonl` are kept as the forecast's data (the last
+may be cut short). It is not run again: the base has changed since (C8, C10).
+
+`make night-d4`:
+1. **The pack audit** (step 49), the real bot with its networks.
+2. **The new base** (Card Sharp's play, C8's card tiers, C10's Fool, on by default) on batch 1's 2,000 Green seeds,
+   tallied, against batch 1's Green arm. S's rule, stated before: Level or Better and it is the base; Worse and the new
+   defaults are split to find which.
+3. **The no-death recording** (B, lab #30): `baseline --play-on --calibrate` on the same seeds, lost blinds played on
+   as if beaten, so every position has its power at every later blind whatever the stake asked. Recording only: the
+   report says `"play_on": true`, `compare_runs.py` refuses it and no progress line is written. Each round's record
+   carries `lost_before`, the blinds lost before it, and the deck as counts.
 
 ```
-cd /mnt/h/balatro-meta && while pgrep -f "jobs.py run green-calib" >/dev/null; do sleep 60; done; make sync && make night-d4
+cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(green-calib): look" || true) && make sync && make night-d4
 ```
 
 ## Later steps

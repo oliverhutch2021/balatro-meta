@@ -250,7 +250,7 @@ green-calib:  ## The look on Green with the new counters, then the calibration r
 pack-audit:  ## What the bot thinks each pack is worth where it could open one, in its own dollars (300 Green runs with the shop audit; about 20 minutes)
 	$(PY) scripts/jobs.py run pack-audit $(JOB_FLAGS)
 
-night-d4:  ## Green, about 4 hours: the pack audit; the base as it now is (Card Sharp, C8, C10 on) on batch 1's 2,000 Green seeds against batch 1; then C8 and C10 each turned off against it
+night-d4:  ## Green, about 3 hours: the pack audit; the base as it now is (Card Sharp, C8, C10 on) on batch 1's 2,000 Green seeds against batch 1; then the no-death calibration recording on the same seeds
 	$(PY) scripts/jobs.py run night-d4 $(JOB_FLAGS)
 
 e1-white-ahead2 e1-white-ahead3 e1-white-ahead8:  ## E1's White guard for one setting (2,000 White seeds against the first 2,000 of batch1's White arm, about 1.2 hours)

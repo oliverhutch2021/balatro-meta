@@ -77,6 +77,10 @@ pub struct RunConfig {
     /// The first `sort_id` to hand out. The game's counter never resets, so
     /// only the order matters; this exists for tests that mirror a session.
     pub first_sort_id: u64,
+    /// Recording only, never a result (B and S, lab #30): a lost blind is played on as if beaten, so every position has
+    /// its power at every later blind whatever the stake asked (`baseline --play-on`, with `--calibrate`). The run's
+    /// `played_on` counts the blinds lost.
+    pub play_on: bool,
 }
 
 /// The stakes by number (`RunConfig::stake`): each adds its rule to those below it.
@@ -99,6 +103,7 @@ impl RunConfig {
             stake: 1,
             tag_profile: TagProfile::default(),
             first_sort_id: 1,
+            play_on: false,
         }
     }
 
@@ -202,6 +207,8 @@ pub struct Run {
     pub round: i32,
     pub win_ante: i32,
     pub won: bool,
+    /// Blinds lost and played on as if beaten (`RunConfig::play_on`, recording only).
+    pub played_on: u32,
     pub phase: Phase,
 
     /// Hands and discards per round (`round_resets`).
@@ -365,6 +372,7 @@ clone_by_field!(Run {
     round,
     win_ante,
     won,
+    played_on,
     phase,
     hands_per_round,
     discards_per_round,

@@ -266,7 +266,9 @@ fn play(
     script: Option<&[(u8, u64)]>,
 ) -> RunSummary {
     bm_core::teacher::new_run();
-    let mut run = Run::new(RunConfig::at_stake(&seed, STAKE.load(Ordering::Relaxed)));
+    let mut cfg = RunConfig::at_stake(&seed, STAKE.load(Ordering::Relaxed));
+    cfg.play_on = PLAY_ON.load(Ordering::Relaxed);
+    let mut run = Run::new(cfg);
     let mut s = RunSummary {
         record: keep.then(Vec::new),
         recorded: RECORD.load(Ordering::Relaxed).then(Recorded::default),
@@ -493,6 +495,12 @@ fn play(
                 // Its own salt, on fair copies: the run and its decisions are untouched.
                 let rec = bm_core::value::calibration(&run, salt << 20 ^ step ^ 0xCA1B, CALIB_SAMPLES)
                     .unwrap_or_else(|| "null".into());
+                // With --play-on: the blinds lost before this one (a lost round shows as the next count up).
+                let rec = if run.cfg.play_on && rec.starts_with('{') {
+                    rec.replacen('{', &format!("{{\"lost_before\":{},", run.played_on), 1)
+                } else {
+                    rec
+                };
                 c.push((run.ante, slot, rec, 0.0, 0.0));
             }
         }
@@ -1218,6 +1226,9 @@ const FORK_LABELS: [&str; 14] = [
 /// The win is counted as before, and everything the reports count stops at it; the positions recorded are the
 /// win's own. A replay of an endless recording plays on the same way.
 static ENDLESS: AtomicBool = AtomicBool::new(false);
+/// `--play-on` (recording only, with `--calibrate`; B and S, lab #30): a lost blind is played on as if beaten. The
+/// report says `"play_on": true` and `compare_runs.py` and the jobs' progress lines refuse it.
+static PLAY_ON: AtomicBool = AtomicBool::new(false);
 /// The last ante an endless run plays (the blinds grow about 5x, 13x and 40x from ante 9 to 12: few runs get
 /// that far).
 const ENDLESS_LAST_ANTE: i32 = 12;
@@ -2390,6 +2401,13 @@ fn main() {
         "--stake takes 1 (White) to 8 (Gold), not {stake}"
     );
     STAKE.store(stake, Ordering::Relaxed);
+    if args.iter().any(|a| a == "--play-on") {
+        assert!(
+            opt("--calibrate").is_some() && replay.is_none() && opt("--record").is_none(),
+            "--play-on: recording only, with --calibrate (never a result, a recording for training, or a replay)"
+        );
+        PLAY_ON.store(true, Ordering::Relaxed);
+    }
     if args.iter().any(|a| a == "--endless") {
         assert!(
             replay.is_none(),
@@ -3039,6 +3057,10 @@ fn main() {
     // What the runs were played with, so two reports can be checked to pair seed by seed
     // (scripts/compare_runs.py), and each run's ending in seed order.
     let opts = bm_core::teacher::options();
+    if PLAY_ON.load(Ordering::Relaxed) {
+        // Never a result: lost blinds were played on, so its wins and stages mean nothing.
+        text = text.replacen('{', "{\n \"play_on\": true,", 1);
+    }
     let mut tail = format!(
         ",\n \"seed_base\": {base},\n \"salt\": {salt_k},\n \"value_net\": {},\n \"value_weight\": {},\n \"teacher_options\": [{}],\n \
          \"stake_net\": {},\n \"stake_mode\": {}",
