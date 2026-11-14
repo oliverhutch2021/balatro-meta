@@ -1374,17 +1374,15 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
         };
         // "forecast" (S, lab #30): every blind after the next round by the forecast's centre and spread, in place of
         // today's power plus the projection.
-        let forecast = (n >= 1.0 && crate::teacher::on("forecast"))
-            .then(|| {
-                FORECAST
-                    .get()
-                    .expect("teacher option \"forecast\" needs baseline --forecast FILE")
-                    .at(mean(&o.next), blind_now(run), n as usize, run.ante)
-            })
-            .flatten();
-        let p_of = |t: f64| match forecast {
-            Some((centre, spread)) => upper_tail((t.max(1.0).ln() - centre) / spread),
-            None => chance(samples, growth(&f, &o, run, n) + shopping, t),
+        let forecast = (n >= 1.0 && crate::teacher::on("forecast")).then(|| {
+            FORECAST
+                .get()
+                .expect("teacher option \"forecast\" needs baseline --forecast FILE")
+        });
+        let p_of = |t: f64| {
+            forecast
+                .and_then(|fc| fc.chance(mean(&o.next), blind_now(run), n as usize, run.ante, t))
+                .unwrap_or_else(|| chance(samples, growth(&f, &o, run, n) + shopping, t))
         };
         let p = p_of(target);
         v += w * p.max(1e-6).ln();
@@ -1435,6 +1433,11 @@ pub struct Forecast {
     /// [rounds on - 1][ante now - 1], rounds on 1..=9, antes 1..=7.
     pub rho: Vec<Vec<f64>>,
     pub sigma: Vec<Vec<f64>>,
+    /// The link from the forecast to a chance (S, lab #30; B checked it): chance = Phi((centre + offset + boss_shift x
+    /// [a boss] - ln target) / sqrt(sigma^2 + round_spread^2)). Without a `link` in the file: the raw tail (0, 0, 0).
+    pub offset: f64,
+    pub round_spread: f64,
+    pub boss_shift: f64,
 }
 
 static FORECAST: std::sync::OnceLock<Forecast> = std::sync::OnceLock::new();
@@ -1471,15 +1474,36 @@ impl Forecast {
             let body = &body[..end];
             (1..=9).map(|h| floats(after(body, &h.to_string())?)).collect()
         }
+        fn number(s: &str, key: &str) -> Option<f64> {
+            let rest = after(s, key).ok()?.trim_start().strip_prefix(':')?.trim_start();
+            let end = rest
+                .find(|c: char| !(c.is_ascii_digit() || matches!(c, '.' | '-' | '+' | 'e' | 'E')))
+                .unwrap_or(rest.len());
+            rest[..end].parse().ok()
+        }
+        let link = after(text, "link").ok().map(|l| &l[..l.find('}').unwrap_or(l.len())]);
+        let get = |k: &str| link.and_then(|l| number(l, k)).unwrap_or(0.0);
         let f = Forecast {
             mean: floats(after(text, "mean_power_by_blind")?)?,
             rho: table(text, "rho")?,
             sigma: table(text, "sigma")?,
+            offset: get("offset"),
+            round_spread: get("round_spread"),
+            boss_shift: get("boss_shift"),
         };
         if f.mean.len() != 24 || f.rho.iter().chain(&f.sigma).any(|r| r.len() < 7) {
             return Err("the forecast's tables have the wrong shape (24 blinds; 9 x 7)".into());
         }
         Ok(f)
+    }
+
+    /// The chance of beating `target` `h` rounds on, from `power` now at blind `now` (0-23) in ante `ante`, through the
+    /// link; None past the tables.
+    pub fn chance(&self, power: f64, now: usize, h: usize, ante: i32, target: f64) -> Option<f64> {
+        let (centre, sigma) = self.at(power, now, h, ante)?;
+        let boss = if (now + h) % 3 == 2 { self.boss_shift } else { 0.0 };
+        let spread = (sigma * sigma + self.round_spread * self.round_spread).sqrt();
+        Some(upper_tail((target.max(1.0).ln() - centre - self.offset - boss) / spread))
     }
 
     /// (centre, spread) of ln power `h` rounds on, from `power` now at blind `now` (0-23) in ante `ante`.
@@ -2776,6 +2800,24 @@ mod tests {
         assert!(f.at(9.0, 22, 3, 8).is_none(), "past ante 8's boss");
         assert!((upper_tail(0.0) - 0.5).abs() < 1e-6 && (upper_tail(1.96) - 0.025).abs() < 1e-3);
         assert!(Forecast::parse("{}").is_err());
+        assert_eq!((f.offset, f.round_spread, f.boss_shift), (0.0, 0.0, 0.0), "no link: the raw tail");
+        // S's link: offset 0.45, round spread 0.45, boss shift -0.1. Blind 5 is a boss (ante 2's).
+        let linked = Forecast::parse(&text.replacen(
+            "{",
+            "{\"link\": {\"what\": \"x\", \"offset\": 0.45, \"round_spread\": 0.45, \"boss_shift\": -0.1}, ",
+            1,
+        ))
+        .unwrap();
+        assert_eq!((linked.offset, linked.round_spread, linked.boss_shift), (0.45, 0.45, -0.1));
+        let (c, s) = linked.at(9.5, 3, 2, 2).unwrap();
+        let want = upper_tail((10.0f64.exp().ln() - c - 0.45 + 0.1) / (s * s + 0.45 * 0.45).sqrt());
+        assert!((linked.chance(9.5, 3, 2, 2, 10.0f64.exp()).unwrap() - want).abs() < 1e-12);
+        // S's own file, when it is at hand (the PC's copy staged into the cloud): it parses, with its link.
+        if let Ok(real) = std::fs::read_to_string(std::env::var("FORECAST_TABLES").unwrap_or_default()) {
+            let f = Forecast::parse(&real).unwrap();
+            eprintln!("S's file: offset {} round spread {} boss shift {}", f.offset, f.round_spread, f.boss_shift);
+            assert!(f.round_spread > 0.0);
+        }
     }
 
     /// C8 (lab #30): the user's tiers rank Lucky above Mult and Steel, Glass at the top; the old table had Mult over
