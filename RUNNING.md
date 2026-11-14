@@ -1523,6 +1523,18 @@ cd /mnt/h/balatro-meta && make sync && make green-calib
 cd /mnt/h/balatro-meta && make sync && make pack-audit
 ```
 
+## Step 50: the night of 14 November (Green, about 4 hours after green-calib)
+
+`make night-d4`: the pack audit (step 49); then the base as it now is (Card Sharp's play, C8's card tiers and C10's
+Fool on by default) on batch 1's 2,000 Green seeds, tallied, against batch 1's Green arm; then C8 and C10 each turned
+off alone on the same seeds against that new base. Also in: the real-game checks confirm the game's seed after
+`start` (lab #31); the calibration record keeps the deck as counts (lab #20); the pack audit counts, per shop, an
+affordable Arcana pack opened, left while still affordable, or given up for want of money.
+
+```
+cd /mnt/h/balatro-meta && while pgrep -f "jobs.py run green-calib" >/dev/null; do sleep 60; done; make sync && make night-d4
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

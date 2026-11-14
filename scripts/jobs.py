@@ -1978,6 +1978,41 @@ def pack_audit_steps(root: Path = ROOT, runs: int = PACK_AUDIT_RUNS) -> list[tup
     return steps
 
 
+def night_d4_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
+    """make night-d4 (14 November, Green only, about 4 hours): the pack audit; then the base as it now is (Card Sharp's
+    play, C8's card tiers and C10's Fool on by default since batch 1) on batch 1's 2,000 Green seeds, tallied, against
+    batch 1's Green arm; then each of C8 and C10 turned off alone on the same seeds against that new base."""
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR, ".sync/audit"])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    steps += [st for st in pack_audit_steps(root) if st[0] not in ("build", "folder")]
+    args = list(best[1])
+    opts = args[args.index("--teacher-options") + 1] if "--teacher-options" in args else "precise"
+    w = args[args.index("--value-weight") + 1]
+    stem = Path(best[2]).stem.split("-on-")[-1]
+    sl = f"salt{BUNDLE_SALT}"
+    green = ["--runs", str(runs), "--seed", "1", "--salt", str(BUNDLE_SALT), "--stake", str(BUNDLE_GREEN)]
+    batch1 = next(a[2] for n, a, *_ in batch1_steps(root, BIG_RUNS, runs) if n == "compare-green")
+    g = f"results/stakes/stake{BUNDLE_GREEN}-{runs // 1000}k-f{FORMULA}-d4"
+    base = f"{g}-base-w{w}-{sl}-on-{stem}.json"
+    arms = [("base", "", base, batch1)] + [(f"no-{o}", f"no-{o}", f"{g}-no-{o}-w{w}-{sl}-on-{stem}.json", base)
+                                           for o in ("card-tiers", "fool-copies")]
+    for name, extra, out, control in arms:
+        a = list(args)
+        a[a.index("--teacher-options") + 1] = f"{opts},{extra}" if extra else opts
+        lines = f"{LEAK_DIR}/d4-{name}-green-{runs // 1000}k-{sl}.jsonl"
+        if not (root / out).exists():
+            steps.append((f"d4-{name}-green", [*BASELINE, "--bot", "teacher", *a, *green, "--leaks", lines,
+                                               "--out", out]))
+            steps.append((f"d4-{name}-gzip", ["gzip", "-f", lines]))
+        steps.append((f"d4-{name}-compare", ["scripts/compare_runs.py", control, out, "--out",
+                                             f"{Path(out).parent}/{Path(out).stem}-vs-control.json"]))
+        steps.append((f"d4-{name}-tally", ["scripts/leaks.py", f"{lines}.gz", "--out",
+                                           f"results/leaks/d4-{name}-green-{runs // 1000}k-{sl}.json"]))
+    return steps
+
+
 def e1_white_steps(k: int, root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     """make e1-white-ahead<K>: E1's White guard for one setting, `ahead=K` with every default on on the first `runs`
     White seeds at salt 2, against the first `runs` of batch1's White arm (S: point estimate above -1.0 on 2,000)."""
@@ -2501,6 +2536,7 @@ JOBS: dict[str, list[tuple]] = {
     "green-next": green_next_steps(),
     "green-calib": green_calib_steps(),
     "pack-audit": pack_audit_steps(),
+    "night-d4": night_d4_steps(),
     **{f"e1-white-ahead{k}": e1_white_steps(k) for k in (2, 3, 8)},
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),

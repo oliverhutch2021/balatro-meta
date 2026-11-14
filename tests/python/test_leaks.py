@@ -88,10 +88,15 @@ def test_tarots_used_count_the_slots_and_the_ones_used_at_once_and_packs_are_sum
 
 def test_the_pack_audit_reads_each_pack_in_the_values_dollars_and_what_beat_an_arcana_pack():
     import pack_audit
-    line = {"ante": 4, "packs": [[0, "Arcana", 4], [1, "Buffoon", 4]], "chosen": "Buy 0",
+    line = {"run": 1, "step": 10, "ante": 4, "behind": 1, "money": 9, "packs": [[0, "Arcana", 4], [1, "Buffoon", 4]],
+            "chosen": "Buy 0",
             "notes": [json.dumps({"quick": {"here": 1.0, "here_plus4": 1.4,
                                             "options": [["OpenBooster 0", 1.5], ["OpenBooster 1", 0.9], ["Buy 0", 2.0]]}})]}
     s = pack_audit.summarise([line])
     assert s["by_kind_and_ante"]["Arcana"][4]["median_dollars"] == 5.0
     assert s["by_kind_and_ante"]["Buffoon"][4]["median_dollars"] == -1.0
     assert s["when_arcana_beats_leaving"] == {"arcana_above_leaving": 1, "another_move_valued_higher": 1}
+    # The same shop's last decision: the money spent, the Arcana pack no longer affordable.
+    end = dict(line, step=11, money=2, chosen="LeaveShop 0")
+    assert pack_audit.by_shop([line, end]) == {"shops": 1, "money_ran_out": 1}
+    assert pack_audit.by_shop([line, dict(end, money=9)]) == {"shops": 1, "left_affordable": 1}

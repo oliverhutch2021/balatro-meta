@@ -1151,9 +1151,14 @@ fn audit_line(
             .collect()
     });
     format!(
-        "{{\"seed\":{},\"run\":{index},\"step\":{step},\"ante\":{},\"stake\":{},\"money\":{},\"interest_cap\":{},\"reroll_cost\":{},\"jokers\":{},\"joker_slots\":{},\"row\":[{}],\"packs\":[{}],\"chosen\":\"{:?} {}\",\"notes\":[{}]}}",
+        "{{\"seed\":{},\"run\":{index},\"step\":{step},\"ante\":{},\"behind\":{},\"stake\":{},\"money\":{},\"interest_cap\":{},\"reroll_cost\":{},\"jokers\":{},\"joker_slots\":{},\"row\":[{}],\"packs\":[{}],\"chosen\":\"{:?} {}\",\"notes\":[{}]}}",
         esc(&run.cfg.seed),
         run.ante,
+        // Blinds beaten or skipped this ante: with the ante, which shop this is.
+        run.slots
+            .iter()
+            .filter(|x| matches!(x, bm_core::blinds::SlotState::Defeated | bm_core::blinds::SlotState::Skipped))
+            .count(),
         run.cfg.stake,
         run.money,
         run.interest_cap,

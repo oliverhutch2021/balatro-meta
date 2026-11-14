@@ -1634,3 +1634,19 @@ def test_pack_audit_audits_every_ante_on_green_and_summarises_the_packs(tmp_path
     a = steps["pack-audit-green"]
     assert a[a.index("--audit-antes") + 1] == "1-8" and a[a.index("--stake") + 1] == str(jobs.BUNDLE_GREEN)
     assert steps["pack-audit-summary"][0] == "scripts/pack_audit.py" and jobs.read_only(steps["pack-audit-summary"])
+
+
+def test_night_d4_audits_packs_then_screens_the_new_base_and_each_new_default_off(tmp_path):
+    champion_in(tmp_path)
+    steps = jobs.night_d4_steps(tmp_path)
+    d = {n: a for n, a, *_ in steps}
+    names = list(d)
+    assert names.index("pack-audit-green") < names.index("d4-base-green") < names.index("d4-no-card-tiers-green")
+    batch1 = next(a[2] for n, a, *_ in jobs.batch1_steps(tmp_path, jobs.BIG_RUNS, jobs.SCREEN_RUNS)
+                  if n == "compare-green")
+    assert d["d4-base-compare"][1] == batch1
+    base_out = d["d4-base-green"][d["d4-base-green"].index("--out") + 1]
+    assert d["d4-no-card-tiers-compare"][1] == base_out and d["d4-no-fool-copies-compare"][1] == base_out
+    o = d["d4-no-fool-copies-green"]
+    assert o[o.index("--teacher-options") + 1].endswith(",no-fool-copies")
+    assert not jobs.path_problems(steps)

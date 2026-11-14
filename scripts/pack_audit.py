@@ -72,7 +72,43 @@ def summarise(lines: list[dict]) -> dict:
             if v:
                 table[kind][a] = {"n": len(v), "median_dollars": round(statistics.median(v), 2),
                                   "above_zero": round(sum(x > 0 for x in v) / len(v), 3)}
-    return {"by_kind_and_ante": table, "when_arcana_beats_leaving": dict(when)}
+    return {"by_kind_and_ante": table, "when_arcana_beats_leaving": dict(when), "arcana_by_shop": by_shop(lines)}
+
+
+SHOP_GAP = 12  # moves between two audited decisions beyond which they belong to different shops (a round between)
+
+
+def by_shop(lines: list[dict]) -> dict:
+    """Shops whose first look had an affordable Arcana pack: opened; not opened because the money ran out (the pack
+    unaffordable at the shop's last decision); or left with the pack still affordable."""
+    out: Counter = Counter()
+    shops: list[list[dict]] = []
+    for d in lines:
+        last = shops[-1][-1] if shops else None
+        # Which shop: the run, the ante and the blinds behind it (audits from before 14 November lack "behind": a gap
+        # of more than SHOP_GAP moves stands for the round between two shops).
+        if "behind" in d:
+            new = last is None or (last["run"], last["ante"], last.get("behind")) != (d["run"], d["ante"], d["behind"])
+        else:
+            new = last is None or last["run"] != d["run"] or d["step"] - last["step"] > SHOP_GAP
+        if new:
+            shops.append([d])
+        else:
+            shops[-1].append(d)
+    for shop in shops:
+        first = shop[0]
+        arcana = {p[0]: p[2] for p in first.get("packs", []) if p[1] == "Arcana" and p[2] <= first["money"]}
+        if not arcana:
+            continue
+        out["shops"] += 1
+        opened = any(d["chosen"] in {f"OpenBooster {i}" for i in arcana} for d in shop)
+        if opened:
+            out["opened"] += 1
+            continue
+        end = shop[-1]
+        still = any(p[0] in arcana and p[2] <= end["money"] for p in end.get("packs", []))
+        out["left_affordable" if still else "money_ran_out"] += 1
+    return dict(out)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -89,6 +125,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {kind}: " + "; ".join(f"a{k} {v['median_dollars']:+.1f} [{100 * v['above_zero']:.0f}%]"
                                          for k, v in t.items()))
     print("Where an Arcana pack beat leaving: " + ", ".join(f"{k} {v}" for k, v in s["when_arcana_beats_leaving"].items()))
+    print("Shops opening with an affordable Arcana pack: " + ", ".join(f"{k} {v}" for k, v in s["arcana_by_shop"].items()))
     print(f"Summary: {a.out}")
     return 0
 
