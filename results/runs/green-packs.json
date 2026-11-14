@@ -1,0 +1,44 @@
+{
+ "job": "green-packs",
+ "commit": "51c1a8d86ac021ef39edc6221b4c77b7f6b1f9e1",
+ "started": "2026-11-14T16:56:27+00:00",
+ "finished": "2026-11-14T19:36:43+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   12.0,
+   17.0,
+   18.1
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 25,
+  "folder": 0,
+  "open-packs-green": 5125,
+  "open-packs-gzip": 1,
+  "open-packs-compare": 0,
+  "open-packs-tally": 0,
+  "open-packs-all-green": 4463,
+  "open-packs-all-gzip": 1,
+  "open-packs-all-compare": 0,
+  "open-packs-all-tally": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "folder": "mkdir -p .sync/leaks .sync/calib",
+  "open-packs-green": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,open-packs --runs 2000 --seed 1 --salt 2 --stake 3 --leaks .sync/leaks/d4-open-packs-green-2k-salt2.jsonl --calibrate .sync/calib/d4-open-packs-green-2k-salt2.jsonl --out results/stakes/stake3-2k-f3-d4-open-packs-w2.5-salt2-on-ensemble8-w1.5.json",
+  "open-packs-gzip": "gzip -f .sync/leaks/d4-open-packs-green-2k-salt2.jsonl .sync/calib/d4-open-packs-green-2k-salt2.jsonl",
+  "open-packs-compare": "scripts/compare_runs.py results/stakes/stake3-2k-f3-d4-base-w2.5-salt2-on-ensemble8-w1.5.json results/stakes/stake3-2k-f3-d4-open-packs-w2.5-salt2-on-ensemble8-w1.5.json --out results/stakes/stake3-2k-f3-d4-open-packs-w2.5-salt2-on-ensemble8-w1.5-vs-d4.json",
+  "open-packs-tally": "scripts/leaks.py .sync/leaks/d4-open-packs-green-2k-salt2.jsonl.gz --out results/leaks/d4-open-packs-green-2k-salt2.json",
+  "open-packs-all-green": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,open-packs-all --runs 2000 --seed 1 --salt 2 --stake 3 --leaks .sync/leaks/d4-open-packs-all-green-2k-salt2.jsonl --calibrate .sync/calib/d4-open-packs-all-green-2k-salt2.jsonl --out results/stakes/stake3-2k-f3-d4-open-packs-all-w2.5-salt2-on-ensemble8-w1.5.json",
+  "open-packs-all-gzip": "gzip -f .sync/leaks/d4-open-packs-all-green-2k-salt2.jsonl .sync/calib/d4-open-packs-all-green-2k-salt2.jsonl",
+  "open-packs-all-compare": "scripts/compare_runs.py results/stakes/stake3-2k-f3-d4-base-w2.5-salt2-on-ensemble8-w1.5.json results/stakes/stake3-2k-f3-d4-open-packs-all-w2.5-salt2-on-ensemble8-w1.5.json --out results/stakes/stake3-2k-f3-d4-open-packs-all-w2.5-salt2-on-ensemble8-w1.5-vs-d4.json",
+  "open-packs-all-tally": "scripts/leaks.py .sync/leaks/d4-open-packs-all-green-2k-salt2.jsonl.gz --out results/leaks/d4-open-packs-all-green-2k-salt2.json"
+ }
+}
