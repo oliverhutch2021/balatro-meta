@@ -1,0 +1,1625 @@
+{
+ "lines": "pack-audit-green.jsonl",
+ "runs": 300,
+ "win_rate": 0.3067,
+ "leaks": {
+  "blue_seal_planet": {
+   "runs": 300,
+   "present_share": 0.3533,
+   "chances": 783,
+   "collected": 459,
+   "collected_share": 0.5862,
+   "won": {
+    "runs": 92,
+    "present_share": 0.6087,
+    "chances": 538,
+    "collected": 361,
+    "collected_share": 0.671
+   },
+   "lost": {
+    "runs": 208,
+    "present_share": 0.2404,
+    "chances": 245,
+    "collected": 98,
+    "collected_share": 0.4
+   },
+   "fix_by_rule": false
+  },
+  "purple_seal_tarot": {
+   "runs": 300,
+   "present_share": 0.2667,
+   "chances": 476,
+   "collected": 288,
+   "collected_share": 0.605,
+   "won": {
+    "runs": 92,
+    "present_share": 0.3478,
+    "chances": 241,
+    "collected": 150,
+    "collected_share": 0.6224
+   },
+   "lost": {
+    "runs": 208,
+    "present_share": 0.2308,
+    "chances": 235,
+    "collected": 138,
+    "collected_share": 0.5872
+   },
+   "fix_by_rule": false
+  },
+  "won_round_room_used": {
+   "runs": 300,
+   "present_share": 1.0,
+   "chances": 4788,
+   "collected": 2649,
+   "collected_share": 0.5533,
+   "won": {
+    "runs": 92,
+    "present_share": 1.0,
+    "chances": 2007,
+    "collected": 1184,
+    "collected_share": 0.5899
+   },
+   "lost": {
+    "runs": 208,
+    "present_share": 1.0,
+    "chances": 2781,
+    "collected": 1465,
+    "collected_share": 0.5268
+   },
+   "fix_by_rule": false
+  },
+  "held_consumable_used": {
+   "runs": 300,
+   "present_share": 0.8567,
+   "chances": 939,
+   "collected": 835,
+   "collected_share": 0.8892,
+   "won": {
+    "runs": 92,
+    "present_share": 0.9783,
+    "chances": 421,
+    "collected": 367,
+    "collected_share": 0.8717
+   },
+   "lost": {
+    "runs": 208,
+    "present_share": 0.8029,
+    "chances": 518,
+    "collected": 468,
+    "collected_share": 0.9035
+   },
+   "fix_by_rule": false
+  },
+  "rich_shop_pack_opened": {
+   "runs": 300,
+   "present_share": 0.5,
+   "chances": 5391,
+   "collected": 4670,
+   "collected_share": 0.8663,
+   "won": {
+    "runs": 92,
+    "present_share": 0.8261,
+    "chances": 2197,
+    "collected": 1712,
+    "collected_share": 0.7792
+   },
+   "lost": {
+    "runs": 208,
+    "present_share": 0.3558,
+    "chances": 3194,
+    "collected": 2958,
+    "collected_share": 0.9261
+   },
+   "fix_by_rule": false
+  }
+ },
+ "seal_events": {
+  "blue_drawn": 783,
+  "blue_held_end": 483,
+  "blue_planet_made": 459,
+  "blue_planet_missed": 24,
+  "blue_played": 160,
+  "blue_played_win": 115,
+  "blue_thrown_digging": 20,
+  "purple_drawn": 476,
+  "purple_held_end_with_discards": 11,
+  "purple_played": 69,
+  "purple_played_win": 66,
+  "purple_played_with_discards": 51,
+  "purple_played_with_discards_slot_free": 51,
+  "purple_tarot_made": 288,
+  "purple_tarot_missed": 7,
+  "purple_thrown_digging": 238,
+  "purple_thrown_spare": 57
+ },
+ "blue_or_purple_seal_by_ante4_share": 0.184,
+ "rounds": {
+  "begun": 5691,
+  "ended_slots_full": 72,
+  "finish_decisions": 4716,
+  "lost": 207,
+  "lost_after_winning_hand": 1,
+  "with_winning_hand": 5147,
+  "won": 5483,
+  "won_with_discards_left": 3010,
+  "won_with_discards_left_purple_near": 243,
+  "won_with_hands_left_blue_to_draw": 548,
+  "won_with_room": 4788,
+  "won_with_room_2plus_hands": 4715,
+  "won_with_room_at_once": 2139,
+  "won_with_room_discards": 3191
+ },
+ "finish_ways": {
+  "extra1": {
+   "same_move": 25,
+   "failed": 4,
+   "passed": 66,
+   "kept": 19,
+   "made": 19
+  },
+  "extra4": {
+   "same_move": 107,
+   "failed": 10,
+   "passed": 171,
+   "kept": 129,
+   "made": 128
+  },
+  "extra5": {
+   "same_move": 2072,
+   "failed": 94,
+   "passed": 1957,
+   "kept": 137,
+   "made": 131
+  },
+  "throw": {
+   "same_move": 1,
+   "failed": 109,
+   "passed": 1312,
+   "kept": 1498,
+   "made": 1432
+  },
+  "throw1": {
+   "same_move": 1,
+   "failed": 0,
+   "passed": 0,
+   "kept": 8,
+   "made": 8
+  },
+  "win": {
+   "same_move": 0,
+   "failed": 15,
+   "passed": 0,
+   "kept": 4682,
+   "made": 2934
+  },
+  "win4": {
+   "same_move": 459,
+   "failed": 2,
+   "passed": 2,
+   "kept": 42,
+   "made": 31
+  }
+ },
+ "left_at_win": {
+  "2,0": 755,
+  "1,0": 638,
+  "3,4": 565,
+  "3,3": 503,
+  "0,0": 479,
+  "3,0": 476,
+  "3,2": 414,
+  "3,1": 372,
+  "2,1": 223,
+  "2,2": 193,
+  "2,3": 151,
+  "2,4": 87,
+  "1,1": 81,
+  "4,0": 64,
+  "1,2": 63
+ },
+ "held_through_share": {
+  "all": {
+   "rounds": 571,
+   "through": 71,
+   "share": 0.1243
+  },
+  "over_bar": [
+   "Death",
+   "Judgement",
+   "Justice",
+   "The Chariot",
+   "The Fool",
+   "The Hermit",
+   "The Hierophant",
+   "The Lovers",
+   "The Moon",
+   "The Star",
+   "The Sun",
+   "The Tower"
+  ],
+  "kinds": {
+   "Temperance": {
+    "rounds": 52,
+    "through": 0,
+    "share": 0.0
+   },
+   "The Hermit": {
+    "rounds": 46,
+    "through": 3,
+    "share": 0.0652
+   },
+   "Death": {
+    "rounds": 44,
+    "through": 5,
+    "share": 0.1136
+   },
+   "The Sun": {
+    "rounds": 40,
+    "through": 30,
+    "share": 0.75
+   },
+   "The Moon": {
+    "rounds": 37,
+    "through": 4,
+    "share": 0.1081
+   },
+   "The Fool": {
+    "rounds": 36,
+    "through": 4,
+    "share": 0.1111
+   },
+   "The High Priestess": {
+    "rounds": 35,
+    "through": 0,
+    "share": 0.0
+   },
+   "Strength": {
+    "rounds": 32,
+    "through": 0,
+    "share": 0.0
+   },
+   "The Hierophant": {
+    "rounds": 30,
+    "through": 2,
+    "share": 0.0667
+   },
+   "The Emperor": {
+    "rounds": 28,
+    "through": 0,
+    "share": 0.0
+   },
+   "The Wheel of Fortune": {
+    "rounds": 28,
+    "through": 0,
+    "share": 0.0
+   },
+   "Justice": {
+    "rounds": 23,
+    "through": 6,
+    "share": 0.2609
+   },
+   "The Hanged Man": {
+    "rounds": 22,
+    "through": 1,
+    "share": 0.0455
+   },
+   "The Chariot": {
+    "rounds": 19,
+    "through": 2,
+    "share": 0.1053
+   },
+   "The Empress": {
+    "rounds": 17,
+    "through": 0,
+    "share": 0.0
+   },
+   "The Magician": {
+    "rounds": 16,
+    "through": 0,
+    "share": 0.0
+   },
+   "The World": {
+    "rounds": 16,
+    "through": 0,
+    "share": 0.0
+   },
+   "The Lovers": {
+    "rounds": 15,
+    "through": 3,
+    "share": 0.2
+   },
+   "The Devil": {
+    "rounds": 13,
+    "through": 0,
+    "share": 0.0
+   },
+   "The Star": {
+    "rounds": 13,
+    "through": 4,
+    "share": 0.3077
+   },
+   "The Tower": {
+    "rounds": 5,
+    "through": 4,
+    "share": 0.8
+   },
+   "Judgement": {
+    "rounds": 4,
+    "through": 3,
+    "share": 0.75
+   }
+  }
+ },
+ "held_at_start": {
+  "Mercury": 112,
+  "Pluto": 79,
+  "Temperance": 52,
+  "Uranus": 47,
+  "The Hermit": 46,
+  "Death": 44,
+  "The Sun": 40,
+  "The Moon": 37,
+  "The Fool": 36,
+  "The High Priestess": 35,
+  "Saturn": 34,
+  "Strength": 32,
+  "Earth": 32,
+  "The Hierophant": 30,
+  "The Emperor": 28,
+  "The Wheel of Fortune": 28,
+  "Venus": 23,
+  "Justice": 23,
+  "The Hanged Man": 22,
+  "Jupiter": 21,
+  "The Chariot": 19,
+  "The Empress": 17,
+  "The Magician": 16,
+  "The World": 16,
+  "The Lovers": 15,
+  "The Devil": 13,
+  "The Star": 13,
+  "Mars": 12,
+  "Neptune": 8,
+  "The Tower": 5,
+  "Judgement": 4
+ },
+ "held_through": {
+  "The Sun": 30,
+  "Pluto": 12,
+  "Mercury": 10,
+  "Justice": 6,
+  "Uranus": 5,
+  "Death": 5,
+  "The Star": 4,
+  "The Moon": 4,
+  "The Tower": 4,
+  "The Fool": 4,
+  "The Lovers": 3,
+  "The Hermit": 3,
+  "Saturn": 3,
+  "Judgement": 3,
+  "The Chariot": 2,
+  "The Hierophant": 2,
+  "Jupiter": 2,
+  "The Hanged Man": 1,
+  "Venus": 1
+ },
+ "used": {
+  "Mercury": 333,
+  "Saturn": 199,
+  "Temperance": 143,
+  "Pluto": 137,
+  "Uranus": 135,
+  "The Hermit": 134,
+  "Earth": 128,
+  "Jupiter": 111,
+  "The Wheel of Fortune": 71,
+  "The Emperor": 64,
+  "The Fool": 62,
+  "The High Priestess": 59,
+  "Death": 59,
+  "Strength": 54,
+  "The Moon": 48,
+  "Venus": 46,
+  "The Hierophant": 45,
+  "The Magician": 39,
+  "The Hanged Man": 38,
+  "The Lovers": 36,
+  "Mars": 35,
+  "The Empress": 34,
+  "The World": 33,
+  "The Chariot": 30,
+  "Justice": 30,
+  "The Devil": 29,
+  "Neptune": 21,
+  "Judgement": 18,
+  "The Sun": 14,
+  "The Star": 14,
+  "The Tower": 4
+ },
+ "sold": {
+  "The Sun": 40,
+  "The Tower": 29,
+  "Judgement": 18,
+  "The Star": 15,
+  "The Lovers": 10,
+  "Justice": 8,
+  "The Moon": 7,
+  "The Fool": 7,
+  "Death": 7,
+  "The Magician": 6,
+  "The Hierophant": 4,
+  "Neptune": 4,
+  "Pluto": 4,
+  "The World": 3,
+  "The Chariot": 3,
+  "Saturn": 3,
+  "The Hermit": 3,
+  "Mars": 3,
+  "The Hanged Man": 3,
+  "Strength": 2,
+  "Venus": 2,
+  "Uranus": 2,
+  "The Devil": 1,
+  "Jupiter": 1,
+  "The High Priestess": 1,
+  "The Empress": 1,
+  "The Emperor": 1,
+  "The Wheel of Fortune": 1
+ },
+ "targets": {
+  "Cryptid": {
+   "uses": 19,
+   "rank0": 19,
+   "already_sealed": 7,
+   "cards": 19,
+   "mean_rank": 0,
+   "share_on_most_valuable": 1.0,
+   "share_already_sealed": 0.3684
+  },
+  "Death": {
+   "uses": 137,
+   "rank0": 121,
+   "already_sealed": 27,
+   "cards": 274,
+   "mean_rank": 3.35,
+   "share_on_most_valuable": 0.8832,
+   "share_already_sealed": 0.0985
+  },
+  "Deja Vu": {
+   "uses": 9,
+   "rank0": 9,
+   "already_sealed": 0,
+   "cards": 9,
+   "mean_rank": 0,
+   "share_on_most_valuable": 1.0,
+   "share_already_sealed": 0.0
+  },
+  "Justice": {
+   "uses": 87,
+   "rank0": 43,
+   "already_sealed": 9,
+   "cards": 87,
+   "mean_rank": 0.97,
+   "share_on_most_valuable": 0.4943,
+   "share_already_sealed": 0.1034
+  },
+  "Medium": {
+   "uses": 22,
+   "rank0": 22,
+   "already_sealed": 0,
+   "cards": 22,
+   "mean_rank": 0,
+   "share_on_most_valuable": 1.0,
+   "share_already_sealed": 0.0
+  },
+  "Strength": {
+   "uses": 86,
+   "rank0": 32,
+   "already_sealed": 7,
+   "cards": 162,
+   "mean_rank": 3.09,
+   "share_on_most_valuable": 0.3721,
+   "share_already_sealed": 0.0432
+  },
+  "Talisman": {
+   "uses": 15,
+   "rank0": 15,
+   "already_sealed": 0,
+   "cards": 15,
+   "mean_rank": 0,
+   "share_on_most_valuable": 1.0,
+   "share_already_sealed": 0.0
+  },
+  "The Chariot": {
+   "uses": 76,
+   "rank0": 25,
+   "already_sealed": 2,
+   "cards": 76,
+   "mean_rank": 3.76,
+   "share_on_most_valuable": 0.3289,
+   "share_already_sealed": 0.0263
+  },
+  "The Devil": {
+   "uses": 70,
+   "rank0": 29,
+   "already_sealed": 3,
+   "cards": 70,
+   "mean_rank": 2.29,
+   "share_on_most_valuable": 0.4143,
+   "share_already_sealed": 0.0429
+  },
+  "The Empress": {
+   "uses": 109,
+   "rank0": 65,
+   "already_sealed": 6,
+   "cards": 210,
+   "mean_rank": 1.18,
+   "share_on_most_valuable": 0.5963,
+   "share_already_sealed": 0.0286
+  },
+  "The Hanged Man": {
+   "uses": 95,
+   "rank0": 0,
+   "already_sealed": 0,
+   "cards": 169,
+   "mean_rank": 6.12,
+   "share_on_most_valuable": 0.0,
+   "share_already_sealed": 0.0
+  },
+  "The Hierophant": {
+   "uses": 123,
+   "rank0": 68,
+   "already_sealed": 8,
+   "cards": 238,
+   "mean_rank": 1.31,
+   "share_on_most_valuable": 0.5528,
+   "share_already_sealed": 0.0336
+  },
+  "The Lovers": {
+   "uses": 59,
+   "rank0": 28,
+   "already_sealed": 1,
+   "cards": 59,
+   "mean_rank": 1.34,
+   "share_on_most_valuable": 0.4746,
+   "share_already_sealed": 0.0169
+  },
+  "The Magician": {
+   "uses": 129,
+   "rank0": 70,
+   "already_sealed": 10,
+   "cards": 246,
+   "mean_rank": 1.47,
+   "share_on_most_valuable": 0.5426,
+   "share_already_sealed": 0.0407
+  },
+  "The Moon": {
+   "uses": 85,
+   "rank0": 26,
+   "already_sealed": 3,
+   "cards": 250,
+   "mean_rank": 3.38,
+   "share_on_most_valuable": 0.3059,
+   "share_already_sealed": 0.012
+  },
+  "The Star": {
+   "uses": 32,
+   "rank0": 20,
+   "already_sealed": 0,
+   "cards": 91,
+   "mean_rank": 2.4,
+   "share_on_most_valuable": 0.625,
+   "share_already_sealed": 0.0
+  },
+  "The Sun": {
+   "uses": 16,
+   "rank0": 4,
+   "already_sealed": 3,
+   "cards": 46,
+   "mean_rank": 3.65,
+   "share_on_most_valuable": 0.25,
+   "share_already_sealed": 0.0652
+  },
+  "The Tower": {
+   "uses": 4,
+   "rank0": 0,
+   "already_sealed": 0,
+   "cards": 4,
+   "mean_rank": 5.5,
+   "share_on_most_valuable": 0.0,
+   "share_already_sealed": 0.0
+  },
+  "The World": {
+   "uses": 64,
+   "rank0": 25,
+   "already_sealed": 5,
+   "cards": 191,
+   "mean_rank": 3.26,
+   "share_on_most_valuable": 0.3906,
+   "share_already_sealed": 0.0262
+  },
+  "Trance": {
+   "uses": 20,
+   "rank0": 20,
+   "already_sealed": 0,
+   "cards": 20,
+   "mean_rank": 0,
+   "share_on_most_valuable": 1.0,
+   "share_already_sealed": 0.0
+  }
+ },
+ "seal_spectral_targets": {
+  "Deja Vu": {
+   "uses": 9,
+   "rank0": 9,
+   "already_sealed": 0,
+   "cards": 9,
+   "mean_rank": 0,
+   "share_on_most_valuable": 1.0,
+   "share_already_sealed": 0.0
+  },
+  "Talisman": {
+   "uses": 15,
+   "rank0": 15,
+   "already_sealed": 0,
+   "cards": 15,
+   "mean_rank": 0,
+   "share_on_most_valuable": 1.0,
+   "share_already_sealed": 0.0
+  },
+  "Medium": {
+   "uses": 22,
+   "rank0": 22,
+   "already_sealed": 0,
+   "cards": 22,
+   "mean_rank": 0,
+   "share_on_most_valuable": 1.0,
+   "share_already_sealed": 0.0
+  },
+  "Trance": {
+   "uses": 20,
+   "rank0": 20,
+   "already_sealed": 0,
+   "cards": 20,
+   "mean_rank": 0,
+   "share_on_most_valuable": 1.0,
+   "share_already_sealed": 0.0
+  }
+ },
+ "spectral_offered": {
+  "Sigil": 48,
+  "Cryptid": 48,
+  "Deja Vu": 45,
+  "Wraith": 44,
+  "Ectoplasm": 43,
+  "Grim": 40,
+  "Hex": 40,
+  "Ankh": 39,
+  "Medium": 38,
+  "Ouija": 38,
+  "Talisman": 37,
+  "Trance": 36,
+  "Aura": 35,
+  "Immolate": 30,
+  "Familiar": 30,
+  "Incantation": 29,
+  "Black Hole": 1,
+  "The Soul": 1
+ },
+ "spectral_taken": {
+  "skipped": 62,
+  "Immolate": 22,
+  "Medium": 20,
+  "Trance": 19,
+  "Familiar": 18,
+  "Cryptid": 18,
+  "Talisman": 15,
+  "Sigil": 12,
+  "Deja Vu": 9,
+  "Wraith": 7,
+  "Hex": 2,
+  "Black Hole": 1
+ },
+ "shops": {
+  "left": 5391,
+  "visits": 5239,
+  "left_at_or_above_interest_cap": 1667,
+  "left_rich_pack_unopened": 721
+ },
+ "last_shop_money_median": {
+  "with_bull_or_bootstraps": 116,
+  "without": 5.0,
+  "runs_with": 35,
+  "runs_without": 84
+ },
+ "hands": {
+  "High Card": 2450,
+  "Pair": 2442,
+  "Straight": 2021,
+  "Flush": 1454,
+  "Two Pair": 1403,
+  "Full House": 1293,
+  "Three of a Kind": 478,
+  "Four of a Kind": 152,
+  "Straight Flush": 68,
+  "Five of a Kind": 11,
+  "Flush House": 6
+ },
+ "two_pair_share": 0.1191,
+ "two_pair_per_run": 4.6767,
+ "main_hand_share_median": 0.3735,
+ "jokers_by_ante": {
+  "pack": {
+   "1": 244,
+   "2": 120,
+   "3": 112,
+   "4": 55,
+   "5": 38,
+   "6": 7,
+   "7": 5,
+   "8": 6
+  },
+  "buy": {
+   "1": 325,
+   "2": 667,
+   "3": 546,
+   "4": 356,
+   "5": 212,
+   "6": 134,
+   "7": 76,
+   "8": 79
+  },
+  "sell": {
+   "1": 32,
+   "2": 210,
+   "3": 431,
+   "4": 360,
+   "5": 230,
+   "6": 128,
+   "7": 76,
+   "8": 101
+  }
+ },
+ "jokers": {
+  "pack": {
+   "Half Joker": 17,
+   "Abstract Joker": 17,
+   "Supernova": 17,
+   "Hanging Chad": 17,
+   "Golden Joker": 14,
+   "Smiley Face": 13,
+   "Odd Todd": 13,
+   "Misprint": 13,
+   "Mail-In Rebate": 12,
+   "Raised Fist": 11,
+   "Shoot the Moon": 11,
+   "Red Card": 11,
+   "Runner": 10,
+   "Square Joker": 10,
+   "Green Joker": 9,
+   "Photograph": 9,
+   "Even Steven": 9,
+   "Riff-raff": 9,
+   "Fortune Teller": 8,
+   "Bootstraps": 8,
+   "Wrathful Joker": 8,
+   "Flash Card": 8,
+   "Joker": 7,
+   "Chaos the Clown": 7,
+   "Delayed Gratification": 7,
+   "Walkie Talkie": 7,
+   "Arrowhead": 7,
+   "Astronomer": 7,
+   "Jolly Joker": 7,
+   "Egg": 7,
+   "Mystic Summit": 7,
+   "Sly Joker": 6,
+   "Hologram": 6,
+   "Space Joker": 6,
+   "Greedy Joker": 6,
+   "Stuntman": 6,
+   "Joker Stencil": 6,
+   "Scholar": 6,
+   "Trading Card": 6,
+   "Mad Joker": 6,
+   "Castle": 6,
+   "Fibonacci": 6,
+   "Swashbuckler": 6,
+   "Scary Face": 5,
+   "Clever Joker": 5,
+   "Flower Pot": 5,
+   "Business Card": 5,
+   "Onyx Agate": 5,
+   "Lusty Joker": 5,
+   "Blue Joker": 5,
+   "Constellation": 4,
+   "The Duo": 4,
+   "Blackboard": 4,
+   "Spare Trousers": 4,
+   "Acrobat": 4,
+   "Burnt Joker": 4,
+   "Reserved Parking": 4,
+   "Certificate": 4,
+   "Crafty Joker": 4,
+   "Wily Joker": 4,
+   "Gros Michel": 4,
+   "Seeing Double": 4,
+   "Ride the Bus": 4,
+   "Cartomancer": 4,
+   "Shortcut": 4,
+   "Turtle Bean": 4,
+   "Vampire": 4,
+   "Juggler": 3,
+   "Hiker": 3,
+   "Rocket": 3,
+   "Dusk": 3,
+   "Zany Joker": 3,
+   "Crazy Joker": 3,
+   "Blueprint": 3,
+   "To the Moon": 3,
+   "Banner": 3,
+   "Ramen": 3,
+   "Sock and Buskin": 3,
+   "Seltzer": 3,
+   "Mime": 3,
+   "Popcorn": 3,
+   "Erosion": 3,
+   "Bull": 3,
+   "The Trio": 3,
+   "Gluttonous Joker": 3,
+   "Gift Card": 2,
+   "Rough Gem": 2,
+   "Midas Mask": 2,
+   "Faceless Joker": 2,
+   "Wee Joker": 2,
+   "Ancient Joker": 2,
+   "Brainstorm": 2,
+   "The Order": 2,
+   "Drunkard": 2,
+   "Card Sharp": 2,
+   "Cloud 9": 2,
+   "Seance": 1,
+   "Madness": 1,
+   "Baseball Card": 1,
+   "The Idol": 1,
+   "Burglar": 1,
+   "Superposition": 1,
+   "The Family": 1,
+   "Devious Joker": 1,
+   "Obelisk": 1,
+   "To Do List": 1,
+   "Matador": 1,
+   "Hallucination": 1,
+   "Pareidolia": 1,
+   "DNA": 1,
+   "Satellite": 1,
+   "Campfire": 1,
+   "Hit the Road": 1,
+   "Hack": 1,
+   "Bloodstone": 1
+  },
+  "buy": {
+   "Runner": 71,
+   "Supernova": 67,
+   "Hanging Chad": 67,
+   "Abstract Joker": 65,
+   "Swashbuckler": 61,
+   "Mail-In Rebate": 56,
+   "Half Joker": 53,
+   "Egg": 50,
+   "Raised Fist": 50,
+   "Smiley Face": 49,
+   "Misprint": 48,
+   "Mystic Summit": 46,
+   "Odd Todd": 45,
+   "Blue Joker": 44,
+   "Green Joker": 39,
+   "Photograph": 38,
+   "Bootstraps": 37,
+   "Square Joker": 35,
+   "Joker": 35,
+   "Even Steven": 34,
+   "Card Sharp": 33,
+   "Seeing Double": 32,
+   "Walkie Talkie": 32,
+   "Sly Joker": 31,
+   "Jolly Joker": 31,
+   "Flash Card": 31,
+   "Scholar": 30,
+   "Turtle Bean": 30,
+   "Space Joker": 30,
+   "The Duo": 29,
+   "Hologram": 29,
+   "Bull": 27,
+   "Delayed Gratification": 27,
+   "Golden Joker": 27,
+   "Fortune Teller": 27,
+   "Spare Trousers": 26,
+   "Shoot the Moon": 26,
+   "Mad Joker": 25,
+   "Gift Card": 25,
+   "Scary Face": 25,
+   "Constellation": 24,
+   "Burglar": 24,
+   "Castle": 23,
+   "Business Card": 23,
+   "Wrathful Joker": 22,
+   "Red Card": 22,
+   "Baseball Card": 22,
+   "Fibonacci": 22,
+   "Acrobat": 22,
+   "Blueprint": 20,
+   "Hiker": 20,
+   "Stuntman": 18,
+   "Onyx Agate": 18,
+   "Lusty Joker": 18,
+   "Banner": 18,
+   "Zany Joker": 17,
+   "Vampire": 17,
+   "Arrowhead": 17,
+   "Mr. Bones": 17,
+   "Brainstorm": 17,
+   "Greedy Joker": 16,
+   "The Trio": 15,
+   "Burnt Joker": 15,
+   "Seltzer": 15,
+   "Drunkard": 13,
+   "Clever Joker": 13,
+   "Blackboard": 13,
+   "Gros Michel": 12,
+   "Juggler": 12,
+   "Riff-raff": 11,
+   "Cartomancer": 11,
+   "Ramen": 11,
+   "Cloud 9": 11,
+   "Sock and Buskin": 10,
+   "Wee Joker": 10,
+   "Obelisk": 10,
+   "Gluttonous Joker": 9,
+   "Certificate": 9,
+   "Chaos the Clown": 8,
+   "The Order": 8,
+   "Ride the Bus": 8,
+   "Rough Gem": 7,
+   "Lucky Cat": 7,
+   "Steel Joker": 7,
+   "Wily Joker": 7,
+   "Flower Pot": 6,
+   "Hallucination": 6,
+   "Crafty Joker": 6,
+   "Rocket": 6,
+   "Popcorn": 6,
+   "Joker Stencil": 6,
+   "Oops! All 6s": 5,
+   "Bloodstone": 5,
+   "Devious Joker": 5,
+   "Crazy Joker": 5,
+   "Midas Mask": 5,
+   "Madness": 5,
+   "To the Moon": 4,
+   "Matador": 4,
+   "Droll Joker": 4,
+   "Mime": 4,
+   "Reserved Parking": 4,
+   "Ancient Joker": 4,
+   "Glass Joker": 4,
+   "Credit Card": 4,
+   "Trading Card": 4,
+   "To Do List": 4,
+   "The Tribe": 3,
+   "Faceless Joker": 3,
+   "The Family": 3,
+   "Troubadour": 3,
+   "Ice Cream": 3,
+   "Pareidolia": 3,
+   "8 Ball": 3,
+   "Showman": 3,
+   "Dusk": 3,
+   "Splash": 3,
+   "Cavendish": 2,
+   "Erosion": 2,
+   "Astronomer": 2,
+   "Driver's License": 2,
+   "Seance": 2,
+   "Vagabond": 2,
+   "Luchador": 2,
+   "Shortcut": 1,
+   "Satellite": 1,
+   "Marble Joker": 1,
+   "Stone Joker": 1,
+   "Golden Ticket": 1,
+   "Smeared Joker": 1,
+   "Superposition": 1,
+   "Baron": 1,
+   "Hit the Road": 1,
+   "Ceremonial Dagger": 1,
+   "Invisible Joker": 1,
+   "Hack": 1,
+   "Merry Andy": 1
+  },
+  "sell": {
+   "Smiley Face": 48,
+   "Raised Fist": 48,
+   "Egg": 47,
+   "Mail-In Rebate": 46,
+   "Odd Todd": 43,
+   "Mystic Summit": 40,
+   "Abstract Joker": 40,
+   "Joker": 37,
+   "Walkie Talkie": 35,
+   "Jolly Joker": 34,
+   "Half Joker": 33,
+   "Misprint": 33,
+   "Golden Joker": 33,
+   "Wrathful Joker": 31,
+   "Hanging Chad": 30,
+   "Sly Joker": 29,
+   "Even Steven": 29,
+   "Delayed Gratification": 29,
+   "Mad Joker": 27,
+   "Green Joker": 27,
+   "Fortune Teller": 27,
+   "Scholar": 26,
+   "Blue Joker": 25,
+   "Supernova": 25,
+   "Gift Card": 24,
+   "Shoot the Moon": 24,
+   "Swashbuckler": 23,
+   "Business Card": 23,
+   "Space Joker": 22,
+   "Greedy Joker": 22,
+   "Riff-raff": 21,
+   "Scary Face": 20,
+   "Zany Joker": 20,
+   "Photograph": 19,
+   "Lusty Joker": 19,
+   "Banner": 19,
+   "Ride the Bus": 15,
+   "Drunkard": 14,
+   "Turtle Bean": 14,
+   "Chaos the Clown": 13,
+   "Square Joker": 13,
+   "Hiker": 13,
+   "Crafty Joker": 12,
+   "Cartomancer": 12,
+   "Clever Joker": 12,
+   "Gluttonous Joker": 12,
+   "Juggler": 12,
+   "Burglar": 11,
+   "Onyx Agate": 10,
+   "Cloud 9": 10,
+   "Wily Joker": 10,
+   "Red Card": 10,
+   "Trading Card": 9,
+   "Rough Gem": 8,
+   "Rocket": 8,
+   "Ramen": 8,
+   "Astronomer": 8,
+   "Crazy Joker": 8,
+   "Certificate": 8,
+   "Popcorn": 8,
+   "Arrowhead": 7,
+   "Droll Joker": 7,
+   "Runner": 7,
+   "Reserved Parking": 7,
+   "Seeing Double": 7,
+   "Fibonacci": 7,
+   "Burnt Joker": 7,
+   "Seltzer": 7,
+   "Hallucination": 6,
+   "Flower Pot": 6,
+   "Ice Cream": 6,
+   "Vampire": 6,
+   "Dusk": 5,
+   "Bloodstone": 5,
+   "Shortcut": 5,
+   "Devious Joker": 5,
+   "To the Moon": 5,
+   "Mime": 5,
+   "Acrobat": 5,
+   "Midas Mask": 5,
+   "Faceless Joker": 5,
+   "Oops! All 6s": 4,
+   "Sock and Buskin": 4,
+   "Obelisk": 4,
+   "Brainstorm": 4,
+   "Bootstraps": 4,
+   "Gros Michel": 4,
+   "Credit Card": 4,
+   "Bull": 4,
+   "Splash": 4,
+   "The Duo": 4,
+   "Card Sharp": 4,
+   "Castle": 3,
+   "Blackboard": 3,
+   "Erosion": 3,
+   "Mr. Bones": 3,
+   "Flash Card": 3,
+   "The Order": 3,
+   "The Tribe": 2,
+   "Seance": 2,
+   "Joker Stencil": 2,
+   "8 Ball": 2,
+   "Ancient Joker": 2,
+   "Superposition": 2,
+   "The Family": 2,
+   "To Do List": 2,
+   "Baron": 2,
+   "Luchador": 2,
+   "Invisible Joker": 2,
+   "Matador": 2,
+   "Pareidolia": 1,
+   "Glass Joker": 1,
+   "Baseball Card": 1,
+   "Wee Joker": 1,
+   "The Idol": 1,
+   "Troubadour": 1,
+   "Perkeo": 1,
+   "Madness": 1,
+   "Marble Joker": 1,
+   "Steel Joker": 1,
+   "Smeared Joker": 1,
+   "Stuntman": 1,
+   "Showman": 1,
+   "Ceremonial Dagger": 1,
+   "Satellite": 1,
+   "Campfire": 1,
+   "Spare Trousers": 1,
+   "Blueprint": 1,
+   "Hit the Road": 1,
+   "Hack": 1,
+   "The Trio": 1
+  }
+ },
+ "vouchers": {
+  "Blank": {
+   "offered": 325,
+   "affordable": 278,
+   "redeemed": 0,
+   "redeemed_when_affordable": 0.0
+  },
+  "Clearance Sale": {
+   "offered": 231,
+   "affordable": 173,
+   "redeemed": 71,
+   "redeemed_when_affordable": 0.4104
+  },
+  "Crystal Ball": {
+   "offered": 321,
+   "affordable": 264,
+   "redeemed": 0,
+   "redeemed_when_affordable": 0.0
+  },
+  "Director's Cut": {
+   "offered": 246,
+   "affordable": 184,
+   "redeemed": 80,
+   "redeemed_when_affordable": 0.4348
+  },
+  "Glow Up": {
+   "offered": 3,
+   "affordable": 3,
+   "redeemed": 0,
+   "redeemed_when_affordable": 0.0
+  },
+  "Grabber": {
+   "offered": 206,
+   "affordable": 145,
+   "redeemed": 76,
+   "redeemed_when_affordable": 0.5241
+  },
+  "Hieroglyph": {
+   "offered": 222,
+   "affordable": 176,
+   "redeemed": 46,
+   "redeemed_when_affordable": 0.2614
+  },
+  "Hone": {
+   "offered": 297,
+   "affordable": 244,
+   "redeemed": 9,
+   "redeemed_when_affordable": 0.0369
+  },
+  "Liquidation": {
+   "offered": 3,
+   "affordable": 3,
+   "redeemed": 3,
+   "redeemed_when_affordable": 1.0
+  },
+  "Magic Trick": {
+   "offered": 354,
+   "affordable": 288,
+   "redeemed": 0,
+   "redeemed_when_affordable": 0.0
+  },
+  "Money Tree": {
+   "offered": 1,
+   "affordable": 1,
+   "redeemed": 1,
+   "redeemed_when_affordable": 1.0
+  },
+  "Nacho Tong": {
+   "offered": 10,
+   "affordable": 10,
+   "redeemed": 9,
+   "redeemed_when_affordable": 0.9
+  },
+  "Observatory": {
+   "offered": 6,
+   "affordable": 6,
+   "redeemed": 4,
+   "redeemed_when_affordable": 0.6667
+  },
+  "Overstock": {
+   "offered": 229,
+   "affordable": 176,
+   "redeemed": 50,
+   "redeemed_when_affordable": 0.2841
+  },
+  "Overstock Plus": {
+   "offered": 13,
+   "affordable": 13,
+   "redeemed": 4,
+   "redeemed_when_affordable": 0.3077
+  },
+  "Paint Brush": {
+   "offered": 221,
+   "affordable": 157,
+   "redeemed": 59,
+   "redeemed_when_affordable": 0.3758
+  },
+  "Palette": {
+   "offered": 11,
+   "affordable": 10,
+   "redeemed": 6,
+   "redeemed_when_affordable": 0.6
+  },
+  "Petroglyph": {
+   "offered": 8,
+   "affordable": 8,
+   "redeemed": 8,
+   "redeemed_when_affordable": 1.0
+  },
+  "Planet Merchant": {
+   "offered": 306,
+   "affordable": 259,
+   "redeemed": 5,
+   "redeemed_when_affordable": 0.0193
+  },
+  "Recyclomancy": {
+   "offered": 6,
+   "affordable": 6,
+   "redeemed": 0,
+   "redeemed_when_affordable": 0.0
+  },
+  "Reroll Glut": {
+   "offered": 3,
+   "affordable": 3,
+   "redeemed": 0,
+   "redeemed_when_affordable": 0.0
+  },
+  "Reroll Surplus": {
+   "offered": 318,
+   "affordable": 260,
+   "redeemed": 7,
+   "redeemed_when_affordable": 0.0269
+  },
+  "Retcon": {
+   "offered": 31,
+   "affordable": 29,
+   "redeemed": 2,
+   "redeemed_when_affordable": 0.069
+  },
+  "Seed Money": {
+   "offered": 299,
+   "affordable": 240,
+   "redeemed": 16,
+   "redeemed_when_affordable": 0.0667
+  },
+  "Tarot Merchant": {
+   "offered": 367,
+   "affordable": 291,
+   "redeemed": 0,
+   "redeemed_when_affordable": 0.0
+  },
+  "Telescope": {
+   "offered": 281,
+   "affordable": 231,
+   "redeemed": 33,
+   "redeemed_when_affordable": 0.1429
+  },
+  "Wasteful": {
+   "offered": 280,
+   "affordable": 220,
+   "redeemed": 27,
+   "redeemed_when_affordable": 0.1227
+  }
+ },
+ "vouchers_per_run": 1.72,
+ "boss_rerolled_away": {
+  "Violet Vessel": 13,
+  "The Wall": 9,
+  "The Water": 6,
+  "The Needle": 4,
+  "The Mouth": 4,
+  "Crimson Heart": 3,
+  "The Plant": 3,
+  "The Eye": 2,
+  "The Mark": 2,
+  "The Goad": 1,
+  "Amber Acorn": 1,
+  "Verdant Leaf": 1,
+  "The Psychic": 1,
+  "The Flint": 1
+ },
+ "runs_with_a_boss_reroll": 36,
+ "card_sharp": {
+  "runs_holding": 35,
+  "rounds_held": 377,
+  "rounds_fired": 291,
+  "rounds_fired_share": 0.7719,
+  "plays_held": 1025,
+  "by_hand": {
+   "High Card": {
+    "played": 342,
+    "fired": 180,
+    "fired_share": 0.5263
+   },
+   "Pair": {
+    "played": 269,
+    "fired": 119,
+    "fired_share": 0.4424
+   },
+   "Straight": {
+    "played": 157,
+    "fired": 51,
+    "fired_share": 0.3248
+   },
+   "Two Pair": {
+    "played": 106,
+    "fired": 38,
+    "fired_share": 0.3585
+   },
+   "Flush": {
+    "played": 86,
+    "fired": 25,
+    "fired_share": 0.2907
+   },
+   "Full House": {
+    "played": 40,
+    "fired": 6,
+    "fired_share": 0.15
+   },
+   "Three of a Kind": {
+    "played": 18,
+    "fired": 0,
+    "fired_share": 0.0
+   },
+   "Four of a Kind": {
+    "played": 6,
+    "fired": 0,
+    "fired_share": 0.0
+   },
+   "Straight Flush": {
+    "played": 1,
+    "fired": 0,
+    "fired_share": 0.0
+   }
+  }
+ },
+ "tarots_used_per_run": {
+  "all": 7.4933,
+  "won": 10.6957,
+  "lost": 6.0769,
+  "from_slots": 3.5267,
+  "at_once": 3.9667,
+  "counted_at_once": true
+ },
+ "packs_per_run": {
+  "Arcana": {
+   "offered": 9.9033,
+   "affordable": 9.73,
+   "opened": 4.4733,
+   "opened_by_ante": {
+    "1": 0.09,
+    "2": 0.3133,
+    "3": 0.62,
+    "4": 0.8767,
+    "5": 0.9167,
+    "6": 0.6367,
+    "7": 0.5767,
+    "8": 0.4433
+   }
+  },
+  "Buffoon": {
+   "offered": 4.1067,
+   "affordable": 4.0233,
+   "opened": 2.1967,
+   "opened_by_ante": {
+    "1": 0.8167,
+    "2": 0.4,
+    "3": 0.41,
+    "4": 0.2533,
+    "5": 0.1767,
+    "6": 0.06,
+    "7": 0.0433,
+    "8": 0.0367
+   }
+  },
+  "Celestial": {
+   "offered": 9.8633,
+   "affordable": 9.67,
+   "opened": 3.0767,
+   "opened_by_ante": {
+    "1": 0.04,
+    "2": 0.0567,
+    "3": 0.1967,
+    "4": 0.5533,
+    "5": 0.6667,
+    "6": 0.62,
+    "7": 0.47,
+    "8": 0.4733
+   }
+  },
+  "Spectral": {
+   "offered": 1.5067,
+   "affordable": 1.4733,
+   "opened": 0.6833,
+   "opened_by_ante": {
+    "1": 0.0367,
+    "2": 0.1067,
+    "3": 0.0833,
+    "4": 0.17,
+    "5": 0.08,
+    "6": 0.0867,
+    "7": 0.0667,
+    "8": 0.0533
+   }
+  },
+  "Standard": {
+   "offered": 9.5467,
+   "affordable": 9.4167,
+   "opened": 2.8333,
+   "opened_by_ante": {
+    "1": 0.03,
+    "2": 0.12,
+    "3": 0.3333,
+    "4": 0.57,
+    "5": 0.63,
+    "6": 0.4833,
+    "7": 0.3767,
+    "8": 0.29
+   }
+  },
+  "shop_consumables_bought": {
+   "Planet": 1.7533,
+   "Tarot": 1.8967
+  }
+ },
+ "fool_copied": {
+  "Temperance": 9,
+  "Mercury": 6,
+  "The Hermit": 6,
+  "Pluto": 5,
+  "Uranus": 5,
+  "The Emperor": 4,
+  "Saturn": 4,
+  "The Wheel of Fortune": 4,
+  "Jupiter": 3,
+  "Strength": 2,
+  "The Empress": 2,
+  "The Magician": 2,
+  "The Moon": 1,
+  "Death": 1,
+  "The Hierophant": 1,
+  "Justice": 1,
+  "The Hanged Man": 1,
+  "The Devil": 1,
+  "The World": 1,
+  "The Lovers": 1,
+  "Neptune": 1,
+  "Earth": 1
+ },
+ "bars": [
+  {
+   "id": "C1",
+   "what": "Tarot/Spectral kinds still held at a round's end at 5% or more (10+ rounds held)",
+   "value": "Death, Justice, The Chariot, The Hierophant, The Lovers, The Moon, The Star, The Sun",
+   "bar": "none, or named",
+   "pass": false
+  },
+  {
+   "id": "C2",
+   "what": "spread of the suit Tarots' held-through shares",
+   "value": 0.75,
+   "bar": "under 0.10",
+   "pass": false
+  },
+  {
+   "id": "C5",
+   "what": "seal Spectrals on the most valuable card",
+   "value": 1.0,
+   "bar": "0.90 or more",
+   "pass": true
+  },
+  {
+   "id": "P1",
+   "what": "Blue Seals thrown while digging, per draw",
+   "value": 0.0255,
+   "bar": "under 0.05",
+   "pass": true
+  },
+  {
+   "id": "P2",
+   "what": "a Planet per Blue Seal draw",
+   "value": 0.5862,
+   "bar": "0.70 or more",
+   "pass": false
+  },
+  {
+   "id": "P3a",
+   "what": "a Tarot per Purple Seal draw",
+   "value": 0.605,
+   "bar": "0.80 or more",
+   "pass": false
+  },
+  {
+   "id": "P3b",
+   "what": "Purple Seals played with discards left, per draw",
+   "value": 0.1071,
+   "bar": "under 0.05",
+   "pass": false
+  },
+  {
+   "id": "P3c",
+   "what": "Purple Seals played with discards left and a slot free, per draw",
+   "value": 0.1071,
+   "bar": "under 0.05",
+   "pass": false
+  },
+  {
+   "id": "B1",
+   "what": "rounds lost after a winning hand was in hand, per such round",
+   "value": 0.0002,
+   "bar": "not above all-off's (the night's gate: under 2x)",
+   "pass": null
+  },
+  {
+   "id": "P4",
+   "what": "cards not made for want of a slot, per seal draw",
+   "value": 0.0246,
+   "bar": "under 0.005",
+   "pass": false
+  },
+  {
+   "id": "P6a",
+   "what": "Two Pair's share of hands",
+   "value": 0.1191,
+   "bar": "under 0.05",
+   "pass": false
+  },
+  {
+   "id": "P6b",
+   "what": "the main hand's share of a run's hands (median)",
+   "value": 0.3735,
+   "bar": "over 0.60",
+   "pass": false
+  },
+  {
+   "id": "S7",
+   "what": "runs that rerolled a boss",
+   "value": 36,
+   "bar": "counted",
+   "pass": null
+  },
+  {
+   "id": "slots",
+   "what": "rounds ended with every consumable slot full, per round begun",
+   "value": 0.0127,
+   "bar": "falling",
+   "pass": null
+  }
+ ]
+}
