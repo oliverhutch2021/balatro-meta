@@ -102,6 +102,13 @@ def compare(game, gs: dict) -> list[str]:
     if ec is not None and gc is not None and abs(float(ec) - float(gc)) <= CHIPS_ALLOWANCE + 1e-4 * abs(float(gc)):
         e["chips"] = gc
     out = differences(e, g)
+    # Which blinds were skipped, in every state the game names them (the checks look at blinds only on the
+    # blind-select screen): a pack opened in the shop and caught before its price is paid or its cards are shown
+    # looks like a skipped blind's pack tag otherwise.
+    skipped = ({k for k, b in e.get("blinds", {}).items() if b.get("status") == "SKIPPED"},
+               {k for k, b in g.get("blinds", {}).items() if b.get("status") == "SKIPPED"})
+    if not out and g.get("blinds") and skipped[0] != skipped[1]:
+        out.append(f"skipped blinds: engine {sorted(skipped[0])}, game {sorted(skipped[1])}")
     # The jokers in every state (the checks compare them only where a move of theirs can change them).
     # (Without face-down marks: the game turns jokers face up again a moment after the cash-out screen opens.)
     held = (sorted(repr((j.get("key"), j.get("edition"))) for j in e["jokers"]),
@@ -427,8 +434,8 @@ def pack_evidence(line: Line, moves: list, passed: list[dict]) -> int:
     return 0 if taken[0] in gone else 1
 
 
-def used_up(game, gs: dict):
-    """Held cards the game no longer shows, two or more, each used with no settled state in between (Perkeo's
+def used_up(game, gs: dict, least: int = 2):
+    """Held cards the game no longer shows, `least` or more, each used with no settled state in between (Perkeo's
     Negative Planets used one after another): (the engine after using them all, the moves), or None when that
     isn't what happened (cards gone that need targets, or the game holding something the engine doesn't)."""
     held = game_view(gs).get("consumables")
@@ -441,7 +448,7 @@ def used_up(game, gs: dict):
         if k not in gone:
             return None
         gone.remove(k)
-    if not 2 <= len(gone) <= 8:
+    if not least <= len(gone) <= 8:
         return None
     c, moves = game.copy(), []
     for k in gone:
@@ -513,9 +520,19 @@ def explain(line: Line, gs: dict, highlight: list | None, passed: list[dict] | N
                 continue
             for k2, a2 in candidates(c, before, gs, highlight, line.follow, wide=False):
                 r = try_move(c, k2, a2, gs)
-                if r is not None and not r[1]:
+                if r is None:
+                    continue
+                third = []
+                if r[1] and all(d.startswith("consumables") for d in r[1]):
+                    # A card made on the way and used at once, all before the game settled (a round's last hand
+                    # with a Blue Seal held, Cash Out, then the Planet used).
+                    u = used_up(r[0], gs, least=1)
+                    if u is None or compare(u[0], gs):
+                        continue
+                    r, third = (u[0], []), u[1]
+                if not r[1]:
                     soft = len(soft_differences(r[0], gs))
-                    matches.append((soft, 100000 + n, r[0], [*pre, (kind, arg), (k2, a2)]))
+                    matches.append((soft, 100000 + n, r[0], [*pre, (kind, arg), (k2, a2), *third]))
                     if soft == 0:
                         break
             if matches and matches[-1][0] == 0 and matches[-1][3]:
