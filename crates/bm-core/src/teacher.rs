@@ -184,6 +184,7 @@ pub const OPTIONS: &[&str] = &[
     // S's order (lab #27): from ante 2, where the value would reroll or leave the shop, an affordable Arcana or
     // Spectral pack is opened instead ("open-packs"); "open-packs-all" adds Buffoon and Standard packs (`forced_pack`).
     "open-packs",
+    "no-open-packs",
     "open-packs-all",
     // Forecast v0 (S, lab #30): blinds after the next round judged by the forecast's tables (`baseline --forecast
     // FILE`), in place of today's power plus the projection.
@@ -466,6 +467,9 @@ const DEFAULTS: &[(&str, &str)] = &[
     // C8 and C10 (lab #30): the user's enhancement tiers for targets; The Fool used at once on a card worth copying.
     ("card-tiers", "no-card-tiers"),
     ("fool-copies", "no-fool-copies"),
+    // Level against -d4 with its behaviour met (lab #27, 14 November: +0.80, -1.40 to +3.00; Arcana opened 46% to 87%
+    // of those affordable, Tarots used 7.6 to 11.6 a run): the base by S's rule. "open-packs-all" was Worse.
+    ("open-packs", "no-open-packs"),
 ];
 
 /// Options on by default (each off with "no-<name>").
@@ -481,6 +485,7 @@ pub const ON_BY_DEFAULT: &[&str] = &[
     "card-sharp",
     "card-tiers",
     "fool-copies",
+    "open-packs",
 ];
 
 /// The defaults in force here (for reports: a run's options say what was added, this what the code had on).
@@ -3967,7 +3972,7 @@ fn plain_move(run: &Run, salt: u64) -> (MoveKind, u64) {
 mod tests {
 
     /// "open-packs" (lab #27): from ante 2, an affordable Arcana pack before a Buffoon one; Buffoon only with
-    /// "open-packs-all"; nothing at ante 1, nothing unaffordable, nothing without the option.
+    /// "open-packs-all"; nothing at ante 1, nothing unaffordable, nothing with "no-open-packs".
     #[test]
     fn open_packs_picks_the_affordable_pack_of_the_kinds_asked_for() {
         use crate::shop::BoosterSlot;
@@ -3983,7 +3988,8 @@ mod tests {
         run.ante = 2;
         let pick = |opts: &[&str], r: &crate::state::Run| with_options(opts, || forced_pack(r));
         assert_eq!(pick(&["open-packs"], &run), Some(1), "the Arcana pack");
-        assert_eq!(pick(&[], &run), None, "off by default");
+        assert_eq!(pick(&[], &run), Some(1), "on by default (lab #27, the -d5 base)");
+        assert_eq!(pick(&["no-open-packs"], &run), None, "and off with no-open-packs");
         run.money = 5;
         assert_eq!(pick(&["open-packs"], &run), None, "the Arcana pack unaffordable, Buffoon not asked for");
         assert_eq!(pick(&["open-packs-all"], &run), Some(0), "with -all, the Buffoon pack");

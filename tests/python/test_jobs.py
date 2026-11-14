@@ -1668,11 +1668,13 @@ def test_the_packs_and_forecast_arms_pair_against_the_d4_base(tmp_path):
     base_out = base[base.index("--out") + 1]
     packs = {n: a for n, a, *_ in jobs.green_packs_steps(tmp_path)}
     fc = {n: a for n, a, *_ in jobs.green_forecast_steps(tmp_path)}
-    for d, arms in ((packs, ("open-packs", "open-packs-all")), (fc, ("forecast", "forecast-ahead3", "forecast-ahead8"))):
-        for arm in arms:
-            assert d[f"{arm}-compare"][1] == base_out
-    assert "--calibrate" in packs["open-packs-green"] and "--calibrate" not in fc["forecast-green"]
-    f8 = fc["forecast-ahead8-green"]
+    for arm in ("open-packs", "open-packs-all"):
+        assert packs[f"{arm}-compare"][1] == base_out
+    open_out = packs["open-packs-green"][packs["open-packs-green"].index("--out") + 1]
+    for arm in ("d5-forecast", "d5-forecast-ahead3", "d5-forecast-ahead8"):
+        assert fc[f"{arm}-compare"][1] == open_out, "the forecast arms pair against open-packs, the -d5 base"
+    assert "--calibrate" in packs["open-packs-green"] and "--calibrate" not in fc["d5-forecast-green"]
+    f8 = fc["d5-forecast-ahead8-green"]
     assert f8[f8.index("--teacher-options") + 1].endswith(",forecast,ahead=8")
     assert f8[f8.index("--forecast") + 1] == jobs.FORECAST_TABLES
     assert not jobs.path_problems(jobs.green_packs_steps(tmp_path) + jobs.green_forecast_steps(tmp_path))

@@ -1608,7 +1608,7 @@ def money_belief_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int 
 #   of playing the bot lacks (class B, Plan v0); a range wider than +-3 points is unmeasured (scripts/forced_buys.py).
 LEAK_DIR = ".sync/leaks"
 # Screens' file names once the champion's report predates the options on by default (champion_trials).
-DEFAULTS_MARK = "-d4"
+DEFAULTS_MARK = "-d5"
 
 
 def played_with_defaults(report: Path) -> bool:
@@ -1624,7 +1624,7 @@ def played_with_defaults(report: Path) -> bool:
 BATCH1_DEFAULTS = ["boss-reroll", "held-cards", "glass", "five-kind", "freeze-money-last", "round-fixes", "shop-fixes",
                    "joker-fixes"]
 CODE_DEFAULTS = ["boss-reroll", "held-cards", "glass", "five-kind", "freeze-money-last", "round-fixes", "shop-fixes",
-                 "joker-fixes", "card-sharp", "card-tiers", "fool-copies"]
+                 "joker-fixes", "card-sharp", "card-tiers", "fool-copies", "open-packs"]
 DEFAULTS_OFF = ",".join(f"no-{d}" for d in CODE_DEFAULTS)
 
 
@@ -2021,7 +2021,7 @@ FORECAST_TABLES = ".sync/lab/out/forecast-v0-tables.json"
 
 
 def d4_arm_steps(arms: list[tuple[str, str, list[str]]], root: Path = ROOT, runs: int = SCREEN_RUNS,
-                 calibrate: bool = False) -> list[tuple]:
+                 calibrate: bool = False, control_arm: str = "base") -> list[tuple]:
     """Arms on top of the `-d4` base (night-d4's base report, the control), each on batch 1's 2,000 Green seeds at salt
     2, tallied, paired against it: (name, the options added, extra baseline arguments)."""
     steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", LEAK_DIR, CALIB_DIR])]
@@ -2033,7 +2033,8 @@ def d4_arm_steps(arms: list[tuple[str, str, list[str]]], root: Path = ROOT, runs
     w = args[args.index("--value-weight") + 1]
     stem = Path(best[2]).stem.split("-on-")[-1]
     sl = f"salt{BUNDLE_SALT}"
-    control = f"results/stakes/stake{BUNDLE_GREEN}-{runs // 1000}k-f{FORMULA}-d4-base-w{w}-{sl}-on-{stem}.json"
+    # The control: the -d4 base, or one of its arms played on the same seeds (open-packs, the -d5 base).
+    control = f"results/stakes/stake{BUNDLE_GREEN}-{runs // 1000}k-f{FORMULA}-d4-{control_arm}-w{w}-{sl}-on-{stem}.json"
     green = ["--runs", str(runs), "--seed", "1", "--salt", str(BUNDLE_SALT), "--stake", str(BUNDLE_GREEN)]
     for name, extra, more in arms:
         a = list(args)
@@ -2064,11 +2065,12 @@ def green_packs_steps(root: Path = ROOT) -> list[tuple]:
 
 def green_forecast_steps(root: Path = ROOT) -> list[tuple]:
     """make green-forecast (S, lab #30): teacher option `forecast` (every blind after the next round by forecast v0's
-    tables, FORECAST_TABLES), then with `ahead=3` and `ahead=8`, against the -d4 base. E1's fault is found if the two
-    ahead arms are not Worse; `forecast` joins the base if Better or Level."""
+    tables and S's link, FORECAST_TABLES), then with `ahead=3` and `ahead=8`, against the base as it now is (-d5: the -d4
+    base with open-packs, green-packs' arm on the same seeds). E1's fault is found if the two ahead arms are not Worse;
+    `forecast` joins the base if Better or Level."""
     more = ["--forecast", FORECAST_TABLES]
-    return d4_arm_steps([("forecast", "forecast", more), ("forecast-ahead3", "forecast,ahead=3", more),
-                         ("forecast-ahead8", "forecast,ahead=8", more)], root)
+    return d4_arm_steps([("d5-forecast", "forecast", more), ("d5-forecast-ahead3", "forecast,ahead=3", more),
+                         ("d5-forecast-ahead8", "forecast,ahead=8", more)], root, control_arm="open-packs")
 
 
 def e1_white_steps(k: int, root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:

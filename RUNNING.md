@@ -1562,6 +1562,20 @@ dead); the user opens 86-100% of affordable Arcana packs from ante 2, the bot 19
 `make green-packs` (about 2.5 hours) and `make green-forecast` (about 3.5 hours), each against the `-d4` base on 2,000
 Green seeds.
 
+## Step 52: open-packs on by default, and forecast v0 against it (lab #27, #30)
+
+Read from step 51: `open-packs` +0.80 points (-1.40 to +3.00) against `-d4`, Level, with Arcana packs opened 46% to 87%
+of those affordable and Tarots used 7.6 to 11.6 a run: the base by S's rule, on by default (`no-open-packs`; screens
+marked `-d5`). `open-packs-all` -2.50 (-4.79 to -0.21), Worse: off.
+
+`forecast` now turns its centre and spread into a chance through S's link (offset, round spread, boss shift, from the
+file's `link`). `make green-forecast` plays `forecast`, `forecast,ahead=3` and `forecast,ahead=8` against green-packs'
+`open-packs` arm (the `-d5` base on the same 2,000 Green seeds).
+
+```
+cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(green-packs)" || true) && make sync && make green-forecast
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

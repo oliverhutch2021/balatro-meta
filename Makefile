@@ -256,7 +256,7 @@ night-d4:  ## Green, about 3 hours: the pack audit; the base as it now is (Card 
 green-packs:  ## open-packs and open-packs-all against the -d4 base on 2,000 Green seeds each, with the calibration recording (about 2.5 hours)
 	$(PY) scripts/jobs.py run green-packs $(JOB_FLAGS)
 
-green-forecast:  ## forecast, forecast+ahead=3, forecast+ahead=8 against the -d4 base on 2,000 Green seeds each (about 3.5 hours; needs .sync/lab/out/forecast-v0-tables.json)
+green-forecast:  ## forecast, forecast+ahead=3, forecast+ahead=8 against the base (-d5, open-packs on) on 2,000 Green seeds each (about 3.5 hours; needs .sync/lab/out/forecast-v0-tables.json)
 	$(PY) scripts/jobs.py run green-forecast $(JOB_FLAGS)
 
 e1-white-ahead2 e1-white-ahead3 e1-white-ahead8:  ## E1's White guard for one setting (2,000 White seeds against the first 2,000 of batch1's White arm, about 1.2 hours)
