@@ -137,6 +137,64 @@ def test_a_late_state_is_passed_over_when_the_next_one_explains_it():
     assert any("passed over" in n for n in r.notes)
 
 
+def play_until(g, states, n: int) -> None:
+    """The greedy bot's moves until the run has made `n` moves, each settled state kept."""
+    while len(g.moves) < n:
+        kind, arg = g.greedy_move()
+        assert g.step(kind, arg)
+        states.append((shown(g), []))
+
+
+def test_a_round_s_last_hand_cash_out_and_a_card_made_on_the_way_used_with_no_state_between():
+    # ABD5S11N's gap (lab #32): the round's last hand makes a Planet (a Blue Seal held), Cash Out, and the Planet is
+    # used, all before the game settles. Three moves between two states; here GAPS0050's 28th move makes an Earth.
+    g = Game("GAPS0050")
+    states = [(shown(g), [])]
+    play_until(g, states, 27)
+    kind, arg = g.greedy_move()
+    assert kind == 6
+    v = g.view()
+    picked = [states[-1][0]["hand"]["cards"][i]["id"] for i in positions(arg)]
+    held = len(v["consumables"])
+    full_house = next(h["level"] for h in v["hand_levels"] if h["name"] == "Full House")
+    assert g.step(kind, arg) and g.view()["state"] == "ROUND_EVAL" and len(g.view()["consumables"]) == held + 1
+    assert g.step(2, 0)
+    made = len(g.view()["consumables"]) - 1
+    assert g.view()["consumables"][made]["key"] == "c_earth"
+    assert g.step(17, made)
+    states.append((shown(g), picked))  # the next settled state: the shop, the Earth used
+    play_until(g, states, len(g.moves) + 40)
+    r = replay(states)
+    same_end(r, g)
+    assert any([m[0] for m in s["moves"]][-3:] == [6, 2, 17] for s in r.steps), "the three moves, found together"
+    assert next(h["level"] for h in r.game.view()["hand_levels"] if h["name"] == "Full House") > full_house
+
+
+def test_a_pack_caught_open_before_its_price_is_paid_is_not_taken_for_a_skipped_blind():
+    # S7GYRU6F's gap (lab #32): a pack opened in the shop, caught before its price is paid or its cards are shown.
+    # "Next round, skip the blind" gives a tag's pack at today's money and fits everything else; the blinds' marks
+    # (the next blind still UPCOMING) rule it out. GAPS0003's 41st move: an affordable pack, and an Ethereal Tag on
+    # the next blind.
+    g = Game("GAPS0003")
+    states = [(shown(g), [])]
+    play_until(g, states, 40)
+    shop = g.copy()
+    money = g.view()["money"]
+    assert g.view()["state"] == "SHOP" and g.step(15, 0) and g.view()["state"] == "SMODS_BOOSTER_OPENED"
+    caught = json.loads(json.dumps(shown(g)))
+    caught["money"] = money  # not paid yet
+    caught.pop("pack")  # its cards not shown yet
+    skip = shop.copy()
+    assert skip.step(3, 0) and skip.step(1, 0) and skip.view()["state"] == "SMODS_BOOSTER_OPENED"
+    diff = rm.compare(skip, caught)
+    assert len(diff) == 1 and diff[0].startswith("skipped blinds"), diff
+    states += [(caught, []), (shown(g), [])]
+    play_until(g, states, len(g.moves) + 30)
+    r = replay(states)
+    same_end(r, g)
+    assert (15, 0) in r.moves and (1, 0) not in r.moves
+
+
 def test_the_kept_state_has_no_text_from_the_game():
     gs = {"hand": {"cards": [{"id": 1, "key": "H_A", "label": "Base Card",
                               "value": {"suit": "H", "rank": "A", "effect": "+11 chips"}}]},
