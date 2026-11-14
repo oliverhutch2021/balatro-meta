@@ -181,6 +181,14 @@ pub const OPTIONS: &[&str] = &[
     "card-sharp",
     // Card Sharp's play is on by default (lab #30); this turns it off.
     "no-card-sharp",
+    // C8 (lab #30): `card_worth` ranks the enhancements in the user's order (Glass, Lucky, Steel and Gold, Mult and
+    // Bonus) for what Death copies, what a seal goes on and what the digging keeps. On by default.
+    "card-tiers",
+    "no-card-tiers",
+    // C10 (lab #30): The Fool used at once when the card it would make is The Hanged Man, Death, The Hermit, or
+    // Temperance paying over $20 (the user's rule); otherwise it waits as before. On by default.
+    "fool-copies",
+    "no-fool-copies",
     // A player's rule, "focus on one hand": his wins pile the Planets on the hand the build plays (Pair to level
     // 27), where the teacher's went only a third to its main hand (on 300 runs: 10 levels a run, its main hand
     // ending its wins at a median level 5; when a Celestial pack offered that hand's Planet it took another or
@@ -448,6 +456,9 @@ const DEFAULTS: &[(&str, &str)] = &[
     // On by the user's judgement (S, lab #30, 13 November): Level on 2,000 Green seeds (+0.60, -0.09 to +1.29), all of it
     // in the runs that hold Card Sharp; the user calls the technique critical. Not a measured gain.
     ("card-sharp", "no-card-sharp"),
+    // C8 and C10 (lab #30): the user's enhancement tiers for targets; The Fool used at once on a card worth copying.
+    ("card-tiers", "no-card-tiers"),
+    ("fool-copies", "no-fool-copies"),
 ];
 
 /// Options on by default (each off with "no-<name>").
@@ -461,6 +472,8 @@ pub const ON_BY_DEFAULT: &[&str] = &[
     "shop-fixes",
     "joker-fixes",
     "card-sharp",
+    "card-tiers",
+    "fool-copies",
 ];
 
 /// The defaults in force here (for reports: a run's options say what was added, this what the code had on).
@@ -1183,7 +1196,9 @@ fn value_consumable_in_round(run: &Run, salt: u64) -> Option<(MoveKind, u64)> {
     // calls a hair worse than the card gone is noise, and holding it is the leak.
     let held = on("held-cards");
     let margin_of = |i: usize| -> f64 {
-        if !held {
+        if on("fool-copies") && fool_worth_using(run, &run.consumables[i]) {
+            f64::MIN / 4.0 // used at once, whatever the value's sample says (the user's rule, C10)
+        } else if !held {
             MIN_GAIN
         } else if use_rather_than_hold(run, &run.consumables[i]) {
             -USE_SLACK
@@ -1230,6 +1245,18 @@ fn use_rather_than_hold(run: &Run, c: &Consumable) -> bool {
         }
         _ => false,
     }
+}
+
+/// "fool-copies" (C10, lab #30): The Fool, when the card it would make is worth copying: The Hanged Man, Death,
+/// The Hermit, or Temperance while the jokers held would pay over $20 (the user: its worth is the flexibility).
+fn fool_worth_using(run: &Run, c: &Consumable) -> bool {
+    use ConsumableKind::*;
+    c.kind == Fool
+        && match run.last_tarot_planet {
+            Some(HangedMan | Death | Hermit) => true,
+            Some(Temperance) => run.jokers.iter().map(|j| j.sell_cost).sum::<i64>().min(50) > 20,
+            _ => false,
+        }
 }
 
 /// A salt that stays the same while only the jokers' order changes, so a decision and the joker moves
@@ -2663,8 +2690,13 @@ fn choose_against(
             .iter()
             .map(|(m, q, _)| format!("[{},{q:.5}]", audit_move(Some(*m))))
             .collect();
+        // Four dollars more, the rest as here: the value's price of money at this position (for reading the options in
+        // dollars).
+        let mut plus = here.clone();
+        plus.money += 4;
         format!(
-            "{{\"quick\":{{\"here\":{here_quick:.5},\"options\":[{}]}}}}",
+            "{{\"quick\":{{\"here\":{here_quick:.5},\"here_plus4\":{:.5},\"options\":[{}]}}}}",
+            quick(&plus, vs),
             all.join(",")
         )
     });
@@ -3874,6 +3906,31 @@ fn plain_move(run: &Run, salt: u64) -> (MoveKind, u64) {
 
 #[cfg(test)]
 mod tests {
+
+    /// C10 (lab #30): The Fool is used at once on The Hanged Man, Death, The Hermit, or a Temperance over $20; on
+    /// anything else it waits.
+    #[test]
+    fn the_fool_is_used_on_the_cards_worth_copying() {
+        let mut run = crate::state::Run::new(crate::RunConfig::new("FOOL1"));
+        let fool = run.make_consumable(ConsumableKind::Fool);
+        for (last, want) in [
+            (Some(ConsumableKind::Death), true),
+            (Some(ConsumableKind::HangedMan), true),
+            (Some(ConsumableKind::Hermit), true),
+            (Some(ConsumableKind::Temperance), false),
+            (Some(ConsumableKind::Moon), false),
+            (None, false),
+        ] {
+            run.last_tarot_planet = last;
+            assert_eq!(fool_worth_using(&run, &fool), want, "{last:?}");
+        }
+        run.last_tarot_planet = Some(ConsumableKind::Temperance);
+        for _ in 0..4 {
+            let i = run.add_joker(crate::joker_data::JokerKind::Joker);
+            run.jokers[i].sell_cost = 6;
+        }
+        assert!(fool_worth_using(&run, &fool), "Temperance paying $24");
+    }
     use super::*;
     use crate::bm_rng::SeedSampler;
     use crate::env::apply;

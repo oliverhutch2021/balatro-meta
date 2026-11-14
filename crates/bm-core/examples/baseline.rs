@@ -1139,10 +1139,15 @@ fn audit_line(
             .collect()
     });
     let packs: Vec<String> = shop.map_or_else(Vec::new, |s| {
+        // [slot (OpenBooster's argument), kind, cost] for each pack still on sale.
         s.boosters
             .iter()
-            .flatten()
-            .map(|b| format!("[{},{}]", esc(&format!("{:?}", b.booster)), b.cost))
+            .enumerate()
+            .filter_map(|(i, b)| b.as_ref().map(|b| (i, b)))
+            .map(|(i, b)| {
+                let kind = bm_core::content::BOOSTERS[b.booster as usize].kind;
+                format!("[{i},{},{}]", esc(&format!("{kind:?}")), b.cost)
+            })
             .collect()
     });
     format!(

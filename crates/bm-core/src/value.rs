@@ -1688,7 +1688,6 @@ pub fn card_value(run: &Run, id: crate::state::CardId) -> f64 {
 
 /// `card_value` of a card as given (one changed in thought: what a Tarot would make of it).
 pub fn card_worth(run: &Run, c: &crate::card::Card) -> f64 {
-    use crate::card::Edition;
     let rank = match c.rank.id() {
         14 => 11.0,
         11..=13 => 10.0,
@@ -1697,6 +1696,23 @@ pub fn card_worth(run: &Run, c: &crate::card::Card) -> f64 {
     // "glass": x mult on the card counted by the times it scores (a retrigger doubles a Glass card's x2 again).
     let glass = crate::teacher::on("glass");
     let triggers = if glass { card_triggers(run, c) } else { 1.0 };
+    // "card-tiers" (C8, lab #30): the user's order of the enhancements, Glass, then Lucky (scoring and money, more
+    // with Lucky Cat), then Steel and Gold, then Mult and Bonus. A ranking for targets (what Death copies, what a seal
+    // goes on, what the digging keeps), not points the value adds.
+    if crate::teacher::on("card-tiers") {
+        let enh = match c.enhancement {
+            Enhancement::Glass if glass => GLASS_PER_TRIGGER * triggers,
+            Enhancement::Glass => 35.0,
+            Enhancement::Lucky => 28.0 + 6.0 * run.count_jokers(JokerKind::LuckyCat) as f64,
+            Enhancement::Steel => 20.0,
+            Enhancement::Gold => 18.0,
+            Enhancement::Mult => 12.0,
+            Enhancement::Bonus | Enhancement::Wild => 10.0,
+            Enhancement::Stone => 5.0,
+            Enhancement::None => 0.0,
+        };
+        return rank + enh + card_extras(run, c, triggers);
+    }
     let enh = match c.enhancement {
         Enhancement::Glass if glass => GLASS_PER_TRIGGER * triggers,
         Enhancement::Glass => 30.0,
@@ -1708,6 +1724,12 @@ pub fn card_worth(run: &Run, c: &crate::card::Card) -> f64 {
         Enhancement::Stone => 5.0,
         Enhancement::None => 0.0,
     };
+    rank + enh + card_extras(run, c, triggers)
+}
+
+/// A card's edition, seal, permanent chips and what the jokers held make of it, for `card_worth`.
+fn card_extras(run: &Run, c: &crate::card::Card, triggers: f64) -> f64 {
+    use crate::card::Edition;
     let ed = match c.edition {
         Edition::Polychrome => 30.0 * triggers,
         Edition::Holographic => 15.0,
@@ -1723,7 +1745,7 @@ pub fn card_worth(run: &Run, c: &crate::card::Card) -> f64 {
         Seal::Purple => 15.0,
         Seal::None => 0.0,
     };
-    rank + enh + ed + seal + c.perma_bonus as f64 + joker_bonus(run, c)
+    ed + seal + c.perma_bonus as f64 + joker_bonus(run, c)
 }
 
 /// "glass": what a Glass card's x2 is worth per time it scores (a Polychrome card's x1.5: 30). A player's view:
@@ -2471,18 +2493,18 @@ mod tests {
         five.enhancement = Enhancement::Glass;
         // Off: as before. On, scored once: 45 for the x2 (30 off).
         assert_eq!(
-            worth(&run, &five, &["no-glass"])
-                - worth(&run, &Card::new(0, Suit::Hearts, Rank::Five), &["no-glass"]),
+            worth(&run, &five, &["no-glass", "no-card-tiers"])
+                - worth(&run, &Card::new(0, Suit::Hearts, Rank::Five), &["no-glass", "no-card-tiers"]),
             30.0
         );
         assert_eq!(
-            worth(&run, &five, &["glass"]) - worth(&run, &five, &["no-glass"]),
+            worth(&run, &five, &["glass"]) - worth(&run, &five, &["no-glass", "no-card-tiers"]),
             15.0
         );
         // A Red Seal scores it twice, Hack (2 to 5) a third time: the x2 counts three times.
         five.seal = Seal::Red;
         run.add_joker(JokerKind::Hack);
-        let plain_glass = worth(&run, &five, &["no-glass"]);
+        let plain_glass = worth(&run, &five, &["no-glass", "no-card-tiers"]);
         assert_eq!(
             worth(&run, &five, &["glass"]) - plain_glass,
             3.0 * 45.0 - 30.0
@@ -2493,7 +2515,7 @@ mod tests {
         king.seal = Seal::Red;
         king.edition = Edition::Polychrome;
         assert_eq!(
-            worth(&run, &king, &["glass"]) - worth(&run, &king, &["no-glass"]),
+            worth(&run, &king, &["glass"]) - worth(&run, &king, &["no-glass", "no-card-tiers"]),
             (2.0 * 45.0 - 30.0) + 30.0
         );
     }
@@ -2598,6 +2620,23 @@ mod tests {
             &["no-five-kind", "no-glass", "no-round-fixes"],
             the_deck_is_measured_by_the_hands_it_deals_off,
         );
+    }
+
+    /// C8 (lab #30): the user's tiers rank Lucky above Mult and Steel, Glass at the top; the old table had Mult over
+    /// Lucky.
+    #[test]
+    fn the_enhancements_rank_in_the_users_order() {
+        use crate::card::Enhancement as E;
+        let run = first_shop("VALUE5");
+        let id = run.playing_cards[0];
+        let worth = |e: E, opts: &[&str]| {
+            let mut c = run.card(id).clone();
+            c.enhancement = e;
+            crate::teacher::with_options(opts, || card_worth(&run, &c))
+        };
+        let on: Vec<f64> = [E::Glass, E::Lucky, E::Steel, E::Gold, E::Mult, E::Bonus].iter().map(|&e| worth(e, &[])).collect();
+        assert!(on.windows(2).all(|w| w[0] >= w[1]), "Glass, Lucky, Steel, Gold, Mult, Bonus: {on:?}");
+        assert!(worth(E::Mult, &["no-card-tiers"]) > worth(E::Lucky, &["no-card-tiers"]), "the old order");
     }
 
     /// C9's premise checked (lab #30): the one-deal measure (a hand dealt, at most two throws) does credit a thinned

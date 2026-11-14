@@ -183,6 +183,7 @@ def summarise(runs: list[dict]) -> dict:
         "card_sharp": card_sharp(runs),
         "tarots_used_per_run": tarots_used(runs),
         "packs_per_run": packs(runs),
+        "fool_copied": dict(total(runs, "fool_copied").most_common()),
     }
 
 
@@ -322,6 +323,8 @@ def main(argv: list[str] | None = None) -> int:
     t = s["tarots_used_per_run"]
     print(f"  Tarots used a run: {t['all']} (wins {t['won']}, losses {t['lost']}; from the slots {t['from_slots']}, "
           f"at once {t['at_once'] if t['counted_at_once'] else 'not counted in this tally'})")
+    if s["fool_copied"]:
+        print("  The Fool made: " + ", ".join(f"{k} {v}" for k, v in s["fool_copied"].items()))
     pk = {k: v for k, v in s["packs_per_run"].items() if k != "shop_consumables_bought"}
     if pk:
         print("  Packs a run (offered / affordable / opened): "

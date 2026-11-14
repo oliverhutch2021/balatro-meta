@@ -1608,7 +1608,7 @@ def money_belief_steps(root: Path = ROOT, runs: int = BIG_RUNS, green_runs: int 
 #   of playing the bot lacks (class B, Plan v0); a range wider than +-3 points is unmeasured (scripts/forced_buys.py).
 LEAK_DIR = ".sync/leaks"
 # Screens' file names once the champion's report predates the options on by default (champion_trials).
-DEFAULTS_MARK = "-d3"
+DEFAULTS_MARK = "-d4"
 
 
 def played_with_defaults(report: Path) -> bool:
@@ -1620,7 +1620,7 @@ def played_with_defaults(report: Path) -> bool:
 # The options on by default (teacher.rs ON_BY_DEFAULT, from 13 November; batch 1 of the master list, lab #27, added
 # the rest), and all of them turned off: what step 37's controls played.
 CODE_DEFAULTS = ["boss-reroll", "held-cards", "glass", "five-kind", "freeze-money-last", "round-fixes", "shop-fixes",
-                 "joker-fixes", "card-sharp"]
+                 "joker-fixes", "card-sharp", "card-tiers", "fool-copies"]
 DEFAULTS_OFF = ",".join(f"no-{d}" for d in CODE_DEFAULTS)
 
 

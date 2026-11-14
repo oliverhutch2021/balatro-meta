@@ -91,6 +91,8 @@ pub struct Leaks {
     /// Consumables used the moment they were taken, never held: from a pack (a Tarot or Planet picked is used on the
     /// spot) or bought and used from the shop, by kind. `used` counts only those used from the consumable slots.
     used_at_once: Counts,
+    /// What each Fool used made (the last Tarot or Planet used before it; "nothing"): C10's counter.
+    fool_copied: Counts,
     /// Packs (S, lab #30): "offered:<kind>", "affordable:<kind>" (each shop's first look), "opened:<kind>" and
     /// "opened:<kind>:a<ante>"; shop consumables bought: "bought:<set>".
     packs: BTreeMap<String, u64>,
@@ -226,6 +228,12 @@ impl Leaks {
             MoveKind::UseConsumable => {
                 if let Some(c) = before.consumables.get((a & 0xFF) as usize) {
                     bump(&mut self.used, c.kind.name());
+                    if c.kind == ConsumableKind::Fool {
+                        bump(
+                            &mut self.fool_copied,
+                            before.last_tarot_planet.map_or("nothing", |k| k.name()),
+                        );
+                    }
                     let mask = a >> 8;
                     if targeted(c.kind) && mask != 0 && before.phase == Phase::Round {
                         self.target(before, c.kind, mask);
@@ -695,7 +703,7 @@ impl Leaks {
              \"held_through\":{},\"used\":{},\"sold\":{},\"targets\":[{}],\"spectral_offered\":{},\
              \"spectral_taken\":{},\"shops\":{},\"last_shop\":{},\"jokers\":[{}],\"vouchers_offered\":{},\
              \"vouchers_affordable\":{},\"vouchers_redeemed\":{},\"boss_rerolled_away\":{},\"hands\":{},\
-             \"card_sharp\":{},\"used_at_once\":{},\"packs\":{},\"blue_or_purple_by_ante4\":{}}}",
+             \"card_sharp\":{},\"used_at_once\":{},\"fool_copied\":{},\"packs\":{},\"blue_or_purple_by_ante4\":{}}}",
             json_counts(&self.seals),
             json_counts(&self.rounds),
             {
@@ -723,6 +731,7 @@ impl Leaks {
                 format!("{{{}}}", parts.join(","))
             },
             json_counts(&self.used_at_once),
+            json_counts(&self.fool_copied),
             {
                 let parts: Vec<String> = self.packs.iter().map(|(k, v)| format!("\"{k}\":{v}")).collect();
                 format!("{{{}}}", parts.join(","))
