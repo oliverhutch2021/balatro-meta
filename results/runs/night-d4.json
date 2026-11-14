@@ -1,34 +1,30 @@
 {
  "job": "night-d4",
- "commit": "57d66ec55cc7197026705e7683ace9c5f1181d20",
- "started": "2026-11-14T12:35:10+00:00",
- "finished": "2026-11-14T16:02:10+00:00",
+ "commit": "1582611b277d68bf9846c073cf7a1356fc3f4b38",
+ "started": "2026-11-14T16:07:30+00:00",
+ "finished": "2026-11-14T16:21:34+00:00",
  "machine": {
   "host": "PC",
   "platform": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
   "cpu_threads": 16,
   "ram_gb": 15.2,
   "load_avg_1_5_15": [
-   12.5,
-   16.2,
-   16.9
+   12.2,
+   16.4,
+   15.6
   ],
   "python": "3.12.3",
   "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
   "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
  },
  "steps": {
-  "build": 21,
+  "build": 2,
   "folder": 0,
-  "pack-audit-green": 749,
-  "pack-audit-summary": 1,
+  "pack-audit-green": 840,
+  "pack-audit-summary": 2,
   "pack-audit-tally": 0,
-  "d4-base-green": 5277,
-  "d4-base-gzip": 0,
   "d4-base-compare": 0,
-  "d4-base-tally": 0,
-  "play-on-green": 6370,
-  "play-on-gzip": 1
+  "d4-base-tally": 0
  },
  "commands": {
   "build": "make --no-print-directory build",
@@ -36,11 +32,7 @@
   "pack-audit-green": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 300 --seed 1 --salt 2 --stake 3 --audit-shops .sync/audit/pack-audit-green.jsonl --audit-antes 1-8 --leaks .sync/leaks/pack-audit-green.jsonl --out .sync/audit/pack-audit-green.json",
   "pack-audit-summary": "scripts/pack_audit.py .sync/audit/pack-audit-green.jsonl --out results/audit/pack-audit-green.json",
   "pack-audit-tally": "scripts/leaks.py .sync/leaks/pack-audit-green.jsonl --out results/leaks/pack-audit-green.json",
-  "d4-base-green": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 2000 --seed 1 --salt 2 --stake 3 --leaks .sync/leaks/d4-base-green-2k-salt2.jsonl --out results/stakes/stake3-2k-f3-d4-base-w2.5-salt2-on-ensemble8-w1.5.json",
-  "d4-base-gzip": "gzip -f .sync/leaks/d4-base-green-2k-salt2.jsonl",
   "d4-base-compare": "scripts/compare_runs.py results/stakes/stake3-2k-f3-precise+late-x-3+boss-x-4+late-from-1+boss-reroll+held-cards+glass+five-kind+freeze-money-last+round-fixes+shop-fixes+joker-fixes+card-sharp+card-tiers+fool-copies-w2.5-salt2-on-ensemble8-w1.5.json results/stakes/stake3-2k-f3-d4-base-w2.5-salt2-on-ensemble8-w1.5.json --out results/stakes/stake3-2k-f3-d4-base-w2.5-salt2-on-ensemble8-w1.5-vs-batch1.json",
-  "d4-base-tally": "scripts/leaks.py .sync/leaks/d4-base-green-2k-salt2.jsonl.gz --out results/leaks/d4-base-green-2k-salt2.json",
-  "play-on-green": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 2000 --seed 1 --salt 2 --stake 3 --play-on --calibrate .sync/calib/play-on-green-2k-salt2.jsonl --out results/calib/play-on-green-2k-salt2.json",
-  "play-on-gzip": "gzip -f .sync/calib/play-on-green-2k-salt2.jsonl"
+  "d4-base-tally": "scripts/leaks.py .sync/leaks/d4-base-green-2k-salt2.jsonl.gz --out results/leaks/d4-base-green-2k-salt2.json"
  }
 }
