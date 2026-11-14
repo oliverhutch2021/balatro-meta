@@ -438,6 +438,10 @@ class Checker:
         self.wait_idle()  # a few frames in the menu: the mod readies the run-setup deck `start` needs
         gs = settle(api, api.call("start", {"deck": "RED", "stake": BALATROBOT_STAKES[stake - 1], "seed": game.seed}))
         self.wait_idle()
+        if gs.get("seed") and gs["seed"] != game.seed:
+            # The run never started and the game is still in the last one (6QK73GR5 was compared against the game
+            # of H9TLIO1C, lab #27): an interrupted check, not a difference.
+            raise RuntimeError(f"start didn't take: the game still shows seed {gs['seed']}, not {game.seed}")
         gs, diff = compare(api, game, gs)
         if diff:
             return False, self.mismatch(game, 0, "start", diff, gs)

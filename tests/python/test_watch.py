@@ -73,7 +73,7 @@ class FakeGame:
         jokers = [{"key": j["key"], "modifier": {"edition": j["edition"]}, "state": {"hidden": j["face_down"]},
                    "cost": {"buy": 2 * j["sell"], "sell": j["sell"] + (1 if self.cheat_sell and i == 0 else 0)}}
                   for i, j in enumerate(v["jokers"])]
-        return {"state": v["state"], "round_num": v["round"], "ante_num": v["ante"], "money": money,
+        return {"state": v["state"], "seed": self.game.seed, "round_num": v["round"], "ante_num": v["ante"], "money": money,
                 "round": {"hands_left": v["hands_left"], "discards_left": v["discards_left"], "chips": v["chips"],
                           "reroll_cost": v["reroll_cost"]},
                 "hand": {"cards": cards}, "jokers": {"cards": jokers}, "blinds": blinds,
@@ -246,6 +246,30 @@ def test_the_windows_bridge_relays_calls(tmp_path, monkeypatch):
             api.call("health", timeout=2)
     finally:
         bridge.close()
+
+
+def test_a_start_that_leaves_the_last_run_on_screen_is_not_compared(tmp_path, monkeypatch):
+    """A `start` the game answers while still showing the last run (lab #27: 6QK73GR5 compared against the game of
+    H9TLIO1C) stops the check as interrupted: no difference is saved."""
+    monkeypatch.setattr(watch, "WATCH", tmp_path)
+    monkeypatch.setattr(checker, "WATCH", tmp_path)
+    fake = FakeGame()
+    rpc = fake.rpc
+
+    def stale(method, p):
+        if method in ("menu", "start"):  # neither takes: the last run stays on screen
+            return fake.view()
+        return rpc(method, p)
+
+    fake.rpc = stale
+    fake.game = Game("OLDRUNAA", 1)
+    srv = serve(fake)
+    api = watch.Api(f"http://127.0.0.1:{srv.server_address[1]}")
+    c = checker.Checker(api=api, files=checker.ModFiles(None), launch=False, say=lambda *_: None)
+    with pytest.raises(RuntimeError, match="still shows seed OLDRUNAA"):
+        c.check_run("NEWRUNBB", None, "test")
+    srv.shutdown()
+    assert not list((tmp_path / "mismatches").glob("*.json"))
 
 
 def test_a_refused_start_is_reported_and_the_checks_carry_on(tmp_path, monkeypatch):
