@@ -1,0 +1,736 @@
+{
+ "gen": 0,
+ "seed_base": 30001,
+ "blocks": [
+  200,
+  800,
+  3000
+ ],
+ "salt": 2,
+ "stake": 3,
+ "base_options": "precise,late-x=3,boss-x=4,late-from=1",
+ "members": {
+  "f1cdc7881f": {
+   "genes": [
+    "buying-power=0.0579",
+    "long-money-x=1.14",
+    "long-power-x=1.65",
+    "money-scale=23.7",
+    "no-fool-copies",
+    "open-packs-all"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 31,
+    "only_member": 29,
+    "diff": -0.01,
+    "se": 0.03872337795182646,
+    "lo": -0.08589782078557985,
+    "hi": 0.06589782078557986
+   },
+   "shrunk": -0.01
+  },
+  "d1388ec917": {
+   "genes": [
+    "above-cap=0.659",
+    "long-money-x=2.02",
+    "long-power-x=2.31",
+    "long-run=0.413",
+    "money-scale=18.7",
+    "no-card-sharp",
+    "no-fool-copies",
+    "no-round-fixes",
+    "spend-down=40"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 34,
+    "only_member": 15,
+    "diff": -0.095,
+    "se": 0.03434930858110538,
+    "lo": -0.16232464481896655,
+    "hi": -0.02767535518103345
+   },
+   "shrunk": -0.095
+  },
+  "c092c4b55d": {
+   "genes": [
+    "buying-power=0.0199",
+    "deck-share=0.408",
+    "long-power-x=2.07",
+    "no-fool-copies",
+    "no-held-cards",
+    "no-open-packs",
+    "no-shop-fixes"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 46,
+    "only_member": 10,
+    "diff": -0.18,
+    "se": 0.03518522417151836,
+    "lo": -0.24896303937617598,
+    "hi": -0.111036960623824
+   },
+   "shrunk": -0.18
+  },
+  "cf32cfd9c6": {
+   "genes": [
+    "above-cap=0.397",
+    "ahead=1",
+    "buying-power=0.0294",
+    "spend-down=35"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 23,
+    "only_member": 27,
+    "diff": 0.02,
+    "se": 0.03532704346531139,
+    "lo": -0.049241005192010315,
+    "hi": 0.08924100519201032
+   },
+   "shrunk": 0.02
+  },
+  "657d9f4953": {
+   "genes": [
+    "buying-power=0.0434",
+    "long-run=0.345",
+    "no-card-tiers",
+    "no-fool-copies",
+    "no-open-packs"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 29,
+    "only_member": 27,
+    "diff": -0.01,
+    "se": 0.03740989174001978,
+    "lo": -0.08332338781043877,
+    "hi": 0.06332338781043878
+   },
+   "shrunk": -0.01
+  },
+  "48c85475d1": {
+   "genes": [
+    "buying-power=0.0585",
+    "long-money-x=2.4",
+    "skips",
+    "spend-down=0"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 58,
+    "only_member": 8,
+    "diff": -0.25,
+    "se": 0.03657184709581949,
+    "lo": -0.3216808203078062,
+    "hi": -0.1783191796921938
+   },
+   "shrunk": -0.25
+  },
+  "8ef47c1b0b": {
+   "genes": [
+    "long-run=0.673",
+    "money-scale=26.6",
+    "no-shop-fixes",
+    "spend-down=35"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 30,
+    "only_member": 19,
+    "diff": -0.055,
+    "se": 0.034783257466775595,
+    "lo": -0.12317518463488017,
+    "hi": 0.013175184634880162
+   },
+   "shrunk": -0.055
+  },
+  "4579b745fb": {
+   "genes": [
+    "long-money-x=0.841",
+    "money-scale=36.1",
+    "no-card-tiers",
+    "skips"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 15,
+    "only_member": 27,
+    "diff": 0.06,
+    "se": 0.03212475680841802,
+    "lo": -0.0029645233444993146,
+    "hi": 0.12296452334449931
+   },
+   "shrunk": 0.06
+  },
+  "be784102d3": {
+   "genes": [
+    "above-cap=0.125",
+    "deck-share=0.387",
+    "money-scale=39.5",
+    "no-fool-copies",
+    "no-open-packs",
+    "spend-down=15"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 37,
+    "only_member": 18,
+    "diff": -0.095,
+    "se": 0.03646745124079828,
+    "lo": -0.16647620443196465,
+    "hi": -0.02352379556803537
+   },
+   "shrunk": -0.095
+  },
+  "f2d2f9c636": {
+   "genes": [
+    "above-cap=0.579",
+    "buying-power=0.0223",
+    "deck-share=0.716",
+    "money-scale=41.5",
+    "no-open-packs",
+    "no-shop-fixes"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 34,
+    "only_member": 22,
+    "diff": -0.06,
+    "se": 0.03717526059088221,
+    "lo": -0.13286351075812913,
+    "hi": 0.012863510758129137
+   },
+   "shrunk": -0.06
+  },
+  "52a50b3dea": {
+   "genes": [
+    "above-cap=0.202",
+    "money-scale=30.2",
+    "no-open-packs",
+    "open-packs-all"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 25,
+    "only_member": 22,
+    "diff": -0.015,
+    "se": 0.034261859260699794,
+    "lo": -0.0821532441509716,
+    "hi": 0.0521532441509716
+   },
+   "shrunk": -0.015
+  },
+  "c1b9a6213c": {
+   "genes": [
+    "above-cap=0.03",
+    "long-power-x=1.14",
+    "money-scale=23.2",
+    "no-open-packs",
+    "spend-down=20"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 31,
+    "only_member": 16,
+    "diff": -0.075,
+    "se": 0.033865542960360165,
+    "lo": -0.14137646420230593,
+    "hi": -0.008623535797694079
+   },
+   "shrunk": -0.075
+  },
+  "ef2fe080f0": {
+   "genes": [
+    "long-money-x=0.759",
+    "no-card-tiers",
+    "spend-down=30"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 28,
+    "only_member": 18,
+    "diff": -0.05,
+    "se": 0.033726843908080104,
+    "lo": -0.116104614059837,
+    "hi": 0.016104614059837
+   },
+   "shrunk": -0.05
+  },
+  "10f1b25b41": {
+   "genes": [
+    "long-power-x=0.95",
+    "no-shop-fixes",
+    "spend-down=40"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 21,
+    "only_member": 20,
+    "diff": -0.005,
+    "se": 0.032013668955619565,
+    "lo": -0.06774679115301435,
+    "hi": 0.05774679115301435
+   },
+   "shrunk": -0.005
+  },
+  "6543849fcc": {
+   "genes": [
+    "buying-power=0.0253",
+    "deck-share=0.626",
+    "long-power-x=0.95",
+    "money-scale=20.6",
+    "spend-down=0"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 57,
+    "only_member": 3,
+    "diff": -0.27,
+    "se": 0.03369718089098849,
+    "lo": -0.33604647454633746,
+    "hi": -0.20395352545366258
+   },
+   "shrunk": -0.27
+  },
+  "aba04ce9c1": {
+   "genes": [
+    "long-money-x=1.92",
+    "long-power-x=1.85",
+    "spend-down=40"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 26,
+    "only_member": 22,
+    "diff": -0.02,
+    "se": 0.03461213659975356,
+    "lo": -0.08783978773551698,
+    "hi": 0.047839787735516975
+   },
+   "shrunk": -0.02
+  },
+  "7af23e9c44": {
+   "genes": [
+    "long-money-x=0.919",
+    "long-power-x=2.05",
+    "long-run=0.374"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 42,
+    "only_member": 19,
+    "diff": -0.115,
+    "se": 0.038195222214303194,
+    "lo": -0.18986263554003427,
+    "hi": -0.04013736445996574
+   },
+   "shrunk": -0.115
+  },
+  "c50d215528": {
+   "genes": [
+    "long-money-x=1.07",
+    "long-run=0.182",
+    "money-scale=17.2",
+    "no-card-tiers",
+    "no-open-packs"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 33,
+    "only_member": 24,
+    "diff": -0.045,
+    "se": 0.03761482420535819,
+    "lo": -0.11872505544250204,
+    "hi": 0.028725055442502048
+   },
+   "shrunk": -0.045
+  },
+  "0b9384ce5a": {
+   "genes": [
+    "long-money-x=0.705",
+    "long-power-x=1.74",
+    "money-scale=18.5",
+    "no-card-sharp",
+    "no-held-cards",
+    "no-open-packs",
+    "spend-down=35"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 40,
+    "only_member": 21,
+    "diff": -0.095,
+    "se": 0.038469143478897475,
+    "lo": -0.17039952121863905,
+    "hi": -0.019600478781360953
+   },
+   "shrunk": -0.095
+  },
+  "8d3144497d": {
+   "genes": [
+    "buying-power=0.0225",
+    "deck-share=0.223",
+    "long-money-x=1.1",
+    "money-scale=35.7",
+    "no-held-cards",
+    "no-open-packs",
+    "open-packs-all"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 34,
+    "only_member": 24,
+    "diff": -0.05,
+    "se": 0.037914377220257756,
+    "lo": -0.1243121793517052,
+    "hi": 0.024312179351705196
+   },
+   "shrunk": -0.05
+  },
+  "5880f33f78": {
+   "genes": [
+    "above-cap=0.0144",
+    "long-money-x=1.95",
+    "no-fool-copies",
+    "no-held-cards",
+    "no-open-packs",
+    "skips"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 19,
+    "only_member": 28,
+    "diff": 0.045,
+    "se": 0.03413026516158349,
+    "lo": -0.021895319716703637,
+    "hi": 0.11189531971670363
+   },
+   "shrunk": 0.045
+  },
+  "89e64afd39": {
+   "genes": [
+    "buying-power=0.0535",
+    "long-money-x=0.885",
+    "long-power-x=0.67",
+    "long-run=0.594",
+    "no-open-packs",
+    "no-round-fixes",
+    "spend-down=25"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 30,
+    "only_member": 28,
+    "diff": -0.01,
+    "se": 0.03807229964160295,
+    "lo": -0.08462170729754177,
+    "hi": 0.06462170729754178
+   },
+   "shrunk": -0.01
+  },
+  "6b9e631821": {
+   "genes": [
+    "above-cap=0.779",
+    "deck-share=0.506",
+    "long-power-x=1.13",
+    "long-run=0.278",
+    "no-held-cards",
+    "no-round-fixes",
+    "spend-down=0"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 55,
+    "only_member": 4,
+    "diff": -0.255,
+    "se": 0.0339098068410895,
+    "lo": -0.32146322140853545,
+    "hi": -0.1885367785914646
+   },
+   "shrunk": -0.255
+  },
+  "7ec1e98042": {
+   "genes": [
+    "ahead=3",
+    "buying-power=0.0159",
+    "deck-share=0.351",
+    "long-power-x=2.39",
+    "long-run=0.284",
+    "money-scale=35.8"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 48,
+    "only_member": 14,
+    "diff": -0.17,
+    "se": 0.037489998666310996,
+    "lo": -0.24348039738596955,
+    "hi": -0.09651960261403046
+   },
+   "shrunk": -0.17
+  },
+  "7ed8e5e5ef": {
+   "genes": [
+    "above-cap=0.631",
+    "ahead=1",
+    "buying-power=0.0384",
+    "deck-share=0.383",
+    "long-power-x=1.2",
+    "money-scale=24",
+    "spend-down=20"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 31,
+    "only_member": 26,
+    "diff": -0.025,
+    "se": 0.03770775782249589,
+    "lo": -0.09890720533209194,
+    "hi": 0.04890720533209194
+   },
+   "shrunk": -0.025
+  },
+  "c68af47001": {
+   "genes": [
+    "deck-share=0.453",
+    "long-money-x=1.39",
+    "no-round-fixes",
+    "no-shop-fixes"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 22,
+    "only_member": 33,
+    "diff": 0.055,
+    "se": 0.036876483021025745,
+    "lo": -0.017277906721210455,
+    "hi": 0.12727790672121045
+   },
+   "shrunk": 0.055
+  },
+  "d8b26eb060": {
+   "genes": [
+    "buying-power=0.0499",
+    "long-money-x=2.92",
+    "long-power-x=1.88",
+    "money-scale=19.4",
+    "no-open-packs"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 28,
+    "only_member": 31,
+    "diff": 0.015,
+    "se": 0.03839107969307454,
+    "lo": -0.060246516198426095,
+    "hi": 0.0902465161984261
+   },
+   "shrunk": 0.015
+  },
+  "92c35b6467": {
+   "genes": [
+    "above-cap=0.89",
+    "skips",
+    "spend-down=40"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 21,
+    "only_member": 22,
+    "diff": 0.005,
+    "se": 0.0327852863339639,
+    "lo": -0.05925916121456925,
+    "hi": 0.06925916121456925
+   },
+   "shrunk": 0.005
+  },
+  "57f54db30b": {
+   "genes": [
+    "above-cap=0.899",
+    "buying-power=0.0539",
+    "deck-share=0.269",
+    "money-scale=14.7",
+    "no-card-tiers"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 19,
+    "only_member": 36,
+    "diff": 0.085,
+    "se": 0.036590640879875284,
+    "lo": 0.013282343875444455,
+    "hi": 0.15671765612455557
+   },
+   "shrunk": 0.085
+  },
+  "c077331637": {
+   "genes": [
+    "buying-power=0.0343",
+    "long-run=0.179",
+    "no-card-sharp",
+    "no-round-fixes",
+    "spend-down=5"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 42,
+    "only_member": 10,
+    "diff": -0.16,
+    "se": 0.03423448553724738,
+    "lo": -0.22709959165300486,
+    "hi": -0.09290040834699514
+   },
+   "shrunk": -0.16
+  },
+  "bc202248d5": {
+   "genes": [
+    "ahead=3",
+    "buying-power=0.0301",
+    "long-money-x=0.624",
+    "money-scale=33.1",
+    "no-fool-copies"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 31,
+    "only_member": 27,
+    "diff": -0.02,
+    "se": 0.038052595180880895,
+    "lo": -0.09458308655452656,
+    "hi": 0.05458308655452655
+   },
+   "shrunk": -0.02
+  },
+  "ce61d1df35": {
+   "genes": [
+    "long-money-x=1.2",
+    "money-scale=36.2",
+    "no-card-tiers",
+    "no-open-packs",
+    "spend-down=5"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 43,
+    "only_member": 12,
+    "diff": -0.155,
+    "se": 0.03542421488191375,
+    "lo": -0.22443146116855095,
+    "hi": -0.08556853883144905
+   },
+   "shrunk": -0.155
+  },
+  "12a99c1c61": {
+   "genes": [
+    "above-cap=0.0952",
+    "deck-share=0.506",
+    "no-card-tiers",
+    "no-open-packs",
+    "spend-down=0"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 57,
+    "only_member": 7,
+    "diff": -0.25,
+    "se": 0.03588175023601831,
+    "lo": -0.3203282304625959,
+    "hi": -0.1796717695374041
+   },
+   "shrunk": -0.25
+  },
+  "88dbbd2310": {
+   "genes": [
+    "above-cap=0.869",
+    "long-run=0.271",
+    "no-card-sharp",
+    "spend-down=0"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 50,
+    "only_member": 9,
+    "diff": -0.205,
+    "se": 0.0355650811892789,
+    "lo": -0.27470755913098666,
+    "hi": -0.13529244086901332
+   },
+   "shrunk": -0.205
+  },
+  "282f507dd7": {
+   "genes": [
+    "buying-power=0.0194",
+    "long-power-x=0.549",
+    "long-run=0.278",
+    "money-scale=21.3",
+    "no-card-sharp",
+    "no-card-tiers",
+    "spend-down=15"
+   ],
+   "estimate": {
+    "seeds": 200,
+    "only_ref": 34,
+    "only_member": 22,
+    "diff": -0.06,
+    "se": 0.03717526059088221,
+    "lo": -0.13286351075812913,
+    "hi": 0.012863510758129137
+   },
+   "shrunk": -0.06
+  },
+  "ce45ed810a": {
+   "genes": [
+    "above-cap=0.377",
+    "deck-share=0.439",
+    "long-power-x=1.38",
+    "long-run=0.225"
+   ]
+  },
+  "63b2abeedb": {
+   "genes": [
+    "buying-power=0.0262",
+    "deck-share=0.546",
+    "long-power-x=0.549",
+    "long-run=0.652",
+    "money-scale=31",
+    "no-fool-copies",
+    "no-shop-fixes",
+    "spend-down=25"
+   ]
+  },
+  "6804e80c0f": {
+   "genes": [
+    "above-cap=0.593",
+    "deck-share=0.23",
+    "long-money-x=1.79",
+    "money-scale=31.2",
+    "no-card-sharp",
+    "no-card-tiers",
+    "spend-down=35"
+   ]
+  },
+  "b38897cc79": {
+   "genes": [
+    "above-cap=0.739",
+    "ahead=1",
+    "buying-power=0.0161",
+    "deck-share=0.659",
+    "long-power-x=0.556",
+    "long-run=0.291",
+    "no-held-cards",
+    "no-round-fixes"
+   ]
+  },
+  "70cdbbf47d": {
+   "genes": [
+    "above-cap=0.761",
+    "deck-share=0.517",
+    "long-power-x=0.773",
+    "long-run=0.255"
+   ]
+  }
+ }
+}
