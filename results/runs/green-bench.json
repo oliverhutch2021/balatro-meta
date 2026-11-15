@@ -1,33 +1,31 @@
 {
  "job": "green-bench",
- "commit": "2209b0a28a9943cd80704ac744bd5917ce044ded",
- "started": "2026-11-15T04:18:10+00:00",
- "finished": "2026-11-15T05:43:38+00:00",
+ "commit": "c6b955a910f447867b06604a5a963582c567ebd9",
+ "started": "2026-11-15T13:33:11+00:00",
+ "finished": "2026-11-15T13:33:13+00:00",
  "machine": {
   "host": "PC",
   "platform": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
   "cpu_threads": 16,
   "ram_gb": 15.2,
   "load_avg_1_5_15": [
-   14.0,
-   17.4,
-   18.0
+   1.1,
+   0.4,
+   0.1
   ],
   "python": "3.12.3",
   "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
   "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
  },
  "steps": {
-  "build": 33,
+  "build": 1,
   "folder": 0,
-  "bench-green": 5094,
   "bench-compare": 0,
   "bench-check": 0
  },
  "commands": {
   "build": "make --no-print-directory build",
   "folder": "mkdir -p .sync/bench",
-  "bench-green": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 2000 --seed 1 --salt 2 --stake 3 --bench .sync/bench/bench-green-2k-salt2.jsonl --out results/bench/bench-green-2k-salt2.json",
   "bench-compare": "scripts/compare_runs.py results/stakes/stake3-2k-f3-d4-open-packs-w2.5-salt2-on-ensemble8-w1.5.json results/bench/bench-green-2k-salt2.json --out results/bench/bench-green-2k-salt2-vs-d5.json",
   "bench-check": "scripts/bench_check.py .sync/bench/bench-green-2k-salt2.jsonl --out results/bench/bench-green-2k-salt2-check.json"
  }
