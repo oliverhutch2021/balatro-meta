@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late teacher-boss teacher-budget teacher-budget-big teacher-budget-confirm teacher-skips skips-stakes teacher-budget-6 teacher-budget-confirm-6 teacher-close teacher-close-2 diagnose-fresh diagnose-control teacher-budget-parts teacher-budget-away teacher-bundle teacher-looks shop-audit teacher-money-belief leak-tally teacher-boss-reroll reroll-demo teacher-held-cards teacher-defaults teacher-batch1 look night night-green green-next green-calib pack-audit night-d4 green-packs green-forecast green-spend green-bench e1-white-ahead2 e1-white-ahead3 e1-white-ahead8 teacher-money teacher-long recheck check-saved diagnose forks-quick forks-night forks-table forks-now
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late teacher-boss teacher-budget teacher-budget-big teacher-budget-confirm teacher-skips skips-stakes teacher-budget-6 teacher-budget-confirm-6 teacher-close teacher-close-2 diagnose-fresh diagnose-control teacher-budget-parts teacher-budget-away teacher-bundle teacher-looks shop-audit teacher-money-belief leak-tally teacher-boss-reroll reroll-demo teacher-held-cards teacher-defaults teacher-batch1 look night night-green green-next green-calib pack-audit night-d4 green-packs green-forecast green-spend green-bench league e1-white-ahead2 e1-white-ahead3 e1-white-ahead8 teacher-money teacher-long recheck check-saved diagnose forks-quick forks-night forks-table forks-now
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -264,6 +264,9 @@ green-spend:  ## spend-down=25 and spend-down=15 against the -d5 base (open-pack
 
 green-bench:  ## The build bench's validation: the base on 2,000 Green seeds with --bench (each build scored as each ante from 5 began; the final builds), read by bench_check.py (about 1.6 hours)
 	$(PY) scripts/jobs.py run green-bench $(JOB_FLAGS)
+
+league:  ## One league generation (lab #33): 40 strategies and the base on 200 fresh Green seeds, cut by bound, the best 12 to 1,000 seeds, the best 4 to 4,000; resumable (GEN=0, 1, ...; about a day of the PC for a whole generation)
+	$(PY) scripts/league.py --gen $(or $(GEN),0)
 
 e1-white-ahead2 e1-white-ahead3 e1-white-ahead8:  ## E1's White guard for one setting (2,000 White seeds against the first 2,000 of batch1's White arm, about 1.2 hours)
 	$(PY) scripts/jobs.py run $@ $(JOB_FLAGS)

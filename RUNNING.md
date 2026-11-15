@@ -1608,6 +1608,23 @@ scores each build as each ante from 5 begins (its boss known) and the final buil
 cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(green-spend)" || true) && make sync && make green-bench
 ```
 
+## Step 55: the league, generation 0 (S and B, lab #33)
+
+`scripts/league.py`, `make league GEN=n`: 40 strategies, each an option string on the base (forced moves: spend-down,
+packs, skips, ahead; the user's judgements, each of which may be switched off; the value's prices: long-power-x,
+long-money-x, buying-power, money-scale, above-cap, long-run, deck-share), drawn at random for generation 0, bred from
+the last generation's parents after. B's rules: common seeds and salt with the base as reference on every block; block
+A 200 seeds for all, cut where the paired difference's upper 95% bound is below zero; the best 12 by the shrunk
+estimate to 1,000 seeds, the best 4 to 4,000; parents only from those at 4,000 that are Level or Better; a fresh seed
+block each generation (from 30,001); every run recorded with `--calibrate`. The ledger, `results/league/gen-n.json`, is
+rewritten after every block, so a stopped generation resumes where it was.
+
+Overnight (green-bench first, then the league; turn off the PC's sleep):
+
+```
+cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(green-spend)" || true) && make sync && make green-bench && make league GEN=0
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001
