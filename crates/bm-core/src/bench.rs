@@ -51,9 +51,10 @@ pub fn blind_chance(run: &Run, ante: i32, kind: BlindKind, tries: u64, salt: u64
     Some(planned_chance(&c, salt, tries))
 }
 
-/// How often the planner beats the blind in `c` (a round at its start): on each of `deals` fair deals, every plan the
-/// hand offers is tried `PLAN_TRIES` times from that hand and the best plan's rate counts (the planner chooses its plan
-/// from the hand by the same tries); the mean over deals.
+/// How often the planner beats the blind in `c` (a round at its start): on each of `deals` fair deals, the plan is
+/// chosen from every plan the hand offers by `PLAN_TRIES` tries each, and the chosen plan is then scored on
+/// `PLAN_TRIES` fresh tries (B, lab #33: the best of several noisy rates, scored on the same tries, flatters a build
+/// with many plans); the mean over deals.
 fn planned_chance(c: &Run, salt: u64, deals: u64) -> f64 {
     use crate::planner::{options_for, plan_move, quick_best, try_policy, Plan, Policy};
     let deals = deals.max(1);
@@ -65,17 +66,20 @@ fn planned_chance(c: &Run, salt: u64, deals: u64) -> f64 {
         if !plans.contains(&Plan::Best) {
             plans.push(Plan::Best);
         }
-        let rate = plans
+        let rate = |p: Plan, from: u64| {
+            let first = plan_move(&d, p, best);
+            (from..from + PLAN_TRIES)
+                .filter(|&t| try_policy(&d, Policy::Plan(p), first, salt ^ (k << 16 | t), None).0)
+                .count() as f64
+                / PLAN_TRIES as f64
+        };
+        let chosen = plans
             .iter()
-            .map(|&p| {
-                let first = plan_move(&d, p, best);
-                (0..PLAN_TRIES)
-                    .filter(|&t| try_policy(&d, Policy::Plan(p), first, salt ^ (k << 16 | t), None).0)
-                    .count() as f64
-                    / PLAN_TRIES as f64
-            })
-            .fold(0.0, f64::max);
-        sum += rate;
+            .copied()
+            .map(|p| (p, rate(p, 0)))
+            .fold((Plan::Best, -1.0), |a, b| if b.1 > a.1 { b } else { a })
+            .0;
+        sum += rate(chosen, 1 << 12);
     }
     sum / deals as f64
 }
@@ -114,6 +118,55 @@ pub fn ante_score(run: &Run, ante: i32, boss: Option<Boss>, tries: u64, salt: u6
     };
     Some([small, big, boss_p, small * big * boss_p])
 }
+
+/// The ceiling of a danger response (S, lab #33, A2): from a shop (`run`, its build and money as the shop stood), the
+/// boss at `ante` faced as it is, and after spending the money in a fair copy of that shop (fresh streams: rerolls draw
+/// new cards) by "raises this boss's chance": each step buys the row item that raises it most (by a quick read), else
+/// rerolls while the money allows (at most `SPEND_REROLLS`). Returns (before, after), each the planner's chance.
+pub fn spend_for_boss(run: &Run, ante: i32, boss: Boss, salt: u64) -> Option<(f64, f64)> {
+    use crate::env::{apply, MoveKind};
+    let kind = BlindKind::Boss(boss);
+    let before = blind_chance(run, ante, kind, TRIES, salt)?;
+    let mut c = crate::observe::fair_copy(run, salt ^ 0x5EE5);
+    if c.phase != Phase::Shop {
+        return Some((before, before));
+    }
+    let quick = |r: &Run| blind_chance(r, ante, kind, QUICK_TRIES, salt ^ 0x9).unwrap_or(0.0);
+    let mut now = quick(&c);
+    let mut rerolls = 0;
+    for _ in 0..40 {
+        let mut best: Option<(Run, f64)> = None;
+        let items = c.shop.as_ref().map_or(0, |sh| sh.row.len());
+        for i in 0..items {
+            for k in [MoveKind::Buy, MoveKind::BuyAndUse] {
+                let mut d = c.clone();
+                if apply(&mut d, k, i as u64).is_err() {
+                    continue;
+                }
+                let v = quick(&d);
+                if v > now + SPEND_GAIN && best.as_ref().is_none_or(|b| v > b.1) {
+                    best = Some((d, v));
+                }
+            }
+        }
+        if let Some((d, v)) = best {
+            c = d;
+            now = v;
+        } else if rerolls < SPEND_REROLLS && c.spendable() >= c.reroll_cost && apply(&mut c, MoveKind::Reroll, 0).is_ok() {
+            rerolls += 1;
+        } else {
+            break;
+        }
+    }
+    Some((before, blind_chance(&c, ante, kind, TRIES, salt ^ 0xAF7E)?))
+}
+
+/// Tries behind each quick read while spending.
+const QUICK_TRIES: u64 = 4;
+/// The least rise in the boss's chance a purchase must make.
+const SPEND_GAIN: f64 = 0.02;
+/// The most rerolls spent in one shop.
+const SPEND_REROLLS: u32 = 12;
 
 #[cfg(test)]
 mod tests {

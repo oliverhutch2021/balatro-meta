@@ -1698,3 +1698,11 @@ def test_green_bench_scores_the_base_and_checks_it_reproduces_the_open_packs_arm
     d = {n: a for n, a, *_ in jobs.green_bench_steps(tmp_path)}
     assert "--bench" in d["bench-green"] and d["bench-compare"][1] == open_out
     assert jobs.read_only(d["bench-check"])
+
+
+def test_danger_look_records_what_the_value_saw_and_the_spending_ceiling(tmp_path):
+    champion_in(tmp_path)
+    d = {n: a for n, a, *_ in jobs.danger_look_steps(tmp_path)}
+    a = d["danger-green"]
+    assert "--calibrate" in a and "--danger-bench" in a and a[a.index("--runs") + 1] == "1000"
+    assert jobs.read_only(d["danger-check"]) and jobs.read_only(d["danger-compare"])

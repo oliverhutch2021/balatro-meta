@@ -186,6 +186,10 @@ pub const OPTIONS: &[&str] = &[
     "open-packs",
     "no-open-packs",
     "open-packs-all",
+    // S's danger genes (lab #33): "danger-spend=T", in a shop where the value's chance of living through this ante is
+    // under T, money is spent to raise it (buy what raises it most, else reroll; `danger_shop_move`); "danger-x", the
+    // long run and its money scaled by that chance, and a reroll in danger worth the best of those the money allows.
+    "danger-x",
     // "spend-down=F" (S, lab #27): from ante 3, where the value would leave the shop, it rerolls while the money after
     // the reroll stays at or above $F ($0 in the run's last shop), at most 8 forced rerolls a shop (`spend_down`).
     // Forecast v0 (S, lab #30): blinds after the next round judged by the forecast's tables (`baseline --forecast
@@ -1272,6 +1276,47 @@ fn fool_worth_using(run: &Run, c: &Consumable) -> bool {
             _ => false,
         }
 }
+
+/// "danger-x": the chance of living through this ante's blinds left below which a run is in danger.
+const DANGER: f64 = 0.75;
+
+/// Whether the value's own chance of living through this ante is under DANGER (quick samples, a fixed salt).
+fn in_danger(run: &Run) -> bool {
+    crate::value::ante_chances(run, 0xDA9, crate::value::quick_samples()).is_some_and(|(_, s)| s < DANGER)
+}
+
+/// The most rerolls "danger-spend" forces in one shop (the run's own count of paid rerolls).
+const DANGER_REROLLS: i64 = 12;
+
+/// "danger-spend=T" (S, lab #33): in a shop where the value's chance of living through this ante is under T, the
+/// money floor is $0: buy what raises that chance most, else reroll while it can, until the chance is over T or the
+/// money is gone. None outside danger (the value shops as usual).
+fn danger_shop_move(run: &Run, vs: u64) -> Option<(MoveKind, u64)> {
+    let t = param("danger-spend")?;
+    let samples = crate::value::quick_samples();
+    let (_, now) = crate::value::ante_chances(run, vs, samples)?;
+    if now >= t {
+        return None;
+    }
+    let shop = run.shop.as_ref()?;
+    let mut best: Option<((MoveKind, u64), f64)> = None;
+    for i in 0..shop.row.len() {
+        for k in [MoveKind::Buy, MoveKind::BuyAndUse] {
+            let Some(c) = after(run, vs ^ 0xDA, &[(k, i as u64)]) else { continue };
+            let Some((_, s)) = crate::value::ante_chances(&c, vs, samples) else { continue };
+            if s > now + DANGER_GAIN && best.is_none_or(|b| s > b.1) {
+                best = Some(((k, i as u64), s));
+            }
+        }
+    }
+    if let Some((m, _)) = best {
+        return Some(m);
+    }
+    (run.spendable() >= run.reroll_cost && run.reroll_increase < DANGER_REROLLS).then_some((MoveKind::Reroll, 0))
+}
+
+/// The least rise in the chance of living through the ante that a danger purchase must make.
+const DANGER_GAIN: f64 = 0.005;
 
 /// The most paid rerolls a shop may have before "spend-down" stops forcing more (the run's own count, so a copy
 /// played out from here counts as the run does: B, lab #27).
@@ -2724,6 +2769,11 @@ fn reroll_worth(run: &Run, best: &[f64], cost: f64, again: bool) -> f64 {
     if again && cost <= 0.0 && on("reroll-best") {
         return free_search(best, rerolls_affordable(run));
     }
+    // "danger-x" (S, lab #33): in danger a reroll is worth the best of the rerolls the money allows, not one average
+    // shop.
+    if again && on("danger-x") && in_danger(run) {
+        return free_search(best, rerolls_affordable(run));
+    }
     search(best, cost, again)
 }
 
@@ -3024,6 +3074,9 @@ fn value_shop_move(run: &Run, salt: u64) -> (MoveKind, u64) {
         }) {
             return (MoveKind::SellConsumable, i as u64);
         }
+    }
+    if let Some(m) = danger_shop_move(run, vs) {
+        return m;
     }
     if focus_on() {
         if let Some(m) = focus_shop_move(run, salt) {
@@ -4021,6 +4074,34 @@ mod tests {
         run.money = 10;
         run.ante = 1;
         assert_eq!(pick(&["open-packs"], &run), None, "ante 1 is the value's");
+    }
+
+    /// S's danger genes (lab #33): "danger-spend=T" acts only below T (a buy or a reroll, never past $0), and not at
+    /// all without the option; "danger-x" makes a reroll in danger worth the best of those affordable.
+    #[test]
+    fn danger_spend_acts_only_in_danger_and_danger_x_prices_the_reroll_as_a_search() {
+        let mut run = crate::state::Run::new(crate::RunConfig::at_stake("DANGER1", 3));
+        while run.phase != crate::state::Phase::Shop {
+            let m = crate::bots::greedy_move(&run, 1);
+            crate::env::apply(&mut run, m.0, m.1).unwrap();
+        }
+        run.money = 30;
+        let vs = 7;
+        assert_eq!(with_options(&[], || danger_shop_move(&run, vs)), None, "off without the option");
+        assert_eq!(with_options(&["danger-spend=0"], || danger_shop_move(&run, vs)), None, "never under a 0 chance");
+        let m = with_options(&["danger-spend=1.01"], || danger_shop_move(&run, vs));
+        assert!(matches!(m, Some((MoveKind::Buy | MoveKind::BuyAndUse | MoveKind::Reroll, _))), "{m:?}");
+        run.money = 0;
+        run.reroll_cost = 5;
+        let m = with_options(&["danger-spend=1.01"], || danger_shop_move(&run, vs));
+        assert!(m.is_none_or(|m| m.0 != MoveKind::Reroll), "no reroll past $0");
+        let best = [0.1, 0.5, 0.2, 0.9];
+        run.money = 30;
+        let plain = with_options(&[], || reroll_worth(&run, &best, 0.0, true));
+        let danger = with_options(&["danger-x"], || {
+            if in_danger(&run) { reroll_worth(&run, &best, 0.0, true) } else { free_search(&best, rerolls_affordable(&run)) }
+        });
+        assert!(danger >= plain - 1e-12);
     }
 
     /// "spend-down=F" (lab #27): from ante 3, a reroll where the money after it keeps the floor, at most 8 a shop;

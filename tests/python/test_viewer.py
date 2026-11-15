@@ -329,6 +329,12 @@ def test_progress_lists_every_measured_bot(tmp_path):
     write_report(results / "baseline" / "greedy.json", 1000000, 713, bot="greedy bot")  # listed already
     write_report(results / "value" / "record-1.json", 20000, 5200)  # not listed: added from the file
     write_report(results / "value" / "half.json", 100, 20, done=False)  # still running: left out
+    # Never results: a play-on recording (lost blinds played on: "99.95%") and a league member's block.
+    write_report(results / "calib" / "play-on.json", 2000, 1999)
+    po = json.loads((results / "calib" / "play-on.json").read_text())
+    po["play_on"] = True
+    (results / "calib" / "play-on.json").write_text(json.dumps(po))
+    write_report(results / "league" / "gen-0" / "abc-b0.json", 200, 70)
     (results / "runs").mkdir()
     (results / "runs" / "teacher.json").write_text(json.dumps({"job": "teacher"}))  # a job stamp, not a report
     got = viewer.read_progress(log, results)

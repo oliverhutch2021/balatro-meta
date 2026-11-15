@@ -1625,6 +1625,29 @@ Overnight (green-bench first, then the league; turn off the PC's sleep):
 cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(green-spend)" || true) && make sync && make green-bench && make league GEN=0
 ```
 
+## Step 56: antes 4 to 6, the danger work (S, lab #33, A1 to A4)
+
+- `--calibrate` records, at each shop's close, the value's own chance of beating each blind left in the ante and their
+  product (`shop_before.seen`); `scripts/danger_check.py` sets it against what happened (A1: did the bot see the
+  danger?).
+- `baseline --danger-bench FILE` (A2): for each run lost at an ante 4-6 boss with $10 or more as the shop before it
+  closed, the boss's chance as the build stood and after spending that money in fair copies of the shop, buying what
+  raises it (`bench::spend_for_boss`).
+- `make danger-look` (about 50 minutes): both, on the base's first 1,000 Green seeds.
+- Danger genes (A3): `danger-spend=T` (a shop where the value's chance of living through the ante is under T buys
+  what raises it most, else rerolls, down to $0) and `danger-x` (the long run scaled by that chance; a reroll in danger
+  worth the best of those affordable).
+- The bench chooses each deal's plan on some tries and scores it on fresh ones (B: the best of noisy rates flattered
+  builds with many plans).
+- The league: selection by the latest block alone and parents by the last block alone (B); `STOP=n` stops after block
+  n; `make league-wall` (A4): designed members (the danger genes, the future turned down, generation 0's leaders) on
+  1,000 fresh Green seeds, the best two to 4,000, deaths by ante beside wins.
+- The viewer's Progress panel leaves out play-on recordings and league blocks (neither is a result).
+
+```
+cd /mnt/h/balatro-meta && git add results && (git commit -qm "results" || true) && make sync && make danger-look
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

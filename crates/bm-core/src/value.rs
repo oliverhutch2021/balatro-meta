@@ -229,6 +229,8 @@ pub const PARAMS: &[(&str, f64)] = &[
     // "spend-down=F" (lab #27, a style arm): the money floor a forced reroll keeps (teacher.rs `spend_down`); off unless
     // given.
     ("spend-down", 0.0),
+    // "danger-spend=T" (lab #33): the chance of living through the ante under which a shop spends to raise it.
+    ("danger-spend", 0.0),
     ("reroll-later-x", 1.0),
 ];
 
@@ -1404,8 +1406,13 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
     let power = (1.0 - deck_share) * mean(&o.next) + deck_share * deck_power(run, salt, deals);
     let long_weight = p("long-run", LONG_RUN);
     let shopping = p("long-money-x", 1.0) * shopping;
-    let long_run =
+    let mut long_run =
         long_weight * (p("long-power-x", 1.0) * (power + growth(&f, &o, run, long)) + shopping);
+    // "danger-x" (S, lab #33): the long run and its money count only as far as the run is likely to live through this
+    // ante's blinds left: a build about to die is paid for what keeps it alive now.
+    if crate::teacher::on("danger-x") {
+        long_run *= survival_of(run, &blinds);
+    }
     let mut sorted = o.next.clone();
     sorted.sort_by(f64::total_cmp);
     Some(Breakdown {
@@ -1536,6 +1543,29 @@ fn upper_tail(z: f64) -> f64 {
             * (-x * x).exp();
     let below = 0.5 * (1.0 + erf.copysign(z));
     1.0 - below
+}
+
+/// The blinds this ante has left (the one being played counts): 3 less those beaten or skipped.
+pub fn blinds_left_this_ante(run: &Run) -> usize {
+    3 - run.slots[..]
+        .iter()
+        .filter(|s| matches!(s, SlotState::Defeated | SlotState::Skipped))
+        .count()
+        .min(3)
+}
+
+/// The chance of living through this ante's blinds left, from a breakdown's blinds (this ante's come first).
+fn survival_of(run: &Run, blinds: &[(f64, f64, f64)]) -> f64 {
+    blinds.iter().take(blinds_left_this_ante(run)).map(|b| b.1).product()
+}
+
+/// The value's own chances for each blind left in this ante, and their product (S, lab #33: did the bot see the danger?).
+/// On fair copies, `samples` sample rounds; None when the run is over.
+pub fn ante_chances(run: &Run, salt: u64, samples: usize) -> Option<(Vec<f64>, f64)> {
+    let b = breakdown_with(run, salt, samples)?;
+    let ps: Vec<f64> = b.blinds.iter().take(blinds_left_this_ante(run)).map(|x| x.1).collect();
+    let prod = ps.iter().product();
+    Some((ps, prod))
 }
 
 /// The blind the run plays next, 0 = ante 1's Small ... 23 = ante 8's boss.

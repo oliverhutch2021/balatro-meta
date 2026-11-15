@@ -293,6 +293,8 @@ fn play(
     let mut shop_open: Option<(i64, [u32; 6])> = None;
     // `--bench FILE`: the bench's score of the build as each ante from 5 began (its boss known), for the validation.
     let mut bench_at: Vec<(i32, [f64; 4])> = Vec::new();
+    // `--danger-bench FILE`: the run as it left the shop before each boss of antes 4 to 6 (S, lab #33, A2).
+    let mut pre_boss: Option<(i32, Run)> = None;
     let mut shop_done: Option<String> = None;
     let force = FORCE_SPEC.get().filter(|_| FORCE_OUT.get().is_some());
     let mut passed: Vec<Passed> = Vec::new();
@@ -469,6 +471,15 @@ fn play(
             }
             _ => {}
         }
+        if DANGER_OUT.get().is_some()
+            && at_win.is_none()
+            && run.phase == Phase::Shop
+            && k == MoveKind::LeaveShop
+            && (4..=6).contains(&run.ante)
+            && bm_core::value::blinds_left_this_ante(&run) == 1
+        {
+            pre_boss = Some((run.ante, run.clone()));
+        }
         if calib.is_some() && run.phase == Phase::Shop {
             let (_, n) = shop_open.get_or_insert((run.money, [0; 6]));
             let row = run.shop.as_ref().and_then(|sh| sh.row.get(a as usize)).map(|r| &r.item);
@@ -487,8 +498,15 @@ fn play(
                 MoveKind::RedeemVoucher => n[5] += 1,
                 MoveKind::LeaveShop => {
                     let (open, n) = shop_open.take().unwrap_or((run.money, [0; 6]));
+                    // What the value saw as the shop closed (S, lab #33): its chance of beating each blind left in
+                    // this ante, and their product. On fair copies with their own salt; play is unchanged.
+                    let seen = bm_core::value::ante_chances(&run, salt << 20 ^ step ^ 0x5EE, bm_core::value::SAMPLES)
+                        .map_or("null".to_string(), |(ps, prod)| {
+                            let ps: Vec<String> = ps.iter().map(|p| format!("{p:.4}")).collect();
+                            format!("{{\"chances\":[{}],\"survive\":{prod:.4}}}", ps.join(","))
+                        });
                     shop_done = Some(format!(
-                        "{{\"money_open\":{open},\"money_left\":{},\"rerolls\":{},\"jokers\":{},\"tarots\":{},\"other\":{},\"packs\":{},\"vouchers\":{}}}",
+                        "{{\"money_open\":{open},\"money_left\":{},\"rerolls\":{},\"jokers\":{},\"tarots\":{},\"other\":{},\"packs\":{},\"vouchers\":{},\"seen\":{seen}}}",
                         run.money, n[0], n[1], n[2], n[3], n[4], n[5]
                     ));
                 }
@@ -611,6 +629,29 @@ fn play(
                 l.json()
             );
             writeln!(out.lock().unwrap(), "{line}").expect("--leaks: writing");
+        }
+    }
+    if let (Some(out), Some((ante, shop))) = (DANGER_OUT.get(), pre_boss.as_ref()) {
+        // Lost at that boss, with $10 or more as the shop closed: the ceiling of spending it (3 fair sample shops).
+        let at_boss = !run.won && run.ante == *ante && run.blind.as_ref().is_some_and(|b| b.boss().is_some());
+        if at_boss && shop.money >= 10 && !s.refused && !s.unfinished {
+            use std::io::Write as _;
+            let tries: Vec<(f64, f64)> = (0..3u64)
+                .filter_map(|t| bm_core::bench::spend_for_boss(shop, *ante, shop.boss, salt << 20 ^ 0xDA4 ^ t))
+                .collect();
+            if !tries.is_empty() {
+                let before = tries[0].0;
+                let after: Vec<String> = tries.iter().map(|t| format!("{:.4}", t.1)).collect();
+                let mean = tries.iter().map(|t| t.1).sum::<f64>() / tries.len() as f64;
+                let line = format!(
+                    "{{\"seed\":{},\"run\":{index},\"ante\":{ante},\"boss\":\"{}\",\"money\":{},\"before\":{before:.4},\"after\":[{}],\"after_mean\":{mean:.4}}}",
+                    esc(&s.seed),
+                    shop.boss.name(),
+                    shop.money,
+                    after.join(",")
+                );
+                writeln!(out.lock().unwrap(), "{line}").expect("--danger-bench: writing");
+            }
         }
     }
     if let Some(out) = BENCH_OUT.get().filter(|_| !s.refused && !s.unfinished) {
@@ -969,6 +1010,9 @@ static LEAKS_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> 
 /// `--bench FILE`: one line per run: the bench's score of the build as each ante from 5 began and whether the run
 /// cleared it, and the final build's score at antes 5 to 8 (bench.rs; the bench's validation, lab #33).
 static BENCH_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> = std::sync::OnceLock::new();
+/// `--danger-bench FILE`: for each run lost at the boss of ante 4, 5 or 6 holding $10 or more as the shop before it
+/// closed, the boss's chance as it was and after spending that money in fair copies of the shop (bench::spend_for_boss).
+static DANGER_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> = std::sync::OnceLock::new();
 /// `--calibrate FILE`: one line per run, each round's start with the value's power and projections (value::calibration)
 /// and what that round scored.
 static CALIB_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> =
@@ -2607,6 +2651,10 @@ fn main() {
         let text = std::fs::read_to_string(&path).expect("--forecast: reading the tables");
         bm_core::value::load_forecast(&text).unwrap_or_else(|e| panic!("--forecast {path}: {e}"));
     }
+    if let Some(path) = opt("--danger-bench") {
+        let f = std::fs::File::create(&path).expect("--danger-bench: creating the file");
+        let _ = DANGER_OUT.set(Mutex::new(std::io::BufWriter::new(f)));
+    }
     if let Some(path) = opt("--bench") {
         let f = std::fs::File::create(&path).expect("--bench: creating the file");
         let _ = BENCH_OUT.set(Mutex::new(std::io::BufWriter::new(f)));
@@ -3130,6 +3178,7 @@ fn main() {
         (LEAKS_OUT.get(), "--leaks"),
         (CALIB_OUT.get(), "--calibrate"),
         (BENCH_OUT.get(), "--bench"),
+        (DANGER_OUT.get(), "--danger-bench"),
         (FORCE_OUT.get(), "--force-out"),
     ] {
         if let Some(out) = out {

@@ -349,6 +349,10 @@ def read_progress(path: Path = PROGRESS, results: Path = RESULTS) -> list[dict]:
             continue
         if not isinstance(r, dict) or r.get("kind") != "baseline" or not r.get("done") or not r.get("runs"):
             continue
+        # Never a result: a play-on recording (lost blinds played on, so nearly every run "wins"), or a league member's
+        # block (read in the league's ledger, results/league/gen-n.json).
+        if r.get("play_on") or "league" in p.relative_to(results).parts[:1]:
+            continue
         out = str(p.relative_to(results.parent)) if p.is_relative_to(results.parent) else str(p)
         if (out, r.get("runs"), r.get("wins")) in listed:
             continue

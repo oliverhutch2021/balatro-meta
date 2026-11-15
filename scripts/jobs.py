@@ -2107,6 +2107,37 @@ def green_bench_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]
     return steps
 
 
+DANGER_RUNS = 1000
+
+
+def danger_look_steps(root: Path = ROOT, runs: int = DANGER_RUNS) -> list[tuple]:
+    """make danger-look (S, lab #33, A1 and A2): the base as it now is (-d5) on the first 1,000 of its Green seeds with
+    `--calibrate` (each shop's close records the value's own chance of living through the ante) and `--danger-bench`
+    (runs lost at an ante 4-6 boss with $10 or more: that boss's chance after spending the money in fair copies of the
+    shop), read by scripts/danger_check.py. Play is unchanged, so it must match green-packs' open-packs arm's first
+    1,000 seeds (its compare is a check)."""
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", CALIB_DIR])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    args = list(best[1])
+    w = args[args.index("--value-weight") + 1]
+    stem = Path(best[2]).stem.split("-on-")[-1]
+    sl = f"salt{BUNDLE_SALT}"
+    control = f"results/stakes/stake{BUNDLE_GREEN}-2k-f{FORMULA}-d4-open-packs-w{w}-{sl}-on-{stem}.json"
+    name = f"danger-green-{runs // 1000}k-{sl}"
+    out, calib, danger = f"results/danger/{name}.json", f"{CALIB_DIR}/{name}.jsonl", f"{CALIB_DIR}/{name}-bench.jsonl"
+    if not (root / out).exists():
+        steps.append(("danger-green", [*BASELINE, "--bot", "teacher", *args, "--runs", str(runs), "--seed", "1",
+                                       "--salt", str(BUNDLE_SALT), "--stake", str(BUNDLE_GREEN), "--calibrate", calib,
+                                       "--danger-bench", danger, "--out", out]))
+        steps.append(("danger-gzip", ["gzip", "-f", calib, danger]))
+    steps.append(("danger-compare", ["scripts/compare_runs.py", control, out, "--out", f"results/danger/{name}-vs-d5.json"]))
+    steps.append(("danger-check", ["scripts/danger_check.py", "--calib", f"{calib}.gz", "--danger", f"{danger}.gz",
+                                   "--out", f"results/danger/{name}-check.json"]))
+    return steps
+
+
 def e1_white_steps(k: int, root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     """make e1-white-ahead<K>: E1's White guard for one setting, `ahead=K` with every default on on the first `runs`
     White seeds at salt 2, against the first `runs` of batch1's White arm (S: point estimate above -1.0 on 2,000)."""
@@ -2635,6 +2666,7 @@ JOBS: dict[str, list[tuple]] = {
     "green-forecast": green_forecast_steps(),
     "green-spend": green_spend_steps(),
     "green-bench": green_bench_steps(),
+    "danger-look": danger_look_steps(),
     **{f"e1-white-ahead{k}": e1_white_steps(k) for k in (2, 3, 8)},
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
@@ -2856,7 +2888,7 @@ def record_progress(entry: dict | None, path: Path = PROGRESS) -> None:
 
 
 READ_ONLY_STEPS = ("scripts/compare_runs.py", "scripts/leaks.py", "scripts/forced_buys.py", "scripts/audit_shops.py",
-                   "scripts/pack_audit.py", "scripts/bench_check.py", "gzip")
+                   "scripts/pack_audit.py", "scripts/bench_check.py", "scripts/danger_check.py", "gzip")
 WRITTEN = (".json", ".jsonl", ".gz", ".csv", ".npy", ".bin", ".txt")
 NAME_MAX = 250
 
