@@ -291,6 +291,8 @@ fn play(
     // With --calibrate, the shop before each round (S, lab #27): money as it opened, rerolls, jokers, Tarots and
     // other cards bought, packs opened, vouchers, and money as it was left; written into the next round's record.
     let mut shop_open: Option<(i64, [u32; 6])> = None;
+    // `--bench FILE`: the bench's score of the build as each ante from 5 began (its boss known), for the validation.
+    let mut bench_at: Vec<(i32, [f64; 4])> = Vec::new();
     let mut shop_done: Option<String> = None;
     let force = FORCE_SPEC.get().filter(|_| FORCE_OUT.get().is_some());
     let mut passed: Vec<Passed> = Vec::new();
@@ -304,6 +306,18 @@ fn play(
     {
         if let Some(d) = diag.as_mut() {
             d.ante_begins(&run);
+        }
+        if BENCH_OUT.get().is_some()
+            && at_win.is_none()
+            && run.phase == Phase::BlindSelect
+            && run.ante >= 5
+            && run.slots.iter().all(|x| matches!(x, bm_core::blinds::SlotState::Upcoming | bm_core::blinds::SlotState::Select))
+            && bench_at.last().is_none_or(|b| b.0 != run.ante)
+        {
+            // On fair copies with their own salt: the run itself is untouched.
+            if let Some(sc) = bm_core::bench::ante_score(&run, run.ante, Some(run.boss), bm_core::bench::TRIES, salt << 20 ^ 0xBE4C ^ run.ante as u64) {
+                bench_at.push((run.ante, sc));
+            }
         }
         if forking
             && at_win.is_none()
@@ -598,6 +612,32 @@ fn play(
             );
             writeln!(out.lock().unwrap(), "{line}").expect("--leaks: writing");
         }
+    }
+    if let Some(out) = BENCH_OUT.get().filter(|_| !s.refused && !s.unfinished) {
+        use std::io::Write as _;
+        let f = |x: &[f64; 4]| format!("[{:.4},{:.4},{:.4},{:.4}]", x[0], x[1], x[2], x[3]);
+        let entered: Vec<String> = bench_at
+            .iter()
+            .map(|(a, sc)| format!("{{\"ante\":{a},\"score\":{},\"cleared\":{}}}", f(sc), run.won || run.ante > *a))
+            .collect();
+        // The final build, frozen, at antes 5 to 8 (each boss the ante can hold, averaged).
+        let finals: Vec<String> = (5..=8)
+            .filter_map(|a| {
+                bm_core::bench::ante_score(&run, a, None, bm_core::bench::TRIES, salt << 20 ^ 0xF1A1 ^ a as u64)
+                    .map(|sc| format!("\"{a}\":{}", f(&sc)))
+            })
+            .collect();
+        let jokers: Vec<String> = run.jokers.iter().map(|j| format!("\"{}\"", j.kind.name())).collect();
+        let line = format!(
+            "{{\"seed\":{},\"run\":{index},\"won\":{},\"end_ante\":{},\"entered\":[{}],\"final\":{{{}}},\"jokers\":[{}]}}",
+            esc(&s.seed),
+            run.won,
+            run.ante,
+            entered.join(","),
+            finals.join(","),
+            jokers.join(",")
+        );
+        writeln!(out.lock().unwrap(), "{line}").expect("--bench: writing");
     }
     if let (Some(c), Some(out)) = (calib.as_ref(), CALIB_OUT.get()) {
         if !s.refused && !s.unfinished {
@@ -926,6 +966,9 @@ static AUDIT_HI: AtomicU64 = AtomicU64::new(8);
 /// `--leaks FILE`: one leak tally line per run (leaks.rs).
 static LEAKS_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> =
     std::sync::OnceLock::new();
+/// `--bench FILE`: one line per run: the bench's score of the build as each ante from 5 began and whether the run
+/// cleared it, and the final build's score at antes 5 to 8 (bench.rs; the bench's validation, lab #33).
+static BENCH_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> = std::sync::OnceLock::new();
 /// `--calibrate FILE`: one line per run, each round's start with the value's power and projections (value::calibration)
 /// and what that round scored.
 static CALIB_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> =
@@ -2564,6 +2607,10 @@ fn main() {
         let text = std::fs::read_to_string(&path).expect("--forecast: reading the tables");
         bm_core::value::load_forecast(&text).unwrap_or_else(|e| panic!("--forecast {path}: {e}"));
     }
+    if let Some(path) = opt("--bench") {
+        let f = std::fs::File::create(&path).expect("--bench: creating the file");
+        let _ = BENCH_OUT.set(Mutex::new(std::io::BufWriter::new(f)));
+    }
     if let Some(path) = opt("--calibrate") {
         let f = std::fs::File::create(&path).expect("--calibrate: creating the file");
         let _ = CALIB_OUT.set(Mutex::new(std::io::BufWriter::new(f)));
@@ -3082,6 +3129,7 @@ fn main() {
     for (out, what) in [
         (LEAKS_OUT.get(), "--leaks"),
         (CALIB_OUT.get(), "--calibrate"),
+        (BENCH_OUT.get(), "--bench"),
         (FORCE_OUT.get(), "--force-out"),
     ] {
         if let Some(out) = out {

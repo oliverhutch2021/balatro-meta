@@ -1273,10 +1273,11 @@ fn fool_worth_using(run: &Run, c: &Consumable) -> bool {
         }
 }
 
-/// The most rerolls "spend-down" forces in one shop.
-const SPEND_DOWN_MAX: u32 = 8;
+/// The most paid rerolls a shop may have before "spend-down" stops forcing more (the run's own count, so a copy
+/// played out from here counts as the run does: B, lab #27).
+const SPEND_DOWN_MAX: i64 = 8;
 
-/// "spend-down=F": whether to reroll where the value would leave (and count the reroll if so).
+/// "spend-down=F": whether to reroll where the value would leave.
 fn spend_down(run: &Run) -> bool {
     let Some(floor) = param("spend-down") else {
         return false;
@@ -1285,23 +1286,7 @@ fn spend_down(run: &Run) -> bool {
         return false;
     }
     let floor = if crate::value::shops_left(run) <= 0.0 { 0 } else { floor as i64 };
-    if run.spendable() - run.reroll_cost < floor {
-        return false;
-    }
-    let behind = run
-        .slots
-        .iter()
-        .filter(|s| matches!(s, crate::blinds::SlotState::Defeated | crate::blinds::SlotState::Skipped))
-        .count();
-    SPEND_REROLLS.with(|c| {
-        let mut c = c.borrow_mut();
-        let n = c.entry((run.ante, behind)).or_insert(0);
-        if *n >= SPEND_DOWN_MAX {
-            return false;
-        }
-        *n += 1;
-        true
-    })
+    run.spendable() - run.reroll_cost >= floor && run.reroll_increase < SPEND_DOWN_MAX
 }
 
 /// "open-packs" (S, lab #27; the user opens 86-100% of the affordable Arcana packs from ante 2, the bot 19-67%): from
@@ -3799,7 +3784,6 @@ pub fn decision(run: &Run, salt: u64) -> (Run, Vec<(MoveKind, u64)>, (MoveKind, 
 /// came before it on its thread, and a job's results don't depend on how its runs fell to its threads.
 pub fn new_run() {
     OPEN_MONEY.with(|c| c.borrow_mut().clear());
-    SPEND_REROLLS.with(|c| c.borrow_mut().clear());
     COMMIT.with(|c| c.set(None));
     CHOICES.with(|c| c.borrow_mut().clear());
     HAND_ORDERS.with(|c| c.borrow_mut().clear());
@@ -3910,9 +3894,6 @@ fn building_suit(run: &Run) -> Option<Suit> {
 
 thread_local! {
     /// The money each shop of this run opened with, by (ante, blinds behind it) ("freeze-money").
-    /// The rerolls "spend-down" forced in each shop of this run, by (ante, blinds behind it).
-    static SPEND_REROLLS: std::cell::RefCell<std::collections::HashMap<(i32, usize), u32>> =
-        std::cell::RefCell::new(std::collections::HashMap::new());
     static OPEN_MONEY: std::cell::RefCell<std::collections::HashMap<(i32, usize), i64>> =
         std::cell::RefCell::new(std::collections::HashMap::new());
 }
@@ -4060,9 +4041,11 @@ mod tests {
         run.money = 29;
         assert!(!with_options(&["spend-down=25"], || spend_down(&run)), "29 - 5 doesn't");
         run.money = 100;
-        let n = (0..20).filter(|_| with_options(&["spend-down=0"], || spend_down(&run))).count();
-        assert_eq!(n as u32, SPEND_DOWN_MAX - 1, "eight a shop, one already made");
-        new_run();
+        run.reroll_increase = SPEND_DOWN_MAX - 1;
+        assert!(with_options(&["spend-down=0"], || spend_down(&run)), "the eighth");
+        run.reroll_increase = SPEND_DOWN_MAX;
+        assert!(!with_options(&["spend-down=0"], || spend_down(&run)), "eight a shop, counted by the run");
+        run.reroll_increase = 0;
         run.ante = 2;
         assert!(!with_options(&["spend-down=0"], || spend_down(&run)), "not before ante 3");
     }

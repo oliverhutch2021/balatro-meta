@@ -2083,6 +2083,30 @@ def green_spend_steps(root: Path = ROOT) -> list[tuple]:
                         calibrate=True, control_arm="open-packs")
 
 
+def green_bench_steps(root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
+    """make green-bench (S and B, lab #33): the bench's validation. The base as it now is (-d5) on the same 2,000 Green
+    seeds with `--bench`: each build scored as each ante from 5 began, and the final builds at antes 5 to 8, read by
+    scripts/bench_check.py. Play is unchanged by the bench, so the report must match green-packs' open-packs arm seed for
+    seed (its compare is a check: 0.00 points)."""
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", ".sync/bench"])]
+    best = best_8k_report(root)
+    if best is None:
+        return steps
+    args = list(best[1])
+    w = args[args.index("--value-weight") + 1]
+    stem = Path(best[2]).stem.split("-on-")[-1]
+    sl = f"salt{BUNDLE_SALT}"
+    control = f"results/stakes/stake{BUNDLE_GREEN}-{runs // 1000}k-f{FORMULA}-d4-open-packs-w{w}-{sl}-on-{stem}.json"
+    name = f"bench-green-{runs // 1000}k-{sl}"
+    out, bench = f"results/bench/{name}.json", f".sync/bench/{name}.jsonl"
+    if not (root / out).exists():
+        steps.append(("bench-green", [*BASELINE, "--bot", "teacher", *args, "--runs", str(runs), "--seed", "1", "--salt",
+                                      str(BUNDLE_SALT), "--stake", str(BUNDLE_GREEN), "--bench", bench, "--out", out]))
+    steps.append(("bench-compare", ["scripts/compare_runs.py", control, out, "--out", f"results/bench/{name}-vs-d5.json"]))
+    steps.append(("bench-check", ["scripts/bench_check.py", bench, "--out", f"results/bench/{name}-check.json"]))
+    return steps
+
+
 def e1_white_steps(k: int, root: Path = ROOT, runs: int = SCREEN_RUNS) -> list[tuple]:
     """make e1-white-ahead<K>: E1's White guard for one setting, `ahead=K` with every default on on the first `runs`
     White seeds at salt 2, against the first `runs` of batch1's White arm (S: point estimate above -1.0 on 2,000)."""
@@ -2610,6 +2634,7 @@ JOBS: dict[str, list[tuple]] = {
     "green-packs": green_packs_steps(),
     "green-forecast": green_forecast_steps(),
     "green-spend": green_spend_steps(),
+    "green-bench": green_bench_steps(),
     **{f"e1-white-ahead{k}": e1_white_steps(k) for k in (2, 3, 8)},
     "teacher-money": money_steps(),
     "teacher-long": long_steps(),
@@ -2831,7 +2856,7 @@ def record_progress(entry: dict | None, path: Path = PROGRESS) -> None:
 
 
 READ_ONLY_STEPS = ("scripts/compare_runs.py", "scripts/leaks.py", "scripts/forced_buys.py", "scripts/audit_shops.py",
-                   "scripts/pack_audit.py", "gzip")
+                   "scripts/pack_audit.py", "scripts/bench_check.py", "gzip")
 WRITTEN = (".json", ".jsonl", ".gz", ".csv", ".npy", ".bin", ".txt")
 NAME_MAX = 250
 

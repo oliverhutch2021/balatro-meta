@@ -3,6 +3,7 @@
 //! Written from the rules notes in `rules/`, which are checked against the
 //! real game. Modules land here phase by phase.
 
+pub mod bench;
 pub mod blinds;
 pub mod bots;
 pub mod card;

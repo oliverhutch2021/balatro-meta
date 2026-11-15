@@ -1689,3 +1689,12 @@ def test_green_spend_plays_both_floors_against_the_open_packs_arm_with_the_calib
         a = d[f"d5-spend-down{f}-green"]
         assert a[a.index("--teacher-options") + 1].endswith(f",spend-down={f}") and "--calibrate" in a
         assert d[f"d5-spend-down{f}-compare"][1] == open_out
+
+
+def test_green_bench_scores_the_base_and_checks_it_reproduces_the_open_packs_arm(tmp_path):
+    champion_in(tmp_path)
+    packs = {n: a for n, a, *_ in jobs.green_packs_steps(tmp_path)}
+    open_out = packs["open-packs-green"][packs["open-packs-green"].index("--out") + 1]
+    d = {n: a for n, a, *_ in jobs.green_bench_steps(tmp_path)}
+    assert "--bench" in d["bench-green"] and d["bench-compare"][1] == open_out
+    assert jobs.read_only(d["bench-check"])

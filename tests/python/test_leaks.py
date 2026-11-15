@@ -121,3 +121,15 @@ def test_the_pack_audit_splits_an_arcana_packs_worth_into_the_formulas_part_and_
     s = pack_audit.split([line])
     # formula +0.1 (0.7 - 0.6); networks -0.2 (the option's -0.1 overall less the formula's +0.1)
     assert s[3]["formula_median"] == 0.1 and s[3]["networks_median"] == -0.2
+
+
+def test_the_bench_check_ranks_and_bands_the_antes_entered():
+    import bench_check
+    rows = [{"won": True, "entered": [{"ante": 5, "score": [1, 1, 0.9, 0.9], "cleared": True}],
+             "final": {"5": [1, 1, 1, 1.0]}},
+            {"won": False, "entered": [{"ante": 5, "score": [1, 0.5, 0.2, 0.1], "cleared": False}],
+             "final": {"5": [0, 0, 0, 0.0]}}]
+    s = bench_check.summarise(rows)
+    assert s["all"]["auc"] == 1.0 and s["by_ante"][5]["n"] == 2
+    assert s["all"]["by_band"]["0.9-1.0"]["cleared"] == 1.0 and s["all"]["by_band"]["0.1-0.3"]["cleared"] == 0.0
+    assert s["final_builds"]["5"]["won_median"] == 1.0

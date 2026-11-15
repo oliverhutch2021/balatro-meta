@@ -1594,6 +1594,20 @@ credits are worth at least five points at Green. `forecast` stays in the code, u
 cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(green-forecast)" || true) && make sync && make green-spend
 ```
 
+## Step 54: the build bench and its validation (S and B, lab #33)
+
+`bench.rs`: a build (a position: jokers, deck, hand levels, hand size, hands, discards, vouchers) scored against an
+ante's three blinds on fair copies at the start of each: on each of 8 deals every plan the hand offers is tried 4 times
+by the planner and the best plan's rate counts; the ante's score is the product of the three. `baseline --bench FILE`
+scores each build as each ante from 5 begins (its boss known) and the final build at antes 5 to 8; play is unchanged.
+`scripts/bench_check.py` reads the validation: AUC, cleared by score band, by ante.
+
+`spend-down`'s cap now reads the run's own count of paid rerolls in the shop (B: a copy counts as the run does).
+
+```
+cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(green-spend)" || true) && make sync && make green-bench
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

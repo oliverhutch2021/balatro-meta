@@ -515,7 +515,7 @@ fn policy_move(run: &Run, policy: Policy) -> (MoveKind, u64) {
 
 /// One try of `policy` from `first` on a fair copy: (beat the blind, how close it got, what the round added
 /// besides, when `reference` is given: see `value::round_gain`).
-fn try_policy(
+pub(crate) fn try_policy(
     run: &Run,
     policy: Policy,
     first: (MoveKind, u64),
