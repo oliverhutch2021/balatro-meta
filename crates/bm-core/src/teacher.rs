@@ -186,6 +186,9 @@ pub const OPTIONS: &[&str] = &[
     "open-packs",
     "no-open-packs",
     "open-packs-all",
+    // S's wall league (lab #33): from ante 3 the run keeps the hand that was its focus then, its Planets taken and
+    // bought for that hand alone (`run_focus`).
+    "commit-main",
     // S's danger genes (lab #33): "danger-spend=T", in a shop where the value's chance of living through this ante is
     // under T, money is spent to raise it (buy what raises it most, else reroll; `danger_shop_move`); "danger-x", the
     // long run and its money scaled by that chance, and a reroll in danger worth the best of those the money allows.
@@ -297,6 +300,16 @@ fn committed(salt: u64) -> Option<HandType> {
 /// The hand the focus moves serve: the committed one ("commit", from ante `COMMIT_ANTE`), else the focus
 /// (`focus_hand`).
 fn run_focus(run: &Run, salt: u64) -> Option<HandType> {
+    // "commit-main" (S, lab #33, the wall league's member 5): from ante COMMIT_ANTE the run keeps the hand that was its
+    // focus then, for the rest of the run (unlike "commit=p", which draws a hand at random for recordings).
+    if on("commit-main") && run.ante >= COMMIT_ANTE {
+        if let Some(c) = COMMIT.with(|c| c.get()) {
+            return c.or_else(|| focus_hand(run));
+        }
+        let f = focus_hand(run);
+        COMMIT.with(|c| c.set(Some(f)));
+        return f;
+    }
     let c = if run.ante >= COMMIT_ANTE {
         committed(salt)
     } else {

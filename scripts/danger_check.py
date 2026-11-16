@@ -29,9 +29,9 @@ def read(path: Path) -> list[dict]:
         return [json.loads(x) for x in fh if x.strip()]
 
 
-def shops(runs: list[dict]) -> list[tuple[int, float, bool, int]]:
-    """(ante, the value's survival chance at the shop's close, lived through the ante, money left) for each shop before a
-    blind of antes 4 to 6."""
+def shops(runs: list[dict], key: str = "seen") -> list[tuple[int, float, bool, int]]:
+    """(ante, the value's survival chance at the shop's close (`seen`) or as it opened (`seen_open`), lived through the
+    ante, money left) for each shop before a blind of antes 4 to 6."""
     out = []
     for r in runs:
         rounds = r.get("rounds", [])
@@ -40,7 +40,7 @@ def shops(runs: list[dict]) -> list[tuple[int, float, bool, int]]:
         for x in rounds:
             st = x.get("at_start") or {}
             sh = st.get("shop_before") or {}
-            seen = sh.get("seen") or {}
+            seen = sh.get(key) or {}
             if 4 <= x["ante"] <= 6 and "survive" in seen:
                 out.append((x["ante"], seen["survive"], died_at != x["ante"], sh.get("money_left", 0)))
     return out
@@ -82,9 +82,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--danger", type=Path)
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
-    rows = shops(read(a.calib))
+    runs = read(a.calib)
+    rows = shops(runs)
+    opened = shops(runs, "seen_open")
     s = {"calib": a.calib.name, "shops": len(rows), "perception": perception(rows),
-         "perception_by_ante": {an: perception([r for r in rows if r[0] == an]) for an in (4, 5, 6)}}
+         "perception_by_ante": {an: perception([r for r in rows if r[0] == an]) for an in (4, 5, 6)},
+         "as_the_shop_opened": perception(opened)}
     if a.danger:
         s["ceiling"] = ceiling(read(a.danger))
     a.out.parent.mkdir(parents=True, exist_ok=True)
@@ -94,6 +97,11 @@ def main(argv: list[str] | None = None) -> int:
     for k, v in s["perception"].items():
         print(f"  {k}: {v['shops']} shops, chance given {v['chance_given']}, lived {v['lived']}, "
               f"money left {v['money_left_median']}")
+    if opened:
+        print("By the danger as the shop opened (before any buy; B):")
+        for k, v in s["as_the_shop_opened"].items():
+            print(f"  {k}: {v['shops']} shops, chance given {v['chance_given']}, lived {v['lived']}, "
+                  f"money left {v['money_left_median']}")
     c = s.get("ceiling")
     if c:
         print(f"Spending the money of {c['deaths']} runs lost at an ante 4-6 boss (median ${c['money_median']}): "

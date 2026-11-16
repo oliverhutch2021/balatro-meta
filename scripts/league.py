@@ -228,7 +228,7 @@ def deaths(stages: str) -> dict[int, float]:
 
 def run_generation(gen, play=None, plan_only: bool = False, members_given: list[list[str]] | None = None,
                    blocks: tuple = None, promote: tuple = None, seed_base: int = None, stop_after: int | None = None,
-                   cut_first: bool = True) -> dict:
+                   cut_first: bool = True, background: list[str] | None = None) -> dict:
     """Play (or resume) a generation. B's selection rules (lab #33): block A for all, cut by bound; each later block for
     the best of the last block's survivors ranked by the shrunk estimate on the latest block alone (never on the seeds
     they were picked on); parents from the last block alone, Level or Better. `stop_after` stops after that block."""
@@ -245,8 +245,10 @@ def run_generation(gen, play=None, plan_only: bool = False, members_given: list[
     for k, m in led.get("members", {}).items():
         members.setdefault(k, m)
     first_seed = seed_base if seed_base is not None else SEED_BASE + int(gen) * GEN_SEEDS
+    background = list(background or [])
     ledger = {"gen": gen, "seed_base": first_seed, "blocks": list(blocks), "salt": SALT, "stake": STAKE,
-              "base_options": base_args[base_args.index("--teacher-options") + 1], "members": members}
+              "base_options": base_args[base_args.index("--teacher-options") + 1], "background": background,
+              "members": members}
 
     def save():
         p = ROOT / ledger_path(gen)
@@ -283,9 +285,10 @@ def run_generation(gen, play=None, plan_only: bool = False, members_given: list[
     for block in range(len(blocks)):
         if block > 0:
             alive = sorted(alive, key=lambda k: -members[k].get("shrunk", -1))[:promote[block - 1]]
-        run_block(gen, "ref", [], block, base_args, play, blocks, first_seed)
+        # The reference plays the background alone (the base, or W); each member the background and its own genes.
+        run_block(gen, "ref", background, block, base_args, play, blocks, first_seed)
         for k in alive:
-            run_block(gen, k, members[k]["genes"], block, base_args, play, blocks, first_seed)
+            run_block(gen, k, background + members[k]["genes"], block, base_args, play, blocks, first_seed)
             members[k][f"block_{block}"] = True
             score([k], block)
             save()
@@ -310,31 +313,23 @@ def run_generation(gen, play=None, plan_only: bool = False, members_given: list[
     return ledger
 
 
-# The wall league (S, lab #33, A4): designed members on one block of 1,000 fresh Green seeds, the reference on it, the
-# best two by the shrunk estimate to 4,000. Deaths by ante beside every member. Generation 0's four leaders (by their
-# block B alone) join as they stand.
+# The wall league, as S redrew it (lab #33, 16 November): six members on 2,000 fresh Green seeds, each paired against W
+# (generation 0's first Better, the reference here), deaths by ante beside wins. A member Better than W at 2,000 goes on
+# to 4,000 fresh seeds (block B) before it joins the base.
+W = ["above-cap=0.899", "buying-power=0.0539", "deck-share=0.269", "money-scale=14.7", "no-card-tiers"]
 WALL_SEEDS = 60001
-WALL_BLOCKS = (1000, 3000)
-WALL_PROMOTE = (2,)
+WALL_BLOCKS = (2000, 4000)
+WALL_PROMOTE = (6,)
 WALL_MEMBERS = [
-    ["danger-spend=0.6"], ["danger-spend=0.75"], ["danger-spend=0.9"], ["danger-x"],
-    ["danger-spend=0.75", "danger-x"],
-    ["long-power-x=0.5"], ["long-power-x=0.75"], ["long-run=0.2"],
-    # The best danger gene with generation 0's leading money genes (danger-spend=0.75 stands for the best until the
-    # danger arms have read).
-    ["above-cap=0.899", "buying-power=0.0539", "danger-spend=0.75", "deck-share=0.269", "money-scale=14.7"],
+    ["long-power-x=0.75"], ["long-power-x=0.5"], ["long-run=0.2"],  # the user's hypothesis in its plain form
+    ["danger-x"],
+    ["commit-main"],  # one main hand from ante 3, its Planets taken and bought
+    ["card-tiers"],  # the user's Tarot tiers back on (W switches them off)
 ]
 
 
 def wall_members() -> list[list[str]]:
-    """WALL_MEMBERS and generation 0's four leaders by their block B alone (all promoted ones if fewer)."""
-    g0 = load(0).get("members", {})
-    played_b = [(k, m) for k, m in g0.items() if m.get("block_1")]
-    def on_b(m):
-        e = m.get("estimate_block_1") or {}
-        return e.get("diff", m.get("estimate", {}).get("diff", -9))
-    leaders = [m["genes"] for _, m in sorted(played_b, key=lambda km: -on_b(km[1]))[:4]]
-    return dedupe(WALL_MEMBERS + leaders)
+    return dedupe(WALL_MEMBERS)
 
 
 def dba(m: dict, ante: int) -> float:
@@ -345,15 +340,19 @@ def dba(m: dict, ante: int) -> float:
 
 def table(ledger: dict) -> str:
     rows = sorted(ledger["members"].items(), key=lambda kv: -(kv[1].get("shrunk") or -9))
-    out = [f"Generation {ledger['gen']}: {len(rows)} members against the base (paired, points of win rate)"]
+    out = [f"Generation {ledger['gen']}: {len(rows)} members against the reference (paired, points of win rate)"]
+    ref = ledger.get("reference_deaths_by_ante", {})
+    if ref:
+        out.append(f"  reference died at 4/5/6: {'/'.join(str(round(100 * dba({'deaths_by_ante': ref}, a), 1)) for a in (4, 5, 6))}%")
     for k, m in rows:
         e = m.get("estimate", {})
         if not e.get("seeds"):
             continue
         out.append(f"  {k}  {e['seeds']:5d} seeds  {100 * e['diff']:+6.2f} ({100 * e['lo']:+.2f} to {100 * e['hi']:+.2f})"
                    f"  shrunk {100 * m.get('shrunk', 0):+.2f}{'  PARENT' if m.get('parent') else ''}"
+                   f"{'  cut' if m.get('cut_at_a') else ''}"
                    f"  died at 4/5/6: {'/'.join(str(round(100 * dba(m, a), 1)) for a in (4, 5, 6))}%"
-                   f"{'  cut' if m.get('cut_at_a') else ''}  {','.join(m['genes'])}")
+                   f"  {','.join(m['genes'])}")
     return "\n".join(out)
 
 
@@ -365,8 +364,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--wall", action="store_true", help="the wall league (S, lab #33, A4) in place of a generation")
     a = ap.parse_args(argv)
     if a.wall:
+        # Block A for all six; block B (4,000 more) waits for the reading, as S ruled ("Better at 2,000 goes on").
+        stop = 0 if a.stop_after is None else a.stop_after
         run_generation("wall", plan_only=a.plan, members_given=wall_members(), blocks=WALL_BLOCKS,
-                       promote=WALL_PROMOTE, seed_base=WALL_SEEDS, stop_after=a.stop_after, cut_first=False)
+                       promote=WALL_PROMOTE, seed_base=WALL_SEEDS, stop_after=stop, cut_first=False, background=W)
     else:
         run_generation(a.gen, plan_only=a.plan, stop_after=a.stop_after)
     return 0

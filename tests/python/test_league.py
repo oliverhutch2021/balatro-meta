@@ -112,9 +112,27 @@ def test_selection_uses_the_latest_block_alone_and_a_stop_keeps_the_rest_for_lat
     assert ms["spend-down=20"]["parent"] and not ms["skips"]["parent"]
 
 
-def test_the_wall_league_has_the_designed_members_and_its_own_seeds():
-    ms = league.wall_members()
-    flat = [",".join(m) for m in ms]
-    assert "danger-x" in flat and "long-power-x=0.5" in flat and "danger-spend=0.75,danger-x" in flat
-    assert league.block_seeds("wall", 0, league.WALL_BLOCKS, league.WALL_SEEDS) == (league.WALL_SEEDS, 1000)
+def test_the_wall_league_has_s_six_members_on_w_and_its_own_seeds(tmp_path, monkeypatch):
+    ms = [",".join(m) for m in league.wall_members()]
+    assert len(ms) == 6 and "commit-main" in ms and "card-tiers" in ms and "long-run=0.2" in ms
+    assert not any("danger-spend" in m for m in ms), "out until rebuilt (B)"
+    assert league.block_seeds("wall", 0, league.WALL_BLOCKS, league.WALL_SEEDS) == (league.WALL_SEEDS, 2000)
     assert league.WALL_SEEDS >= league.SEED_BASE + 3 * league.GEN_SEEDS, "never a generation's seeds"
+    # The reference plays W, each member W and its gene.
+    monkeypatch.setattr(league, "ROOT", tmp_path)
+    monkeypatch.setattr(league.jobs, "best_8k_report",
+                        lambda root: (0.75, ["--value-weight", "2.5", "--teacher-options", "precise"], "x.json"))
+    played = []
+
+    def play(cmd):
+        played.append(cmd)
+        if cmd[0] != "gzip":
+            out = Path(tmp_path / cmd[cmd.index("--out") + 1])
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps({"run_stages": "Y" * int(cmd[cmd.index("--runs") + 1])}))
+        return 0
+    league.run_generation("wall-t", play=play, members_given=league.wall_members(), blocks=(10, 20), promote=(6,),
+                          seed_base=90001, stop_after=0, cut_first=False, background=league.W)
+    opts = [c[c.index("--teacher-options") + 1] for c in played if c[0] != "gzip"]
+    assert opts[0] == "precise," + ",".join(league.W), "the reference is W"
+    assert all(o.startswith("precise," + ",".join(league.W)) for o in opts) and len(opts) == 7

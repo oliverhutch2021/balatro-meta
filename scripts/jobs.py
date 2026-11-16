@@ -2116,7 +2116,7 @@ def danger_look_steps(root: Path = ROOT, runs: int = DANGER_RUNS) -> list[tuple]
     (runs lost at an ante 4-6 boss with $10 or more: that boss's chance after spending the money in fair copies of the
     shop), read by scripts/danger_check.py. Play is unchanged, so it must match green-packs' open-packs arm's first
     1,000 seeds (its compare is a check)."""
-    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", CALIB_DIR])]
+    steps: list[tuple] = [("build", [*MAKE, "build"]), ("folder", ["mkdir", "-p", CALIB_DIR, ".sync/bench"])]
     best = best_8k_report(root)
     if best is None:
         return steps
@@ -2127,14 +2127,18 @@ def danger_look_steps(root: Path = ROOT, runs: int = DANGER_RUNS) -> list[tuple]
     control = f"results/stakes/stake{BUNDLE_GREEN}-2k-f{FORMULA}-d4-open-packs-w{w}-{sl}-on-{stem}.json"
     name = f"danger-green-{runs // 1000}k-{sl}"
     out, calib, danger = f"results/danger/{name}.json", f"{CALIB_DIR}/{name}.jsonl", f"{CALIB_DIR}/{name}-bench.jsonl"
+    # The fixed bench (plan chosen and scored on separate tries) on the same runs, for B's band table.
+    bench = f".sync/bench/{name}-bench-fixed.jsonl"
     if not (root / out).exists():
         steps.append(("danger-green", [*BASELINE, "--bot", "teacher", *args, "--runs", str(runs), "--seed", "1",
                                        "--salt", str(BUNDLE_SALT), "--stake", str(BUNDLE_GREEN), "--calibrate", calib,
-                                       "--danger-bench", danger, "--out", out]))
+                                       "--danger-bench", danger, "--bench", bench, "--out", out]))
         steps.append(("danger-gzip", ["gzip", "-f", calib, danger]))
     steps.append(("danger-compare", ["scripts/compare_runs.py", control, out, "--out", f"results/danger/{name}-vs-d5.json"]))
     steps.append(("danger-check", ["scripts/danger_check.py", "--calib", f"{calib}.gz", "--danger", f"{danger}.gz",
                                    "--out", f"results/danger/{name}-check.json"]))
+    steps.append(("danger-bench-check", ["scripts/bench_check.py", bench, "--out",
+                                         f"results/danger/{name}-bench-fixed-check.json"]))
     return steps
 
 

@@ -271,7 +271,7 @@ danger-look:  ## Antes 4-6 (S, lab #33, A1 and A2): did the bot see the danger a
 league:  ## One league generation (lab #33): 40 strategies and the base on 200 fresh Green seeds, cut by bound, the best 12 to 1,000 seeds, the best 4 to 4,000; resumable (GEN=0, 1, ...; STOP=1 stops after block B)
 	$(PY) scripts/league.py --gen $(or $(GEN),0) $(if $(STOP),--stop-after $(STOP))
 
-league-wall:  ## The wall league (S, lab #33, A4): designed members (danger genes, the future turned down, generation 0's leaders) on 1,000 fresh Green seeds against the base, the best two to 4,000; deaths by ante beside wins; resumable (about 10 hours for the first block)
+league-wall:  ## The wall league (S, lab #33, redrawn 16 Nov): six members on W (generation 0's first Better) against W on 2,000 fresh Green seeds each (the future turned down three ways, danger-x, commit-main, card-tiers back on), deaths by ante beside wins; block B waits for the reading (about 9.5 hours)
 	$(PY) scripts/league.py --wall $(if $(STOP),--stop-after $(STOP))
 
 e1-white-ahead2 e1-white-ahead3 e1-white-ahead8:  ## E1's White guard for one setting (2,000 White seeds against the first 2,000 of batch1's White arm, about 1.2 hours)

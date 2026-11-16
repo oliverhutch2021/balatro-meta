@@ -291,6 +291,8 @@ fn play(
     // With --calibrate, the shop before each round (S, lab #27): money as it opened, rerolls, jokers, Tarots and
     // other cards bought, packs opened, vouchers, and money as it was left; written into the next round's record.
     let mut shop_open: Option<(i64, [u32; 6])> = None;
+    // The value's chance of living through the ante as the shop opened (B, lab #33: the danger before any buy).
+    let mut seen_open = String::from("null");
     // `--bench FILE`: the bench's score of the build as each ante from 5 began (its boss known), for the validation.
     let mut bench_at: Vec<(i32, [f64; 4])> = Vec::new();
     // `--danger-bench FILE`: the run as it left the shop before each boss of antes 4 to 6 (S, lab #33, A2).
@@ -481,6 +483,13 @@ fn play(
             pre_boss = Some((run.ante, run.clone()));
         }
         if calib.is_some() && run.phase == Phase::Shop {
+            if shop_open.is_none() {
+                seen_open = bm_core::value::ante_chances(&run, salt << 20 ^ step ^ 0x09E, bm_core::value::SAMPLES)
+                    .map_or("null".to_string(), |(ps, prod)| {
+                        let ps: Vec<String> = ps.iter().map(|p| format!("{p:.4}")).collect();
+                        format!("{{\"chances\":[{}],\"survive\":{prod:.4}}}", ps.join(","))
+                    });
+            }
             let (_, n) = shop_open.get_or_insert((run.money, [0; 6]));
             let row = run.shop.as_ref().and_then(|sh| sh.row.get(a as usize)).map(|r| &r.item);
             match k {
@@ -506,7 +515,7 @@ fn play(
                             format!("{{\"chances\":[{}],\"survive\":{prod:.4}}}", ps.join(","))
                         });
                     shop_done = Some(format!(
-                        "{{\"money_open\":{open},\"money_left\":{},\"rerolls\":{},\"jokers\":{},\"tarots\":{},\"other\":{},\"packs\":{},\"vouchers\":{},\"seen\":{seen}}}",
+                        "{{\"money_open\":{open},\"money_left\":{},\"rerolls\":{},\"jokers\":{},\"tarots\":{},\"other\":{},\"packs\":{},\"vouchers\":{},\"seen_open\":{seen_open},\"seen\":{seen}}}",
                         run.money, n[0], n[1], n[2], n[3], n[4], n[5]
                     ));
                 }
