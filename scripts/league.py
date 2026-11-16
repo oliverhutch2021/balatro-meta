@@ -63,13 +63,15 @@ GENES: list[tuple[str, str, tuple, float]] = [
     ("no-round-fixes", "switch", (), 0.15),
     ("no-shop-fixes", "switch", (), 0.15),
     # The value's prices (value::PARAMS), log-uniform about the base's value.
-    ("long-power-x", "log", (0.5, 3.0), 0.5),
+    ("long-power-x", "log", (0.3, 3.0), 0.5),
     ("long-money-x", "log", (0.5, 3.0), 0.5),
     ("buying-power", "log", (0.015, 0.06), 0.5),
-    ("money-scale", "log", (12.5, 50.0), 0.5),
-    ("above-cap", "uniform", (0.0, 1.0), 0.5),
+    ("money-scale", "log", (10.0, 60.0), 0.5),
+    ("above-cap", "uniform", (0.0, 1.3), 0.5),
     ("long-run", "log", (0.175, 0.7), 0.4),
-    ("deck-share", "uniform", (0.2, 0.8), 0.4),
+    ("deck-share", "uniform", (0.1, 0.8), 0.4),
+    # How sure the value is of a blind's outcome from its sample rounds (generation 1, S: the far terms' steepness).
+    ("sharpness", "log", (1.25, 5.0), 0.3),
 ]
 
 
@@ -109,13 +111,41 @@ def breed(parents: list[list[str]], r: random.Random) -> list[str]:
 
 
 def member_id(genes: list[str]) -> str:
-    return "ref" if not genes else hashlib.sha1(",".join(sorted(genes)).encode()).hexdigest()[:10]
+    """A member's key in the ledger: a hash of its genes; "base" for the base itself (no genes). The reference is
+    always "ref", whatever it plays."""
+    return "base" if not genes else hashlib.sha1(",".join(sorted(genes)).encode()).hexdigest()[:10]
+
+
+# Generation 1 (S, lab #33, 16 November): the reference is generation 0's best measured member, 4579b745fb; the
+# founders are generation 0's four parents and the wall league's Better member; six designed crosses; the -d5 base as a
+# member (so the total gain stays on one scale); the rest bred from the founders and drawn at random.
+G0_4579 = ["long-money-x=0.841", "money-scale=36.1", "no-card-tiers", "skips"]
+G0_70CD = ["above-cap=0.761", "deck-share=0.517", "long-power-x=0.773", "long-run=0.255"]
+G0_W = ["above-cap=0.899", "buying-power=0.0539", "deck-share=0.269", "money-scale=14.7", "no-card-tiers"]
+G0_6804 = ["above-cap=0.593", "deck-share=0.23", "long-money-x=1.79", "money-scale=31.2", "no-card-sharp",
+           "no-card-tiers", "spend-down=35"]
+GEN1_REFERENCE = G0_4579
+GEN1_FOUNDERS = [G0_4579, G0_70CD, G0_W, G0_W + ["long-power-x=0.75"], G0_6804]
+GEN1_CROSSES = [
+    G0_4579 + ["long-power-x=0.75"],
+    G0_4579 + ["above-cap=0.9"],
+    G0_W + ["skips", "long-power-x=0.75"],
+    G0_70CD + ["skips", "no-card-tiers"],
+    G0_W + ["long-power-x=0.75", "long-run=0.255"],
+    ["skips", "no-card-tiers", "above-cap=0.9", "long-power-x=0.75", "buying-power=0.054", "money-scale=14.7",
+     "deck-share=0.27"],
+]
 
 
 def members_for(gen: int, ledger_dir: Path = OUT) -> list[list[str]]:
-    """Generation `gen`'s members: drawn at random (generation 0), or bred from the last generation's parents plus
-    RANDOM_EACH_GEN random ones. The same every time it is asked (seeded by the generation)."""
+    """Generation `gen`'s members: drawn at random (generation 0); generation 1 as S drew it (GEN1_*); later ones bred
+    from the last generation's parents plus RANDOM_EACH_GEN random ones. The same every time it is asked."""
     r = random.Random(1000 + gen)
+    if gen == 1:
+        designed = GEN1_FOUNDERS + GEN1_CROSSES + [[]]
+        n_bred = MEMBERS - len(dedupe(designed)) - RANDOM_EACH_GEN
+        kids = [breed(GEN1_FOUNDERS, r) for _ in range(n_bred + 10)]
+        return dedupe(designed + kids + [random_member(r) for _ in range(RANDOM_EACH_GEN + 5)])[:MEMBERS]
     if gen > 0:
         prev = load(gen - 1, ledger_dir)
         parents = [m["genes"] for m in prev.get("members", {}).values() if m.get("parent")]
@@ -216,6 +246,29 @@ def run_block(gen, mid: str, genes: list[str], block: int, base_args: list[str],
     return json.loads(p.read_text()) if p.exists() else None
 
 
+# ln of what ante 4's boss asks at Green Stake (base 8,000, a boss twice that): the lead entering ante 4 is power at
+# its Small Blind less this (B's measure, lab #33).
+LN_ANTE4_BOSS_GREEN = math.log(16000)
+
+
+def lead_entering_ante4(gen, mid: str, upto: int) -> dict:
+    """The mean lead entering ante 4 over the member's blocks so far, from its calibration lines (runs that got there),
+    and how many runs got there. None-valued when no recording is at hand."""
+    import gzip
+    leads = []
+    for b in range(upto + 1):
+        p = ROOT / REC / f"gen-{gen}" / f"{mid}-b{b}.jsonl.gz"
+        if not p.exists():
+            continue
+        with gzip.open(p, "rt") as fh:
+            for line in fh:
+                r = json.loads(line)
+                first = next((x for x in r.get("rounds", []) if x["ante"] == 4 and x["blind"] == 0), None)
+                if first and first.get("at_start"):
+                    leads.append(first["at_start"]["power"] - LN_ANTE4_BOSS_GREEN)
+    return {"mean": round(sum(leads) / len(leads), 3), "runs": len(leads)} if leads else {"mean": None, "runs": 0}
+
+
 def deaths(stages: str) -> dict[int, float]:
     """The share of runs that ended at each ante (1-8), and won (9)."""
     n = max(len(stages), 1)
@@ -228,7 +281,8 @@ def deaths(stages: str) -> dict[int, float]:
 
 def run_generation(gen, play=None, plan_only: bool = False, members_given: list[list[str]] | None = None,
                    blocks: tuple = None, promote: tuple = None, seed_base: int = None, stop_after: int | None = None,
-                   cut_first: bool = True, background: list[str] | None = None) -> dict:
+                   cut_first: bool = True, background: list[str] | None = None,
+                   reference: list[str] | None = None) -> dict:
     """Play (or resume) a generation. B's selection rules (lab #33): block A for all, cut by bound; each later block for
     the best of the last block's survivors ranked by the shrunk estimate on the latest block alone (never on the seeds
     they were picked on); parents from the last block alone, Level or Better. `stop_after` stops after that block."""
@@ -246,8 +300,13 @@ def run_generation(gen, play=None, plan_only: bool = False, members_given: list[
         members.setdefault(k, m)
     first_seed = seed_base if seed_base is not None else SEED_BASE + int(gen) * GEN_SEEDS
     background = list(background or [])
+    # The reference plays the background and `reference` (generation 1: generation 0's best); members their own genes.
+    if reference is None and members_given is None and gen == 1:
+        reference = GEN1_REFERENCE
+    reference = list(reference or [])
     ledger = {"gen": gen, "seed_base": first_seed, "blocks": list(blocks), "salt": SALT, "stake": STAKE,
               "base_options": base_args[base_args.index("--teacher-options") + 1], "background": background,
+              "reference": reference,
               "members": members}
 
     def save():
@@ -272,6 +331,7 @@ def run_generation(gen, play=None, plan_only: bool = False, members_given: list[
             st = "".join(stages_of(json.loads((ROOT / report_path(gen, k, b)).read_text()))
                          for b in range(block + 1) if (ROOT / report_path(gen, k, b)).exists())
             members[k]["deaths_by_ante"] = deaths(st) if st else {}
+            members[k]["lead_ante4"] = lead_entering_ante4(gen, k, block)
         sh = shrink({k: members[k][f"estimate_block_{block}"] for k in ids})
         for k, v in sh.items():
             members[k]["shrunk"] = v
@@ -286,7 +346,7 @@ def run_generation(gen, play=None, plan_only: bool = False, members_given: list[
         if block > 0:
             alive = sorted(alive, key=lambda k: -members[k].get("shrunk", -1))[:promote[block - 1]]
         # The reference plays the background alone (the base, or W); each member the background and its own genes.
-        run_block(gen, "ref", background, block, base_args, play, blocks, first_seed)
+        run_block(gen, "ref", background + reference, block, base_args, play, blocks, first_seed)
         for k in alive:
             run_block(gen, k, background + members[k]["genes"], block, base_args, play, blocks, first_seed)
             members[k][f"block_{block}"] = True

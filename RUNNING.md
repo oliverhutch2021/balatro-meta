@@ -1648,6 +1648,24 @@ cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(green-spen
 cd /mnt/h/balatro-meta && git add results && (git commit -qm "results" || true) && make sync && make danger-look
 ```
 
+## Step 57: league generation 1 (S, lab #33, 16 November)
+
+Generation 0's block C (3,000 fresh seeds each): `skips, long-money-x=0.841, money-scale=36.1, no-card-tiers` +4.03
+(+2.26 to +5.81); the future turned down (`long-power-x=0.773, long-run=0.255`, with `above-cap=0.761`) +2.70; W +2.70;
+a fourth +1.60. The wall league on W: `long-power-x=0.75` +2.25 (Better), `danger-x` -4.05 (Worse). The danger line is
+closed: the bot is gloomy, not blind, and money at the door buys nothing.
+
+`make league GEN=1`: the reference is generation 0's best (`skips, long-money-x=0.841, money-scale=36.1,
+no-card-tiers`); members: the founders (generation 0's four parents and W with `long-power-x=0.75`), S's six crosses,
+the -d5 base (so the total gain stays on one scale), and the rest bred from the founders and drawn at random (wider
+ranges, and `sharpness`). B's rules: block A 200 fresh seeds (from 40,001), cut by bound, the best 12 by block B alone
+to 1,000, the best 4 to 4,000, parents from block C alone. The ledger records deaths by ante and the lead entering ante
+4 for every member.
+
+```
+cd /mnt/h/balatro-meta && while pgrep -f "league.py --wall" >/dev/null; do sleep 60; done; git add results && (git commit -qm "results(league wall)" || true) && make sync && make league GEN=1
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

@@ -136,3 +136,30 @@ def test_the_wall_league_has_s_six_members_on_w_and_its_own_seeds(tmp_path, monk
     opts = [c[c.index("--teacher-options") + 1] for c in played if c[0] != "gzip"]
     assert opts[0] == "precise," + ",".join(league.W), "the reference is W"
     assert all(o.startswith("precise," + ",".join(league.W)) for o in opts) and len(opts) == 7
+
+
+def test_generation_1_has_s_founders_crosses_and_the_base_and_plays_4579_as_reference(tmp_path, monkeypatch):
+    ms = league.members_for(1)
+    keys = {",".join(m) for m in ms}
+    assert len(ms) == league.MEMBERS and [] in ms, "the -d5 base is a member"
+    for m in league.GEN1_FOUNDERS + league.GEN1_CROSSES:
+        assert ",".join(sorted(m)) in keys
+    monkeypatch.setattr(league, "ROOT", tmp_path)
+    monkeypatch.setattr(league, "MEMBERS", 40)
+    monkeypatch.setattr(league.jobs, "best_8k_report",
+                        lambda root: (0.75, ["--value-weight", "2.5", "--teacher-options", "precise"], "x.json"))
+    played = []
+
+    def play(cmd):
+        played.append(cmd)
+        if cmd[0] != "gzip":
+            out = Path(tmp_path / cmd[cmd.index("--out") + 1])
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps({"run_stages": "Y" * int(cmd[cmd.index("--runs") + 1])}))
+        return 0
+    led = league.run_generation(1, play=play, stop_after=0)
+    ref = next(c for c in played if c[0] != "gzip" and "/ref-b0" in c[c.index("--out") + 1])
+    assert ref[ref.index("--teacher-options") + 1] == "precise," + ",".join(league.GEN1_REFERENCE)
+    base = next(c for c in played if c[0] != "gzip" and "/base-b0" in c[c.index("--out") + 1])
+    assert base[base.index("--teacher-options") + 1] == "precise"
+    assert all("lead_ante4" in m for m in led["members"].values())
