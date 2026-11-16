@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The leak tally's summary (make leak-tally, lab #19): what the runs did with their seals, consumables, won rounds,
+"""The leak tally's summary (make look, lab #19): what the runs did with their seals, consumables, won rounds,
 shops and packs, from the lines `baseline --leaks` wrote (one per run, gzipped or not).
 
 For each leak: the share of runs where it could happen ("present") and how often the value was collected when it

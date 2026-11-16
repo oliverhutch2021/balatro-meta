@@ -6,6 +6,8 @@ import random
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -37,7 +39,9 @@ def test_blocks_follow_each_other_and_generations_never_share_seeds():
 
 
 def test_the_paired_estimate_and_its_shrinkage():
-    assert league.paired("YYAB", "YAYB") == (4, 1, 1)
+    assert league.paired({"run_stages": "YYAB"}, {"run_stages": "YAYB"}) == (4, 1, 1)
+    with pytest.raises(ValueError, match="seed_base"):
+        league.paired({"run_stages": "YY", "seed_base": 1}, {"run_stages": "YY", "seed_base": 30001})
     e = league.estimate([(100, 10, 20), (100, 5, 5)])
     assert abs(e["diff"] - 0.05) < 1e-12 and e["lo"] < e["diff"] < e["hi"]
     ests = {"a": {"seeds": 200, "diff": 0.10, "se": 0.04}, "b": {"seeds": 200, "diff": -0.10, "se": 0.04},
