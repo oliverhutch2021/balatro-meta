@@ -133,3 +133,11 @@ def test_the_bench_check_ranks_and_bands_the_antes_entered():
     assert s["all"]["auc"] == 1.0 and s["by_ante"][5]["n"] == 2
     assert s["all"]["by_band"]["0.9-1.0"]["cleared"] == 1.0 and s["all"]["by_band"]["0.1-0.3"]["cleared"] == 0.0
     assert s["final_builds"]["5"]["won_median"] == 1.0
+
+
+def test_the_danger_check_counts_kills_per_appearance_by_boss():
+    import danger_check
+    runs = [{"won": False, "rounds": [{"ante": 4, "at_start": {"boss": "The Wall"}}]},
+            {"won": True, "rounds": [{"ante": 4, "at_start": {"boss": "The Wall"}}, {"ante": 5, "at_start": {}}]}]
+    b = danger_check.bosses(runs)
+    assert b["The Wall"] == {"faced": 2, "killed": 1, "kill_rate": 0.5}

@@ -76,6 +76,23 @@ def ceiling(rows: list[dict]) -> dict:
             "after_over_half": round(sum(a > 0.5 for a in after) / len(after), 3), "by_ante": by_ante}
 
 
+def bosses(runs: list[dict]) -> dict:
+    """Kills per appearance by boss at antes 4 to 6 (S, lab #33): rounds played against each boss there, and the share
+    the run died in."""
+    seen: dict = {}
+    for r in runs:
+        rounds = r.get("rounds", [])
+        for i, x in enumerate(rounds):
+            b = (x.get("at_start") or {}).get("boss")
+            if b and 4 <= x["ante"] <= 6:
+                died = i == len(rounds) - 1 and not r.get("won")
+                d = seen.setdefault(b, [0, 0])
+                d[0] += 1
+                d[1] += died
+    return {b: {"faced": n, "killed": k, "kill_rate": round(k / n, 3)} for b, (n, k) in
+            sorted(seen.items(), key=lambda kv: -kv[1][1])}
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--calib", type=Path, required=True)
@@ -88,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     s = {"calib": a.calib.name, "shops": len(rows), "perception": perception(rows),
          "perception_by_ante": {an: perception([r for r in rows if r[0] == an]) for an in (4, 5, 6)},
          "as_the_shop_opened": perception(opened)}
+    s["bosses_antes_4_to_6"] = bosses(runs)
     if a.danger:
         s["ceiling"] = ceiling(read(a.danger))
     a.out.parent.mkdir(parents=True, exist_ok=True)
@@ -102,6 +120,10 @@ def main(argv: list[str] | None = None) -> int:
         for k, v in s["as_the_shop_opened"].items():
             print(f"  {k}: {v['shops']} shops, chance given {v['chance_given']}, lived {v['lived']}, "
                   f"money left {v['money_left_median']}")
+    if s["bosses_antes_4_to_6"]:
+        print("Kills per appearance by boss at antes 4 to 6:")
+        for b, v in list(s["bosses_antes_4_to_6"].items())[:12]:
+            print(f"  {b}: faced {v['faced']}, killed {v['killed']} ({100 * v['kill_rate']:.0f}%)")
     c = s.get("ceiling")
     if c:
         print(f"Spending the money of {c['deaths']} runs lost at an ante 4-6 boss (median ${c['money_median']}): "

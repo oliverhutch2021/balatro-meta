@@ -576,6 +576,11 @@ fn play(
                     Some(sh) if rec.starts_with('{') => rec.replacen('{', &format!("{{\"shop_before\":{sh},"), 1),
                     _ => rec,
                 };
+                // The boss being played (S, lab #33: kills per appearance by boss at antes 4 to 6).
+                let rec = match run.blind.as_ref().and_then(|b| b.boss()) {
+                    Some(b) if rec.starts_with('{') => rec.replacen('{', &format!("{{\"boss\":\"{}\",", b.name()), 1),
+                    _ => rec,
+                };
                 c.push((run.ante, slot, rec, 0.0, 0.0));
             }
         }
