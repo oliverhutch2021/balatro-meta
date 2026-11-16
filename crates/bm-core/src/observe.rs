@@ -841,16 +841,6 @@ fn stake_part(s: &Screen, out: &mut Vec<f32>) {
     out.extend((2..=8u8).map(|rule| f32::from(s.stake >= rule)));
 }
 
-/// The joker kinds in the screen's order, as embedding tokens (for a
-/// network that embeds jokers rather than reading `encode`'s scalar).
-pub fn joker_tokens(s: &Screen) -> [u16; MAX_JOKERS] {
-    let mut t = [0u16; MAX_JOKERS];
-    for (i, j) in s.jokers.iter().take(MAX_JOKERS).enumerate() {
-        t[i] = joker_token(j) as u16;
-    }
-    t
-}
-
 /// Face-down cards in hand (The Mark, The Fish, The Wheel, The House) don't show which cards they are, and the
 /// game's view of the remaining deck keeps hiding them (it counts them with the deck). What the player can still
 /// read: where each one sits when the hand is sorted by rank and when it is sorted by suit (the game sorts them by

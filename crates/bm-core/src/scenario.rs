@@ -64,14 +64,6 @@ impl Run {
         self.apply_voucher(v, true);
     }
 
-    /// Move every card in hand back to the deck.
-    pub fn clear_hand(&mut self) {
-        let h: Vec<CardId> = self.hand.drain(..).collect();
-        for id in h {
-            self.deck.insert(0, id);
-        }
-    }
-
     /// Push a position toward rare situations, for tests that must reach every path of a bot (the fair-play
     /// fuzz: `tests/fair_play.rs`, `examples/fair_fuzz.rs`): up to three jokers of any kind (some with an
     /// edition), up to two consumables, a voucher, enhancements, seals and editions on cards, and in a round

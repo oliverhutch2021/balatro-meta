@@ -46,11 +46,6 @@ impl HandType {
         HandType::ALL[i]
     }
 
-    /// The game's listing order: Flush Five = 1 ... High Card = 12.
-    pub fn game_order(self) -> u8 {
-        12 - self as u8
-    }
-
     pub fn name(self) -> &'static str {
         match self {
             HandType::HighCard => "High Card",
