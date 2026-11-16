@@ -1,0 +1,308 @@
+{
+ "calib": "danger-green-1k-salt2.jsonl.gz",
+ "shops": 7092,
+ "perception": {
+  "0.00-0.50": {
+   "shops": 928,
+   "chance_given": 0.336,
+   "lived": 0.349,
+   "money_left_median": 12.0
+  },
+  "0.50-0.75": {
+   "shops": 1781,
+   "chance_given": 0.648,
+   "lived": 0.751,
+   "money_left_median": 20
+  },
+  "0.75-0.90": {
+   "shops": 2204,
+   "chance_given": 0.83,
+   "lived": 0.942,
+   "money_left_median": 23.0
+  },
+  "0.90-0.97": {
+   "shops": 1500,
+   "chance_given": 0.936,
+   "lived": 0.993,
+   "money_left_median": 27.0
+  },
+  "0.97-1.00": {
+   "shops": 679,
+   "chance_given": 0.984,
+   "lived": 0.996,
+   "money_left_median": 29
+  }
+ },
+ "perception_by_ante": {
+  "4": {
+   "0.00-0.50": {
+    "shops": 279,
+    "chance_given": 0.353,
+    "lived": 0.423,
+    "money_left_median": 8
+   },
+   "0.50-0.75": {
+    "shops": 665,
+    "chance_given": 0.648,
+    "lived": 0.765,
+    "money_left_median": 13
+   },
+   "0.75-0.90": {
+    "shops": 931,
+    "chance_given": 0.831,
+    "lived": 0.936,
+    "money_left_median": 18
+   },
+   "0.90-0.97": {
+    "shops": 712,
+    "chance_given": 0.935,
+    "lived": 0.99,
+    "money_left_median": 24.0
+   },
+   "0.97-1.00": {
+    "shops": 280,
+    "chance_given": 0.983,
+    "lived": 0.989,
+    "money_left_median": 25.0
+   }
+  },
+  "5": {
+   "0.00-0.50": {
+    "shops": 424,
+    "chance_given": 0.326,
+    "lived": 0.29,
+    "money_left_median": 15.0
+   },
+   "0.50-0.75": {
+    "shops": 657,
+    "chance_given": 0.646,
+    "lived": 0.718,
+    "money_left_median": 22
+   },
+   "0.75-0.90": {
+    "shops": 736,
+    "chance_given": 0.83,
+    "lived": 0.958,
+    "money_left_median": 26.0
+   },
+   "0.90-0.97": {
+    "shops": 391,
+    "chance_given": 0.937,
+    "lived": 0.997,
+    "money_left_median": 28
+   },
+   "0.97-1.00": {
+    "shops": 169,
+    "chance_given": 0.983,
+    "lived": 1.0,
+    "money_left_median": 31
+   }
+  },
+  "6": {
+   "0.00-0.50": {
+    "shops": 225,
+    "chance_given": 0.334,
+    "lived": 0.369,
+    "money_left_median": 15
+   },
+   "0.50-0.75": {
+    "shops": 459,
+    "chance_given": 0.652,
+    "lived": 0.776,
+    "money_left_median": 25
+   },
+   "0.75-0.90": {
+    "shops": 537,
+    "chance_given": 0.829,
+    "lived": 0.931,
+    "money_left_median": 29
+   },
+   "0.90-0.97": {
+    "shops": 397,
+    "chance_given": 0.935,
+    "lived": 0.995,
+    "money_left_median": 33
+   },
+   "0.97-1.00": {
+    "shops": 230,
+    "chance_given": 0.985,
+    "lived": 1.0,
+    "money_left_median": 41.0
+   }
+  }
+ },
+ "as_the_shop_opened": {
+  "0.00-0.50": {
+   "shops": 1286,
+   "chance_given": 0.323,
+   "lived": 0.461,
+   "money_left_median": 14.0
+  },
+  "0.50-0.75": {
+   "shops": 2007,
+   "chance_given": 0.639,
+   "lived": 0.808,
+   "money_left_median": 21
+  },
+  "0.75-0.90": {
+   "shops": 2071,
+   "chance_given": 0.828,
+   "lived": 0.953,
+   "money_left_median": 24
+  },
+  "0.90-0.97": {
+   "shops": 1265,
+   "chance_given": 0.935,
+   "lived": 0.991,
+   "money_left_median": 28
+  },
+  "0.97-1.00": {
+   "shops": 463,
+   "chance_given": 0.983,
+   "lived": 0.998,
+   "money_left_median": 32
+  }
+ },
+ "bosses_antes_4_to_6": {
+  "The Wall": {
+   "faced": 97,
+   "killed": 39,
+   "kill_rate": 0.402
+  },
+  "The Needle": {
+   "faced": 83,
+   "killed": 20,
+   "kill_rate": 0.241
+  },
+  "The Water": {
+   "faced": 103,
+   "killed": 19,
+   "kill_rate": 0.184
+  },
+  "The Plant": {
+   "faced": 115,
+   "killed": 18,
+   "kill_rate": 0.157
+  },
+  "The Pillar": {
+   "faced": 100,
+   "killed": 17,
+   "kill_rate": 0.17
+  },
+  "The Eye": {
+   "faced": 107,
+   "killed": 17,
+   "kill_rate": 0.159
+  },
+  "The Mark": {
+   "faced": 108,
+   "killed": 15,
+   "kill_rate": 0.139
+  },
+  "The House": {
+   "faced": 102,
+   "killed": 14,
+   "kill_rate": 0.137
+  },
+  "The Fish": {
+   "faced": 105,
+   "killed": 14,
+   "kill_rate": 0.133
+  },
+  "The Goad": {
+   "faced": 96,
+   "killed": 13,
+   "kill_rate": 0.135
+  },
+  "The Manacle": {
+   "faced": 99,
+   "killed": 12,
+   "kill_rate": 0.121
+  },
+  "The Flint": {
+   "faced": 108,
+   "killed": 11,
+   "kill_rate": 0.102
+  },
+  "The Psychic": {
+   "faced": 114,
+   "killed": 11,
+   "kill_rate": 0.096
+  },
+  "The Hook": {
+   "faced": 103,
+   "killed": 11,
+   "kill_rate": 0.107
+  },
+  "The Arm": {
+   "faced": 120,
+   "killed": 11,
+   "kill_rate": 0.092
+  },
+  "The Club": {
+   "faced": 95,
+   "killed": 10,
+   "kill_rate": 0.105
+  },
+  "The Mouth": {
+   "faced": 99,
+   "killed": 10,
+   "kill_rate": 0.101
+  },
+  "The Wheel": {
+   "faced": 111,
+   "killed": 9,
+   "kill_rate": 0.081
+  },
+  "The Head": {
+   "faced": 91,
+   "killed": 9,
+   "kill_rate": 0.099
+  },
+  "The Tooth": {
+   "faced": 112,
+   "killed": 7,
+   "kill_rate": 0.062
+  },
+  "The Window": {
+   "faced": 98,
+   "killed": 5,
+   "kill_rate": 0.051
+  },
+  "The Serpent": {
+   "faced": 70,
+   "killed": 4,
+   "kill_rate": 0.057
+  },
+  "The Ox": {
+   "faced": 36,
+   "killed": 3,
+   "kill_rate": 0.083
+  }
+ },
+ "ceiling": {
+  "deaths": 226,
+  "money_median": 23.0,
+  "boss_chance_before": 0.205,
+  "boss_chance_after": 0.208,
+  "expected_saved_share": 0.003,
+  "after_over_half": 0.15,
+  "by_ante": {
+   "4": {
+    "deaths": 67,
+    "before": 0.271,
+    "after": 0.283
+   },
+   "5": {
+    "deaths": 98,
+    "before": 0.168,
+    "after": 0.175
+   },
+   "6": {
+    "deaths": 61,
+    "before": 0.19,
+    "after": 0.178
+   }
+  }
+ }
+}

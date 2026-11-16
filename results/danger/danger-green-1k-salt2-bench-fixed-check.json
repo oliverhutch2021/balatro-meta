@@ -1,0 +1,213 @@
+{
+ "bench": "danger-green-1k-salt2-bench-fixed.jsonl",
+ "runs": 1000,
+ "all": {
+  "n": 2323,
+  "cleared": 0.796,
+  "auc": 0.8106,
+  "by_band": {
+   "0.0-0.1": {
+    "n": 998,
+    "cleared": 0.604,
+    "mean_score": 0.013
+   },
+   "0.1-0.3": {
+    "n": 240,
+    "cleared": 0.858,
+    "mean_score": 0.186
+   },
+   "0.3-0.5": {
+    "n": 178,
+    "cleared": 0.893,
+    "mean_score": 0.389
+   },
+   "0.5-0.7": {
+    "n": 209,
+    "cleared": 0.943,
+    "mean_score": 0.595
+   },
+   "0.7-0.9": {
+    "n": 226,
+    "cleared": 0.969,
+    "mean_score": 0.799
+   },
+   "0.9-1.0": {
+    "n": 472,
+    "cleared": 0.987,
+    "mean_score": 0.982
+   }
+  }
+ },
+ "by_ante": {
+  "5": {
+   "n": 799,
+   "cleared": 0.75,
+   "auc": 0.8008,
+   "by_band": {
+    "0.0-0.1": {
+     "n": 420,
+     "cleared": 0.574,
+     "mean_score": 0.012
+    },
+    "0.1-0.3": {
+     "n": 81,
+     "cleared": 0.889,
+     "mean_score": 0.178
+    },
+    "0.3-0.5": {
+     "n": 50,
+     "cleared": 0.92,
+     "mean_score": 0.395
+    },
+    "0.5-0.7": {
+     "n": 54,
+     "cleared": 0.981,
+     "mean_score": 0.592
+    },
+    "0.7-0.9": {
+     "n": 68,
+     "cleared": 0.941,
+     "mean_score": 0.793
+    },
+    "0.9-1.0": {
+     "n": 126,
+     "cleared": 0.976,
+     "mean_score": 0.979
+    }
+   }
+  },
+  "6": {
+   "n": 602,
+   "cleared": 0.821,
+   "auc": 0.8101,
+   "by_band": {
+    "0.0-0.1": {
+     "n": 249,
+     "cleared": 0.635,
+     "mean_score": 0.015
+    },
+    "0.1-0.3": {
+     "n": 63,
+     "cleared": 0.873,
+     "mean_score": 0.196
+    },
+    "0.3-0.5": {
+     "n": 52,
+     "cleared": 0.904,
+     "mean_score": 0.378
+    },
+    "0.5-0.7": {
+     "n": 55,
+     "cleared": 0.964,
+     "mean_score": 0.605
+    },
+    "0.7-0.9": {
+     "n": 70,
+     "cleared": 0.986,
+     "mean_score": 0.792
+    },
+    "0.9-1.0": {
+     "n": 113,
+     "cleared": 0.991,
+     "mean_score": 0.986
+    }
+   }
+  },
+  "7": {
+   "n": 495,
+   "cleared": 0.863,
+   "auc": 0.8316,
+   "by_band": {
+    "0.0-0.1": {
+     "n": 152,
+     "cleared": 0.671,
+     "mean_score": 0.012
+    },
+    "0.1-0.3": {
+     "n": 48,
+     "cleared": 0.833,
+     "mean_score": 0.184
+    },
+    "0.3-0.5": {
+     "n": 40,
+     "cleared": 0.875,
+     "mean_score": 0.389
+    },
+    "0.5-0.7": {
+     "n": 58,
+     "cleared": 0.948,
+     "mean_score": 0.59
+    },
+    "0.7-0.9": {
+     "n": 46,
+     "cleared": 0.957,
+     "mean_score": 0.805
+    },
+    "0.9-1.0": {
+     "n": 151,
+     "cleared": 1.0,
+     "mean_score": 0.984
+    }
+   }
+  },
+  "8": {
+   "n": 427,
+   "cleared": 0.773,
+   "auc": 0.7934,
+   "by_band": {
+    "0.0-0.1": {
+     "n": 177,
+     "cleared": 0.576,
+     "mean_score": 0.011
+    },
+    "0.1-0.3": {
+     "n": 48,
+     "cleared": 0.812,
+     "mean_score": 0.189
+    },
+    "0.3-0.5": {
+     "n": 36,
+     "cleared": 0.861,
+     "mean_score": 0.397
+    },
+    "0.5-0.7": {
+     "n": 42,
+     "cleared": 0.857,
+     "mean_score": 0.594
+    },
+    "0.7-0.9": {
+     "n": 42,
+     "cleared": 1.0,
+     "mean_score": 0.811
+    },
+    "0.9-1.0": {
+     "n": 82,
+     "cleared": 0.976,
+     "mean_score": 0.978
+    }
+   }
+  }
+ },
+ "final_builds": {
+  "5": {
+   "won_median": 1.0,
+   "lost_median": 0.046,
+   "lost_above_half": 0.372
+  },
+  "6": {
+   "won_median": 0.992,
+   "lost_median": 0.0,
+   "lost_above_half": 0.222
+  },
+  "7": {
+   "won_median": 0.951,
+   "lost_median": 0.0,
+   "lost_above_half": 0.112
+  },
+  "8": {
+   "won_median": 0.575,
+   "lost_median": 0.0,
+   "lost_above_half": 0.021
+  }
+ }
+}

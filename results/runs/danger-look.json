@@ -1,0 +1,38 @@
+{
+ "job": "danger-look",
+ "commit": "42a05167d20d63ce1539819d6e91d0ddb1ce661a",
+ "started": "2026-11-16T06:41:35+00:00",
+ "finished": "2026-11-16T07:14:42+00:00",
+ "machine": {
+  "host": "PC",
+  "platform": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_threads": 16,
+  "ram_gb": 15.2,
+  "load_avg_1_5_15": [
+   9.7,
+   14.4,
+   15.2
+  ],
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "gpu": "NVIDIA GeForce RTX 4070 Ti, 12282 MiB, 617.42"
+ },
+ "steps": {
+  "build": 20,
+  "folder": 0,
+  "danger-green": 1966,
+  "danger-gzip": 0,
+  "danger-compare": 0,
+  "danger-check": 1,
+  "danger-bench-check": 0
+ },
+ "commands": {
+  "build": "make --no-print-directory build",
+  "folder": "mkdir -p .sync/calib .sync/bench",
+  "danger-green": "cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1 --runs 1000 --seed 1 --salt 2 --stake 3 --calibrate .sync/calib/danger-green-1k-salt2.jsonl --danger-bench .sync/calib/danger-green-1k-salt2-bench.jsonl --bench .sync/bench/danger-green-1k-salt2-bench-fixed.jsonl --out results/danger/danger-green-1k-salt2.json",
+  "danger-gzip": "gzip -f .sync/calib/danger-green-1k-salt2.jsonl .sync/calib/danger-green-1k-salt2-bench.jsonl",
+  "danger-compare": "scripts/compare_runs.py results/stakes/stake3-2k-f3-d4-open-packs-w2.5-salt2-on-ensemble8-w1.5.json results/danger/danger-green-1k-salt2.json --out results/danger/danger-green-1k-salt2-vs-d5.json",
+  "danger-check": "scripts/danger_check.py --calib .sync/calib/danger-green-1k-salt2.jsonl.gz --danger .sync/calib/danger-green-1k-salt2-bench.jsonl.gz --out results/danger/danger-green-1k-salt2-check.json",
+  "danger-bench-check": "scripts/bench_check.py .sync/bench/danger-green-1k-salt2-bench-fixed.jsonl --out results/danger/danger-green-1k-salt2-bench-fixed-check.json"
+ }
+}
