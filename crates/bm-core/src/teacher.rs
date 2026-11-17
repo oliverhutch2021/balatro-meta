@@ -3234,7 +3234,10 @@ fn shop_option_list(
         if !samples.is_empty() {
             // Another reroll after this one, while the money allows it (its cost goes up by one).
             let again = run.spendable() - 2 * run.reroll_cost > keep;
-            let cost = crate::value::quick(run, vs) - bare.iter().sum::<f64>() / bare.len() as f64;
+            // "reroll-price-x" (a league price gene, lab #33): the value's own price of a reroll (what the money spent
+            // is worth to it), scaled.
+            let cost = crate::value::p_param("reroll-price-x", 1.0)
+                * (crate::value::quick(run, vs) - bare.iter().sum::<f64>() / bare.len() as f64);
             let q = reroll_worth(run, &best, cost, again);
             audit(|| {
                 let n = best.len().max(1) as f64;

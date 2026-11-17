@@ -50,11 +50,12 @@ REC = Path(".sync/league")
 # generation 0 with its chance of being set; when not set the base's own value stands.
 GENES: list[tuple[str, str, tuple, float]] = [
     # Forced moves.
-    ("spend-down", "level", (0, 40, 5), 0.5),
+    # B's range fix before generation 2 (lab #33): spend-down 10 and below and ahead 2 and above are known Worse.
+    ("spend-down", "level", (15, 40, 5), 0.5),
     ("no-open-packs", "switch", (), 0.3),
     ("open-packs-all", "switch", (), 0.15),
     ("skips", "switch", (), 0.2),
-    ("ahead", "level", (1, 3, 1), 0.1),
+    ("ahead", "level", (1, 1, 1), 0.1),
     # The user's judgements, each of which the league may overrule.
     ("no-card-sharp", "switch", (), 0.2),
     ("no-card-tiers", "switch", (), 0.2),
@@ -72,6 +73,20 @@ GENES: list[tuple[str, str, tuple, float]] = [
     ("deck-share", "uniform", (0.1, 0.8), 0.4),
     # How sure the value is of a blind's outcome from its sample rounds (generation 1, S: the far terms' steepness).
     ("sharpness", "log", (1.25, 5.0), 0.3),
+    # Generation 2's price genes (S, lab #33): the reroll's price, a held Tarot's and Planet's worth, the scaling and
+    # economy families' credit.
+    ("reroll-price-x", "log", (0.4, 2.0), 0.3),
+    ("tarot-x", "log", (0.5, 3.0), 0.3),
+    ("planet-x", "log", (0.5, 3.0), 0.3),
+    ("fam-scaling-x", "log", (0.5, 2.0), 0.3),
+    ("fam-econ-x", "log", (0.5, 2.0), 0.3),
+    # Closed ideas kept as genes (S, lab #34): the deck's size priced, deck fixing and its price, the x-mult fit, a
+    # reroll worth the best of several.
+    ("thin", "uniform", (0.0, 0.03), 0.15),
+    ("deck-fix", "switch", (), 0.15),
+    ("fix-dollars", "log", (0.3, 1.5), 0.15),
+    ("xmult-fit", "uniform", (0.0, 0.3), 0.15),
+    ("reroll-best", "switch", (), 0.15),
 ]
 
 
@@ -252,8 +267,8 @@ LN_ANTE4_BOSS_GREEN = math.log(16000)
 
 
 def lead_entering_ante4(gen, mid: str, upto: int) -> dict:
-    """The mean lead entering ante 4 over the member's blocks so far, from its calibration lines (runs that got there),
-    and how many runs got there. None-valued when no recording is at hand."""
+    """The mean lead entering ante 4 and the mean money held then, over the member's blocks so far, from its calibration
+    lines (runs that got there), and how many runs got there. None-valued when no recording is at hand."""
     import gzip
     leads = []
     for b in range(upto + 1):
@@ -265,8 +280,12 @@ def lead_entering_ante4(gen, mid: str, upto: int) -> dict:
                 r = json.loads(line)
                 first = next((x for x in r.get("rounds", []) if x["ante"] == 4 and x["blind"] == 0), None)
                 if first and first.get("at_start"):
-                    leads.append(first["at_start"]["power"] - LN_ANTE4_BOSS_GREEN)
-    return {"mean": round(sum(leads) / len(leads), 3), "runs": len(leads)} if leads else {"mean": None, "runs": 0}
+                    # The lead, and the money held (S: which of the two the winners bring to the wall).
+                    leads.append((first["at_start"]["power"] - LN_ANTE4_BOSS_GREEN, first["at_start"].get("money", 0)))
+    if not leads:
+        return {"mean": None, "money": None, "runs": 0}
+    return {"mean": round(sum(x for x, _ in leads) / len(leads), 3),
+            "money": round(sum(m for _, m in leads) / len(leads), 2), "runs": len(leads)}
 
 
 def deaths(stages: str) -> dict[int, float]:
@@ -293,11 +312,16 @@ def run_generation(gen, play=None, plan_only: bool = False, members_given: list[
     if best is None:
         raise SystemExit("No champion report found to play the league on")
     base_args = list(best[1])
-    given = members_given if members_given is not None else members_for(gen)
-    members = {member_id(m): {"genes": m} for m in given}
     led = load(gen)
-    for k, m in led.get("members", {}).items():
-        members.setdefault(k, m)
+    if led.get("members") and members_given is None:
+        # A generation already begun keeps its members as its ledger has them: a change to the genes' ranges or to
+        # the breeding afterwards must never add members that skipped its first block (B's rule 2, lab #34).
+        members = dict(led["members"])
+    else:
+        given = members_given if members_given is not None else members_for(gen)
+        members = {member_id(m): {"genes": m} for m in given}
+        for k, m in led.get("members", {}).items():
+            members.setdefault(k, m)
     first_seed = seed_base if seed_base is not None else SEED_BASE + int(gen) * GEN_SEEDS
     background = list(background or [])
     # The reference plays the background and `reference` (generation 1: generation 0's best); members their own genes.

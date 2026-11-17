@@ -163,3 +163,15 @@ def test_generation_1_has_s_founders_crosses_and_the_base_and_plays_4579_as_refe
     base = next(c for c in played if c[0] != "gzip" and "/base-b0" in c[c.index("--out") + 1])
     assert base[base.index("--teacher-options") + 1] == "precise"
     assert all("lead_ante4" in m for m in led["members"].values())
+
+
+def test_a_generation_begun_keeps_its_ledgers_members_when_the_genes_change(tmp_path, monkeypatch):
+    monkeypatch.setattr(league, "ROOT", tmp_path)
+    led = {"members": {"aaaa": {"genes": ["skips"]}}}
+    p = tmp_path / league.ledger_path(5)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(led))
+    monkeypatch.setattr(league.jobs, "best_8k_report",
+                        lambda root: (0.75, ["--value-weight", "2.5", "--teacher-options", "precise"], "x.json"))
+    out = league.run_generation(5, plan_only=True)
+    assert list(out["members"]) == ["aaaa"], "no member is added from a regenerated list"

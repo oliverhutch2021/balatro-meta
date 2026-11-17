@@ -229,12 +229,25 @@ pub const PARAMS: &[(&str, f64)] = &[
     // "spend-down=F" (lab #27, a style arm): the money floor a forced reroll keeps (teacher.rs `spend_down`); off unless
     // given.
     ("spend-down", 0.0),
+    // League price genes (lab #33, generation 2): the reroll's price, a held Tarot's and Planet's worth, and two family
+    // credits: the growth the scaling jokers bring (their chips, mult and x mult per round) and the economy jokers'
+    // money per round.
+    ("reroll-price-x", 1.0),
+    ("tarot-x", 1.0),
+    ("planet-x", 1.0),
+    ("fam-scaling-x", 1.0),
+    ("fam-econ-x", 1.0),
     // "danger-spend=T" (lab #33): the chance of living through the ante under which a shop spends to raise it.
     ("danger-spend", 0.0),
     ("reroll-later-x", 1.0),
 ];
 
 /// A number of the formula: as an option set it, else its usual value.
+/// A `PARAMS` value as the options set it (for the teacher's own uses).
+pub(crate) fn p_param(name: &str, usual: f64) -> f64 {
+    p(name, usual)
+}
+
 fn p(name: &str, usual: f64) -> f64 {
     crate::teacher::param(name).unwrap_or(usual)
 }
@@ -652,6 +665,16 @@ pub fn flows_for(run: &Run, shares: &[f64; 12]) -> Flows {
     f.tarots += purple * thrown / deck;
     // "held-cards": with every consumable slot full, what the seals and jokers would make is lost (a Blue Seal's
     // Planet, a Purple Seal's Tarot, Cartomancer's...), so a full slot costs what it blocks.
+    // The family credits (league genes, lab #33): the scaling jokers' growth and the economy's money per round.
+    let (scaling, econ) = (p("fam-scaling-x", 1.0), p("fam-econ-x", 1.0));
+    if scaling != 1.0 {
+        f.chips *= scaling;
+        f.mult *= scaling;
+        for x in f.xmult.iter_mut() {
+            x.1 *= scaling;
+        }
+    }
+    f.money *= econ;
     if crate::teacher::on("held-cards") && run.consumables.len() as i32 >= run.consumable_slots {
         f.levels -= blue * held_at_end;
         f.tarots = 0.0;
@@ -843,6 +866,16 @@ fn tag_dollars(t: crate::tags::TagKind) -> f64 {
 /// with Steel Joker, Mime or Baron, Magician's lucky cards with Lucky Cat...). Which cards they change, and
 /// whether a suit or a rank is worth building, is judged when they are used, by what the deck then deals.
 pub fn consumable_dollars(run: &Run, c: &crate::create::Consumable) -> f64 {
+    // "tarot-x", "planet-x" (league price genes, lab #33): a held Tarot's or Planet's worth, scaled.
+    let x = match c.kind.set() {
+        ConsumableSet::Tarot => p("tarot-x", 1.0),
+        ConsumableSet::Planet => p("planet-x", 1.0),
+        _ => 1.0,
+    };
+    x * consumable_dollars_unscaled(run, c)
+}
+
+fn consumable_dollars_unscaled(run: &Run, c: &crate::create::Consumable) -> f64 {
     // "held-cards": a card held through a round that never used it is worth nothing held (selling it is what it is
     // still good for: the user's "anything to be sold is sold at the next shop").
     if c.kind.set() != ConsumableSet::Planet
@@ -2851,6 +2884,29 @@ mod tests {
             eprintln!("S's file: offset {} round spread {} boss shift {}", f.offset, f.round_spread, f.boss_shift);
             assert!(f.round_spread > 0.0);
         }
+    }
+
+    /// The league's price genes (lab #33): a held Tarot's and Planet's worth and the build's growth and money per round
+    /// scale with them; at 1 nothing changes.
+    #[test]
+    fn the_price_genes_scale_what_they_name() {
+        use crate::content::ConsumableKind as C;
+        use crate::teacher::with_options;
+        let mut run = first_shop("GENES1");
+        let tarot = run.make_consumable(C::Strength);
+        let planet = run.make_consumable(C::Mercury);
+        let base = (consumable_dollars(&run, &tarot), consumable_dollars(&run, &planet));
+        let x = with_options(&["tarot-x=2", "planet-x=0.5"], || {
+            (consumable_dollars(&run, &tarot), consumable_dollars(&run, &planet))
+        });
+        assert!((x.0 - 2.0 * base.0).abs() < 1e-9 && (x.1 - 0.5 * base.1).abs() < 1e-9, "{base:?} {x:?}");
+        run.add_joker(JokerKind::GreenJoker);
+        run.add_joker(JokerKind::GoldenJoker);
+        let shares = [1.0 / 12.0; 12];
+        let f1 = flows_for(&run, &shares);
+        let f2 = with_options(&["fam-scaling-x=2", "fam-econ-x=0"], || flows_for(&run, &shares));
+        assert!(f1.mult > 0.0 && (f2.mult - 2.0 * f1.mult).abs() < 1e-9, "Green Joker's growth doubled");
+        assert!(f1.money > 0.0 && f2.money == 0.0, "Golden Joker's money off");
     }
 
     /// C8 (lab #30): the user's tiers rank Lucky above Mult and Steel, Glass at the top; the old table had Mult over
