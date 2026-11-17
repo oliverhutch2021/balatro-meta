@@ -1666,6 +1666,20 @@ to 1,000, the best 4 to 4,000, parents from block C alone. The ledger records de
 cd /mnt/h/balatro-meta && while pgrep -f "league.py --wall" >/dev/null; do sleep 60; done; git add results && (git commit -qm "results(league wall)" || true) && make sync && make league GEN=1
 ```
 
+## Step 58: league generation 2 (S, lab #33, 17 November)
+
+Generation 1 (block C, 3,000 seeds from 41,001, against 4579 at 37.27%): four Better members, three of them the leader
+plus the long run at about three quarters. S's new base is a8e343eb2a (`long-money-x=0.841, long-power-x=0.773,
+long-run=0.255, money-scale=36.1, no-card-tiers, skips`, 39.40%, +2.13); 5bd50d6860 (W's money and `open-packs-all`,
+39.60%) stays as a second shape. Generation 2 plays a8e3 as reference on fresh seeds (from 50,001): a8e3 against
+itself, the `-d5` base, the other three parents, a8e3 with the Tarot tiers on, three crosses of the two shapes, each new
+price gene once on a8e3, 14 bred, 8 random (40). `fix-dollars` is only ever drawn with `deck-fix` (B). About a day,
+like generation 1.
+
+```
+cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(league gen 1)" || true) && make sync && make league GEN=2
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

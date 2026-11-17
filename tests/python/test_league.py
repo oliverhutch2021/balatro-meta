@@ -165,6 +165,38 @@ def test_generation_1_has_s_founders_crosses_and_the_base_and_plays_4579_as_refe
     assert all("lead_ante4" in m for m in led["members"].values())
 
 
+def test_generation_2_is_s_list_and_plays_a8e3_as_reference(tmp_path, monkeypatch):
+    ms = league.members_for(2)
+    keys = {",".join(m) for m in ms}
+    assert len(ms) == 40 and len(keys) == 40 and [] in ms, "the -d5 base is a member"
+    designed = league.dedupe(league.GEN2_DESIGNED)
+    assert len(designed) == 18 and ms[:18] == designed
+    assert ",".join(sorted(g for g in league.G1_A8E3 if g != "no-card-tiers")) in keys, "the tiers pair has the tiers on"
+    assert all("fix-dollars" not in league.gene_names(m) or "deck-fix" in league.gene_names(m) for m in ms)
+    monkeypatch.setattr(league, "ROOT", tmp_path)
+    monkeypatch.setattr(league.jobs, "best_8k_report",
+                        lambda root: (0.75, ["--value-weight", "2.5", "--teacher-options", "precise"], "x.json"))
+    played = []
+
+    def play(cmd):
+        played.append(cmd)
+        if cmd[0] != "gzip":
+            out = Path(tmp_path / cmd[cmd.index("--out") + 1])
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps({"run_stages": "Y" * int(cmd[cmd.index("--runs") + 1])}))
+        return 0
+    led = league.run_generation(2, play=play, stop_after=0)
+    assert led["reference"] == league.G1_A8E3
+    ref = next(c for c in played if c[0] != "gzip" and "/ref-b0" in c[c.index("--out") + 1])
+    assert ref[ref.index("--teacher-options") + 1] == "precise," + ",".join(league.G1_A8E3)
+    assert int(ref[ref.index("--seed") + 1]) == league.SEED_BASE + 2 * league.GEN_SEEDS, "fresh seeds"
+
+
+def test_a_partnered_gene_is_dropped_without_its_partner():
+    assert league.tidy(["fix-dollars=1", "skips"]) == ["skips"]
+    assert league.tidy(["deck-fix", "fix-dollars=1"]) == ["deck-fix", "fix-dollars=1"]
+
+
 def test_a_generation_begun_keeps_its_ledgers_members_when_the_genes_change(tmp_path, monkeypatch):
     monkeypatch.setattr(league, "ROOT", tmp_path)
     led = {"members": {"aaaa": {"genes": ["skips"]}}}

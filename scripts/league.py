@@ -101,13 +101,27 @@ def draw_gene(name: str, kind: str, rng: tuple, r: random.Random) -> str:
     return f"{name}={v:.3g}"
 
 
+# A gene that only acts beside another (B, lab #33): fix-dollars prices deck-fix's fixes and is nothing without it.
+NEEDS = {"fix-dollars": "deck-fix"}
+
+
+def tidy(genes: list[str]) -> list[str]:
+    """Drop a gene whose partner (NEEDS) is absent, so it never wastes a member's slot."""
+    names = {gene_name(g) for g in genes}
+    return [g for g in genes if NEEDS.get(gene_name(g), gene_name(g)) in names]
+
+
 def random_member(r: random.Random) -> list[str]:
-    genes = [draw_gene(n, k, rg, r) for n, k, rg, p in GENES if r.random() < p]
+    genes = tidy([draw_gene(n, k, rg, r) for n, k, rg, p in GENES if r.random() < p])
     return genes or [draw_gene(*GENES[0][:3], r)]
 
 
 def gene_name(g: str) -> str:
     return g.split("=")[0]
+
+
+def gene_names(genes: list[str]) -> set[str]:
+    return {gene_name(g) for g in genes}
 
 
 def breed(parents: list[list[str]], r: random.Random) -> list[str]:
@@ -122,7 +136,7 @@ def breed(parents: list[list[str]], r: random.Random) -> list[str]:
     child = [g for g in child if gene_name(g) != n]
     if r.random() < 0.7:
         child.append(draw_gene(n, k, rg, r))
-    return sorted(set(child)) or random_member(r)
+    return sorted(set(tidy(child))) or random_member(r)
 
 
 def member_id(genes: list[str]) -> str:
@@ -152,15 +166,50 @@ GEN1_CROSSES = [
 ]
 
 
+# Generation 2 (S, lab #33, 17 November): the reference is generation 1's plainest Better member, a8e343eb2a (the new
+# base, -d6 once the prunes land); the -d5 base keeps the total gain on one scale; generation 1's other three parents
+# as founders; the Tarot tiers pair (a8e3 with the tiers on); crosses of the two shapes (5bd5 pays early and collects
+# late); each new gene once on a8e3 (breeding material, not tests: B); 14 bred from the four parents, 8 random.
+G1_A8E3 = ["long-money-x=0.841", "long-power-x=0.773", "long-run=0.255", "money-scale=36.1", "no-card-tiers", "skips"]
+G1_5BD5 = ["above-cap=0.899", "buying-power=0.0539", "long-money-x=0.841", "long-power-x=0.75", "money-scale=36.1",
+           "no-card-tiers", "open-packs-all", "skips"]
+G1_F418 = ["long-money-x=0.841", "long-power-x=0.75", "money-scale=36.1", "no-card-tiers", "skips"]
+G1_1715 = ["deck-share=0.517", "long-power-x=0.773", "money-scale=36.1", "no-card-tiers", "skips"]
+GEN2_PARENTS = [G1_A8E3, G1_5BD5, G1_F418, G1_1715]
+GEN2_SINGLES = [["tarot-x=2"], ["planet-x=1.5"], ["reroll-price-x=0.5"], ["fam-scaling-x=1.5"], ["fam-econ-x=1.5"],
+                ["thin=0.015"], ["deck-fix", "fix-dollars=1"], ["xmult-fit=0.15"], ["reroll-best"]]
+GEN2_DESIGNED = (
+    [G1_A8E3, []]
+    + [G1_5BD5, G1_F418, G1_1715]
+    + [[g for g in G1_A8E3 if g != "no-card-tiers"]]
+    + [G1_A8E3 + ["open-packs-all"], G1_5BD5 + ["long-run=0.255"], [g for g in G1_5BD5 if g != "open-packs-all"]]
+    + [G1_A8E3 + x for x in GEN2_SINGLES]
+)
+GEN2_BRED, GEN2_RANDOM = 14, 8
+# Each designed generation's reference (the ledger keeps it too).
+REFERENCES = {1: G0_4579, 2: G1_A8E3}
+
+
 def members_for(gen: int, ledger_dir: Path = OUT) -> list[list[str]]:
-    """Generation `gen`'s members: drawn at random (generation 0); generation 1 as S drew it (GEN1_*); later ones bred
-    from the last generation's parents plus RANDOM_EACH_GEN random ones. The same every time it is asked."""
+    """Generation `gen`'s members: drawn at random (generation 0); generations 1 and 2 as S drew them (GEN1_*, GEN2_*);
+    later ones bred from the last generation's parents plus RANDOM_EACH_GEN random ones. The same every time it is
+    asked."""
     r = random.Random(1000 + gen)
     if gen == 1:
         designed = GEN1_FOUNDERS + GEN1_CROSSES + [[]]
         n_bred = MEMBERS - len(dedupe(designed)) - RANDOM_EACH_GEN
         kids = [breed(GEN1_FOUNDERS, r) for _ in range(n_bred + 10)]
         return dedupe(designed + kids + [random_member(r) for _ in range(RANDOM_EACH_GEN + 5)])[:MEMBERS]
+    if gen == 2:
+        designed = dedupe(GEN2_DESIGNED)
+        kids = []
+        while len(dedupe(designed + kids)) < len(designed) + GEN2_BRED:
+            kids.append(breed(GEN2_PARENTS, r))
+        bred = dedupe(designed + kids)
+        rand = []
+        while len(dedupe(bred + rand)) < len(bred) + GEN2_RANDOM:
+            rand.append(random_member(r))
+        return dedupe(bred + rand)
     if gen > 0:
         prev = load(gen - 1, ledger_dir)
         parents = [m["genes"] for m in prev.get("members", {}).values() if m.get("parent")]
@@ -325,8 +374,8 @@ def run_generation(gen, play=None, plan_only: bool = False, members_given: list[
     first_seed = seed_base if seed_base is not None else SEED_BASE + int(gen) * GEN_SEEDS
     background = list(background or [])
     # The reference plays the background and `reference` (generation 1: generation 0's best); members their own genes.
-    if reference is None and members_given is None and gen == 1:
-        reference = GEN1_REFERENCE
+    if reference is None and members_given is None and gen in REFERENCES:
+        reference = REFERENCES[gen]
     reference = list(reference or [])
     ledger = {"gen": gen, "seed_base": first_seed, "blocks": list(blocks), "salt": SALT, "stake": STAKE,
               "base_options": base_args[base_args.index("--teacher-options") + 1], "background": background,
