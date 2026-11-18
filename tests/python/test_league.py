@@ -103,7 +103,9 @@ def test_selection_uses_the_latest_block_alone_and_a_stop_keeps_the_rest_for_lat
         later = first > 70001
         good = ("skips" in opts and not later) or ("spend-down" in opts and later)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps({"run_stages": "Y" * runs if good else "".join("Y" if i % 2 else "M" for i in
+        # Losses end a stage apart from the reference's (wins the same), so no member plays as the reference.
+        lost = "M" if "/ref-" in str(out) else "L"
+        out.write_text(json.dumps({"run_stages": "Y" * runs if good else "".join("Y" if i % 2 else lost for i in
                                                                                   range(runs))}))
         return 0
     led = league.run_generation("t", play=play, members_given=members, blocks=(20, 40, 60), promote=(2, 1),
@@ -114,6 +116,41 @@ def test_selection_uses_the_latest_block_alone_and_a_stop_keeps_the_rest_for_lat
     ms = {",".join(m["genes"]): m for m in led["members"].values()}
     assert ms["spend-down=20"].get("block_2") and not ms["skips"].get("block_2"), "block C chosen on block B alone"
     assert ms["spend-down=20"]["parent"] and not ms["skips"]["parent"]
+
+
+def test_a_check_and_a_member_that_plays_as_the_reference_are_never_promoted(tmp_path, monkeypatch):
+    """B's rule (lab #33): the reference's own genes are a check only; a member ending differently from the reference
+    on under 3% of seeds plays as the reference (Level), so neither goes on, whatever its estimate."""
+    monkeypatch.setattr(league, "ROOT", tmp_path)
+    monkeypatch.setattr(league.jobs, "best_8k_report",
+                        lambda root: (0.75, ["--value-weight", "2.5", "--teacher-options", "precise"], "x.json"))
+    members = [["skips"], ["thin=0.01"], ["long-run=0.2"], ["spend-down=20"]]
+
+    def play(cmd):
+        if cmd[0] == "gzip":
+            return 0
+        out = Path(tmp_path / cmd[cmd.index("--out") + 1])
+        runs = int(cmd[cmd.index("--runs") + 1])
+        opts = cmd[cmd.index("--teacher-options") + 1]
+        ref = "".join("Y" if i % 2 else "M" for i in range(runs))
+        if "thin" in opts:  # one seed in 100 won where the reference lost: under 3%, and a tiny SE
+            st = "".join("Y" if i % 100 == 0 else c for i, c in enumerate(ref))
+        elif "long-run" in opts:  # a real member: loses elsewhere and wins a little more
+            st = "".join("Y" if i % 7 == 0 else ("Y" if i % 2 else "L") for i in range(runs))
+        elif "spend-down" in opts:
+            st = "".join("Y" if i % 2 else "K" for i in range(runs))
+        else:  # "skips": the reference's own genes
+            st = ref
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps({"run_stages": st}))
+        return 0
+    led = league.run_generation("t", play=play, members_given=members, blocks=(200, 400), promote=(4,),
+                                seed_base=70001, cut_first=False, reference=["skips"])
+    ms = {",".join(m["genes"]): m for m in led["members"].values()}
+    assert ms["skips"]["check"] and not ms["skips"].get("block_1") and not ms["skips"]["parent"]
+    assert ms["thin=0.01"]["plays_as_reference"] and not ms["thin=0.01"].get("block_1")
+    assert ms["thin=0.01"]["estimate"]["diff"] > 0, "Better on its estimate, and still not promoted"
+    assert ms["long-run=0.2"].get("block_1") and ms["spend-down=20"].get("block_1")
 
 
 def test_the_wall_league_has_s_six_members_on_w_and_its_own_seeds(tmp_path, monkeypatch):

@@ -1690,6 +1690,8 @@ Generation 2 left the price genes level with a8e3 (block B: the top 12 within ±
   `late-above-cap`, `late-buying-power`, `late-spend-down`, `late-open-packs-all`, `late-no-open-packs-all`). Off
   unless given.
 - `fam-econ-x` never scales a rental's rent (B). No change at Green.
+- B's promotion rule: a member with the reference's own genes is a check only, and one whose runs end differently on
+  under 3% of a block's seeds "plays as the reference" (Level); neither is promoted or made a parent.
 - Generation 3: reference a8e3; the `-d5` base; nine schedules on a8e3 (the present counted more from ante 4 or 5,
   the future back at full weight from 4, build early and cash in, packs opened late or only early, spending down late,
   the bank spent late); generation 2's parents; 16 bred from parents and schedules; random to 40. Seeds from 70,001

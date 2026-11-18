@@ -314,6 +314,19 @@ def stages_of(report: dict) -> str:
     return report.get("run_stages", "")
 
 
+# B's rule (lab #33, 18 November): a member that plays almost every seed as the reference does can't differ, so it can't
+# be Better; its tiny SE escapes the shrinking. Under this share of seeds ending differently it is "plays as the
+# reference", read as Level, never promoted or a parent. A member whose genes are the reference's is a check only.
+SAME_PLAY = 0.03
+
+
+def differs(member: dict, ref: dict) -> float:
+    """The share of seeds whose runs end at a different stage, member against reference (prefix pairing)."""
+    a, b = stages_of(member), stages_of(ref)
+    n = min(len(a), len(b))
+    return sum(x != y for x, y in zip(a[:n], b[:n])) / n if n else 0.0
+
+
 def paired(member: dict, ref: dict) -> tuple[int, int, int]:
     """(seeds, only the reference won, only the member won) from two block reports, by compare_runs' own pairing
     (which also refuses reports of different seed bases or stakes)."""
@@ -472,9 +485,22 @@ def run_generation(gen, play=None, plan_only: bool = False, members_given: list[
         return ledger
     ids = list(members)
     alive = ids
+    ref_genes = sorted(background + reference)
+
+    def as_reference(k: str, block: int) -> bool:
+        """A check (the reference's own genes) or a member that plays as the reference on `block` (B's rule)."""
+        m = members[k]
+        m["check"] = sorted(background + m["genes"]) == ref_genes
+        mr, rr = ROOT / report_path(gen, k, block), ROOT / report_path(gen, "ref", block)
+        if mr.exists() and rr.exists():
+            m[f"differs_block_{block}"] = round(differs(json.loads(mr.read_text()), json.loads(rr.read_text())), 4)
+        m["plays_as_reference"] = m.get(f"differs_block_{block}", 1.0) < SAME_PLAY
+        return m["check"] or m["plays_as_reference"]
+
     for block in range(len(blocks)):
         if block > 0:
-            alive = sorted(alive, key=lambda k: -members[k].get("shrunk", -1))[:promote[block - 1]]
+            ranked = [k for k in alive if not as_reference(k, block - 1)]
+            alive = sorted(ranked, key=lambda k: -members[k].get("shrunk", -1))[:promote[block - 1]]
         # The reference plays the background alone (the base, or W); each member the background and its own genes.
         run_block(gen, "ref", background + reference, block, base_args, play, blocks, first_seed)
         for k in alive:
@@ -497,7 +523,8 @@ def run_generation(gen, play=None, plan_only: bool = False, members_given: list[
     last = len(blocks) - 1
     for k in ids:
         e = members[k].get(f"estimate_block_{last}", {})
-        members[k]["parent"] = bool(members[k].get(f"block_{last}") and e.get("hi", -1) > 0)
+        members[k]["parent"] = bool(members[k].get(f"block_{last}") and e.get("hi", -1) > 0
+                                    and not (members[k].get(f"block_{last}") and as_reference(k, last)))
     save()
     print(table(ledger))
     return ledger
