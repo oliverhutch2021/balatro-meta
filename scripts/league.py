@@ -88,6 +88,14 @@ GENES: list[tuple[str, str, tuple, float]] = [
     ("fix-dollars", "log", (0.3, 1.5), 0.15),
     ("xmult-fit", "uniform", (0.0, 0.3), 0.15),
     ("reroll-best", "switch", (), 0.15),
+    # Schedules by ante (S, lab #33, generation 3): from the decision's ante `phase` on, the late values given.
+    ("phase", "level", (3, 6, 1), 0.3),
+    ("late-long-power-x", "log", (0.3, 3.0), 0.3),
+    ("late-above-cap", "uniform", (0.0, 1.3), 0.2),
+    ("late-buying-power", "log", (0.015, 0.06), 0.2),
+    ("late-spend-down", "level", (15, 40, 5), 0.2),
+    ("late-open-packs-all", "switch", (), 0.15),
+    ("late-no-open-packs-all", "switch", (), 0.15),
 ]
 
 
@@ -102,14 +110,29 @@ def draw_gene(name: str, kind: str, rng: tuple, r: random.Random) -> str:
     return f"{name}={v:.3g}"
 
 
-# A gene that only acts beside another (B, lab #33): fix-dollars prices deck-fix's fixes and is nothing without it.
-NEEDS = {"fix-dollars": "deck-fix"}
+# A gene that only acts beside another (B, lab #33): fix-dollars prices deck-fix's fixes and is nothing without it; a
+# late value is nothing without a phase.
+NEEDS = {"fix-dollars": "deck-fix", "late-long-power-x": "phase", "late-above-cap": "phase",
+         "late-buying-power": "phase", "late-spend-down": "phase", "late-open-packs-all": "phase",
+         "late-no-open-packs-all": "phase"}
+# A gene that does nothing beside another: turning open-packs-all on late when it is on throughout, or off late when it
+# was never on.
+IDLE_WITH = {"late-open-packs-all": "open-packs-all"}
+IDLE_WITHOUT = {"late-no-open-packs-all": "open-packs-all"}
 
 
 def tidy(genes: list[str]) -> list[str]:
-    """Drop a gene whose partner (NEEDS) is absent, so it never wastes a member's slot."""
+    """Drop a gene whose partner (NEEDS) is absent, or that does nothing beside the others, so it never wastes a
+    member's slot; a phase with no late value goes too."""
     names = {gene_name(g) for g in genes}
-    return [g for g in genes if NEEDS.get(gene_name(g), gene_name(g)) in names]
+
+    def useful(n: str) -> bool:
+        return ((n not in NEEDS or NEEDS[n] in names) and (n not in IDLE_WITH or IDLE_WITH[n] not in names)
+                and (n not in IDLE_WITHOUT or IDLE_WITHOUT[n] in names))
+    out = [g for g in genes if useful(gene_name(g))]
+    if not any(gene_name(g).startswith("late-") for g in out):
+        out = [g for g in out if gene_name(g) != "phase"]
+    return out
 
 
 def random_member(r: random.Random) -> list[str]:
@@ -187,8 +210,24 @@ GEN2_DESIGNED = (
     + [G1_A8E3 + x for x in GEN2_SINGLES]
 )
 GEN2_BRED, GEN2_RANDOM = 14, 8
+# Generation 3 (S, lab #33, point 4: genes that change with the ante): the reference stays the base, a8e3; schedules
+# on it that ask the user's question (present against later strength) directly; generation 2's parents (from its
+# ledger); 16 bred from the parents and the schedules, 8 random over all genes, the schedule genes included.
+GEN3_SCHEDULES = [
+    G1_A8E3 + ["phase=4", "late-long-power-x=0.5"],           # from ante 4, the present counts more
+    G1_A8E3 + ["phase=5", "late-long-power-x=0.5"],
+    G1_A8E3 + ["phase=4", "late-long-power-x=1"],             # the future back at full weight from ante 4
+    [g for g in G1_A8E3 if not g.startswith("long-power-x")] + ["long-power-x=1", "phase=4",
+                                                                 "late-long-power-x=0.6"],  # build early, cash in
+    G1_A8E3 + ["phase=5", "late-open-packs-all"],             # 5bd5's late collecting without its early cost
+    G1_A8E3 + ["open-packs-all", "phase=4", "late-no-open-packs-all"],
+    G1_A8E3 + ["phase=5", "late-spend-down=25"],
+    G1_A8E3 + ["phase=6", "late-above-cap=0.3"],              # the bank spent late
+    G1_A8E3 + ["phase=4", "late-buying-power=0.025"],
+]
+GEN3_BRED, GEN3_RANDOM = 16, 8
 # Each designed generation's reference (the ledger keeps it too).
-REFERENCES = {1: G0_4579, 2: G1_A8E3}
+REFERENCES = {1: G0_4579, 2: G1_A8E3, 3: G1_A8E3}
 
 
 def members_for(gen: int, ledger_dir: Path = OUT) -> list[list[str]]:
@@ -211,6 +250,19 @@ def members_for(gen: int, ledger_dir: Path = OUT) -> list[list[str]]:
         while len(dedupe(bred + rand)) < len(bred) + GEN2_RANDOM:
             rand.append(random_member(r))
         return dedupe(bred + rand)
+    if gen == 3:
+        prev = load(2, ledger_dir)
+        parents = [m["genes"] for m in prev.get("members", {}).values() if m.get("parent")]
+        designed = dedupe([G1_A8E3, []] + GEN3_SCHEDULES + parents)
+        pool = dedupe(parents + GEN3_SCHEDULES)
+        kids = []
+        while len(dedupe(designed + kids)) < len(designed) + GEN3_BRED:
+            kids.append(breed(pool, r))
+        bred = dedupe(designed + kids)
+        rand = []
+        while len(dedupe(bred + rand)) < MEMBERS:
+            rand.append(random_member(r))
+        return dedupe(bred + rand)[:MEMBERS]
     if gen > 0:
         prev = load(gen - 1, ledger_dir)
         parents = [m["genes"] for m in prev.get("members", {}).values() if m.get("parent")]
@@ -230,11 +282,18 @@ def dedupe(ms: list[list[str]]) -> list[list[str]]:
     return out
 
 
+def gen_seed_base(gen) -> int:
+    """Generation n's first seed: SEED_BASE + n x GEN_SEEDS, stepping over the wall league's (WALL_SEEDS, played in
+    generation 3's place) from generation 3 on."""
+    n = int(gen)
+    return SEED_BASE + (n + (n >= 3)) * GEN_SEEDS
+
+
 def block_seeds(gen, block: int, blocks: tuple = None, seed_base: int = None) -> tuple[int, int]:
     """(first seed, runs) of a block: generation n's blocks follow each other from SEED_BASE + n x GEN_SEEDS; a named
     league (the wall) plays from its own seed base."""
     blocks = blocks or BLOCKS
-    base = seed_base if seed_base is not None else SEED_BASE + int(gen) * GEN_SEEDS
+    base = seed_base if seed_base is not None else gen_seed_base(gen)
     return base + sum(blocks[:block]), blocks[block]
 
 
@@ -370,7 +429,7 @@ def run_generation(gen, play=None, plan_only: bool = False, members_given: list[
         members = {member_id(m): {"genes": m} for m in given}
         for k, m in led.get("members", {}).items():
             members.setdefault(k, m)
-    first_seed = seed_base if seed_base is not None else SEED_BASE + int(gen) * GEN_SEEDS
+    first_seed = seed_base if seed_base is not None else gen_seed_base(gen)
     background = list(background or [])
     # The reference plays the background and `reference` (generation 1: generation 0's best); members their own genes.
     if reference is None and members_given is None and gen in REFERENCES:

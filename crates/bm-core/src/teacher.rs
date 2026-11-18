@@ -186,6 +186,9 @@ pub const OPTIONS: &[&str] = &[
     "open-packs",
     "no-open-packs",
     "open-packs-all",
+    // Schedules by ante (S, lab #33): from "phase=N"'s ante on, "open-packs-all" on, or off (`late_now`).
+    "late-open-packs-all",
+    "late-no-open-packs-all",
     // S's wall league (lab #33): from ante 3 the run keeps the hand that was its focus then, its Planets taken and
     // bought for that hand alone (`run_focus`).
     "commit-main",
@@ -445,8 +448,44 @@ pub fn with_options<T>(names: &[&str], f: impl FnOnce() -> T) -> T {
     out
 }
 
-/// A number of the value formula as an option set it (`name=value`), if one did.
+thread_local! {
+    /// The ante of the decision being made (`teacher_move`), for the schedule genes ("phase"). A decision's look-ahead
+    /// copies keep their decision's phase; a decision made inside one (a play-out) sets its own and puts it back.
+    static DECISION_ANTE: std::cell::Cell<i32> = const { std::cell::Cell::new(0) };
+}
+
+/// The gene a schedule's late value replaces (`phase`), if `name` has one.
+fn late_name(name: &str) -> Option<&'static str> {
+    match name {
+        "long-power-x" => Some("late-long-power-x"),
+        "above-cap" => Some("late-above-cap"),
+        "buying-power" => Some("late-buying-power"),
+        "spend-down" => Some("late-spend-down"),
+        _ => None,
+    }
+}
+
+/// Whether the schedule's late values are in force: "phase=N" given and the decision's ante at N or later.
+fn late_now() -> bool {
+    let phase = given_param("phase").unwrap_or(0.0);
+    phase > 0.0 && f64::from(DECISION_ANTE.with(|a| a.get())) >= phase
+}
+
+/// A number of the value formula as an option set it (`name=value`), if one did; from the schedule's phase on, its
+/// late value where one was given.
 pub(crate) fn param(name: &str) -> Option<f64> {
+    if let Some(late) = late_name(name) {
+        if late_now() {
+            if let Some(v) = given_param(late) {
+                return Some(v);
+            }
+        }
+    }
+    given_param(name)
+}
+
+/// A number as the options give it, whatever the phase.
+fn given_param(name: &str) -> Option<f64> {
     let find = |s: &Set| {
         s.params
             .iter()
@@ -462,6 +501,14 @@ pub(crate) fn param(name: &str) -> Option<f64> {
 
 /// Whether an option is switched on.
 pub(crate) fn on(name: &str) -> bool {
+    if name == "open-packs-all" && late_now() {
+        if given("late-open-packs-all") {
+            return true;
+        }
+        if given("late-no-open-packs-all") {
+            return false;
+        }
+    }
     // On by default (the user, 13 November: "why is it off, turn it on"; the master list's batch 1, lab #27): turned
     // off by "no-<name>".
     match DEFAULTS.iter().find(|(n, _)| *n == name) {
@@ -3868,6 +3915,13 @@ pub fn new_run() {
 /// scaled by that much (`value::Scales`, rounds included): the late antes are where most runs are lost, and a
 /// decision there has fewer to come after it.
 pub fn teacher_move(run: &Run, salt: u64) -> (MoveKind, u64) {
+    let outer = DECISION_ANTE.with(|a| a.replace(run.ante));
+    let m = teacher_move_now(run, salt);
+    DECISION_ANTE.with(|a| a.set(outer));
+    m
+}
+
+fn teacher_move_now(run: &Run, salt: u64) -> (MoveKind, u64) {
     if on("held-cards") {
         note_held_cards(run);
     }
@@ -4064,6 +4118,44 @@ fn plain_move(run: &Run, salt: u64) -> (MoveKind, u64) {
 
 #[cfg(test)]
 mod tests {
+
+    /// Schedules by ante (S, lab #33): "phase=N" puts the late values in force from the decision's ante N on, and only
+    /// those given; without "phase" a late value does nothing.
+    #[test]
+    fn a_schedule_switches_its_genes_at_the_phase_ante() {
+        type Read<'a> = &'a dyn Fn() -> (Option<f64>, Option<f64>, bool);
+        let at = |ante: i32, f: Read| {
+            let before = DECISION_ANTE.with(|a| a.replace(ante));
+            let out = f();
+            DECISION_ANTE.with(|a| a.set(before));
+            out
+        };
+        let read = || (param("long-power-x"), param("above-cap"), on("open-packs-all"));
+        let early = ["phase=4", "long-power-x=0.75", "late-long-power-x=1.5", "open-packs-all"];
+        with_options(&[&early[..], &["late-no-open-packs-all"]].concat(), || {
+            assert_eq!(at(3, &read), (Some(0.75), None, true), "before the phase: the early values");
+            assert_eq!(at(4, &read), (Some(1.5), None, false), "from the phase: the late ones, only those given");
+            assert_eq!(at(7, &read), (Some(1.5), None, false));
+        });
+        with_options(&["late-long-power-x=1.5", "late-open-packs-all"], || {
+            assert_eq!(at(8, &read), (None, None, false), "no phase, no schedule");
+        });
+        let spend = || (param("spend-down"), None, on("open-packs-all"));
+        with_options(&["phase=5", "late-open-packs-all", "late-spend-down=20"], || {
+            assert_eq!(at(5, &spend), (Some(20.0), None, true));
+            assert_eq!(at(4, &spend), (None, None, false));
+        });
+    }
+
+    /// A decision sets its ante for the schedule and puts the outer one back (a play-out inside a decision).
+    #[test]
+    fn a_decision_puts_the_outer_ante_back() {
+        let run = crate::state::Run::new(crate::RunConfig::new("PHASE01"));
+        DECISION_ANTE.with(|a| a.set(6));
+        let _ = teacher_move(&run, 1);
+        assert_eq!(DECISION_ANTE.with(|a| a.get()), 6);
+        DECISION_ANTE.with(|a| a.set(0));
+    }
 
     /// "open-packs" (lab #27): from ante 2, an affordable Arcana pack before a Buffoon one; Buffoon only with
     /// "open-packs-all"; nothing at ante 1, nothing unaffordable, nothing with "no-open-packs".

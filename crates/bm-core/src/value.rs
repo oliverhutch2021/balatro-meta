@@ -240,14 +240,23 @@ pub const PARAMS: &[(&str, f64)] = &[
     // "danger-spend=T" (lab #33): the chance of living through the ante under which a shop spends to raise it.
     ("danger-spend", 0.0),
     ("reroll-later-x", 1.0),
+    // Schedules by ante (S, lab #33, generation 3): "phase=N" switches a few genes to their late values from the
+    // decision's ante N on ("late-long-power-x", "late-above-cap", "late-buying-power", "late-spend-down"; the
+    // switches "late-open-packs-all" and "late-no-open-packs-all"); `teacher::param`. Off (0) unless given; a late
+    // value not given leaves its gene as it was.
+    ("phase", 0.0),
+    ("late-long-power-x", 1.0),
+    ("late-above-cap", ABOVE_CAP),
+    ("late-buying-power", BUYING_POWER),
+    ("late-spend-down", 0.0),
 ];
 
-/// A number of the formula: as an option set it, else its usual value.
 /// A `PARAMS` value as the options set it (for the teacher's own uses).
 pub(crate) fn p_param(name: &str, usual: f64) -> f64 {
     p(name, usual)
 }
 
+/// A number of the formula: as an option set it, else its usual value.
 fn p(name: &str, usual: f64) -> f64 {
     crate::teacher::param(name).unwrap_or(usual)
 }
@@ -549,12 +558,11 @@ pub fn flows_for(run: &Run, shares: &[f64; 12]) -> Flows {
     // The share of hands of these types (a per-hand effect pays in proportion).
     let share = |h: &[HandType]| h.iter().map(|&t| shares[t as usize]).sum::<f64>().min(1.0);
     let mut f = Flows::default();
+    // Gold Stake's rental jokers cost their rent at every round's end, working or not (`run.rs`): money the shops to
+    // come won't have. Bought for $1 they look like a bargain otherwise. Taken off after the economy's credit is
+    // scaled ("fam-econ-x" scales what the jokers make, never the rent: B, lab #33).
+    let rent = run.jokers.iter().filter(|j| j.rental).count() as f64 * crate::run::RENTAL_COST as f64;
     for j in &run.jokers {
-        // Gold Stake's rental jokers cost their rent at every round's end, working or not (`run.rs`): money the
-        // shops to come won't have. Bought for $1 they look like a bargain otherwise.
-        if j.rental {
-            f.money -= crate::run::RENTAL_COST as f64;
-        }
         if j.debuffed {
             continue;
         }
@@ -663,9 +671,8 @@ pub fn flows_for(run: &Run, shares: &[f64; 12]) -> Flows {
         + 3.0 * gold_cards * held_at_end
         + 20.0 / 15.0 * lucky * scored / deck;
     f.tarots += purple * thrown / deck;
-    // "held-cards": with every consumable slot full, what the seals and jokers would make is lost (a Blue Seal's
-    // Planet, a Purple Seal's Tarot, Cartomancer's...), so a full slot costs what it blocks.
-    // The family credits (league genes, lab #33): the scaling jokers' growth and the economy's money per round.
+    // The family credits (league genes, lab #33): the scaling jokers' growth and the economy's money per round. The
+    // growth is net, either sign: a melting joker's decay (Ice Cream, Popcorn, Gros Michel, Ramen) is scaled with it.
     let (scaling, econ) = (p("fam-scaling-x", 1.0), p("fam-econ-x", 1.0));
     if scaling != 1.0 {
         f.chips *= scaling;
@@ -674,7 +681,9 @@ pub fn flows_for(run: &Run, shares: &[f64; 12]) -> Flows {
             x.1 *= scaling;
         }
     }
-    f.money *= econ;
+    f.money = f.money * econ - rent;
+    // "held-cards": with every consumable slot full, what the seals and jokers would make is lost (a Blue Seal's
+    // Planet, a Purple Seal's Tarot, Cartomancer's...), so a full slot costs what it blocks.
     if crate::teacher::on("held-cards") && run.consumables.len() as i32 >= run.consumable_slots {
         f.levels -= blue * held_at_end;
         f.tarots = 0.0;
@@ -2907,6 +2916,14 @@ mod tests {
         let f2 = with_options(&["fam-scaling-x=2", "fam-econ-x=0"], || flows_for(&run, &shares));
         assert!(f1.mult > 0.0 && (f2.mult - 2.0 * f1.mult).abs() < 1e-9, "Green Joker's growth doubled");
         assert!(f1.money > 0.0 && f2.money == 0.0, "Golden Joker's money off");
+        // A rental's rent is never scaled (B, lab #33): with the economy's credit off it still costs its rent.
+        run.jokers.last_mut().unwrap().rental = true;
+        let rent = crate::run::RENTAL_COST as f64;
+        let f3 = flows_for(&run, &shares);
+        let f4 = with_options(&["fam-econ-x=0"], || flows_for(&run, &shares));
+        let f5 = with_options(&["fam-econ-x=2"], || flows_for(&run, &shares));
+        assert!((f3.money - (f1.money - rent)).abs() < 1e-9, "{} {}", f3.money, f1.money);
+        assert!((f4.money + rent).abs() < 1e-9 && (f5.money - (2.0 * f1.money - rent)).abs() < 1e-9);
     }
 
     /// C8 (lab #30): the user's tiers rank Lucky above Mult and Steel, Glass at the top; the old table had Mult over

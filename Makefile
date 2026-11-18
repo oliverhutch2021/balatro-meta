@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-stakes teacher-exam watch watch-mod record-me compare-me diagnose-control look pack-audit green-bench league recheck check-saved diagnose
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-stakes teacher-exam watch watch-mod record-me compare-me diagnose-control look pack-audit green-bench league rule1 recheck check-saved diagnose
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -129,6 +129,9 @@ pack-audit:  ## What the bot thinks each pack is worth where it could open one, 
 
 green-bench:  ## The build bench's validation: the base on 2,000 Green seeds with --bench (each build scored as each ante from 5 began; the final builds), read by bench_check.py (about 1.6 hours)
 	$(PY) scripts/jobs.py run green-bench $(JOB_FLAGS)
+
+rule1:  ## Rule 1 (lab #34): the -d5 base, a8e3 and 4579 replay generation 2's block A and W the wall's first 200 seeds; every run must end where it did (about 45 minutes)
+	$(PY) scripts/rule1.py
 
 league:  ## One league generation (lab #33): 40 strategies and the base on 200 fresh Green seeds, cut by bound, the best 12 to 1,000 seeds, the best 4 to 4,000; resumable (GEN=0, 1, ...; STOP=1 stops after block B)
 	$(PY) scripts/league.py --gen $(or $(GEN),0) $(if $(STOP),--stop-after $(STOP))

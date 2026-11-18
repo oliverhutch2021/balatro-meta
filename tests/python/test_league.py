@@ -121,7 +121,7 @@ def test_the_wall_league_has_s_six_members_on_w_and_its_own_seeds(tmp_path, monk
     assert len(ms) == 6 and "commit-main" in ms and "card-tiers" in ms and "long-run=0.2" in ms
     assert not any("danger-spend" in m for m in ms), "out until rebuilt (B)"
     assert league.block_seeds("wall", 0, league.WALL_BLOCKS, league.WALL_SEEDS) == (league.WALL_SEEDS, 2000)
-    assert league.WALL_SEEDS >= league.SEED_BASE + 3 * league.GEN_SEEDS, "never a generation's seeds"
+    assert all(not (league.WALL_SEEDS <= league.gen_seed_base(g) < league.WALL_SEEDS + league.GEN_SEEDS) for g in range(9)), "never a generation's seeds"
     # The reference plays W, each member W and its gene.
     monkeypatch.setattr(league, "ROOT", tmp_path)
     monkeypatch.setattr(league.jobs, "best_8k_report",
@@ -199,6 +199,28 @@ def test_generation_2_is_s_list_and_plays_a8e3_as_reference(tmp_path, monkeypatc
 def test_a_partnered_gene_is_dropped_without_its_partner():
     assert league.tidy(["fix-dollars=1", "skips"]) == ["skips"]
     assert league.tidy(["deck-fix", "fix-dollars=1"]) == ["deck-fix", "fix-dollars=1"]
+
+
+def test_a_late_value_needs_a_phase_and_a_phase_needs_a_late_value():
+    assert league.tidy(["late-long-power-x=0.5", "skips"]) == ["skips"]
+    assert league.tidy(["phase=4", "skips"]) == ["skips"]
+    assert league.tidy(["late-open-packs-all", "open-packs-all", "phase=4"]) == ["open-packs-all"]
+    assert league.tidy(["late-no-open-packs-all", "phase=4"]) == []
+    assert league.tidy(["late-spend-down=25", "phase=5"]) == ["late-spend-down=25", "phase=5"]
+
+
+def test_generation_3_has_the_schedules_and_generation_2s_parents_on_fresh_seeds(tmp_path):
+    (tmp_path / "gen-2.json").write_text(json.dumps({"members": {
+        "a": {"genes": league.G1_A8E3, "parent": True}, "b": {"genes": league.G1_5BD5, "parent": True},
+        "c": {"genes": ["skips"], "parent": False}}}))
+    ms = league.members_for(3, tmp_path)
+    keys = {",".join(m) for m in ms}
+    assert len(ms) == 40 and len(keys) == 40 and [] in ms
+    for m in league.GEN3_SCHEDULES + [league.G1_5BD5]:
+        assert ",".join(sorted(m)) in keys
+    assert all(m == league.tidy(m) for m in ms[11:]), "bred and random members carry no idle gene"
+    assert league.REFERENCES[3] == league.G1_A8E3
+    assert league.gen_seed_base(3) == league.SEED_BASE + 4 * league.GEN_SEEDS, "the wall's seeds stepped over"
 
 
 def test_a_generation_begun_keeps_its_ledgers_members_when_the_genes_change(tmp_path, monkeypatch):

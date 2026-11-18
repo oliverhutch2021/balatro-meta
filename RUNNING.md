@@ -1680,6 +1680,27 @@ like generation 1.
 cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(league gen 1)" || true) && make sync && make league GEN=2
 ```
 
+## Step 59: the prunes, rule 1, and league generation 3: schedules by ante (S, lab #33 and #34, 18 November)
+
+Generation 2 left the price genes level with a8e3 (block B: the top 12 within ±1.1 points). In:
+- B's Python prune (lab #35) and prune 1 (six dead functions); `CLOSED.md` holds both halves.
+- `make rule1`: the `-d5` base, a8e3 and 4579 replay generation 2's block A, W the wall's first 200 seeds, with the
+  same commands; every run must end where it did. It stops the line if not.
+- Schedules (S's point 4): `phase=N` and late values from the decision's ante N on (`late-long-power-x`,
+  `late-above-cap`, `late-buying-power`, `late-spend-down`, `late-open-packs-all`, `late-no-open-packs-all`). Off
+  unless given.
+- `fam-econ-x` never scales a rental's rent (B). No change at Green.
+- Generation 3: reference a8e3; the `-d5` base; nine schedules on a8e3 (the present counted more from ante 4 or 5,
+  the future back at full weight from 4, build early and cash in, packs opened late or only early, spending down late,
+  the bank spent late); generation 2's parents; 16 bred from parents and schedules; random to 40. Seeds from 70,001
+  (60,001 was the wall's). About a day.
+
+After generation 2 ends (it waits for it):
+
+```
+cd /mnt/h/balatro-meta && while pgrep -f "league.py --gen 2" >/dev/null; do sleep 60; done; git add results && (git commit -qm "results(league gen 2)" || true) && make sync && make rule1 && make league GEN=3
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001
