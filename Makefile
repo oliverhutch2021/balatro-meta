@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-precise teacher-tune teacher-tune-2 teacher-ideas teacher-next teacher-ideas-2 teacher-focus teacher-control teacher-big teacher-weights teacher-weights-high teacher-inputs teacher-stakes stakes-trials stakes-night boost-quick boost-night teacher-exam watch watch-mod record-me compare-me teacher-doubt teacher-margin teacher-late teacher-boss teacher-budget teacher-budget-big teacher-budget-confirm teacher-skips skips-stakes teacher-budget-6 teacher-budget-confirm-6 teacher-close teacher-close-2 diagnose-fresh diagnose-control teacher-budget-parts teacher-budget-away teacher-bundle teacher-looks shop-audit teacher-money-belief leak-tally teacher-boss-reroll reroll-demo teacher-held-cards teacher-defaults teacher-batch1 look night night-green green-next green-calib pack-audit night-d4 green-packs green-forecast green-spend green-bench danger-look league league-wall e1-white-ahead2 e1-white-ahead3 e1-white-ahead8 teacher-money teacher-long recheck check-saved diagnose forks-quick forks-night forks-table forks-now
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-stakes teacher-exam watch watch-mod record-me compare-me diagnose-control look pack-audit green-bench league recheck check-saved diagnose
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -118,170 +118,20 @@ learned-%:  ## Round N of the learned value, the three jobs in a row: make learn
 teacher-ensemble:  ## The teacher with rounds 1 and 2's networks together, at weights 1 and 1.5, on the usual 5,000 seeds (about 40 minutes)
 	$(PY) scripts/jobs.py run teacher-ensemble $(JOB_FLAGS)
 
-teacher-precise:  ## The best teacher with more samples where its decisions are noisiest, against its own runs (about 10 minutes)
-	$(PY) scripts/jobs.py run teacher-precise $(JOB_FLAGS)
-
-teacher-tune:  ## The value formula's numbers changed one at a time on the best teacher, each against its own runs (about 1 hour)
-	$(PY) scripts/jobs.py run teacher-tune $(JOB_FLAGS)
-
-teacher-tune-2:  ## The tuning's winners together, and pushed further, against the same teacher's own runs (about 50 minutes)
-	$(PY) scripts/jobs.py run teacher-tune-2 $(JOB_FLAGS)
-
-teacher-ideas:  ## What your recorded runs showed the bot missing (Dusk, Five of a Kind, Overstock, Midas), each against the same runs (about 50 minutes)
-	$(PY) scripts/jobs.py run teacher-ideas $(JOB_FLAGS)
-
-teacher-next:  ## On the tuned formula: the quick look at twice its samples, your ideas together, both, and round 4's networks (about 1 hour)
-	$(PY) scripts/jobs.py run teacher-next $(JOB_FLAGS)
-
-teacher-ideas-2:  ## Your second batch: deck fixing, Glass, x mult that fits the hand, Card Sharp's x3, and all together (about 70 minutes)
-	$(PY) scripts/jobs.py run teacher-ideas-2 $(JOB_FLAGS)
-
-teacher-focus:  ## Focus on one hand: the most played hand's Planets always taken; pack picks judged against skipping; both (about 40 minutes)
-	$(PY) scripts/jobs.py run teacher-focus $(JOB_FLAGS)
-
-teacher-control:  ## The precise teacher on the newest round's networks, 2,000 seeds, against the control before it (about 15 minutes)
-	$(PY) scripts/jobs.py run teacher-control $(JOB_FLAGS)
-
-teacher-big:  ## focus + fair-skip on 8,000 seeds against the same teacher without them, to see a 1-point gain (about 1.5 hours)
-	$(PY) scripts/jobs.py run teacher-big $(JOB_FLAGS)
-
-teacher-weights:  ## The newest networks at weights 1.5, 2.5 and 4 on 8,000 seeds, each against 1.5 (about 3 hours)
-	$(PY) scripts/jobs.py run teacher-weights $(JOB_FLAGS)
-
-teacher-weights-high:  ## The newest networks at weights 8 and 16 on 8,000 seeds, each against 4 and 1.5 (about 1.75 hours)
-	$(PY) scripts/jobs.py run teacher-weights-high $(JOB_FLAGS)
-
-teacher-doubt:  ## The champion again, then with its networks' disagreement as the brake (doubt=k) at weights 2.5 and 4, 8,000 seeds each (about 3 hours)
-	$(PY) scripts/jobs.py run teacher-doubt $(JOB_FLAGS)
-
-teacher-margin:  ## After round 11: its networks at the champion's weight, aiming for wins with 3 or 6 blinds to spare (margin=K), 8,000 seeds each (about 2.5 hours)
-	$(PY) scripts/jobs.py run teacher-margin $(JOB_FLAGS)
-
-teacher-late:  ## The champion with three times the samples from ante 6 (late-x=3), and from ante 5, 8,000 seeds each against the champion (about 5 hours)
-	$(PY) scripts/jobs.py run teacher-late $(JOB_FLAGS)
-
-teacher-boss:  ## The champion with four times the samples in boss blinds (boss-x=4), 8,000 seeds against the champion (about 1 hour)
-	$(PY) scripts/jobs.py run teacher-boss $(JOB_FLAGS)
-
-teacher-budget:  ## How far the search budget goes: late-x=2, from ante 3, late-x=6, everywhere, screened on 2,000 seeds against the champion (about 3.5 hours)
-	$(PY) scripts/jobs.py run teacher-budget $(JOB_FLAGS)
-
-teacher-budget-big:  ## The same four on 8,000 seeds (the confirmation; about 14 hours)
-	$(PY) scripts/jobs.py run teacher-budget-big $(JOB_FLAGS)
-
-teacher-budget-confirm:  ## The screen's winner (three times the samples everywhere) on 8,000 seeds against the champion: what makes it the champion (about 5.5 hours)
-	$(PY) scripts/jobs.py run teacher-budget-confirm $(JOB_FLAGS)
-
-teacher-skips:  ## Skipping a blind for its tag, judged by value (option "skips"), screened on 2,000 seeds against the champion (about 1.75 hours)
-	$(PY) scripts/jobs.py run teacher-skips $(JOB_FLAGS)
-
-skips-stakes:  ## Skipping blinds for tags at Red, Green and Purple Stake, where a skip should be worth more: each stake's best teacher with "skips" against itself, 2,000 seeds a stake (about 45 minutes)
-	$(PY) scripts/jobs.py run skips-stakes $(JOB_FLAGS)
-
-teacher-budget-6:  ## Six times the samples everywhere, screened on 2,000 seeds against the champion (about 3.5 hours)
-	$(PY) scripts/jobs.py run teacher-budget-6 $(JOB_FLAGS)
-
-teacher-budget-confirm-6:  ## Six times the samples everywhere on 8,000 seeds against the champion: what would make it the champion (about 16 hours)
-	$(PY) scripts/jobs.py run teacher-budget-confirm-6 $(JOB_FLAGS)
-
-teacher-close:  ## The adaptive budget (close calls judged again at 2x and 3x the counts), screened on 2,000 seeds each against the champion (about 3.5 hours)
-	$(PY) scripts/jobs.py run teacher-close $(JOB_FLAGS)
-
-teacher-close-2:  ## The adaptive budget as fixed on 7 November (the choice between the two options judged again alone), 2x and 3x on 2,000 seeds each against the champion (about 2.75 hours)
-	$(PY) scripts/jobs.py run teacher-close-2 $(JOB_FLAGS)
-
-diagnose-fresh:  ## The champion's own runs recorded today (3,000, no exploring) and diagnosed: how it wins and where it loses (about 2.5 hours)
-	$(PY) scripts/jobs.py run diagnose-fresh $(JOB_FLAGS)
-
-diagnose-control:  ## Every lost blind of diagnose-fresh's runs played again 8 times at the usual samples and 8 at 4x: what deeper search adds over luck (minutes)
+diagnose-control:  ## Every lost blind of the newest recording played again 8 times at the usual samples and 8 at 4x: what deeper search adds over luck (minutes)
 	$(PY) scripts/jobs.py run diagnose-control $(JOB_FLAGS)
-
-teacher-budget-parts:  ## Where the budget pays: the looks, the deals and the planner's tries each doubled on their own, 2,000 seeds each against the champion (about 5 hours)
-	$(PY) scripts/jobs.py run teacher-budget-parts $(JOB_FLAGS)
-
-teacher-budget-away:  ## Where the budget's gain sits: between rounds, in a round, the deals and the sample contents each kept at their own counts under the champion's 3x/4x, 2,000 seeds each at salt 1 against the champion at salt 1 (about 3.5 to 4 hours)
-	$(PY) scripts/jobs.py run teacher-budget-away $(JOB_FLAGS)
-
-teacher-bundle:  ## Overnight: the champion and one combined candidate (round 11's pair + the reroll fix) on 8,000 White seeds at a fresh salt, then both on 2,000 Green seeds, each pair compared as it finishes (about 12.5 hours)
-	$(PY) scripts/jobs.py run teacher-bundle $(JOB_FLAGS)
-
-teacher-looks:  ## The long run: twice and four times the looks with the deals at their own count (8,000 White and 2,000 Green seeds), then 6x between rounds, at salt 2 against the champion there, cheapest first (about 40 hours)
-	$(PY) scripts/jobs.py run teacher-looks $(JOB_FLAGS)
-
-shop-audit:  ## Why runs leave the late shops with money: the champion replays step 37's salt-2 seeds (8,000 White, 2,000 Green) noting every shop decision of antes 6-8 (Green 3-5), then a summary (about 6 hours)
-	$(PY) scripts/jobs.py run shop-audit $(JOB_FLAGS)
-
-teacher-money-belief:  ## The judge's belief about money: the networks read the money as the shop opened, in the last shop and in every shop (8,000 White seeds each at salt 2, ante 8 audited), and every shop on 2,000 Green seeds, against step 37's controls (about 11 hours)
-	$(PY) scripts/jobs.py run teacher-money-belief $(JOB_FLAGS)
-
-leak-tally:  ## Two diagnoses, no change to play: the champion replays the first 3,000 of step 37's salt-2 seeds counting what it does with seals, consumables, won rounds and shops (the leak tally), and forks each run's passes of nine named jokers, its own move against taking the joker and keeping it, to the end (about 11 hours)
-	$(PY) scripts/jobs.py run leak-tally $(JOB_FLAGS)
-
-teacher-boss-reroll:  ## The boss reroll (Director's Cut, Retcon) made by value: 8,000 White seeds with the leak tally on, then 2,000 Green, at salt 2 against step 37's controls (about 6.5 hours)
-	$(PY) scripts/jobs.py run teacher-boss-reroll $(JOB_FLAGS)
-
-reroll-demo:  ## A look at the boss reroll before any arm: the champion with it on 400 seeds, its reroll runs kept for the viewer's "Boss rerolls" button (make watch), and how often it bought the vouchers (about 15 minutes)
-	$(PY) scripts/jobs.py run reroll-demo $(JOB_FLAGS)
-
-teacher-held-cards:  ## The leak bundle's first part: held Tarots and Spectrals used, not sat on (2,000 Green seeds, then 8,000 White, both with the leak tally) at salt 2 against step 37's controls (about 6.5 hours)
-	$(PY) scripts/jobs.py run teacher-held-cards $(JOB_FLAGS)
-
-teacher-defaults:  ## The bot as it now plays by default (boss reroll and held cards on) against step 37's controls: 2,000 Green seeds, then 8,000 White, both with the leak tally (about 6.5 hours)
-	$(PY) scripts/jobs.py run teacher-defaults $(JOB_FLAGS)
-
-teacher-batch1:  ## The bot with every default on (batch 1 of the master list) against step 37's controls: 2,000 Green seeds, then 8,000 White, both with the leak tally (about 6.5 hours)
-	$(PY) scripts/jobs.py run teacher-batch1 $(JOB_FLAGS)
 
 look:  ## The gate before a long run: 400 Green and 400 White runs of the bot as it now plays, tallied, the bars printed pass or fail, the runs kept for the viewer (about 30 minutes)
 	$(PY) scripts/jobs.py run look $(JOB_FLAGS)
 
-night:  ## One night, set and forget: the look (400 Green, 400 White, 400 White all-off, tallied), the gate, then teacher-batch1 and E1 on 2,000 Green (ahead=2, 3 and every ante); on a stop, make leak-tally instead (about 9.5 hours)
-	$(PY) scripts/jobs.py run night $(JOB_FLAGS)
-
-night-green:  ## What is left of the night on Green alone (White dropped for now): batch1's Green compare and tally, then E1's three arms (ahead=2, 3, every ante) on 2,000 Green seeds each (about 2.4 hours)
-	$(PY) scripts/jobs.py run night-green $(JOB_FLAGS)
-
-green-next:  ## S's next Green line (lab #30): card-sharp, then deck-fix, each on 2,000 Green seeds against batch 1 with the tally; then the base again with the calibration recording, the forecast's dataset (about 3.5 hours)
-	$(PY) scripts/jobs.py run green-next $(JOB_FLAGS)
-
-green-calib:  ## The look on Green with the new counters, then the calibration recording on Green seeds 2,001 to 8,000 with the tally (about 3.8 hours)
-	$(PY) scripts/jobs.py run green-calib $(JOB_FLAGS)
-
 pack-audit:  ## What the bot thinks each pack is worth where it could open one, in its own dollars (300 Green runs with the shop audit; about 20 minutes)
 	$(PY) scripts/jobs.py run pack-audit $(JOB_FLAGS)
-
-night-d4:  ## Green, about 3 hours: the pack audit; the base as it now is (Card Sharp, C8, C10 on) on batch 1's 2,000 Green seeds against batch 1; then the no-death calibration recording on the same seeds
-	$(PY) scripts/jobs.py run night-d4 $(JOB_FLAGS)
-
-green-packs:  ## open-packs and open-packs-all against the -d4 base on 2,000 Green seeds each, with the calibration recording (about 2.5 hours)
-	$(PY) scripts/jobs.py run green-packs $(JOB_FLAGS)
-
-green-forecast:  ## forecast, forecast+ahead=3, forecast+ahead=8 against the base (-d5, open-packs on) on 2,000 Green seeds each (about 3.5 hours; needs .sync/lab/out/forecast-v0-tables.json)
-	$(PY) scripts/jobs.py run green-forecast $(JOB_FLAGS)
-
-green-spend:  ## spend-down=25 and spend-down=15 against the -d5 base (open-packs on) on 2,000 Green seeds each, with the calibration recording (about 2.5 hours)
-	$(PY) scripts/jobs.py run green-spend $(JOB_FLAGS)
 
 green-bench:  ## The build bench's validation: the base on 2,000 Green seeds with --bench (each build scored as each ante from 5 began; the final builds), read by bench_check.py (about 1.6 hours)
 	$(PY) scripts/jobs.py run green-bench $(JOB_FLAGS)
 
-danger-look:  ## Antes 4-6 (S, lab #33, A1 and A2): did the bot see the danger at each shop, and what would spending its money have bought at the boss that killed it (1,000 Green seeds; about 50 minutes)
-	$(PY) scripts/jobs.py run danger-look $(JOB_FLAGS)
-
 league:  ## One league generation (lab #33): 40 strategies and the base on 200 fresh Green seeds, cut by bound, the best 12 to 1,000 seeds, the best 4 to 4,000; resumable (GEN=0, 1, ...; STOP=1 stops after block B)
 	$(PY) scripts/league.py --gen $(or $(GEN),0) $(if $(STOP),--stop-after $(STOP))
-
-league-wall:  ## The wall league (S, lab #33, redrawn 16 Nov): six members on W (generation 0's first Better) against W on 2,000 fresh Green seeds each (the future turned down three ways, danger-x, commit-main, card-tiers back on), deaths by ante beside wins; block B waits for the reading (about 9.5 hours)
-	$(PY) scripts/league.py --wall $(if $(STOP),--stop-after $(STOP))
-
-e1-white-ahead2 e1-white-ahead3 e1-white-ahead8:  ## E1's White guard for one setting (2,000 White seeds against the first 2,000 of batch1's White arm, about 1.2 hours)
-	$(PY) scripts/jobs.py run $@ $(JOB_FLAGS)
-
-teacher-money:  ## The value formula's money numbers retuned on the champion, each leaning towards spending, 2,000 seeds each (about 7 hours)
-	$(PY) scripts/jobs.py run teacher-money $(JOB_FLAGS)
-
-teacher-long:  ## The value formula's long run one part at a time (its power, its held money), how far it looks, and the money numbers counted higher, 2,000 seeds each against the champion (about 8.5 hours)
-	$(PY) scripts/jobs.py run teacher-long $(JOB_FLAGS)
 
 check-saved:  ## Saved real-game differences played again through today's checks in the real game (FILES="a.json b.json"; seconds each)
 	$(PY) scripts/check_saved.py $(FILES)
@@ -292,77 +142,8 @@ recheck:  ## Every difference the real-game checks saved, replayed on today's en
 diagnose:  ## Where the champion's runs are lost and why: the newest recording replayed, a quarter of the lost blinds played again with deeper search (about 15 minutes)
 	$(PY) scripts/jobs.py run diagnose $(JOB_FLAGS)
 
-forks-quick:  ## An hour of forks (the champion's options at recorded decisions, each played out), then the networks that learn from them: the judge test today (about 1.5 hours)
-	$(PY) scripts/jobs.py run forks-quick $(JOB_FLAGS)
-	$(PY) scripts/jobs.py run value-net-forks-quick $(JOB_FLAGS)
-
-forks-now:  ## While the forks come in: the pair at three pair weights and its control on every fork so far, the judge test of each, one table (about 20 minutes on the GPU)
-	$(PY) scripts/jobs.py run forks-now --force $(if $(filter 0,$(WATCH)),--no-watch,)
-
-forks-table:  ## The judge test from every fork file so far (seconds; runs beside a job)
-	@$(PY) -c 'import subprocess, sys; sys.path.insert(0, "scripts"); import jobs; s = jobs.fork_table_steps(); sys.exit(subprocess.call([sys.executable, *s[0][1]]) if s else print("No fork file yet (make forks-quick)."))'
-
-forks-%:  ## Forks round N, 1/3: a night of forks (9 hours)
-	$(PY) scripts/jobs.py run forks-$* $(JOB_FLAGS)
-
-value-net-forks-%:  ## Forks round N, 2/3: the pair that learns the forks, and its control (about 40 minutes)
-	$(PY) scripts/jobs.py run value-net-forks-$* $(JOB_FLAGS)
-
-teacher-forks-%:  ## Forks round N, 3/3: the pair against its control, and the champion with the pair against the champion, 8,000 seeds each (about 5 hours)
-	$(PY) scripts/jobs.py run teacher-forks-$* $(JOB_FLAGS)
-
-forks-night:  ## Forks round 1, the three jobs in a row (about 15 hours)
-	@$(MAKE) --no-print-directory forks-1
-	@$(MAKE) --no-print-directory value-net-forks-1
-	@$(MAKE) --no-print-directory teacher-forks-1
-
-teacher-inputs:  ## Round 11's networks on the deck card by card against the totals, on the same runs, 8,000 seeds (about 2.5 hours)
-	$(PY) scripts/jobs.py run teacher-inputs $(JOB_FLAGS)
-
 teacher-stakes:  ## The best teacher at every stake, White to Gold, 2,000 seeds each (about 1.5 hours)
 	$(PY) scripts/jobs.py run teacher-stakes $(JOB_FLAGS)
-
-stakes-trials:  ## The best teacher of 3 November without eternal, perishable or rental jokers, and with "reach=6", each at its stake (about 35 minutes)
-	$(PY) scripts/jobs.py run stakes-trials $(JOB_FLAGS)
-
-stakes-data-%:  ## Stake-aware round N, 1/3: runs at every stake recorded (round 1: .sync/night.sh's, encoded in layout 3)
-	$(PY) scripts/jobs.py run stakes-data-$* $(JOB_FLAGS)
-
-stakes-net-%:  ## Stake-aware round N, 2/3: two networks learn layout 3 from the round's runs and the round before's
-	$(PY) scripts/jobs.py run stakes-net-$* $(JOB_FLAGS)
-
-stakes-play-%:  ## Stake-aware round N, 3/3: the pair at White on 8,000 seeds, then at every stake against 3 November (about 2 hours)
-	$(PY) scripts/jobs.py run stakes-play-$* $(JOB_FLAGS)
-
-stakes-round-%:  ## Stake-aware round N, the three jobs in a row
-	@$(MAKE) --no-print-directory stakes-data-$*
-	@$(MAKE) --no-print-directory stakes-net-$*
-	@$(MAKE) --no-print-directory stakes-play-$*
-
-stakes-night:  ## Round 1 of the stake-aware networks, the stake trials, then rounds 2, 3... until stopped (Ctrl-C; each finished step is kept)
-	@$(MAKE) --no-print-directory stakes-round-1
-	@$(MAKE) --no-print-directory stakes-trials
-	@n=2; while [ $$n -le 12 ] && $(MAKE) --no-print-directory stakes-round-$$n; do git push || true; n=$$((n + 1)); done
-
-boost-quick:  ## One quick turn of the correction on the night's runs: train one network, White on 1,000 seeds, 500 at each other stake (about 25 minutes)
-	$(PY) scripts/jobs.py run boost-quick $(JOB_FLAGS)
-
-boost-data-%:  ## Boost round N, 1/3: the champion's log-odds added to its runs (round 1), or each stake recorded with its best teacher so far
-	$(PY) scripts/jobs.py run boost-data-$* $(JOB_FLAGS)
-
-boost-net-%:  ## Boost round N, 2/3: a residual pair learns what the champion's networks get wrong, at every stake
-	$(PY) scripts/jobs.py run boost-net-$* $(JOB_FLAGS)
-
-boost-play-%:  ## Boost round N, 3/3: the champion with the correction at White (8,000 seeds), then every stake against 3 November
-	$(PY) scripts/jobs.py run boost-play-$* $(JOB_FLAGS)
-
-boost-round-%:  ## Boost round N, the three jobs in a row (round 1 about 3 hours, later rounds about 4)
-	@$(MAKE) --no-print-directory boost-data-$*
-	@$(MAKE) --no-print-directory boost-net-$*
-	@$(MAKE) --no-print-directory boost-play-$*
-
-boost-night:  ## Boost rounds 1, 2, 3... until stopped (Ctrl-C; each finished step is kept)
-	@n=1; while [ $$n -le 12 ] && $(MAKE) --no-print-directory boost-round-$$n; do git push || true; n=$$((n + 1)); done
 
 teacher-exam:  ## The best teacher there is on the exam's 8,000 seeds, used for nothing else: the headline number (about 4.5 hours at the champion's budget)
 	$(PY) scripts/jobs.py run teacher-exam $(JOB_FLAGS)

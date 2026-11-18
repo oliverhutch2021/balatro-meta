@@ -32,6 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import compare_runs  # noqa: E402
 import jobs  # noqa: E402
 
 ROOT = jobs.ROOT
@@ -254,13 +255,11 @@ def stages_of(report: dict) -> str:
     return report.get("run_stages", "")
 
 
-def paired(member: str, ref: str) -> tuple[int, int, int]:
-    """(seeds, only the reference won, only the member won) from two reports' run endings (WIN is 'Y')."""
-    n = min(len(member), len(ref))
-    win = "Y"
-    only_ref = sum(1 for i in range(n) if ref[i] == win and member[i] != win)
-    only_mem = sum(1 for i in range(n) if member[i] == win and ref[i] != win)
-    return n, only_ref, only_mem
+def paired(member: dict, ref: dict) -> tuple[int, int, int]:
+    """(seeds, only the reference won, only the member won) from two block reports, by compare_runs' own pairing
+    (which also refuses reports of different seed bases or stakes)."""
+    c = compare_runs.compare(ref, member)
+    return c["seeds"], c["only_a_won"], c["only_b_won"]
 
 
 def estimate(counts: list[tuple[int, int, int]]) -> dict:
@@ -392,8 +391,7 @@ def run_generation(gen, play=None, plan_only: bool = False, members_given: list[
         for b in which:
             mr, rr = report_path(gen, k, b), report_path(gen, "ref", b)
             if (ROOT / mr).exists() and (ROOT / rr).exists():
-                out.append(paired(stages_of(json.loads((ROOT / mr).read_text())),
-                                  stages_of(json.loads((ROOT / rr).read_text()))))
+                out.append(paired(json.loads((ROOT / mr).read_text()), json.loads((ROOT / rr).read_text())))
         return out
 
     def score(ids: list[str], block: int):
