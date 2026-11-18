@@ -2,7 +2,7 @@
 //! leaving (`rules/shop.md`, `rules/vouchers_tags.md`).
 
 use crate::card::{Card, Edition};
-use crate::content::{BoosterId, ConsumableKind, ConsumableSet, PackKind, VoucherKind, BOOSTERS};
+use crate::content::{BoosterId, ConsumableKind, ConsumableSet, VoucherKind, BOOSTERS};
 use crate::create::{Center, Consumable, CreateArgs, CreateKind, Created, Dest};
 use crate::joker_data::JokerKind;
 use crate::jokers::Joker;
@@ -651,8 +651,4 @@ impl Run {
         }
     }
 
-    /// Is a booster of this kind?
-    pub fn booster_kind(id: BoosterId) -> PackKind {
-        BOOSTERS[id as usize].kind
-    }
 }

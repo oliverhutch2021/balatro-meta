@@ -386,11 +386,6 @@ fn networks_screen(run: &Run) -> crate::observe::Screen {
     s
 }
 
-/// The chance of winning the run from this position, by the loaded network (None if none is loaded).
-pub fn win_chance(run: &Run) -> Option<f64> {
-    chance(run, None)
-}
-
 /// The loaded networks' chance from this position of winning (`reach` None), or of getting at least `reach`
 /// blinds further than it is (`reach_chance`), remembered by the input for the searches' repeats.
 fn chance(run: &Run, reach: Option<usize>) -> Option<f64> {

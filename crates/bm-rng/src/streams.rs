@@ -146,11 +146,6 @@ impl Streams {
         self.hashed_seed
     }
 
-    /// The current value of a stream, if it has been used.
-    pub fn stream_value(&self, key: &str) -> Option<f64> {
-        self.state.get(key).copied()
-    }
-
     /// Every stream used so far and its current value, sorted by key.
     pub fn snapshot(&self) -> Vec<(String, f64)> {
         let mut v: Vec<_> = self

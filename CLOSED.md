@@ -7,11 +7,34 @@ here with the last commit that holds it. To bring one back, take its code from t
 
 ## Options and value numbers (teacher.rs, value.rs, planner.rs, learned.rs)
 
-Added as each Rust prune lands (lab #34, A's half): the option, what it tried, its last result with seeds
-and stake, why it closed, and the last commit that holds its code.
+Closed in the code audit (lab #34, 16 November; S's record). Each option's code is still on lab main until A's
+subsystem prune takes it out; the last commit holding all of them is `49698c9`. The user's rule: a concept that fails
+is not dropped, we find out why, so each line says why it closed.
 
 | option | what it tried | last result | why closed | last code |
 |---|---|---|---|---|
+| `forecast`, `--forecast` | blinds after the next round by forecast v0's tables (S's centre and spread), in place of today's power plus the projection | −5.15 (−7.35 to −2.95), 2,000 Green, against `-d4` (lab #30) | it took the growth and money credits out of the value, so the bot stopped paying for them; forecast v1 is a different build (accepted on forks); the tables stay as a Python measuring tool | `49698c9` |
+| `danger-x` | the long run scaled by the chance of living through the ante; a reroll in danger worth the best of those affordable | −4.05 (−6.34 to −1.76), 2,000 Green, on W (wall league) | ante 4 deaths fell and every later ante's rose; the bot is gloomy, not blind (lab #33) | `49698c9` |
+| `danger-spend=T` | spending to raise the ante's survival chance when under T | pre-flight only: 11 → 2-3 wins of 150 (light bot) | read the value on two quick samples and emptied the purse on false alarms; the ceiling of spending in danger is nil (0.205 → 0.208 over 226 deaths) | `49698c9` |
+| `--danger-bench` | the ceiling of a danger response on the bench | 0.205 → 0.208, 226 deaths, 1,000 Green | measured; the danger line is closed (lab #33) | `49698c9` |
+| `commit-main` | the run's focus hand kept from ante 3 | −0.10 (−0.69 to +0.49), 2,000 Green, on W | changes 2% of seeds: the focus already serves that hand; a real commitment gene (round play favouring the hand) is a new build | `49698c9` |
+| `commit=p` | a random hand committed to from ante 3 (recordings, whole-build exploration) | round 10, not the idea it was named for (lab #30) | withdrawn | `49698c9` |
+| `explore`, `explore-within` | recordings that swap among near-best options | withdrawn (lab #30) | stays near the bot's habits; the league gives the spread instead | `49698c9` |
+| `close-x`, `close-gap`, `close-beats` | the adaptive budget: close decisions judged again with more samples | measured cleanly, "stay closed" (lab #30) | not a concept | `49698c9` |
+| `freeze-money` | the networks read the money a shop opened with, in every shop | −5.6 (all shops) | removed with nothing in its place; `freeze-money-last` (the last shop) stays in the base | `49698c9` |
+| `xmult-bonus` | points added for x mult held by ante 6 | −2.5 | its premise is wrong: the bot holds more x-mult jokers than the player (lab #33) | `49698c9` |
+| `final-hand` | playing a round down to its last hand for Dusk and Acrobat | Level | never promoted; the player calls it good practice, not critical | `49698c9` |
+| `steady`, `looks`, `steady-rounds`, `flat-*`, `deals-x`, `quick-x`, `looks-x`, `tries-x`, `between-x`, `finalists` | the search budget's studies | measured, closed (steps 33 to 38) | not concepts | `49698c9` |
+| `static-sells`, `no-juggle`, `classic` | old trials of joker sales, joker order, the classic teacher | superseded | `classic` also misled a reader into taking its code for the bot's | `49698c9` |
+| stake nets: `StakeMode`, `--stake-net`, `--stake-mode`, `--offsets`, `--offsets-into`, `train_value --offset`, `stake-scale` | networks that know the stake | better calibrated, worse play (steps 25-26) | the wrong split (lab #30, Part 1 point 5) | `49698c9` |
+| depth head: `--endless`, `margin`, `reach`, `doubt`, `hope` | winning with room to spare, the networks' depth head | learned almost nothing | no run of ours scaled; Endless depth is a gauge in the look, not a goal | `49698c9` |
+| forced-buy forks: `--force-buy`, `--force-out`, `--force-copies`, `forced_buys.py` | a named joker taken where the run passed it, played out | leak-tally dropped; the league replaces it | | `49698c9` |
+
+Kept as league genes for generation 2 (S, lab #34), each with its range: `thin`, `deck-fix` with `fix-dollars`,
+`xmult-fit`, `reroll-best`. If generations 2 and 3 never promote them, they go then.
+
+Dead code removed in prune 1 (no caller anywhere; `49698c9`): `learned::win_chance`, `shop::booster_kind`,
+`poker::game_order`, `scenario::clear_hand`, `observe::joker_tokens`, `streams::stream_value`.
 
 ## Jobs, make targets and scripts (scripts/jobs.py, Makefile, scripts/)
 
