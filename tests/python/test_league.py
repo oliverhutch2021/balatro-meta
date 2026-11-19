@@ -60,6 +60,39 @@ def test_members_all_within_their_noise_still_rank_by_their_results():
     assert sorted(sh, key=lambda k: -sh[k])[:2] == ["best", "next"]
 
 
+def test_a_block_begun_keeps_who_played_it_and_fills_the_rest_by_the_ranking(tmp_path, monkeypatch):
+    monkeypatch.setattr(league, "ROOT", tmp_path)
+    monkeypatch.setattr(league.jobs, "best_8k_report",
+                        lambda root: (0.75, ["--value-weight", "2.5", "--teacher-options", "precise"], "x.json"))
+    members = [["skips"], ["spend-down=20"], ["long-run=0.2"], ["thin=0.01"]]
+    wins = {"skips": 3, "spend-down": 2, "long-run": 1, "thin": 0}  # extra wins in every 10 seeds
+
+    def play(cmd):
+        if cmd[0] == "gzip":
+            return 0
+        out = Path(tmp_path / cmd[cmd.index("--out") + 1])
+        runs = int(cmd[cmd.index("--runs") + 1])
+        opts = cmd[cmd.index("--teacher-options") + 1]
+        extra = next((v for g, v in wins.items() if g in opts), None)
+        lost = "M" if extra is None else "L"
+        st = "".join("Y" if i % 2 or (extra and i % 10 < 2 * extra) else lost for i in range(runs))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps({"run_stages": st}))
+        return 0
+    led = league.run_generation("t", play=play, members_given=members, blocks=(100, 100), promote=(2,),
+                                seed_base=70001, cut_first=False, stop_after=0)
+    worst = next(k for k, m in led["members"].items() if m["genes"] == ["thin=0.01"])
+    # As if an older rule had sent the worst member on and it had played block B.
+    play([*league.jobs.BASELINE, "--teacher-options", "precise,thin=0.01", "--runs", "100", "--seed", "70101",
+          "--out", str(league.report_path("t", worst, 1))])
+    led["members"][worst]["block_1"] = True
+    (tmp_path / league.ledger_path("t")).write_text(json.dumps(led))
+    led = league.run_generation("t", play=play, members_given=None, blocks=(100, 100), promote=(2,),
+                                seed_base=70001, cut_first=False)
+    on = sorted(",".join(m["genes"]) for m in led["members"].values() if m.get("block_1"))
+    assert on == ["skips", "thin=0.01"], "the one that played kept, the free place to the best"
+
+
 def test_a_generation_plays_cuts_promotes_and_names_parents(tmp_path, monkeypatch):
     monkeypatch.setattr(league, "ROOT", tmp_path)
     monkeypatch.setattr(league.jobs, "best_8k_report",

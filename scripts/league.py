@@ -509,12 +509,11 @@ def run_generation(gen, play=None, plan_only: bool = False, members_given: list[
             played = [k for k in ids if members[k].get(f"block_{block}")]
             ranked = [k for k in alive if not as_reference(k, block - 1)]
             # Ties (none, with the floor) fall to the raw difference, never to list order.
-            alive = sorted(ranked, key=lambda k: (-members[k].get("shrunk", -1),
-                                                  -members[k].get("estimate", {}).get("diff", -1)))[:promote[block - 1]]
-            # A block already begun keeps the members that played it: a change to the ranking afterwards must never
-            # send on members picked by other rules (as the ledger keeps a generation's members).
-            if played:
-                alive = played
+            best = sorted(ranked, key=lambda k: (-members[k].get("shrunk", -1),
+                                                 -members[k].get("estimate", {}).get("diff", -1)))
+            # A block already begun keeps the members that played it (their seeds are fresh, so a member sent on by an
+            # older rule still measures true), and its free places go to the best by today's ranking.
+            alive = played + [k for k in best if k not in played][:max(promote[block - 1] - len(played), 0)]
         # The reference plays the background alone (the base, or W); each member the background and its own genes.
         run_block(gen, "ref", background + reference, block, base_args, play, blocks, first_seed)
         for k in alive:
