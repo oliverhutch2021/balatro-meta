@@ -50,6 +50,16 @@ def test_the_paired_estimate_and_its_shrinkage():
     assert 0 < sh["a"] < 0.10 and -0.10 < sh["b"] < 0, "pulled toward the mean"
 
 
+def test_members_all_within_their_noise_still_rank_by_their_results():
+    """Generation 3's block C (19 November): twelve members within their noise gave a spread of 0, all shrank to the
+    mean and list order picked the four. With the floor, equal SEs keep the order of the differences."""
+    ests = {k: {"seeds": 800, "diff": d, "se": 0.015} for k, d in
+            [("a", -0.0075), ("b", -0.01), ("c", -0.026), ("best", 0.019), ("next", 0.0075)]}
+    sh = league.shrink(ests)
+    assert len(set(sh.values())) == 5
+    assert sorted(sh, key=lambda k: -sh[k])[:2] == ["best", "next"]
+
+
 def test_a_generation_plays_cuts_promotes_and_names_parents(tmp_path, monkeypatch):
     monkeypatch.setattr(league, "ROOT", tmp_path)
     monkeypatch.setattr(league.jobs, "best_8k_report",

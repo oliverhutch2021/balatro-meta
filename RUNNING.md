@@ -1697,6 +1697,16 @@ Generation 2 left the price genes level with a8e3 (block B: the top 12 within ±
   the bank spent late); generation 2's parents; 16 bred from parents and schedules; random to 40. Seeds from 70,001
   (60,001 was the wall's). About a day.
 
+A fix during generation 3 (19 November): when every member of a block lay within its noise, the shrinking's spread
+came out 0, all members tied, and list order sent four to block C (e026, cf06, c557, 8314) in place of block B's best.
+The spread now has a floor of one point (B's suggestion), ties fall to the raw difference, and a block already begun
+keeps the members that played it. Generation 2's block C was picked the same way (a8e3 and 1a11 went on unshrunk).
+Stop the league (Ctrl-C), then:
+
+```
+cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(rule1, league gen 3 blocks A-B)" || true) && make sync && make league GEN=3
+```
+
 After generation 2 ends (it waits for it):
 
 ```

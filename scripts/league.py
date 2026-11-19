@@ -345,6 +345,13 @@ def estimate(counts: list[tuple[int, int, int]]) -> dict:
     return {"seeds": n, "only_ref": a, "only_member": b, "diff": d, "se": se, "lo": d - 1.96 * se, "hi": d + 1.96 * se}
 
 
+# The floor on the spread of true differences the shrinking assumes (B, lab #33): one point of win rate. Without it, a
+# block whose members all lie within their noise gives a spread of 0, every member shrinks to the mean, and the ranking
+# is a tie broken by list order (generation 3's block C, 19 November: e026, cf06, c557, 8314 were sent on in place of
+# block B's best).
+TAU_FLOOR = 0.01
+
+
 def shrink(ests: dict[str, dict]) -> dict[str, float]:
     xs = {k: e for k, e in ests.items() if e.get("seeds")}
     if not xs:
@@ -352,7 +359,7 @@ def shrink(ests: dict[str, dict]) -> dict[str, float]:
     vals = [e["diff"] for e in xs.values()]
     mean = sum(vals) / len(vals)
     var = sum((v - mean) ** 2 for v in vals) / max(len(vals) - 1, 1)
-    tau2 = max(var - sum(e["se"] ** 2 for e in xs.values()) / len(xs), 0.0)
+    tau2 = max(var - sum(e["se"] ** 2 for e in xs.values()) / len(xs), TAU_FLOOR ** 2)
     return {k: mean + (e["diff"] - mean) * (tau2 / (tau2 + e["se"] ** 2) if tau2 + e["se"] ** 2 > 0 else 0.0)
             for k, e in xs.items()}
 
@@ -499,8 +506,15 @@ def run_generation(gen, play=None, plan_only: bool = False, members_given: list[
 
     for block in range(len(blocks)):
         if block > 0:
+            played = [k for k in ids if members[k].get(f"block_{block}")]
             ranked = [k for k in alive if not as_reference(k, block - 1)]
-            alive = sorted(ranked, key=lambda k: -members[k].get("shrunk", -1))[:promote[block - 1]]
+            # Ties (none, with the floor) fall to the raw difference, never to list order.
+            alive = sorted(ranked, key=lambda k: (-members[k].get("shrunk", -1),
+                                                  -members[k].get("estimate", {}).get("diff", -1)))[:promote[block - 1]]
+            # A block already begun keeps the members that played it: a change to the ranking afterwards must never
+            # send on members picked by other rules (as the ledger keeps a generation's members).
+            if played:
+                alive = played
         # The reference plays the background alone (the base, or W); each member the background and its own genes.
         run_block(gen, "ref", background + reference, block, base_args, play, blocks, first_seed)
         for k in alive:
