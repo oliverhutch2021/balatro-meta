@@ -25,9 +25,11 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import random
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -297,6 +299,23 @@ def block_seeds(gen, block: int, blocks: tuple = None, seed_base: int = None) ->
     return base + sum(blocks[:block]), blocks[block]
 
 
+def write_ledger(p: Path, text: str, tries: int = 5) -> None:
+    """Write the ledger to a new file and move it into place, so the old one is never opened for writing (on the PC's
+    Windows drive, a ledger git had just checked out refused to open for writing: "Invalid argument", 19 November).
+    A refusal is tried again a few times before it stops the league."""
+    tmp = p.with_name(p.name + ".new")
+    for k in range(tries):
+        try:
+            tmp.write_text(text)
+            os.replace(tmp, p)
+            return
+        except OSError as e:
+            if k == tries - 1:
+                raise SystemExit(f"could not write {p} ({e}); the ledger so far is in {tmp} if it exists. Is another "
+                                 "league still running, or the file open in another program?") from e
+            time.sleep(2)
+
+
 def ledger_path(gen, root: Path = OUT) -> Path:
     return root / f"gen-{gen}.json"
 
@@ -463,7 +482,7 @@ def run_generation(gen, play=None, plan_only: bool = False, members_given: list[
     def save():
         p = ROOT / ledger_path(gen)
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(ledger, indent=1) + "\n")
+        write_ledger(p, json.dumps(ledger, indent=1) + "\n")
 
     def counts(k: str, which: list[int]) -> list[tuple[int, int, int]]:
         out = []
