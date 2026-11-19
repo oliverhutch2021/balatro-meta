@@ -1,0 +1,37 @@
+{
+ "same": true,
+ "checks": [
+  {
+   "style": "base",
+   "seeds": 200,
+   "same": true,
+   "differ_at": [],
+   "won_before": 70,
+   "won_after": 70
+  },
+  {
+   "style": "a8e3",
+   "seeds": 200,
+   "same": true,
+   "differ_at": [],
+   "won_before": 81,
+   "won_after": 81
+  },
+  {
+   "style": "4579",
+   "seeds": 200,
+   "same": true,
+   "differ_at": [],
+   "won_before": 79,
+   "won_after": 79
+  },
+  {
+   "style": "W",
+   "seeds": 200,
+   "same": true,
+   "differ_at": [],
+   "won_before": 61,
+   "won_after": 61
+  }
+ ]
+}
