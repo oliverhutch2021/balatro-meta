@@ -67,7 +67,8 @@
    "cut_at_a": false,
    "check": true,
    "differs_block_0": 0.0,
-   "plays_as_reference": true
+   "plays_as_reference": true,
+   "parent": false
   },
   "base": {
    "genes": [],
@@ -106,11 +107,12 @@
     "money": 17.51,
     "runs": 185
    },
-   "shrunk": -0.03,
+   "shrunk": -0.029779673316761054,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.645,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "8f78dacbc0": {
    "genes": [
@@ -158,11 +160,12 @@
     "money": 21.65,
     "runs": 181
    },
-   "shrunk": 0.005,
+   "shrunk": -0.0032055122291173334,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.27,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "8f7fe9bc48": {
    "genes": [
@@ -210,11 +213,12 @@
     "money": 21.18,
     "runs": 184
    },
-   "shrunk": -0.01,
+   "shrunk": -0.013524446714219655,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.18,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "e02626d423": {
    "genes": [
@@ -229,13 +233,13 @@
    ],
    "block_0": true,
    "estimate": {
-    "seeds": 200,
-    "only_ref": 9,
-    "only_member": 10,
-    "diff": 0.005,
-    "se": 0.021791626832340903,
-    "lo": -0.03771158859138817,
-    "hi": 0.04771158859138817
+    "seeds": 1000,
+    "only_ref": 57,
+    "only_member": 52,
+    "diff": -0.005,
+    "se": 0.01043910915739461,
+    "lo": -0.025460653948493436,
+    "hi": 0.015460653948493434
    },
    "estimate_block_0": {
     "seeds": 200,
@@ -247,22 +251,22 @@
     "hi": 0.04771158859138817
    },
    "deaths_by_ante": {
-    "1": 0.0,
-    "2": 0.025,
-    "3": 0.035,
-    "4": 0.105,
-    "5": 0.205,
-    "6": 0.09,
-    "7": 0.065,
-    "8": 0.12,
-    "9": 0.355
+    "1": 0.007,
+    "2": 0.018,
+    "3": 0.033,
+    "4": 0.117,
+    "5": 0.185,
+    "6": 0.089,
+    "7": 0.061,
+    "8": 0.112,
+    "9": 0.378
    },
    "lead_ante4": {
-    "mean": 0.289,
-    "money": 20.88,
-    "runs": 184
+    "mean": 0.324,
+    "money": 20.95,
+    "runs": 902
    },
-   "shrunk": 0.005,
+   "shrunk": -0.0075,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.21,
@@ -277,7 +281,8 @@
     "lo": -0.030736929390519738,
     "hi": 0.01573692939051974
    },
-   "differs_block_1": 0.2087
+   "differs_block_1": 0.2087,
+   "parent": false
   },
   "cf0636fcdb": {
    "genes": [
@@ -292,13 +297,13 @@
    ],
    "block_0": true,
    "estimate": {
-    "seeds": 200,
-    "only_ref": 14,
-    "only_member": 25,
-    "diff": 0.055,
-    "se": 0.03098184952516554,
-    "lo": -0.005724425069324454,
-    "hi": 0.11572442506932445
+    "seeds": 4000,
+    "only_ref": 406,
+    "only_member": 385,
+    "diff": -0.00525,
+    "se": 0.007030690533297565,
+    "lo": -0.019030153445263227,
+    "hi": 0.008530153445263228
    },
    "estimate_block_0": {
     "seeds": 200,
@@ -310,22 +315,22 @@
     "hi": 0.11572442506932445
    },
    "deaths_by_ante": {
-    "1": 0.005,
-    "2": 0.03,
-    "3": 0.03,
-    "4": 0.095,
-    "5": 0.2,
-    "6": 0.11,
-    "7": 0.045,
-    "8": 0.08,
-    "9": 0.405
+    "1": 0.006,
+    "2": 0.0192,
+    "3": 0.0333,
+    "4": 0.1138,
+    "5": 0.1777,
+    "6": 0.0885,
+    "7": 0.0663,
+    "8": 0.104,
+    "9": 0.3912
    },
    "lead_ante4": {
-    "mean": 0.275,
-    "money": 21.03,
-    "runs": 178
+    "mean": 0.319,
+    "money": 20.68,
+    "runs": 3616
    },
-   "shrunk": 0.055,
+   "shrunk": -0.006960688215230627,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.415,
@@ -350,7 +355,9 @@
     "se": 0.008204389069272617,
     "lo": -0.024080602575774327,
     "hi": 0.008080602575774327
-   }
+   },
+   "differs_block_2": 0.4167,
+   "parent": true
   },
   "21dffc86f8": {
    "genes": [
@@ -398,11 +405,12 @@
     "money": 21.18,
     "runs": 184
    },
-   "shrunk": 0.0,
+   "shrunk": -0.007841987260442846,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.33,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "c557f027a5": {
    "genes": [
@@ -418,13 +426,13 @@
    ],
    "block_0": true,
    "estimate": {
-    "seeds": 200,
-    "only_ref": 21,
-    "only_member": 29,
-    "diff": 0.04,
-    "se": 0.035242020373412196,
-    "lo": -0.0290743599318879,
-    "hi": 0.10907435993188791
+    "seeds": 1000,
+    "only_ref": 137,
+    "only_member": 124,
+    "diff": -0.013,
+    "se": 0.016150263155750747,
+    "lo": -0.044654515785271465,
+    "hi": 0.01865451578527147
    },
    "estimate_block_0": {
     "seeds": 200,
@@ -436,22 +444,22 @@
     "hi": 0.10907435993188791
    },
    "deaths_by_ante": {
-    "1": 0.0,
-    "2": 0.025,
-    "3": 0.03,
-    "4": 0.17,
-    "5": 0.185,
-    "6": 0.075,
-    "7": 0.05,
-    "8": 0.075,
-    "9": 0.39
+    "1": 0.007,
+    "2": 0.023,
+    "3": 0.043,
+    "4": 0.143,
+    "5": 0.162,
+    "6": 0.095,
+    "7": 0.071,
+    "8": 0.086,
+    "9": 0.37
    },
    "lead_ante4": {
-    "mean": 0.251,
-    "money": 17.54,
-    "runs": 186
+    "mean": 0.298,
+    "money": 17.14,
+    "runs": 883
    },
-   "shrunk": 0.04,
+   "shrunk": -0.011872401040267083,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.595,
@@ -466,7 +474,8 @@
     "lo": -0.06179178698201597,
     "hi": 0.009291786982015968
    },
-   "differs_block_1": 0.5537
+   "differs_block_1": 0.5537,
+   "parent": false
   },
   "f7afb4097a": {
    "genes": [
@@ -514,8 +523,9 @@
     "money": 21.18,
     "runs": 184
    },
-   "shrunk": -0.055,
-   "cut_at_a": true
+   "shrunk": -0.048973726538576456,
+   "cut_at_a": true,
+   "parent": false
   },
   "83143fa49a": {
    "genes": [
@@ -530,13 +540,13 @@
    ],
    "block_0": true,
    "estimate": {
-    "seeds": 200,
-    "only_ref": 5,
-    "only_member": 8,
-    "diff": 0.015,
-    "se": 0.017996527442815182,
-    "lo": -0.020273193787917754,
-    "hi": 0.05027319378791775
+    "seeds": 1000,
+    "only_ref": 34,
+    "only_member": 29,
+    "diff": -0.005,
+    "se": 0.007935678924956578,
+    "lo": -0.020553930692914894,
+    "hi": 0.010553930692914892
    },
    "estimate_block_0": {
     "seeds": 200,
@@ -548,22 +558,22 @@
     "hi": 0.05027319378791775
    },
    "deaths_by_ante": {
-    "1": 0.0,
-    "2": 0.025,
-    "3": 0.035,
-    "4": 0.105,
-    "5": 0.185,
-    "6": 0.09,
+    "1": 0.007,
+    "2": 0.018,
+    "3": 0.033,
+    "4": 0.116,
+    "5": 0.175,
+    "6": 0.088,
     "7": 0.075,
-    "8": 0.12,
-    "9": 0.365
+    "8": 0.11,
+    "9": 0.378
    },
    "lead_ante4": {
-    "mean": 0.289,
-    "money": 21.18,
-    "runs": 184
+    "mean": 0.319,
+    "money": 21.41,
+    "runs": 911
    },
-   "shrunk": 0.015,
+   "shrunk": -0.008904494382022472,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.1,
@@ -578,7 +588,8 @@
     "lo": -0.02731025129800258,
     "hi": 0.0073102512980025795
    },
-   "differs_block_1": 0.0963
+   "differs_block_1": 0.0963,
+   "parent": false
   },
   "9b0c6ef6d3": {
    "genes": [
@@ -626,11 +637,12 @@
     "money": 20.99,
     "runs": 182
    },
-   "shrunk": -0.015,
+   "shrunk": -0.018755272863302717,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.375,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "1a11ad38b7": {
    "genes": [
@@ -642,13 +654,13 @@
    ],
    "block_0": true,
    "estimate": {
-    "seeds": 200,
-    "only_ref": 2,
-    "only_member": 3,
-    "diff": 0.005,
-    "se": 0.011174748319313506,
-    "lo": -0.01690250670585447,
-    "hi": 0.026902506705854472
+    "seeds": 1000,
+    "only_ref": 10,
+    "only_member": 10,
+    "diff": 0.0,
+    "se": 0.00447213595499958,
+    "lo": -0.008765386471799176,
+    "hi": 0.008765386471799176
    },
    "estimate_block_0": {
     "seeds": 200,
@@ -660,22 +672,22 @@
     "hi": 0.026902506705854472
    },
    "deaths_by_ante": {
-    "1": 0.0,
-    "2": 0.025,
-    "3": 0.035,
-    "4": 0.105,
-    "5": 0.185,
-    "6": 0.105,
-    "7": 0.08,
-    "8": 0.11,
-    "9": 0.355
+    "1": 0.007,
+    "2": 0.018,
+    "3": 0.033,
+    "4": 0.116,
+    "5": 0.174,
+    "6": 0.089,
+    "7": 0.072,
+    "8": 0.108,
+    "9": 0.383
    },
    "lead_ante4": {
-    "mean": 0.291,
-    "money": 21.17,
-    "runs": 184
+    "mean": 0.32,
+    "money": 21.4,
+    "runs": 911
    },
-   "shrunk": 0.005,
+   "shrunk": -0.0024366287441256983,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.055,
@@ -690,7 +702,8 @@
     "lo": -0.01073841382292109,
     "hi": 0.00823841382292109
    },
-   "differs_block_1": 0.0262
+   "differs_block_1": 0.0262,
+   "parent": false
   },
   "bc08379063": {
    "genes": [
@@ -704,13 +717,13 @@
    ],
    "block_0": true,
    "estimate": {
-    "seeds": 200,
-    "only_ref": 5,
-    "only_member": 5,
-    "diff": 0.0,
-    "se": 0.015811388300841896,
-    "lo": -0.030990321069650113,
-    "hi": 0.030990321069650113
+    "seeds": 4000,
+    "only_ref": 160,
+    "only_member": 151,
+    "diff": -0.00225,
+    "se": 0.004408654485781348,
+    "lo": -0.010890962792131443,
+    "hi": 0.006390962792131442
    },
    "estimate_block_0": {
     "seeds": 200,
@@ -722,22 +735,22 @@
     "hi": 0.030990321069650113
    },
    "deaths_by_ante": {
-    "1": 0.0,
-    "2": 0.025,
-    "3": 0.03,
-    "4": 0.115,
-    "5": 0.17,
-    "6": 0.09,
-    "7": 0.075,
-    "8": 0.145,
-    "9": 0.35
+    "1": 0.0057,
+    "2": 0.0198,
+    "3": 0.0367,
+    "4": 0.1087,
+    "5": 0.1745,
+    "6": 0.089,
+    "7": 0.068,
+    "8": 0.1032,
+    "9": 0.3942
    },
    "lead_ante4": {
-    "mean": 0.312,
-    "money": 21.03,
-    "runs": 183
+    "mean": 0.33,
+    "money": 21.18,
+    "runs": 3613
    },
-   "shrunk": 0.0,
+   "shrunk": -0.004038665284873958,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.135,
@@ -752,7 +765,19 @@
     "lo": -0.016157839840131548,
     "hi": 0.021157839840131545
    },
-   "differs_block_1": 0.1675
+   "differs_block_1": 0.1675,
+   "block_2": true,
+   "estimate_block_2": {
+    "seeds": 3000,
+    "only_ref": 127,
+    "only_member": 116,
+    "diff": -0.0036666666666666666,
+    "se": 0.005195721174054524,
+    "lo": -0.013850280167813533,
+    "hi": 0.006516946834480199
+   },
+   "differs_block_2": 0.16,
+   "parent": true
   },
   "7ee7965d2d": {
    "genes": [
@@ -799,11 +824,12 @@
     "money": 19.29,
     "runs": 177
    },
-   "shrunk": -0.06,
+   "shrunk": -0.04901616317568974,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.575,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "58b87f3ecf": {
    "genes": [
@@ -850,8 +876,9 @@
     "money": 15.7,
     "runs": 179
    },
-   "shrunk": -0.07,
-   "cut_at_a": true
+   "shrunk": -0.05617019176681386,
+   "cut_at_a": true,
+   "parent": false
   },
   "c7fc1ed67b": {
    "genes": [
@@ -900,11 +927,12 @@
     "money": 21.18,
     "runs": 184
    },
-   "shrunk": 0.0,
+   "shrunk": -0.004943163196739597,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.19,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "74b172ecfb": {
    "genes": [
@@ -921,13 +949,13 @@
    ],
    "block_0": true,
    "estimate": {
-    "seeds": 1000,
-    "only_ref": 78,
-    "only_member": 88,
-    "diff": 0.01,
-    "se": 0.012880217389469793,
-    "lo": -0.015245226083360793,
-    "hi": 0.035245226083360795
+    "seeds": 4000,
+    "only_ref": 333,
+    "only_member": 331,
+    "diff": -0.0005,
+    "se": 0.00644204451241995,
+    "lo": -0.013126407244343103,
+    "hi": 0.012126407244343102
    },
    "estimate_block_0": {
     "seeds": 200,
@@ -939,22 +967,22 @@
     "hi": 0.07360519377821519
    },
    "deaths_by_ante": {
-    "1": 0.007,
-    "2": 0.017,
-    "3": 0.032,
-    "4": 0.121,
-    "5": 0.175,
-    "6": 0.091,
-    "7": 0.063,
-    "8": 0.101,
-    "9": 0.393
+    "1": 0.0055,
+    "2": 0.0185,
+    "3": 0.0357,
+    "4": 0.1082,
+    "5": 0.1822,
+    "6": 0.09,
+    "7": 0.0638,
+    "8": 0.1,
+    "9": 0.396
    },
    "lead_ante4": {
-    "mean": 0.326,
-    "money": 21.43,
-    "runs": 911
+    "mean": 0.34,
+    "money": 21.28,
+    "runs": 3614
    },
-   "shrunk": -0.0075,
+   "shrunk": -0.004504618184315342,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.35,
@@ -969,7 +997,19 @@
     "lo": -0.021066936963909867,
     "hi": 0.03606693696390986
    },
-   "differs_block_1": 0.32
+   "differs_block_1": 0.32,
+   "block_2": true,
+   "estimate_block_2": {
+    "seeds": 3000,
+    "only_ref": 255,
+    "only_member": 243,
+    "diff": -0.004,
+    "se": 0.007438279370929813,
+    "lo": -0.018579027567022434,
+    "hi": 0.010579027567022432
+   },
+   "differs_block_2": 0.3263,
+   "parent": true
   },
   "ba8ab60584": {
    "genes": [
@@ -983,13 +1023,13 @@
    ],
    "block_0": true,
    "estimate": {
-    "seeds": 1000,
-    "only_ref": 114,
-    "only_member": 137,
-    "diff": 0.023,
-    "se": 0.01582627561999348,
-    "lo": -0.008019500215187221,
-    "hi": 0.05401950021518722
+    "seeds": 4000,
+    "only_ref": 535,
+    "only_member": 540,
+    "diff": 0.00125,
+    "se": 0.008196774327441253,
+    "lo": -0.014815677681784855,
+    "hi": 0.017315677681784856
    },
    "estimate_block_0": {
     "seeds": 200,
@@ -1001,22 +1041,22 @@
     "hi": 0.11312665177621631
    },
    "deaths_by_ante": {
-    "1": 0.007,
-    "2": 0.02,
-    "3": 0.036,
-    "4": 0.127,
-    "5": 0.171,
-    "6": 0.097,
-    "7": 0.057,
-    "8": 0.079,
-    "9": 0.406
+    "1": 0.006,
+    "2": 0.0213,
+    "3": 0.0367,
+    "4": 0.116,
+    "5": 0.1775,
+    "6": 0.0895,
+    "7": 0.0607,
+    "8": 0.0945,
+    "9": 0.3977
    },
    "lead_ante4": {
-    "mean": 0.309,
-    "money": 21.77,
-    "runs": 907
+    "mean": 0.324,
+    "money": 21.57,
+    "runs": 3593
    },
-   "shrunk": -0.0075,
+   "shrunk": -0.005721210106742959,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.595,
@@ -1031,7 +1071,19 @@
     "lo": -0.015437706809246502,
     "hi": 0.052937706809246504
    },
-   "differs_block_1": 0.54
+   "differs_block_1": 0.54,
+   "block_2": true,
+   "estimate_block_2": {
+    "seeds": 3000,
+    "only_ref": 421,
+    "only_member": 403,
+    "diff": -0.006,
+    "se": 0.009567839649343815,
+    "lo": -0.024752965712713876,
+    "hi": 0.012752965712713877
+   },
+   "differs_block_2": 0.5667,
+   "parent": true
   },
   "cb858c222e": {
    "genes": [
@@ -1079,7 +1131,7 @@
     "money": 21.52,
     "runs": 917
    },
-   "shrunk": -0.0075,
+   "shrunk": -0.00862739571589628,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.23,
@@ -1094,7 +1146,8 @@
     "lo": -0.03162671496089964,
     "hi": 0.011626714960899636
    },
-   "differs_block_1": 0.2387
+   "differs_block_1": 0.2387,
+   "parent": false
   },
   "c96069bb4e": {
    "genes": [
@@ -1146,7 +1199,8 @@
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.645,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "3bc0e5f7d5": {
    "genes": [
@@ -1194,7 +1248,7 @@
     "money": 21.46,
     "runs": 895
    },
-   "shrunk": -0.0075,
+   "shrunk": -0.007843437920912686,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.51,
@@ -1209,7 +1263,8 @@
     "lo": -0.040594227842342165,
     "hi": 0.023094227842342163
    },
-   "differs_block_1": 0.4612
+   "differs_block_1": 0.4612,
+   "parent": false
   },
   "73630f21e9": {
    "genes": [
@@ -1260,7 +1315,8 @@
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.575,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "2c933c9a5a": {
    "genes": [
@@ -1308,7 +1364,7 @@
     "money": 19.77,
     "runs": 887
    },
-   "shrunk": -0.0075,
+   "shrunk": -0.010914888420983504,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.715,
@@ -1323,7 +1379,8 @@
     "lo": -0.06174860355164384,
     "hi": 0.01424860355164384
    },
-   "differs_block_1": 0.6587
+   "differs_block_1": 0.6587,
+   "parent": false
   },
   "00ed55b7b1": {
    "genes": [
@@ -1375,7 +1432,8 @@
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.69,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "3f762bba92": {
    "genes": [
@@ -1424,7 +1482,8 @@
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.425,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "4a9a86e5bc": {
    "genes": [
@@ -1476,7 +1535,8 @@
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.685,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "68cc39c107": {
    "genes": [
@@ -1530,7 +1590,8 @@
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.635,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "bb1dbd1b03": {
    "genes": [
@@ -1576,7 +1637,8 @@
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.63,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "432bcc6a0e": {
    "genes": [
@@ -1626,7 +1688,8 @@
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.57,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "24254bfda4": {
    "genes": [
@@ -1676,7 +1739,8 @@
     "runs": 183
    },
    "shrunk": -0.15792789388156156,
-   "cut_at_a": true
+   "cut_at_a": true,
+   "parent": false
   },
   "d7d020cea9": {
    "genes": [
@@ -1731,7 +1795,8 @@
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.705,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "eac2116a77": {
    "genes": [
@@ -1781,7 +1846,8 @@
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.675,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "faa8e13116": {
    "genes": [
@@ -1836,7 +1902,8 @@
     "runs": 185
    },
    "shrunk": -0.12181414354874855,
-   "cut_at_a": true
+   "cut_at_a": true,
+   "parent": false
   },
   "33a4daf078": {
    "genes": [
@@ -1885,7 +1952,8 @@
     "runs": 185
    },
    "shrunk": -0.08270785335970363,
-   "cut_at_a": true
+   "cut_at_a": true,
+   "parent": false
   },
   "652c486e29": {
    "genes": [
@@ -1939,7 +2007,8 @@
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.75,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   },
   "5ea5a55a50": {
    "genes": [
@@ -1984,7 +2053,8 @@
     "runs": 184
    },
    "shrunk": -0.0628201745838004,
-   "cut_at_a": true
+   "cut_at_a": true,
+   "parent": false
   },
   "cf1184c493": {
    "genes": [
@@ -2031,7 +2101,7 @@
     "money": 17.32,
     "runs": 880
    },
-   "shrunk": -0.0075,
+   "shrunk": -0.010279192376170004,
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.73,
@@ -2046,7 +2116,8 @@
     "lo": -0.06019180397561212,
     "hi": 0.017691803975612114
    },
-   "differs_block_1": 0.675
+   "differs_block_1": 0.675,
+   "parent": false
   },
   "e479efe959": {
    "genes": [
@@ -2098,7 +2169,8 @@
     "runs": 169
    },
    "shrunk": -0.08681114274205973,
-   "cut_at_a": true
+   "cut_at_a": true,
+   "parent": false
   },
   "b8a7b15946": {
    "genes": [
@@ -2147,7 +2219,8 @@
     "runs": 182
    },
    "shrunk": -0.09418778338239289,
-   "cut_at_a": true
+   "cut_at_a": true,
+   "parent": false
   },
   "a04e788fb2": {
    "genes": [
@@ -2198,7 +2271,19 @@
    "cut_at_a": false,
    "check": false,
    "differs_block_0": 0.61,
-   "plays_as_reference": false
+   "plays_as_reference": false,
+   "parent": false
   }
+ },
+ "reference_deaths_by_ante": {
+  "1": 0.0057,
+  "2": 0.019,
+  "3": 0.0377,
+  "4": 0.1085,
+  "5": 0.174,
+  "6": 0.0875,
+  "7": 0.0705,
+  "8": 0.1005,
+  "9": 0.3965
  }
 }
