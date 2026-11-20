@@ -18,6 +18,7 @@ pub mod joker_data;
 pub mod joker_events;
 pub mod jokers;
 pub mod leaks;
+pub mod multipliers;
 pub mod learned;
 pub mod observe;
 pub mod packs;

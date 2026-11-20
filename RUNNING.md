@@ -1713,6 +1713,29 @@ After generation 2 ends (it waits for it):
 cd /mnt/h/balatro-meta && while pgrep -f "league.py --gen 2" >/dev/null; do sleep 60; done; git add results && (git commit -qm "results(league gen 2)" || true) && make sync && make rule1 && make league GEN=3
 ```
 
+## Step 60: the multiplier table (S, lab #33, 20 November)
+
+Three league generations took the bot from 33.2% to about 40%, then twice nothing. The bot is not short of motive
+but of means: from ante 4 its builds enter blinds under about x1.8 their real target too often (B: 92% of losses
+come from the 16% of rounds entered under x1.3). `make multipliers`: a8e3 plays 800 fresh Green seeds (from 300,001);
+at the first blind choice of antes 5 and 7 each build is copied and changed once, and the value's power (next round,
+and the boss with its effect) and the bench are read before and after, on the same salt:
+- the focus hand +3 and +5 levels (and the scoring hand where it differs);
+- the deck one suit, and one suit with Flush +3; one rank to eight copies, size kept; thinned to 40;
+- the best card and the best four with a Red Seal, Glass, Steel;
+- each of Hanging Chad, Sock and Buskin, Dusk, Mime, Hack, Seltzer, Blueprint, Brainstorm in place of the weakest joker
+  (the one whose loss costs least power; copiers tried in every place);
+- the best common, uncommon and rare joker for the build (searched by power);
+- one more hand, discard, card in hand; the best pair of the above.
+
+`scripts/multipliers.py` reports, by ante, each change's median multiplier on power for all builds, the weakest
+third and the band under x1.3, the bench's gain, and the share of builds it lifts over x1.8. Runs after the a8e3
+play-on recording; a 20-seed pre-flight first:
+
+```
+cd /mnt/h/balatro-meta && while pgrep -f "play-on" >/dev/null; do sleep 60; done; git add results && (git commit -qm "results(a8e3 play-on)" || true) && make sync && make multipliers RUNS=20 && make multipliers
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

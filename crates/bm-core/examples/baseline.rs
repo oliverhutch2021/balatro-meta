@@ -39,6 +39,8 @@
 //! (`chunk-NNNNN-{idx,val,ptr,lab}.npy`, `FORK_LABELS`), for `train_value.py --forks`; the report says how often
 //! the teacher's own choice was the option that went best and what its choices gave away (`forks`).
 //!
+//! `--multipliers FILE --at 5,7` writes the multiplier table's line (multipliers.rs, S, lab #33) for each build at the
+//! first blind choice of each ante named: power and bench before and after each single change, with the run's ending.
 //! `--calibrate FILE` writes one JSON line per run (E1 step 1, lab #27 and #30): at each round's start the value's
 //! measured power and its projections three, six and nine rounds on, split by source (`value::calibration`), with what
 //! that round then scored; the forecast's dataset. A diagnosis: play is unchanged.
@@ -295,6 +297,8 @@ fn play(
     let mut seen_open = String::from("null");
     // `--bench FILE`: the bench's score of the build as each ante from 5 began (its boss known), for the validation.
     let mut bench_at: Vec<(i32, [f64; 4])> = Vec::new();
+    // `--multipliers FILE`: the multiplier lines of this run's builds, by ante, written with its ending.
+    let mut mult_at: Vec<(i32, String)> = Vec::new();
     // `--danger-bench FILE`: the run as it left the shop before each boss of antes 4 to 6 (S, lab #33, A2).
     let mut pre_boss: Option<(i32, Run)> = None;
     let mut shop_done: Option<String> = None;
@@ -321,6 +325,18 @@ fn play(
             // On fair copies with their own salt: the run itself is untouched.
             if let Some(sc) = bm_core::bench::ante_score(&run, run.ante, Some(run.boss), bm_core::bench::TRIES, salt << 20 ^ 0xBE4C ^ run.ante as u64) {
                 bench_at.push((run.ante, sc));
+            }
+        }
+        if MULT_OUT.get().is_some()
+            && at_win.is_none()
+            && run.phase == Phase::BlindSelect
+            && MULT_AT.get().is_some_and(|a| a.contains(&run.ante))
+            && run.slots.iter().all(|x| matches!(x, bm_core::blinds::SlotState::Upcoming | bm_core::blinds::SlotState::Select))
+            && mult_at.last().is_none_or(|b| b.0 != run.ante)
+        {
+            // On copies with their own salt: the run itself is untouched.
+            if let Some(l) = bm_core::multipliers::line(&run, salt << 20 ^ 0x3017 ^ run.ante as u64, bm_core::bench::TRIES) {
+                mult_at.push((run.ante, l));
             }
         }
         if forking
@@ -666,6 +682,22 @@ fn play(
                 );
                 writeln!(out.lock().unwrap(), "{line}").expect("--danger-bench: writing");
             }
+        }
+    }
+    if let Some(out) = MULT_OUT.get().filter(|_| !s.refused && !s.unfinished) {
+        use std::io::Write as _;
+        let mut out = out.lock().unwrap();
+        for (a, l) in &mult_at {
+            // The line's own object, opened with the seed and how the run went on from this ante.
+            let line = format!(
+                "{{\"seed\":{},\"run\":{index},\"won\":{},\"end_ante\":{},\"cleared\":{},{}",
+                esc(&s.seed),
+                run.won,
+                run.ante,
+                run.won || run.ante > *a,
+                &l[1..]
+            );
+            writeln!(out, "{line}").expect("--multipliers: writing");
         }
     }
     if let Some(out) = BENCH_OUT.get().filter(|_| !s.refused && !s.unfinished) {
@@ -1027,6 +1059,10 @@ static BENCH_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> 
 /// `--danger-bench FILE`: for each run lost at the boss of ante 4, 5 or 6 holding $10 or more as the shop before it
 /// closed, the boss's chance as it was and after spending that money in fair copies of the shop (bench::spend_for_boss).
 static DANGER_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> = std::sync::OnceLock::new();
+/// `--multipliers FILE --at 5,7` (S, lab #33): the multiplier table's line (multipliers::line) for each build at the
+/// first blind choice of each ante named, with how the run ended; the run itself plays on untouched.
+static MULT_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> = std::sync::OnceLock::new();
+static MULT_AT: std::sync::OnceLock<Vec<i32>> = std::sync::OnceLock::new();
 /// `--calibrate FILE`: one line per run, each round's start with the value's power and projections (value::calibration)
 /// and what that round scored.
 static CALIB_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> =
@@ -2669,6 +2705,16 @@ fn main() {
         let f = std::fs::File::create(&path).expect("--danger-bench: creating the file");
         let _ = DANGER_OUT.set(Mutex::new(std::io::BufWriter::new(f)));
     }
+    if let Some(path) = opt("--multipliers") {
+        let f = std::fs::File::create(&path).expect("--multipliers: creating the file");
+        let _ = MULT_OUT.set(Mutex::new(std::io::BufWriter::new(f)));
+        let at: Vec<i32> = opt("--at")
+            .unwrap_or_else(|| "5,7".to_string())
+            .split(',')
+            .map(|a| a.trim().parse().expect("--at: antes like 5,7"))
+            .collect();
+        let _ = MULT_AT.set(at);
+    }
     if let Some(path) = opt("--bench") {
         let f = std::fs::File::create(&path).expect("--bench: creating the file");
         let _ = BENCH_OUT.set(Mutex::new(std::io::BufWriter::new(f)));
@@ -3192,6 +3238,7 @@ fn main() {
         (LEAKS_OUT.get(), "--leaks"),
         (CALIB_OUT.get(), "--calibrate"),
         (BENCH_OUT.get(), "--bench"),
+        (MULT_OUT.get(), "--multipliers"),
         (DANGER_OUT.get(), "--danger-bench"),
         (FORCE_OUT.get(), "--force-out"),
     ] {
