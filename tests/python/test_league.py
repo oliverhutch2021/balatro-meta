@@ -11,7 +11,19 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import jobs  # noqa: E402
 import league  # noqa: E402
+
+
+def own_genes(cmd: list[str]) -> list[str]:
+    """What a fake play reads of a member: its options after the champion's ("precise"), less what `as_d5` sets back
+    from -d6's defaults when its genes leave them."""
+    added = {"card-tiers", "no-skips", *jobs.D5_NUMBERS}
+    return [o for o in cmd[cmd.index("--teacher-options") + 1].split(",")[1:] if o not in added]
+
+
+def has(genes: list[str], name: str) -> bool:
+    return any(g.split("=")[0] == name for g in genes)
 
 
 def test_members_are_the_same_each_time_and_distinct():
@@ -72,8 +84,8 @@ def test_a_block_begun_keeps_who_played_it_and_fills_the_rest_by_the_ranking(tmp
             return 0
         out = Path(tmp_path / cmd[cmd.index("--out") + 1])
         runs = int(cmd[cmd.index("--runs") + 1])
-        opts = cmd[cmd.index("--teacher-options") + 1]
-        extra = next((v for g, v in wins.items() if g in opts), None)
+        opts = own_genes(cmd)
+        extra = next((v for g, v in wins.items() if has(opts, g)), None)
         lost = "M" if extra is None else "L"
         st = "".join("Y" if i % 2 or (extra and i % 10 < 2 * extra) else lost for i in range(runs))
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -108,7 +120,7 @@ def test_a_generation_plays_cuts_promotes_and_names_parents(tmp_path, monkeypatc
             return 0
         out = Path(tmp_path / cmd[cmd.index("--out") + 1])
         runs = int(cmd[cmd.index("--runs") + 1])
-        opts = cmd[cmd.index("--teacher-options") + 1]
+        opts = own_genes(cmd)
         # A member with "skips" wins every seed; everyone else wins every other one, like the reference.
         stages = "Y" * runs if "skips" in opts else "".join("Y" if i % 2 else "A" for i in range(runs))
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -141,10 +153,10 @@ def test_selection_uses_the_latest_block_alone_and_a_stop_keeps_the_rest_for_lat
             return 0
         out = Path(tmp_path / cmd[cmd.index("--out") + 1])
         runs, first = int(cmd[cmd.index("--runs") + 1]), int(cmd[cmd.index("--seed") + 1])
-        opts = cmd[cmd.index("--teacher-options") + 1]
+        opts = own_genes(cmd)
         # "skips" wins every seed of the first block only, "spend-down" every seed of the later ones.
         later = first > 70001
-        good = ("skips" in opts and not later) or ("spend-down" in opts and later)
+        good = ("skips" in opts and not later) or (has(opts, "spend-down") and later)
         out.parent.mkdir(parents=True, exist_ok=True)
         # Losses end a stage apart from the reference's (wins the same), so no member plays as the reference.
         lost = "M" if "/ref-" in str(out) else "L"
@@ -174,13 +186,13 @@ def test_a_check_and_a_member_that_plays_as_the_reference_are_never_promoted(tmp
             return 0
         out = Path(tmp_path / cmd[cmd.index("--out") + 1])
         runs = int(cmd[cmd.index("--runs") + 1])
-        opts = cmd[cmd.index("--teacher-options") + 1]
+        opts = own_genes(cmd)
         ref = "".join("Y" if i % 2 else "M" for i in range(runs))
-        if "thin" in opts:  # one seed in 100 won where the reference lost: under 3%, and a tiny SE
+        if has(opts, "thin"):  # one seed in 100 won where the reference lost: under 3%, and a tiny SE
             st = "".join("Y" if i % 100 == 0 else c for i, c in enumerate(ref))
-        elif "long-run" in opts:  # a real member: loses elsewhere and wins a little more
+        elif has(opts, "long-run"):  # a real member: loses elsewhere and wins a little more
             st = "".join("Y" if i % 7 == 0 else ("Y" if i % 2 else "L") for i in range(runs))
-        elif "spend-down" in opts:
+        elif has(opts, "spend-down"):
             st = "".join("Y" if i % 2 else "K" for i in range(runs))
         else:  # "skips": the reference's own genes
             st = ref
@@ -218,7 +230,7 @@ def test_the_wall_league_has_s_six_members_on_w_and_its_own_seeds(tmp_path, monk
     league.run_generation("wall-t", play=play, members_given=league.wall_members(), blocks=(10, 20), promote=(6,),
                           seed_base=90001, stop_after=0, cut_first=False, background=league.W)
     opts = [c[c.index("--teacher-options") + 1] for c in played if c[0] != "gzip"]
-    assert opts[0] == "precise," + ",".join(league.W), "the reference is W"
+    assert opts[0] == "precise," + ",".join(league.as_d5(league.W)), "the reference is W (as -d5 played it)"
     assert all(o.startswith("precise," + ",".join(league.W)) for o in opts) and len(opts) == 7
 
 
@@ -243,9 +255,9 @@ def test_generation_1_has_s_founders_crosses_and_the_base_and_plays_4579_as_refe
         return 0
     led = league.run_generation(1, play=play, stop_after=0)
     ref = next(c for c in played if c[0] != "gzip" and "/ref-b0" in c[c.index("--out") + 1])
-    assert ref[ref.index("--teacher-options") + 1] == "precise," + ",".join(league.GEN1_REFERENCE)
+    assert ref[ref.index("--teacher-options") + 1] == "precise," + ",".join(league.as_d5(league.GEN1_REFERENCE))
     base = next(c for c in played if c[0] != "gzip" and "/base-b0" in c[c.index("--out") + 1])
-    assert base[base.index("--teacher-options") + 1] == "precise"
+    assert base[base.index("--teacher-options") + 1] == "precise," + ",".join(league.as_d5([])), "-d5's base"
     assert all("lead_ante4" in m for m in led["members"].values())
 
 
@@ -313,3 +325,14 @@ def test_a_generation_begun_keeps_its_ledgers_members_when_the_genes_change(tmp_
                         lambda root: (0.75, ["--value-weight", "2.5", "--teacher-options", "precise"], "x.json"))
     out = league.run_generation(5, plan_only=True)
     assert list(out["members"]) == ["aaaa"], "no member is added from a regenerated list"
+
+
+def test_genes_written_for_d5_play_the_same_on_d6():
+    """-d6 (lab #33): each default it changed and the genes leave alone is set back to -d5's; a8e3 needs nothing."""
+    d5 = ["long-run=0.35", "long-power-x=1", "long-money-x=1", "money-scale=25"]
+    assert league.as_d5([]) == ["card-tiers", "no-skips", *d5]
+    assert league.as_d5(league.G1_A8E3) == league.G1_A8E3
+    assert league.as_d5(league.W) == [*league.W, "no-skips", "long-run=0.35", "long-power-x=1", "long-money-x=1"]
+    assert league.as_d5(league.G0_4579) == [*league.G0_4579, "long-run=0.35", "long-power-x=1"]
+    assert league.as_d5(["skips", "card-tiers"]) == ["skips", "card-tiers", *d5]
+    assert jobs.D5_NUMBERS == d5 and "no-skips" in jobs.DEFAULTS_OFF and "long-run=0.35" in jobs.DEFAULTS_OFF

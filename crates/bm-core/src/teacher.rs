@@ -72,6 +72,8 @@ pub const OPTIONS: &[&str] = &[
     // lost (on 400 seeds with round 1's learned value, 1.4 skips a run won 35.75% against 38.5%): the networks had
     // never seen a skipped blind or a held tag and misjudged the position, and the lost shop was only guessed at.
     "skips",
+    // On by default from -d6 (a8e3, lab #33); this turns it off.
+    "no-skips",
     // Jokers to sell picked by the fixed judgement, not by what the run would lose without each.
     "static-sells",
     // No joker or card moves for events (leaving the shop, throws, the order of played cards).
@@ -202,7 +204,8 @@ pub const OPTIONS: &[&str] = &[
     // FILE`), in place of today's power plus the projection.
     "forecast",
     // C8 (lab #30): `card_worth` ranks the enhancements in the user's order (Glass, Lucky, Steel and Gold, Mult and
-    // Bonus) for what Death copies, what a seal goes on and what the digging keeps. On by default.
+    // Bonus) for what Death copies, what a seal goes on and what the digging keeps. On by default until -d6, off from it
+    // (a8e3 plays without it, lab #33); "no-card-tiers" is kept so the league's older genes still parse.
     "card-tiers",
     "no-card-tiers",
     // C10 (lab #30): The Fool used at once when the card it would make is The Hanged Man, Death, The Hermit, or
@@ -530,12 +533,13 @@ const DEFAULTS: &[(&str, &str)] = &[
     // On by the user's judgement (S, lab #30, 13 November): Level on 2,000 Green seeds (+0.60, -0.09 to +1.29), all of it
     // in the runs that hold Card Sharp; the user calls the technique critical. Not a measured gain.
     ("card-sharp", "no-card-sharp"),
-    // C8 and C10 (lab #30): the user's enhancement tiers for targets; The Fool used at once on a card worth copying.
-    ("card-tiers", "no-card-tiers"),
+    // C10 (lab #30): The Fool used at once on a card worth copying. (C8's tiers, "card-tiers", were on until -d6.)
     ("fool-copies", "no-fool-copies"),
     // Level against -d4 with its behaviour met (lab #27, 14 November: +0.80, -1.40 to +3.00; Arcana opened 46% to 87%
     // of those affordable, Tarots used 7.6 to 11.6 a run): the base by S's rule. "open-packs-all" was Worse.
     ("open-packs", "no-open-packs"),
+    // -d6 (lab #33): a8e3, the league's reference for generations 2 and 3, skips blinds for their tags.
+    ("skips", "no-skips"),
 ];
 
 /// Options on by default (each off with "no-<name>").
@@ -549,9 +553,9 @@ pub const ON_BY_DEFAULT: &[&str] = &[
     "shop-fixes",
     "joker-fixes",
     "card-sharp",
-    "card-tiers",
     "fool-copies",
     "open-packs",
+    "skips",
 ];
 
 /// The defaults in force here (for reports: a run's options say what was added, this what the code had on).
@@ -4118,6 +4122,14 @@ fn plain_move(run: &Run, salt: u64) -> (MoveKind, u64) {
 
 #[cfg(test)]
 mod tests {
+
+    /// -d6 (lab #33): a8e3's switches are the defaults, skips on and the tiers off, and each turns back by its name.
+    #[test]
+    fn skips_are_on_and_the_tiers_off_by_default() {
+        with_options(&["light"], || assert!(on("skips") && !on("card-tiers")));
+        with_options(&["light", "no-skips", "card-tiers"], || assert!(!on("skips") && on("card-tiers")));
+        with_options(&["light", "skips", "no-card-tiers"], || assert!(on("skips") && !on("card-tiers")));
+    }
 
     /// Schedules by ante (S, lab #33): "phase=N" puts the late values in force from the decision's ante N on, and only
     /// those given; without "phase" a late value does nothing.

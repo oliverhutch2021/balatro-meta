@@ -528,7 +528,7 @@ BUNDLE_GREEN = 3
 # Where the looks write their tallies (`baseline --leaks`, read by scripts/leaks.py).
 LEAK_DIR = ".sync/leaks"
 # Screens' file names once the champion's report predates the options on by default (champion_trials).
-DEFAULTS_MARK = "-d5"
+DEFAULTS_MARK = "-d6"
 
 
 def played_with_defaults(report: Path) -> bool:
@@ -538,9 +538,12 @@ def played_with_defaults(report: Path) -> bool:
     except (OSError, ValueError):
         return False
 CODE_DEFAULTS = ["boss-reroll", "held-cards", "glass", "five-kind", "freeze-money-last", "round-fixes", "shop-fixes",
-                 "joker-fixes", "card-sharp", "card-tiers", "fool-copies", "open-packs"]
-# All of them turned off (tests replay old runs this way).
-DEFAULTS_OFF = ",".join(f"no-{d}" for d in CODE_DEFAULTS)
+                 "joker-fixes", "card-sharp", "fool-copies", "open-packs", "skips"]
+# -d6 (lab #33): a8e3's genes are the code's own. The value formula's numbers before it: with these, "card-tiers" (on
+# until -d6) and "no-skips", a run plays as it did on -d5's code (league.as_d5).
+D5_NUMBERS = ["long-run=0.35", "long-power-x=1", "long-money-x=1", "money-scale=25"]
+# All of them turned off, and the formula's numbers as they were before -d6 (tests replay old runs this way).
+DEFAULTS_OFF = ",".join([*(f"no-{d}" for d in CODE_DEFAULTS), *D5_NUMBERS])
 
 
 # make look: the gate before any long run (lab #27): 400 runs at Green and 400 at White with every default on and the

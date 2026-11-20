@@ -5,6 +5,9 @@ played, with the same command, and every run must end in the same place (`run_st
 - the `-d5` base, a8e3 (generation 2's reference) and 4579 on generation 2's block A (200 seeds from 50,001);
 - W on the wall league's first 200 seeds (from 60,001).
 
+The styles were played on -d5's code; from -d6 each plays with -d5's defaults set back where its genes leave them
+(league.as_d5), and a fifth check, "a8e3-default", plays the champion's options alone: -d6's own defaults must be a8e3.
+
     scripts/rule1.py [--runs 200]
 
 Writes `results/rule1/<style>.json` and `results/rule1/summary.json`; exits 1 if any run ends elsewhere.
@@ -27,10 +30,11 @@ REC = Path(".sync/rule1")
 
 # (style, its genes on the champion's options, the report that played them, the ledger that holds its options)
 CHECKS = [
-    ("base", [], "results/league/gen-2/base-b0.json", "results/league/gen-2.json"),
-    ("a8e3", league.G1_A8E3, "results/league/gen-2/ref-b0.json", "results/league/gen-2.json"),
-    ("4579", league.G0_4579, "results/league/gen-2/4579b745fb-b0.json", "results/league/gen-2.json"),
-    ("W", league.W, "results/league/gen-wall/ref-b0.json", "results/league/gen-wall.json"),
+    ("base", league.as_d5([]), "results/league/gen-2/base-b0.json", "results/league/gen-2.json"),
+    ("a8e3", league.as_d5(league.G1_A8E3), "results/league/gen-2/ref-b0.json", "results/league/gen-2.json"),
+    ("4579", league.as_d5(league.G0_4579), "results/league/gen-2/4579b745fb-b0.json", "results/league/gen-2.json"),
+    ("W", league.as_d5(league.W), "results/league/gen-wall/ref-b0.json", "results/league/gen-wall.json"),
+    ("a8e3-default", [], "results/league/gen-2/ref-b0.json", "results/league/gen-2.json"),
 ]
 
 

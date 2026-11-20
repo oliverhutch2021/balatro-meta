@@ -143,8 +143,8 @@ pub const PARAMS: &[(&str, f64)] = &[
     // The long run's two parts scaled apart (1: as "long-run" weighs them): its scoring power and growth some rounds
     // on ("long-power-x"), and its held money's shopping in the shops still to come ("long-money-x"). "long-run"
     // scales both at once, so it cannot tell looking further ahead from counting held money more.
-    ("long-power-x", 1.0),
-    ("long-money-x", 1.0),
+    ("long-power-x", LONG_POWER_X),
+    ("long-money-x", LONG_MONEY_X),
     ("long-rounds", LONG_ROUNDS),
     ("buying-power", BUYING_POWER),
     ("money-scale", MONEY_SCALE),
@@ -245,7 +245,7 @@ pub const PARAMS: &[(&str, f64)] = &[
     // switches "late-open-packs-all" and "late-no-open-packs-all"); `teacher::param`. Off (0) unless given; a late
     // value not given leaves its gene as it was.
     ("phase", 0.0),
-    ("late-long-power-x", 1.0),
+    ("late-long-power-x", LONG_POWER_X),
     ("late-above-cap", ABOVE_CAP),
     ("late-buying-power", BUYING_POWER),
     ("late-spend-down", 0.0),
@@ -275,14 +275,20 @@ const OVERSTOCK: f64 = 0.15;
 /// Midas Mask, as dollars a round: its Gold cards (face cards turned Gold when scored, $3 each held at the end
 /// of a round) add up as the deck turns gold, more than this: `make teacher-ideas` tries more.
 const MIDAS: f64 = 1.0;
-/// Weight of the long run (log scoring power some rounds on): 0.5 until the PC's tuning (see SHARPNESS).
-const LONG_RUN: f64 = 0.35;
+/// Weight of the long run (log scoring power some rounds on): 0.5 until the PC's tuning (see SHARPNESS), 0.35 until
+/// -d6. From -d6 (lab #33) the long run's numbers are the league's a8e3 (generation 1's Better, the reference of
+/// generations 2 and 3, which nothing beat): long-run 0.255 (was 0.35), its power part 0.773 and its money part 0.841
+/// (were 1), money-scale 36.1 (was 25). `-d5` plays as `long-run=0.35,long-power-x=1,long-money-x=1,money-scale=25`.
+const LONG_RUN: f64 = 0.255;
+/// The long run's scoring power and growth, and its held money's shopping, scaled apart (-d6: a8e3's).
+const LONG_POWER_X: f64 = 0.773;
+const LONG_MONEY_X: f64 = 0.841;
 /// Rounds the long run looks ahead.
 const LONG_ROUNDS: f64 = 9.0;
 /// Log scoring power a dollar buys in a shop at ante 1 (falling with the ante: late shops add less to a
 /// big score), and the money at which each further dollar is worth half as much.
 const BUYING_POWER: f64 = 0.03;
-const MONEY_SCALE: f64 = 25.0;
+const MONEY_SCALE: f64 = 36.1;
 /// Held Tarots and Spectrals, in dollars.
 const TAROT: f64 = 3.0;
 const SPECTRAL: f64 = 5.0;
@@ -1447,9 +1453,9 @@ fn breakdown_with(run: &Run, salt: u64, samples: usize) -> Option<Breakdown> {
     let deck_share = p("deck-share", DECK_SHARE);
     let power = (1.0 - deck_share) * mean(&o.next) + deck_share * deck_power(run, salt, deals);
     let long_weight = p("long-run", LONG_RUN);
-    let shopping = p("long-money-x", 1.0) * shopping;
+    let shopping = p("long-money-x", LONG_MONEY_X) * shopping;
     let mut long_run =
-        long_weight * (p("long-power-x", 1.0) * (power + growth(&f, &o, run, long)) + shopping);
+        long_weight * (p("long-power-x", LONG_POWER_X) * (power + growth(&f, &o, run, long)) + shopping);
     // "danger-x" (S, lab #33): the long run and its money count only as far as the run is likely to live through this
     // ante's blinds left: a build about to die is paid for what keeps it alive now.
     if crate::teacher::on("danger-x") {
@@ -2489,6 +2495,20 @@ mod tests {
     use super::*;
     use crate::{Run, RunConfig};
 
+    /// -d6 (lab #33): the long run's numbers are a8e3's, and an option still sets each back (`-d5`'s values).
+    #[test]
+    fn the_long_run_s_numbers_are_a8e3_s_and_options_set_them_back() {
+        use crate::teacher::with_options;
+        let read = || (p("long-run", LONG_RUN), p("long-power-x", LONG_POWER_X), p("long-money-x", LONG_MONEY_X),
+                       p("money-scale", MONEY_SCALE));
+        with_options(&["light"], || assert_eq!(read(), (0.255, 0.773, 0.841, 36.1)));
+        let d5 = ["light", "long-run=0.35", "long-power-x=1", "long-money-x=1", "money-scale=25"];
+        with_options(&d5, || assert_eq!(read(), (0.35, 1.0, 1.0, 25.0)));
+        let usual = |n: &str| PARAMS.iter().find(|(k, _)| *k == n).map(|(_, v)| *v);
+        assert_eq!(usual("long-power-x"), Some(LONG_POWER_X));
+        assert_eq!(usual("long-money-x"), Some(LONG_MONEY_X));
+    }
+
     #[test]
     fn the_options_set_how_many_samples_back_a_decision() {
         use crate::teacher::with_options;
@@ -2542,9 +2562,9 @@ mod tests {
         let total = |opts: &[&str]| with_options(opts, || breakdown(&run, 9).unwrap().total);
         let usual = total(&[]);
         assert_eq!(
-            total(&["sharpness=2.5", "long-run=0.35", "planner-edge=0.3"]),
+            total(&["sharpness=2.5", "long-run=0.255", "planner-edge=0.3"]),
             usual,
-            "the usual numbers"
+            "the usual numbers (-d6)"
         );
         assert_ne!(
             total(&["sharpness=3.5", "long-run=0.5", "planner-edge=0.5"]),
@@ -2554,15 +2574,16 @@ mod tests {
         assert_ne!(total(&["long-run=0.25"]), usual);
         assert_ne!(total(&["sharpness=2"]), usual);
         assert_ne!(total(&["money-scale=40", "precise"]), usual);
-        // The long run's parts apart: at 1 as usual; the power's part moves the total, and so does the money's
-        // (this first shop holds money and has shops to come).
-        assert_eq!(total(&["long-power-x=1", "long-money-x=1"]), usual);
+        // The long run's parts apart: at a8e3's values as usual (-d6); the power's part moves the total, and so does
+        // the money's (this first shop holds money and has shops to come).
+        assert_eq!(total(&["long-power-x=0.773", "long-money-x=0.841", "money-scale=36.1"]), usual);
+        assert_ne!(total(&["long-power-x=1", "long-money-x=1"]), usual);
         assert_ne!(total(&["long-power-x=1.4"]), usual);
         assert_ne!(total(&["long-money-x=1.4"]), usual);
         let part = |opts: &[&str]| with_options(opts, || breakdown(&run, 9).unwrap().money);
         assert!(part(&["long-money-x=2"]) > part(&[]) && part(&["long-power-x=2"]) == part(&[]));
         // The last value given counts.
-        assert_eq!(total(&["long-run=0.25", "long-run=0.35"]), usual);
+        assert_eq!(total(&["long-run=0.25", "long-run=0.255"]), usual);
         for bad in ["long-run=x", "long-run=", "nonsense=1", "long-run=inf"] {
             let names = vec![bad.to_string()];
             let err = std::panic::catch_unwind(|| with_options(&[bad], || ()));
@@ -2926,8 +2947,8 @@ mod tests {
         assert!((f4.money + rent).abs() < 1e-9 && (f5.money - (2.0 * f1.money - rent)).abs() < 1e-9);
     }
 
-    /// C8 (lab #30): the user's tiers rank Lucky above Mult and Steel, Glass at the top; the old table had Mult over
-    /// Lucky.
+    /// C8 (lab #30): the user's tiers ("card-tiers", off by default from -d6) rank Lucky above Mult and Steel, Glass at
+    /// the top; the old table, the default again from -d6, had Mult over Lucky.
     #[test]
     fn the_enhancements_rank_in_the_users_order() {
         use crate::card::Enhancement as E;
@@ -2938,8 +2959,11 @@ mod tests {
             c.enhancement = e;
             crate::teacher::with_options(opts, || card_worth(&run, &c))
         };
-        let on: Vec<f64> = [E::Glass, E::Lucky, E::Steel, E::Gold, E::Mult, E::Bonus].iter().map(|&e| worth(e, &[])).collect();
+        let tiers = ["card-tiers"];
+        let on: Vec<f64> =
+            [E::Glass, E::Lucky, E::Steel, E::Gold, E::Mult, E::Bonus].iter().map(|&e| worth(e, &tiers)).collect();
         assert!(on.windows(2).all(|w| w[0] >= w[1]), "Glass, Lucky, Steel, Gold, Mult, Bonus: {on:?}");
+        assert!(worth(E::Mult, &[]) > worth(E::Lucky, &[]), "the old order, -d6's default");
         assert!(worth(E::Mult, &["no-card-tiers"]) > worth(E::Lucky, &["no-card-tiers"]), "the old order");
     }
 

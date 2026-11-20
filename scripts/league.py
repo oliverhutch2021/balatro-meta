@@ -50,7 +50,9 @@ OUT = Path("results/league")
 REC = Path(".sync/league")
 
 # The genes: (option, kind, range). "switch" genes are present or not; "level" genes take a number. Each is drawn in
-# generation 0 with its chance of being set; when not set the base's own value stands.
+# generation 0 with its chance of being set; when not set the base's own value stands. Genes are written for -d5's code
+# (its defaults the base), every generation's alike; from -d6 a member plays its genes through `as_d5`, so a gene list
+# means what it meant when it was drawn and a ledger's members never change their play (rule 2).
 GENES: list[tuple[str, str, tuple, float]] = [
     # Forced moves.
     # B's range fix before generation 2 (lab #33): spend-down 10 and below and ahead 2 and above are known Worse.
@@ -232,6 +234,20 @@ GEN3_BRED, GEN3_RANDOM = 16, 8
 REFERENCES = {1: G0_4579, 2: G1_A8E3, 3: G1_A8E3}
 
 
+def as_d5(genes: list[str]) -> list[str]:
+    """Genes written for -d5's code (every list above, and generations 0 to 3's ledgers), as -d6's code plays them the
+    same way: each default -d6 changed and the genes leave alone is set back to -d5's ("card-tiers" unless
+    "no-card-tiers", "no-skips" unless "skips", and the formula's four numbers, jobs.D5_NUMBERS). a8e3 itself needs
+    nothing back but these are harmless on it."""
+    names = {g.split("=")[0] for g in genes}
+    out = list(genes)
+    if not names & {"card-tiers", "no-card-tiers"}:
+        out.append("card-tiers")
+    if not names & {"skips", "no-skips"}:
+        out.append("no-skips")
+    return out + [n for n in jobs.D5_NUMBERS if n.split("=")[0] not in names]
+
+
 def members_for(gen: int, ledger_dir: Path = OUT) -> list[list[str]]:
     """Generation `gen`'s members: drawn at random (generation 0); generations 1 and 2 as S drew them (GEN1_*, GEN2_*);
     later ones bred from the last generation's parents plus RANDOM_EACH_GEN random ones. The same every time it is
@@ -391,8 +407,7 @@ def run_block(gen, mid: str, genes: list[str], block: int, base_args: list[str],
         first, runs = block_seeds(gen, block, blocks, seed_base)
         a = list(base_args)
         i = a.index("--teacher-options")
-        if genes:
-            a[i + 1] = f"{a[i + 1]},{','.join(genes)}"
+        a[i + 1] = f"{a[i + 1]},{','.join(as_d5(genes))}"
         rec = REC / f"gen-{gen}" / f"{mid}-b{block}.jsonl"
         (ROOT / out).parent.mkdir(parents=True, exist_ok=True)
         (ROOT / rec).parent.mkdir(parents=True, exist_ok=True)
