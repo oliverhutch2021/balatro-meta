@@ -5,6 +5,22 @@
 
 use std::fmt;
 
+thread_local! {
+    /// Whether this thread is taking the recorded run's own step (`live`), where `RunConfig::play_on` acts.
+    static LIVE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Take a step of the recorded run itself: only here does `RunConfig::play_on` play a lost blind on. The bots'
+/// look-ahead copies of a play-on run (a skip played out, a shop judged by the rounds after it) lose as the game
+/// does, so a play-on recording plays as the bot plays until its first loss (B, lab #33: without this, a8e3's play-on
+/// run took the skip play-out's loss as free and its runs parted from a8e3's before any blind was lost).
+pub fn live<T>(f: impl FnOnce() -> T) -> T {
+    let before = LIVE.with(|l| l.replace(true));
+    let out = f();
+    LIVE.with(|l| l.set(before));
+    out
+}
+
 use bm_rng::{pick_index, shuffle, Streams};
 
 use crate::blinds::{
@@ -1002,8 +1018,9 @@ impl Run {
                 }
             }
         }
-        // Recording only (`RunConfig::play_on`): the lost blind is played on as if beaten.
-        if game_over && self.cfg.play_on {
+        // Recording only (`RunConfig::play_on`, on the recorded run's own step, `live`): the lost blind is played on
+        // as if beaten.
+        if game_over && self.cfg.play_on && LIVE.with(|l| l.get()) {
             game_over = false;
             self.played_on += 1;
         }

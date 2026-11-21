@@ -539,7 +539,7 @@ fn play(
             }
         }
         let chips_before = run.round_chips;
-        if let Err(why) = apply(&mut run, k, a) {
+        if let Err(why) = bm_core::run::live(|| apply(&mut run, k, a)) {
             // Never expected: the bots only make legal moves (tested). Say which, for a fix.
             eprintln!(
                 "refused: seed {seed}, move {step}: {k:?} {a:#x} in {:?}: {}",
