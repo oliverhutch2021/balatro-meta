@@ -1763,6 +1763,18 @@ played again.
 cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(rule1 -d6, multiplier table on offerable jokers)" || true) && make sync && cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,long-money-x=0.841,long-power-x=0.773,long-run=0.255,money-scale=36.1,no-card-tiers,skips --runs 2000 --seed 200001 --salt 2 --stake 3 --play-on --calibrate .sync/playon/a8e3-live.jsonl --out results/playon/a8e3-live.json && gzip -f .sync/playon/a8e3-live.jsonl && make multipliers NAME=a8e3-cands
 ```
 
+## Step 63: offered and passed (21 November)
+
+The table's third run (with every candidate's read): at ante 5 the best of 2, 4 and 8 lasting jokers drawn as a shop
+draws them is worth x1.16, x1.26 and x1.38 on the weakest third (x1.0 to 1.17 at ante 7), against the oracle's best
+rare x2.2, one suit with Flush +3 x1.7 and five levels x1.4. `make offers`: a8e3 on 1,000 fresh Green seeds, every shop
+row at antes 2 to 7 read joker by joker (`baseline --offers`), and which the run took; `scripts/offers.py`. Also
+what Gros Michel led to (Cavendish offered afterwards).
+
+```
+cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(a8e3 play-on live, multiplier table with candidates)" || true) && make sync && make offers
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

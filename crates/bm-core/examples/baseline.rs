@@ -299,6 +299,10 @@ fn play(
     let mut bench_at: Vec<(i32, [f64; 4])> = Vec::new();
     // `--multipliers FILE`: the multiplier lines of this run's builds, by ante, written with its ending.
     let mut mult_at: Vec<(i32, String)> = Vec::new();
+    // `--offers FILE`: this shop's rows read (by the row's jokers, so a row is read once) and the shops done.
+    let mut offer_rows: Vec<String> = Vec::new();
+    let mut offer_seen: Vec<Vec<u64>> = Vec::new();
+    let mut offer_shops: Vec<String> = Vec::new();
     // `--danger-bench FILE`: the run as it left the shop before each boss of antes 4 to 6 (S, lab #33, A2).
     let mut pre_boss: Option<(i32, Run)> = None;
     let mut shop_done: Option<String> = None;
@@ -337,6 +341,41 @@ fn play(
             // On copies with their own salt: the run itself is untouched.
             if let Some(l) = bm_core::multipliers::line(&run, salt << 20 ^ 0x3017 ^ run.ante as u64, bm_core::bench::TRIES) {
                 mult_at.push((run.ante, l));
+            }
+        }
+        if OFFER_OUT.get().is_some() && at_win.is_none() {
+            if run.phase == Phase::Shop && (2..=7).contains(&run.ante) {
+                let ids: Vec<u64> = run
+                    .shop
+                    .as_ref()
+                    .map(|sh| {
+                        sh.row
+                            .iter()
+                            .map(|r| match &r.item {
+                                bm_core::shop::RowItem::Joker(j) => j.sort_id,
+                                bm_core::shop::RowItem::Consumable(c) => c.sort_id,
+                                bm_core::shop::RowItem::Card(c) => c.sort_id,
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if !ids.is_empty() && !offer_seen.contains(&ids) {
+                    offer_seen.push(ids);
+                    if let Some(l) = bm_core::multipliers::offer_line(&run, salt << 20 ^ 0x0FFE ^ step) {
+                        offer_rows.push(l);
+                    }
+                }
+            } else if prev_phase == Phase::Shop && !offer_seen.is_empty() {
+                let held: Vec<String> = run.jokers.iter().map(|j| format!("\"{}\"", j.kind.name())).collect();
+                offer_shops.push(format!(
+                    "{{\"ante\":{},\"rows\":[{}],\"left_with\":[{}],\"money_left\":{}}}",
+                    run.ante,
+                    offer_rows.join(","),
+                    held.join(","),
+                    run.money
+                ));
+                offer_rows.clear();
+                offer_seen.clear();
             }
         }
         if forking
@@ -683,6 +722,17 @@ fn play(
                 writeln!(out.lock().unwrap(), "{line}").expect("--danger-bench: writing");
             }
         }
+    }
+    if let Some(out) = OFFER_OUT.get().filter(|_| !s.refused && !s.unfinished) {
+        use std::io::Write as _;
+        let line = format!(
+            "{{\"seed\":{},\"run\":{index},\"won\":{},\"end_ante\":{},\"shops\":[{}]}}",
+            esc(&s.seed),
+            run.won,
+            run.ante,
+            offer_shops.join(",")
+        );
+        writeln!(out.lock().unwrap(), "{line}").expect("--offers: writing");
     }
     if let Some(out) = MULT_OUT.get().filter(|_| !s.refused && !s.unfinished) {
         use std::io::Write as _;
@@ -1063,6 +1113,10 @@ static DANGER_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>>
 /// first blind choice of each ante named, with how the run ended; the run itself plays on untouched.
 static MULT_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> = std::sync::OnceLock::new();
 static MULT_AT: std::sync::OnceLock<Vec<i32>> = std::sync::OnceLock::new();
+/// `--offers FILE` (S and B, lab #33: offered and passed): every shop row the run sees at antes 2 to 7 (each new row:
+/// the shop's first look and after each reroll), each joker on offer read as a multiplier on the build's power, and
+/// what the run held when it left that shop; one line per shop.
+static OFFER_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> = std::sync::OnceLock::new();
 /// `--calibrate FILE`: one line per run, each round's start with the value's power and projections (value::calibration)
 /// and what that round scored.
 static CALIB_OUT: std::sync::OnceLock<Mutex<std::io::BufWriter<std::fs::File>>> =
@@ -2705,6 +2759,10 @@ fn main() {
         let f = std::fs::File::create(&path).expect("--danger-bench: creating the file");
         let _ = DANGER_OUT.set(Mutex::new(std::io::BufWriter::new(f)));
     }
+    if let Some(path) = opt("--offers") {
+        let f = std::fs::File::create(&path).expect("--offers: creating the file");
+        let _ = OFFER_OUT.set(Mutex::new(std::io::BufWriter::new(f)));
+    }
     if let Some(path) = opt("--multipliers") {
         let f = std::fs::File::create(&path).expect("--multipliers: creating the file");
         let _ = MULT_OUT.set(Mutex::new(std::io::BufWriter::new(f)));
@@ -3239,6 +3297,7 @@ fn main() {
         (CALIB_OUT.get(), "--calibrate"),
         (BENCH_OUT.get(), "--bench"),
         (MULT_OUT.get(), "--multipliers"),
+        (OFFER_OUT.get(), "--offers"),
         (DANGER_OUT.get(), "--danger-bench"),
         (FORCE_OUT.get(), "--force-out"),
     ] {

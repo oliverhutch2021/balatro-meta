@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-stakes teacher-exam watch watch-mod record-me compare-me diagnose-control look pack-audit green-bench league rule1 multipliers recheck check-saved diagnose
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-stakes teacher-exam watch watch-mod record-me compare-me diagnose-control look pack-audit green-bench league rule1 multipliers offers recheck check-saved diagnose
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -132,6 +132,9 @@ green-bench:  ## The build bench's validation: the base on 2,000 Green seeds wit
 
 multipliers:  ## The multiplier table (S, lab #33): a8e3 on 800 fresh Green seeds; at antes 5 and 7 each build is copied and changed once (levels, deck, seals, retrigger jokers, the best joker of each rarity, hands...), power and bench before and after; RUNS=20 for a pre-flight
 	$(PY) scripts/multipliers.py --play $(if $(RUNS),--runs $(RUNS)) $(if $(NAME),--name $(NAME))
+
+offers:  ## Offered and passed (S and B, lab #33): a8e3 on 1,000 fresh Green seeds; every shop row at antes 2 to 7 with each joker on offer read as a multiplier on the build, and which the run took (about 2 h)
+	$(PY) scripts/offers.py --play $(if $(RUNS),--runs $(RUNS))
 
 rule1:  ## Rule 1 (lab #34): the -d5 base, a8e3 and 4579 replay generation 2's block A and W the wall's first 200 seeds; every run must end where it did (about 45 minutes)
 	$(PY) scripts/rule1.py

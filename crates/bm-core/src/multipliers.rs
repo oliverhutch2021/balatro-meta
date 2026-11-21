@@ -308,6 +308,45 @@ pub fn line(run: &Run, salt: u64, bench_tries: u64) -> Option<String> {
     ))
 }
 
+/// The shop's joker offers read for this build (S and B, lab #33: offered and passed): for each joker in the row, its
+/// cost and the multiplier on power of holding it in place of the weakest joker (or in a free slot), on the same
+/// deals as the build's own read; with the money and the weakest joker's sale. A diagnostic only.
+pub fn offer_line(run: &Run, salt: u64) -> Option<String> {
+    use crate::shop::RowItem;
+    let shop = run.shop.as_ref()?;
+    let offers: Vec<(JokerKind, i64)> = shop
+        .row
+        .iter()
+        .filter_map(|r| match &r.item {
+            RowItem::Joker(j) => Some((j.kind, r.cost)),
+            _ => None,
+        })
+        .collect();
+    if offers.is_empty() {
+        return None;
+    }
+    let (before, _) = power(run, salt, SCREEN_SAMPLES)?;
+    let full = (run.jokers.len() as i32) >= run.joker_slots;
+    let weakest = if full { weakest_joker(run, salt) } else { None };
+    let sale = weakest.map_or(0, |i| crate::run::joker_sell_value(&run.jokers[i]));
+    let reads: Vec<String> = offers
+        .iter()
+        .filter_map(|&(k, cost)| {
+            let mut c = run.clone();
+            swap_in(&mut c, weakest, k, salt);
+            power(&c, salt, SCREEN_SAMPLES).map(|p| format!("[\"{}\",{cost},{:.4}]", k.name(), (p.0 - before).exp()))
+        })
+        .collect();
+    Some(format!(
+        "{{\"ante\":{},\"money\":{},\"full\":{full},\"weakest\":{},\"weakest_sale\":{sale},\"jokers\":[{}],\"offers\":[{}]}}",
+        run.ante,
+        run.money,
+        weakest.map_or("null".to_string(), |i| format!("\"{}\"", run.jokers[i].kind.name())),
+        run.jokers.iter().map(|j| format!("\"{}\"", j.kind.name())).collect::<Vec<_>>().join(","),
+        reads.join(",")
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
