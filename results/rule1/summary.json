@@ -32,6 +32,14 @@
    "differ_at": [],
    "won_before": 61,
    "won_after": 61
+  },
+  {
+   "style": "a8e3-default",
+   "seeds": 200,
+   "same": true,
+   "differ_at": [],
+   "won_before": 81,
+   "won_after": 81
   }
  ]
 }
