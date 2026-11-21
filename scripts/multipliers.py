@@ -115,7 +115,7 @@ def summary(lines: list[dict]) -> dict:
     return s
 
 
-def play(runs: int, seed: int) -> Path:
+def play(runs: int, seed: int, name: str = "a8e3") -> Path:
     """a8e3 (generation 2's reference, the base) plays `runs` fresh Green seeds with the champion's networks, writing
     a multiplier line at the first blind choice of antes 5 and 7; returns the lines' file (gzipped)."""
     import jobs
@@ -126,12 +126,12 @@ def play(runs: int, seed: int) -> Path:
     a = list(best[1])
     i = a.index("--teacher-options")
     a[i + 1] = f"{a[i + 1]},{','.join(league.G1_A8E3)}"
-    lines = LINES / f"a8e3-{runs}-from-{seed}.jsonl"
+    lines = LINES / f"{name}-{runs}-from-{seed}.jsonl"
     (ROOT / lines).parent.mkdir(parents=True, exist_ok=True)
     (ROOT / OUT).mkdir(parents=True, exist_ok=True)
     cmd = [*jobs.BASELINE, "--bot", "teacher", *a, "--runs", str(runs), "--seed", str(seed), "--salt", "2",
            "--stake", "3", "--multipliers", str(lines), "--at", "5,7",
-           "--out", str(OUT / f"a8e3-{runs}-from-{seed}-report.json")]
+           "--out", str(OUT / f"{name}-{runs}-from-{seed}-report.json")]
     print(f"multiplier table: a8e3 on {runs} Green seeds from {seed}", flush=True)
     if subprocess.call(cmd, cwd=ROOT) != 0:
         raise SystemExit("the run failed")
@@ -146,10 +146,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--play", action="store_true")
     ap.add_argument("--runs", type=int, default=800)
     ap.add_argument("--seed", type=int, default=300001)
+    ap.add_argument("--name", default="a8e3", help="the files' name (a second table on the same seeds keeps the first)")
     a = ap.parse_args(argv)
     if a.play:
-        a.file = play(a.runs, a.seed)
-        a.out = a.out or ROOT / OUT / f"a8e3-{a.runs}-from-{a.seed}.json"
+        a.file = play(a.runs, a.seed, a.name)
+        a.out = a.out or ROOT / OUT / f"{a.name}-{a.runs}-from-{a.seed}.json"
     if a.file is None:
         ap.error("a lines file, or --play")
     s = summary(read(a.file))

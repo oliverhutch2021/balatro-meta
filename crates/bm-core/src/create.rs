@@ -205,7 +205,7 @@ impl Run {
     // --------------------------------------------------------------- pools
 
     /// Is this joker in the pool now (apart from its rarity)?
-    fn joker_available(&self, k: JokerKind) -> bool {
+    pub(crate) fn joker_available(&self, k: JokerKind) -> bool {
         let info = k.info();
         if self.is_present(Center::Joker(k)) && !self.showman() {
             return false;

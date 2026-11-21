@@ -131,7 +131,7 @@ green-bench:  ## The build bench's validation: the base on 2,000 Green seeds wit
 	$(PY) scripts/jobs.py run green-bench $(JOB_FLAGS)
 
 multipliers:  ## The multiplier table (S, lab #33): a8e3 on 800 fresh Green seeds; at antes 5 and 7 each build is copied and changed once (levels, deck, seals, retrigger jokers, the best joker of each rarity, hands...), power and bench before and after; RUNS=20 for a pre-flight
-	$(PY) scripts/multipliers.py --play $(if $(RUNS),--runs $(RUNS))
+	$(PY) scripts/multipliers.py --play $(if $(RUNS),--runs $(RUNS)) $(if $(NAME),--name $(NAME))
 
 rule1:  ## Rule 1 (lab #34): the -d5 base, a8e3 and 4579 replay generation 2's block A and W the wall's first 200 seeds; every run must end where it did (about 45 minutes)
 	$(PY) scripts/rule1.py

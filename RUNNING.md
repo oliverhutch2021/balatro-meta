@@ -1736,6 +1736,19 @@ play-on recording; a 20-seed pre-flight first:
 cd /mnt/h/balatro-meta && while pgrep -f "play-on" >/dev/null; do sleep 60; done; git add results && (git commit -qm "results(a8e3 play-on)" || true) && make sync && make multipliers RUNS=20 && make multipliers
 ```
 
+## Step 61: -d6, and the multiplier table on the jokers a shop could offer (21 November)
+
+The first table (800 seeds from 300,001; 662 builds at ante 5, 463 at ante 7) ranked a better joker in place of the
+weakest far above everything else (best common x2.8 on the weakest third at ante 5, rare x2.2, uncommon x1.9; one
+suit with Flush +3 x1.7; five levels x1.4; retriggers about x1 or worse). Its best common was mostly Cavendish, which
+no shop offers before Gros Michel's extinction; the search now takes only jokers the shop could offer the build
+(`joker_available`). -d6 (B, lab #36): a8e3's genes are the code's defaults; rule 1 checks five styles, the fifth
+the champion's options alone against a8e3.
+
+```
+cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(multiplier table)" || true) && make sync && make rule1 && make multipliers NAME=a8e3-pool
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

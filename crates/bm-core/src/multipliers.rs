@@ -208,7 +208,10 @@ fn changes(run: &Run, salt: u64) -> Vec<Change> {
         let best = JokerKind::ALL
             .iter()
             .copied()
-            .filter(|k| k.rarity() == rarity && !run.jokers.iter().any(|j| j.kind == *k))
+            // Only jokers a shop could offer this build now (`joker_available`: not held, Cavendish only once Gros
+            // Michel is gone, the enhancement jokers only with such a card): the first table's best common was mostly
+            // Cavendish, which no shop offers before Gros Michel's extinction.
+            .filter(|k| k.rarity() == rarity && run.joker_available(*k))
             .filter_map(|k| {
                 let mut c = run.clone();
                 swap_in(&mut c, weakest, k, salt);
