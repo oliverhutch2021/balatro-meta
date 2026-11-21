@@ -132,7 +132,15 @@ fn remove_card(run: &mut Run, id: crate::state::CardId) {
 }
 
 /// The single changes for this build (some found by search: the weakest joker, the best of each rarity).
-fn changes(run: &Run, salt: u64) -> Vec<Change> {
+/// Every offerable joker's screening read, by rarity (B, lab #33: the table then shows the best of k jokers a run is
+/// actually offered, not only the best of all of them), with the build's own read on the same deals.
+#[derive(Default)]
+struct Candidates {
+    before: f64,
+    by_rarity: Vec<(&'static str, Vec<(JokerKind, f64)>)>,
+}
+
+fn changes(run: &Run, salt: u64, cands: &mut Candidates) -> Vec<Change> {
     let mut out = Vec::new();
     // Hand levels: the focus hand (the bot's own, `teacher::focus_hand`), else the hand that scores the most; and the
     // scoring hand separately where it differs (S: both columns).
@@ -204,8 +212,9 @@ fn changes(run: &Run, salt: u64) -> Vec<Change> {
             out.push(change(format!("joker:{}", k.name()), "joker", move |r: &mut Run| swap_in(r, weakest, k, salt)));
         }
     }
+    cands.before = power(run, salt, SCREEN_SAMPLES).map_or(f64::NAN, |p| p.0);
     for (rarity, label) in [(1u8, "best-common"), (2, "best-uncommon"), (3, "best-rare")] {
-        let best = JokerKind::ALL
+        let reads: Vec<(JokerKind, f64)> = JokerKind::ALL
             .iter()
             .copied()
             // Only jokers a shop could offer this build now (`joker_available`: not held, Cavendish only once Gros
@@ -217,7 +226,9 @@ fn changes(run: &Run, salt: u64) -> Vec<Change> {
                 swap_in(&mut c, weakest, k, salt);
                 power(&c, salt, SCREEN_SAMPLES).map(|p| (k, p.0))
             })
-            .max_by(|a, b| a.1.total_cmp(&b.1));
+            .collect();
+        let best = reads.iter().copied().max_by(|a, b| a.1.total_cmp(&b.1));
+        cands.by_rarity.push((&label[5..], reads));
         if let Some((k, _)) = best {
             out.push(change(format!("{label}:{}", k.name()), "joker", move |r: &mut Run| swap_in(r, weakest, k, salt)));
         }
@@ -245,7 +256,8 @@ pub fn line(run: &Run, salt: u64, bench_tries: u64) -> Option<String> {
         ))
     };
     let before = read(run)?.0;
-    let changes = changes(run, salt);
+    let mut cands = Candidates::default();
+    let changes = changes(run, salt, &mut cands);
     let mut singles: Vec<(usize, f64)> = Vec::new();
     let mut after = Vec::new();
     for (i, ch) in changes.iter().enumerate() {
@@ -272,9 +284,17 @@ pub fn line(run: &Run, salt: u64, bench_tries: u64) -> Option<String> {
     let scaling = scaling_for_stake(run.cfg.stake);
     let ask = |k: BlindKind| blind_target(ante, scaling, k, 1.0).max(1.0).ln();
     let jokers: Vec<String> = run.jokers.iter().map(|j| format!("\"{}\"", j.kind.name())).collect();
+    let cand_json: Vec<String> = cands
+        .by_rarity
+        .iter()
+        .map(|(r, v)| {
+            let xs: Vec<String> = v.iter().map(|(k, p)| format!("[\"{}\",{p:.4}]", k.name())).collect();
+            format!("\"{r}\":[{}]", xs.join(","))
+        })
+        .collect();
     Some(format!(
         "{{\"ante\":{ante},\"boss\":\"{}\",\"focus\":{},\"ask\":[{:.4},{:.4},{:.4}],\"jokers\":[{}],\"deck\":{},\
-         \"before\":{before},\"after\":{{{}}}}}",
+         \"before\":{before},\"after\":{{{}}},\"candidates\":{{\"before\":{:.4},{}}}}}",
         run.boss.name(),
         crate::teacher::focus_hand(run).map_or("null".to_string(), |h| format!("\"{}\"", h.name())),
         ask(BlindKind::Small),
@@ -282,7 +302,9 @@ pub fn line(run: &Run, salt: u64, bench_tries: u64) -> Option<String> {
         ask(BlindKind::Boss(run.boss)),
         jokers.join(","),
         run.playing_cards.len(),
-        after.join(",")
+        after.join(","),
+        cands.before,
+        cand_json.join(",")
     ))
 }
 
@@ -317,7 +339,7 @@ mod tests {
     fn the_changes_do_what_they_name_on_a_copy() {
         let run = at_blind_choice("MULTA");
         assert_eq!(run.phase, crate::state::Phase::BlindSelect);
-        let chs = changes(&run, 7);
+        let chs = changes(&run, 7, &mut Candidates::default());
         let get = |name: &str| chs.iter().find(|c| c.name == name).unwrap_or_else(|| panic!("{name}"));
         let mut c = run.clone();
         (get("one-suit").apply)(&mut c);
@@ -352,7 +374,7 @@ mod tests {
     fn a_line_has_before_after_and_the_asks() {
         let run = at_blind_choice("MULTB");
         let l = line(&run, 3, 2).expect("a line");
-        for key in ["\"before\":{\"power\":", "\"hand+1\":{\"power\":", "\"ask\":[", "\"pair:", "\"one-suit+flush+3\""] {
+        for key in ["\"before\":{\"power\":", "\"hand+1\":{\"power\":", "\"ask\":[", "\"pair:", "\"one-suit+flush+3\"", "\"candidates\":{\"before\":", "\"rare\":[["] {
             assert!(l.contains(key), "{key} in {l}");
         }
         assert_eq!(l.matches('{').count(), l.matches('}').count());

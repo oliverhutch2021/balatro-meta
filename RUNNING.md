@@ -1749,6 +1749,20 @@ the champion's options alone against a8e3.
 cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(multiplier table)" || true) && make sync && make rule1 && make multipliers NAME=a8e3-pool
 ```
 
+## Step 62: the a8e3 play-on recording again, and the table's jokers as offered (21 November)
+
+The table on offerable jokers (same 800 seeds): ante 5, weakest third, best rare x2.2 (Stuntman, Baseball Card,
+Blueprint), best uncommon x1.9 (Ramen, Card Sharp, Seltzer), one suit with Flush +3 x1.7, best common x1.65 (Popcorn,
+Ice Cream, Photograph), focus +5 levels x1.4. Rule 1 passed under -d6 (five styles). B: the best-of-everything rows
+are an oracle and read short-lived jokers at full strength, so each line now keeps every candidate's read and the
+report adds the best of 2, 4 and 8 jokers drawn as a shop draws them, with and without the short-lived ones. And the
+play-on recording parted from a8e3's play before any loss (look-ahead copies played on; PR #37, `run::live`), so it is
+played again.
+
+```
+cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(rule1 -d6, multiplier table on offerable jokers)" || true) && make sync && cargo run --release -q -p bm-core --example baseline -- --bot teacher --value-net models/value-1.bin,models/value-2.bin,models/value-3.bin,models/value-4.bin,models/value-5.bin,models/value-6.bin,models/value-7.bin,models/value-8.bin,models/value-3b.bin,models/value-4b.bin,models/value-5b.bin,models/value-6b.bin,models/value-7b.bin,models/value-8b.bin --value-weight 2.5 --teacher-options precise,late-x=3,boss-x=4,late-from=1,long-money-x=0.841,long-power-x=0.773,long-run=0.255,money-scale=36.1,no-card-tiers,skips --runs 2000 --seed 200001 --salt 2 --stake 3 --play-on --calibrate .sync/playon/a8e3-live.jsonl --out results/playon/a8e3-live.json && gzip -f .sync/playon/a8e3-live.jsonl && make multipliers NAME=a8e3-cands
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

@@ -99,6 +99,60 @@ def table(lines: list[dict]) -> dict:
     return out
 
 
+# Jokers whose next-round read overstates them, since what they give runs out or decays (B, lab #33).
+SHORT_LIVED = {"Ramen", "Seltzer", "Turtle Bean", "Popcorn", "Ice Cream", "Gros Michel"}
+# A shop's joker draws by rarity (common, uncommon, rare).
+RARITY_WEIGHTS = {"common": 0.70, "uncommon": 0.25, "rare": 0.05}
+OFFERS = (2, 4, 8)
+
+
+def best_of_k(cands: dict, k: int, lasting: bool, draws: int = 400, seed: int = 1) -> float | None:
+    """The expected best multiplier among k jokers drawn as a shop draws them (rarity by its weight, then any
+    offerable joker of it), from the line's candidate reads (`candidates`): what a run offered k jokers can have,
+    where the "best-<rarity>" rows are the best of every joker there is."""
+    import random
+    pools = {r: [math.exp(v - cands["before"]) for name, v in cands.get(r, [])
+                 if not (lasting and name in SHORT_LIVED)] for r in RARITY_WEIGHTS}
+    pools = {r: v for r, v in pools.items() if v}
+    if not pools or not math.isfinite(cands.get("before", float("nan"))):
+        return None
+    rs, ws = zip(*[(r, RARITY_WEIGHTS[r]) for r in pools])
+    g = random.Random(seed)
+    total = 0.0
+    for _ in range(draws):
+        total += max(g.choice(pools[r]) for r in g.choices(rs, ws, k=k))
+    return total / draws
+
+
+def offered(lines: list[dict]) -> dict:
+    """Per group of builds (all, the weakest third): the median best-of-k multiplier for k jokers offered, with and
+    without the short-lived ones, and each rarity's best lasting joker (from the candidates' 6-deal reads)."""
+    xs = [x for x in lines if "candidates" in x]
+    if not xs:
+        return {}
+    base = sorted(margin(x["before"], x["ask"][2]) for x in xs)
+    third = base[len(base) // 3] if len(base) >= 3 else base[-1]
+    out = {}
+    for g, keep in {"all": lambda m: True, "weakest_third": lambda m: m <= third}.items():
+        sub = [x for x in xs if keep(margin(x["before"], x["ask"][2]))]
+        row = {}
+        for lasting in (False, True):
+            tag = "lasting" if lasting else "any"
+            for k in OFFERS:
+                vals = [v for v in (best_of_k(x["candidates"], k, lasting) for x in sub) if v is not None]
+                row[f"best_of_{k}_{tag}"] = quart(vals) if vals else None
+        for r in RARITY_WEIGHTS:
+            vals = []
+            for x in sub:
+                c = x["candidates"]
+                lasting = [math.exp(v - c["before"]) for name, v in c.get(r, []) if name not in SHORT_LIVED]
+                if lasting:
+                    vals.append(max(lasting))
+            row[f"best_{r}_lasting"] = quart(vals) if vals else None
+        out[g] = row
+    return out
+
+
 def summary(lines: list[dict]) -> dict:
     s = {}
     for ante in sorted({x["ante"] for x in lines}):
@@ -111,6 +165,7 @@ def summary(lines: list[dict]) -> dict:
             "at_x1.8_or_more": round(sum(v >= SAFE for v in m) / len(m), 3),
             "under_x1.3": round(sum(v < WEAK for v in m) / len(m), 3),
             "changes": table(sub),
+            "offered": offered(sub),
         }
     return s
 
@@ -171,6 +226,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {fam:<20} {al['power_x'][1]:>8} ({al['power_x'][0]}-{al['power_x'][2]}) "
                   f"{wk['power_x'][1]:>10} ({wk['power_x'][0]}-{wk['power_x'][2]}) {wk['bench_gain']:>+8.3f} "
                   f"{'' if lift is None else f'{lift:.0%}':>14}" + (f"  {list(r['found'])[:3]}" if "found" in r else ""))
+        off = t.get("offered", {})
+        if off:
+            print("  Jokers as offered (6-deal reads; median of the expected best of k, all / weakest third):")
+            for key in off["all"]:
+                a, w = off["all"][key], off["weakest_third"].get(key)
+                print(f"    {key:<24} {a[1] if a else '-':>8} {w[1] if w else '-':>8}")
     return 0
 
 
