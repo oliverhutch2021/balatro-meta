@@ -1,0 +1,2924 @@
+{
+ "5": {
+  "builds": 662,
+  "cleared": 0.807,
+  "boss_power_over_ask_median": 0.97,
+  "at_x1.8_or_more": 0.157,
+  "under_x1.3": 0.699,
+  "changes": {
+   "levels+3": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.123,
+      1.203,
+      1.297
+     ],
+     "boss_x": [
+      1.109,
+      1.178,
+      1.293
+     ],
+     "bench_gain": 0.0293,
+     "lifted_over_x1.8": 0.072
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.135,
+      1.236,
+      1.334
+     ],
+     "boss_x": [
+      1.127,
+      1.206,
+      1.337
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.128,
+      1.206,
+      1.296
+     ],
+     "boss_x": [
+      1.114,
+      1.178,
+      1.293
+     ],
+     "bench_gain": 0.0313,
+     "lifted_over_x1.8": 0.0
+    }
+   },
+   "levels+5": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.229,
+      1.372,
+      1.537
+     ],
+     "boss_x": [
+      1.206,
+      1.345,
+      1.531
+     ],
+     "bench_gain": 0.0766,
+     "lifted_over_x1.8": 0.138
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.285,
+      1.427,
+      1.603
+     ],
+     "boss_x": [
+      1.236,
+      1.392,
+      1.613
+     ],
+     "bench_gain": 0.0313,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.252,
+      1.376,
+      1.53
+     ],
+     "boss_x": [
+      1.218,
+      1.345,
+      1.53
+     ],
+     "bench_gain": 0.125,
+     "lifted_over_x1.8": 0.028
+    }
+   },
+   "scoring-levels+3": {
+    "all": {
+     "builds": 338,
+     "power_x": [
+      1.155,
+      1.225,
+      1.323
+     ],
+     "boss_x": [
+      1.123,
+      1.204,
+      1.292
+     ],
+     "bench_gain": 0.0205,
+     "lifted_over_x1.8": 0.078
+    },
+    "weakest_third": {
+     "builds": 120,
+     "power_x": [
+      1.187,
+      1.268,
+      1.361
+     ],
+     "boss_x": [
+      1.139,
+      1.244,
+      1.318
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 246,
+     "power_x": [
+      1.163,
+      1.232,
+      1.323
+     ],
+     "boss_x": [
+      1.127,
+      1.215,
+      1.289
+     ],
+     "bench_gain": 0.0302,
+     "lifted_over_x1.8": 0.012
+    }
+   },
+   "one-suit": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.044,
+      1.271,
+      1.511
+     ],
+     "boss_x": [
+      1.041,
+      1.261,
+      1.541
+     ],
+     "bench_gain": 0.0625,
+     "lifted_over_x1.8": 0.147
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.127,
+      1.325,
+      1.618
+     ],
+     "boss_x": [
+      1.137,
+      1.369,
+      1.692
+     ],
+     "bench_gain": 0.0019,
+     "lifted_over_x1.8": 0.032
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.083,
+      1.296,
+      1.536
+     ],
+     "boss_x": [
+      1.094,
+      1.295,
+      1.571
+     ],
+     "bench_gain": 0.125,
+     "lifted_over_x1.8": 0.084
+    }
+   },
+   "one-suit+flush+3": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.254,
+      1.572,
+      1.953
+     ],
+     "boss_x": [
+      1.224,
+      1.558,
+      2.001
+     ],
+     "bench_gain": 0.2129,
+     "lifted_over_x1.8": 0.276
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.365,
+      1.683,
+      2.098
+     ],
+     "boss_x": [
+      1.372,
+      1.734,
+      2.295
+     ],
+     "bench_gain": 0.125,
+     "lifted_over_x1.8": 0.072
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.327,
+      1.609,
+      1.972
+     ],
+     "boss_x": [
+      1.296,
+      1.6,
+      2.039
+     ],
+     "bench_gain": 0.3945,
+     "lifted_over_x1.8": 0.205
+    }
+   },
+   "rank-x8": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.004,
+      1.04,
+      1.097
+     ],
+     "boss_x": [
+      1.003,
+      1.042,
+      1.097
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.014
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.014,
+      1.059,
+      1.138
+     ],
+     "boss_x": [
+      1.016,
+      1.061,
+      1.128
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.009,
+      1.047,
+      1.108
+     ],
+     "boss_x": [
+      1.012,
+      1.053,
+      1.108
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.002
+    }
+   },
+   "thin-to-40": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.07,
+      1.148,
+      1.288
+     ],
+     "boss_x": [
+      1.053,
+      1.144,
+      1.293
+     ],
+     "bench_gain": 0.0198,
+     "lifted_over_x1.8": 0.079
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.097,
+      1.199,
+      1.352
+     ],
+     "boss_x": [
+      1.08,
+      1.197,
+      1.338
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.005
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.074,
+      1.152,
+      1.288
+     ],
+     "boss_x": [
+      1.064,
+      1.162,
+      1.298
+     ],
+     "bench_gain": 0.0201,
+     "lifted_over_x1.8": 0.011
+    }
+   },
+   "best-card-red-seal": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.005,
+      1.028,
+      1.077
+     ],
+     "boss_x": [
+      1.002,
+      1.024,
+      1.075
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.022
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.013,
+      1.039,
+      1.08
+     ],
+     "boss_x": [
+      1.008,
+      1.033,
+      1.077
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.006,
+      1.03,
+      1.074
+     ],
+     "boss_x": [
+      1.003,
+      1.025,
+      1.068
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    }
+   },
+   "best-4-red-seal": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.059,
+      1.13,
+      1.267
+     ],
+     "boss_x": [
+      1.044,
+      1.122,
+      1.259
+     ],
+     "bench_gain": 0.0234,
+     "lifted_over_x1.8": 0.066
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.099,
+      1.169,
+      1.287
+     ],
+     "boss_x": [
+      1.079,
+      1.15,
+      1.277
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.068,
+      1.14,
+      1.259
+     ],
+     "boss_x": [
+      1.054,
+      1.127,
+      1.237
+     ],
+     "bench_gain": 0.0255,
+     "lifted_over_x1.8": 0.009
+    }
+   },
+   "best-card-glass": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.0,
+      1.009,
+      1.035
+     ],
+     "boss_x": [
+      1.0,
+      1.006,
+      1.031
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.013
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.0,
+      1.008,
+      1.041
+     ],
+     "boss_x": [
+      1.0,
+      1.006,
+      1.033
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.0,
+      1.012,
+      1.039
+     ],
+     "boss_x": [
+      1.0,
+      1.008,
+      1.033
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.002
+    }
+   },
+   "best-4-glass": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.028,
+      1.098,
+      1.241
+     ],
+     "boss_x": [
+      1.02,
+      1.082,
+      1.217
+     ],
+     "bench_gain": 0.0005,
+     "lifted_over_x1.8": 0.09
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.033,
+      1.119,
+      1.225
+     ],
+     "boss_x": [
+      1.028,
+      1.097,
+      1.209
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.009
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.033,
+      1.103,
+      1.225
+     ],
+     "boss_x": [
+      1.023,
+      1.087,
+      1.206
+     ],
+     "bench_gain": 0.0069,
+     "lifted_over_x1.8": 0.032
+    }
+   },
+   "best-card-steel": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      0.991,
+      1.002,
+      1.021
+     ],
+     "boss_x": [
+      0.994,
+      1.0,
+      1.02
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.004
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      0.991,
+      1.001,
+      1.02
+     ],
+     "boss_x": [
+      0.997,
+      1.001,
+      1.021
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      0.993,
+      1.001,
+      1.022
+     ],
+     "boss_x": [
+      0.996,
+      1.001,
+      1.02
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    }
+   },
+   "best-4-steel": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      0.986,
+      1.032,
+      1.106
+     ],
+     "boss_x": [
+      0.985,
+      1.024,
+      1.096
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.023
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      0.988,
+      1.036,
+      1.12
+     ],
+     "boss_x": [
+      0.99,
+      1.032,
+      1.119
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      0.989,
+      1.036,
+      1.114
+     ],
+     "boss_x": [
+      0.986,
+      1.027,
+      1.103
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    }
+   },
+   "joker:Hanging Chad": {
+    "all": {
+     "builds": 551,
+     "power_x": [
+      0.928,
+      1.066,
+      1.218
+     ],
+     "boss_x": [
+      0.921,
+      1.068,
+      1.202
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.038
+    },
+    "weakest_third": {
+     "builds": 195,
+     "power_x": [
+      1.046,
+      1.158,
+      1.309
+     ],
+     "boss_x": [
+      1.051,
+      1.151,
+      1.331
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.005
+    },
+    "under_x1.3": {
+     "builds": 397,
+     "power_x": [
+      0.977,
+      1.113,
+      1.257
+     ],
+     "boss_x": [
+      0.964,
+      1.105,
+      1.267
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.015
+    }
+   },
+   "joker:Sock and Buskin": {
+    "all": {
+     "builds": 648,
+     "power_x": [
+      0.871,
+      1.017,
+      1.148
+     ],
+     "boss_x": [
+      0.856,
+      0.995,
+      1.122
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.042
+    },
+    "weakest_third": {
+     "builds": 217,
+     "power_x": [
+      0.934,
+      1.064,
+      1.222
+     ],
+     "boss_x": [
+      0.897,
+      1.038,
+      1.191
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.005
+    },
+    "under_x1.3": {
+     "builds": 453,
+     "power_x": [
+      0.897,
+      1.031,
+      1.144
+     ],
+     "boss_x": [
+      0.869,
+      1.013,
+      1.122
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.015
+    }
+   },
+   "joker:Dusk": {
+    "all": {
+     "builds": 660,
+     "power_x": [
+      0.845,
+      0.975,
+      1.056
+     ],
+     "boss_x": [
+      0.833,
+      0.96,
+      1.048
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.004
+    },
+    "weakest_third": {
+     "builds": 219,
+     "power_x": [
+      0.917,
+      1.021,
+      1.085
+     ],
+     "boss_x": [
+      0.868,
+      1.011,
+      1.088
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 461,
+     "power_x": [
+      0.872,
+      0.993,
+      1.067
+     ],
+     "boss_x": [
+      0.859,
+      0.983,
+      1.06
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    }
+   },
+   "joker:Mime": {
+    "all": {
+     "builds": 654,
+     "power_x": [
+      0.802,
+      0.931,
+      1.0
+     ],
+     "boss_x": [
+      0.792,
+      0.915,
+      1.0
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.005
+    },
+    "weakest_third": {
+     "builds": 214,
+     "power_x": [
+      0.839,
+      0.99,
+      1.02
+     ],
+     "boss_x": [
+      0.833,
+      0.994,
+      1.012
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 455,
+     "power_x": [
+      0.818,
+      0.953,
+      1.0
+     ],
+     "boss_x": [
+      0.812,
+      0.947,
+      1.0
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.002
+    }
+   },
+   "joker:Hack": {
+    "all": {
+     "builds": 658,
+     "power_x": [
+      0.804,
+      0.932,
+      1.027
+     ],
+     "boss_x": [
+      0.803,
+      0.938,
+      1.035
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.014
+    },
+    "weakest_third": {
+     "builds": 220,
+     "power_x": [
+      0.858,
+      0.997,
+      1.085
+     ],
+     "boss_x": [
+      0.834,
+      1.008,
+      1.094
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 459,
+     "power_x": [
+      0.828,
+      0.97,
+      1.046
+     ],
+     "boss_x": [
+      0.83,
+      0.969,
+      1.06
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.002
+    }
+   },
+   "joker:Seltzer": {
+    "all": {
+     "builds": 651,
+     "power_x": [
+      1.039,
+      1.227,
+      1.577
+     ],
+     "boss_x": [
+      1.021,
+      1.2,
+      1.518
+     ],
+     "bench_gain": 0.0166,
+     "lifted_over_x1.8": 0.123
+    },
+    "weakest_third": {
+     "builds": 217,
+     "power_x": [
+      1.132,
+      1.319,
+      1.642
+     ],
+     "boss_x": [
+      1.127,
+      1.283,
+      1.609
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.014
+    },
+    "under_x1.3": {
+     "builds": 458,
+     "power_x": [
+      1.066,
+      1.256,
+      1.602
+     ],
+     "boss_x": [
+      1.048,
+      1.232,
+      1.555
+     ],
+     "bench_gain": 0.0312,
+     "lifted_over_x1.8": 0.072
+    }
+   },
+   "joker:Blueprint": {
+    "all": {
+     "builds": 628,
+     "power_x": [
+      1.137,
+      1.38,
+      1.751
+     ],
+     "boss_x": [
+      1.102,
+      1.364,
+      1.724
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.199
+    },
+    "weakest_third": {
+     "builds": 215,
+     "power_x": [
+      1.13,
+      1.336,
+      1.577
+     ],
+     "boss_x": [
+      1.08,
+      1.243,
+      1.522
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.014
+    },
+    "under_x1.3": {
+     "builds": 446,
+     "power_x": [
+      1.124,
+      1.337,
+      1.632
+     ],
+     "boss_x": [
+      1.085,
+      1.287,
+      1.579
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.105
+    }
+   },
+   "joker:Brainstorm": {
+    "all": {
+     "builds": 643,
+     "power_x": [
+      0.992,
+      1.162,
+      1.394
+     ],
+     "boss_x": [
+      0.967,
+      1.133,
+      1.383
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.099
+    },
+    "weakest_third": {
+     "builds": 215,
+     "power_x": [
+      1.028,
+      1.202,
+      1.4
+     ],
+     "boss_x": [
+      1.0,
+      1.179,
+      1.398
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.009
+    },
+    "under_x1.3": {
+     "builds": 451,
+     "power_x": [
+      1.009,
+      1.178,
+      1.385
+     ],
+     "boss_x": [
+      0.989,
+      1.145,
+      1.366
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.044
+    }
+   },
+   "best-common": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.32,
+      1.523,
+      1.754
+     ],
+     "boss_x": [
+      1.312,
+      1.539,
+      1.782
+     ],
+     "bench_gain": 0.1749,
+     "lifted_over_x1.8": 0.228
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.46,
+      1.649,
+      1.901
+     ],
+     "boss_x": [
+      1.46,
+      1.655,
+      1.933
+     ],
+     "bench_gain": 0.0873,
+     "lifted_over_x1.8": 0.014
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.392,
+      1.571,
+      1.801
+     ],
+     "boss_x": [
+      1.391,
+      1.596,
+      1.831
+     ],
+     "bench_gain": 0.2774,
+     "lifted_over_x1.8": 0.114
+    },
+    "found": {
+     "Popcorn": 276,
+     "Ice Cream": 199,
+     "Photograph": 37,
+     "Hanging Chad": 31,
+     "Shoot the Moon": 19,
+     "Swashbuckler": 16,
+     "Smiley Face": 16,
+     "Half Joker": 15
+    }
+   },
+   "best-uncommon": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.583,
+      1.859,
+      2.091
+     ],
+     "boss_x": [
+      1.54,
+      1.819,
+      2.051
+     ],
+     "bench_gain": 0.1875,
+     "lifted_over_x1.8": 0.351
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.702,
+      1.878,
+      2.111
+     ],
+     "boss_x": [
+      1.569,
+      1.863,
+      2.051
+     ],
+     "bench_gain": 0.1582,
+     "lifted_over_x1.8": 0.023
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.611,
+      1.862,
+      2.067
+     ],
+     "boss_x": [
+      1.559,
+      1.802,
+      2.005
+     ],
+     "bench_gain": 0.3125,
+     "lifted_over_x1.8": 0.242
+    },
+    "found": {
+     "Ramen": 223,
+     "Card Sharp": 133,
+     "Seltzer": 82,
+     "Turtle Bean": 51,
+     "Flower Pot": 27,
+     "Seeing Double": 26,
+     "Fibonacci": 22,
+     "Bull": 19
+    }
+   },
+   "best-rare": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.685,
+      2.044,
+      2.448
+     ],
+     "boss_x": [
+      1.614,
+      2.041,
+      2.534
+     ],
+     "bench_gain": 0.25,
+     "lifted_over_x1.8": 0.446
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.824,
+      2.173,
+      2.566
+     ],
+     "boss_x": [
+      1.73,
+      2.207,
+      2.786
+     ],
+     "bench_gain": 0.386,
+     "lifted_over_x1.8": 0.113
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.725,
+      2.056,
+      2.389
+     ],
+     "boss_x": [
+      1.649,
+      2.054,
+      2.485
+     ],
+     "bench_gain": 0.5,
+     "lifted_over_x1.8": 0.343
+    },
+    "found": {
+     "Stuntman": 255,
+     "Baseball Card": 119,
+     "Blueprint": 74,
+     "The Trio": 62,
+     "Brainstorm": 42,
+     "Ancient Joker": 36,
+     "The Duo": 32,
+     "The Order": 24
+    }
+   },
+   "hand+1": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.15,
+      1.192,
+      1.23
+     ],
+     "boss_x": [
+      1.125,
+      1.178,
+      1.221
+     ],
+     "bench_gain": 0.0265,
+     "lifted_over_x1.8": 0.072
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.154,
+      1.191,
+      1.226
+     ],
+     "boss_x": [
+      1.106,
+      1.171,
+      1.209
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.156,
+      1.192,
+      1.227
+     ],
+     "boss_x": [
+      1.129,
+      1.179,
+      1.219
+     ],
+     "bench_gain": 0.0261,
+     "lifted_over_x1.8": 0.0
+    }
+   },
+   "discard+1": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.0,
+      1.026,
+      1.073
+     ],
+     "boss_x": [
+      1.0,
+      1.028,
+      1.08
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.013
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.006,
+      1.038,
+      1.078
+     ],
+     "boss_x": [
+      1.0,
+      1.035,
+      1.089
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.0,
+      1.031,
+      1.073
+     ],
+     "boss_x": [
+      1.0,
+      1.03,
+      1.082
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    }
+   },
+   "hand-size+1": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      1.053,
+      1.105,
+      1.189
+     ],
+     "boss_x": [
+      1.041,
+      1.097,
+      1.185
+     ],
+     "bench_gain": 0.0115,
+     "lifted_over_x1.8": 0.039
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      1.06,
+      1.116,
+      1.205
+     ],
+     "boss_x": [
+      1.056,
+      1.12,
+      1.221
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      1.054,
+      1.107,
+      1.183
+     ],
+     "boss_x": [
+      1.048,
+      1.109,
+      1.189
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.002
+    }
+   },
+   "pair": {
+    "all": {
+     "builds": 662,
+     "power_x": [
+      2.76,
+      3.454,
+      5.024
+     ],
+     "boss_x": [
+      2.618,
+      3.441,
+      4.962
+     ],
+     "bench_gain": 0.5835,
+     "lifted_over_x1.8": 0.789
+    },
+    "weakest_third": {
+     "builds": 221,
+     "power_x": [
+      2.923,
+      3.63,
+      5.179
+     ],
+     "boss_x": [
+      2.702,
+      3.695,
+      5.199
+     ],
+     "bench_gain": 0.9082,
+     "lifted_over_x1.8": 0.575
+    },
+    "under_x1.3": {
+     "builds": 463,
+     "power_x": [
+      2.742,
+      3.371,
+      4.8
+     ],
+     "boss_x": [
+      2.564,
+      3.4,
+      4.824
+     ],
+     "bench_gain": 0.7881,
+     "lifted_over_x1.8": 0.747
+    },
+    "found": {
+     "best-rare:Stuntman+one-suit+flush+3": 83,
+     "best-rare:Stuntman+levels+5": 45,
+     "best-rare:Baseball Card+one-suit+flush+3": 35,
+     "one-suit+flush+3+best-rare:Stuntman": 29,
+     "joker:Blueprint+one-suit+flush+3": 27,
+     "best-rare:Baseball Card+levels+5": 23,
+     "best-uncommon:Ramen+one-suit+flush+3": 22,
+     "best-uncommon:Card Sharp+levels+5": 19
+    }
+   }
+  },
+  "offered": {
+   "all": {
+    "best_of_2_any": [
+     0.994,
+     1.124,
+     1.224
+    ],
+    "best_of_4_any": [
+     1.104,
+     1.238,
+     1.355
+    ],
+    "best_of_8_any": [
+     1.213,
+     1.376,
+     1.503
+    ],
+    "best_of_2_lasting": [
+     0.961,
+     1.087,
+     1.186
+    ],
+    "best_of_4_lasting": [
+     1.051,
+     1.185,
+     1.289
+    ],
+    "best_of_8_lasting": [
+     1.16,
+     1.304,
+     1.425
+    ],
+    "best_common_lasting": [
+     1.226,
+     1.404,
+     1.641
+    ],
+    "best_uncommon_lasting": [
+     1.54,
+     1.752,
+     2.028
+    ],
+    "best_rare_lasting": [
+     1.735,
+     2.073,
+     2.494
+    ]
+   },
+   "weakest_third": {
+    "best_of_2_any": [
+     1.064,
+     1.192,
+     1.268
+    ],
+    "best_of_4_any": [
+     1.17,
+     1.316,
+     1.402
+    ],
+    "best_of_8_any": [
+     1.297,
+     1.448,
+     1.559
+    ],
+    "best_of_2_lasting": [
+     1.033,
+     1.158,
+     1.22
+    ],
+    "best_of_4_lasting": [
+     1.121,
+     1.26,
+     1.328
+    ],
+    "best_of_8_lasting": [
+     1.217,
+     1.377,
+     1.484
+    ],
+    "best_common_lasting": [
+     1.328,
+     1.477,
+     1.724
+    ],
+    "best_uncommon_lasting": [
+     1.611,
+     1.815,
+     2.024
+    ],
+    "best_rare_lasting": [
+     1.888,
+     2.198,
+     2.634
+    ]
+   }
+  }
+ },
+ "7": {
+  "builds": 463,
+  "cleared": 0.896,
+  "boss_power_over_ask_median": 1.33,
+  "at_x1.8_or_more": 0.287,
+  "under_x1.3": 0.49,
+  "changes": {
+   "levels+3": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      1.083,
+      1.156,
+      1.225
+     ],
+     "boss_x": [
+      1.067,
+      1.132,
+      1.221
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.13
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      1.096,
+      1.158,
+      1.231
+     ],
+     "boss_x": [
+      1.062,
+      1.125,
+      1.227
+     ],
+     "bench_gain": 0.0302,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      1.092,
+      1.158,
+      1.227
+     ],
+     "boss_x": [
+      1.066,
+      1.127,
+      1.222
+     ],
+     "bench_gain": 0.0454,
+     "lifted_over_x1.8": 0.0
+    }
+   },
+   "levels+5": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      1.153,
+      1.28,
+      1.394
+     ],
+     "boss_x": [
+      1.123,
+      1.243,
+      1.389
+     ],
+     "bench_gain": 0.0312,
+     "lifted_over_x1.8": 0.194
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      1.162,
+      1.279,
+      1.394
+     ],
+     "boss_x": [
+      1.122,
+      1.216,
+      1.362
+     ],
+     "bench_gain": 0.0641,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      1.157,
+      1.285,
+      1.396
+     ],
+     "boss_x": [
+      1.123,
+      1.225,
+      1.362
+     ],
+     "bench_gain": 0.0762,
+     "lifted_over_x1.8": 0.026
+    }
+   },
+   "one-suit": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      0.944,
+      1.07,
+      1.31
+     ],
+     "boss_x": [
+      0.925,
+      1.089,
+      1.369
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.158
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      0.924,
+      1.103,
+      1.374
+     ],
+     "boss_x": [
+      0.924,
+      1.133,
+      1.449
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.045
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      0.935,
+      1.085,
+      1.327
+     ],
+     "boss_x": [
+      0.926,
+      1.091,
+      1.372
+     ],
+     "bench_gain": 0.0225,
+     "lifted_over_x1.8": 0.066
+    }
+   },
+   "one-suit+flush+3": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      1.006,
+      1.239,
+      1.616
+     ],
+     "boss_x": [
+      1.01,
+      1.268,
+      1.674
+     ],
+     "bench_gain": 0.0312,
+     "lifted_over_x1.8": 0.285
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      1.003,
+      1.276,
+      1.777
+     ],
+     "boss_x": [
+      1.019,
+      1.315,
+      1.918
+     ],
+     "bench_gain": 0.099,
+     "lifted_over_x1.8": 0.116
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      1.011,
+      1.249,
+      1.672
+     ],
+     "boss_x": [
+      1.016,
+      1.284,
+      1.696
+     ],
+     "bench_gain": 0.125,
+     "lifted_over_x1.8": 0.15
+    }
+   },
+   "rank-x8": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      0.994,
+      1.01,
+      1.053
+     ],
+     "boss_x": [
+      0.99,
+      1.005,
+      1.052
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.036
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      0.999,
+      1.019,
+      1.065
+     ],
+     "boss_x": [
+      0.991,
+      1.021,
+      1.069
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      0.998,
+      1.017,
+      1.065
+     ],
+     "boss_x": [
+      0.993,
+      1.013,
+      1.063
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    }
+   },
+   "thin-to-40": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      1.039,
+      1.117,
+      1.272
+     ],
+     "boss_x": [
+      1.031,
+      1.116,
+      1.285
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.148
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      1.047,
+      1.141,
+      1.303
+     ],
+     "boss_x": [
+      1.045,
+      1.14,
+      1.342
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.019
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      1.047,
+      1.128,
+      1.293
+     ],
+     "boss_x": [
+      1.038,
+      1.115,
+      1.306
+     ],
+     "bench_gain": 0.0264,
+     "lifted_over_x1.8": 0.04
+    }
+   },
+   "best-card-red-seal": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      1.001,
+      1.017,
+      1.072
+     ],
+     "boss_x": [
+      1.0,
+      1.012,
+      1.065
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.058
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      1.001,
+      1.024,
+      1.075
+     ],
+     "boss_x": [
+      1.0,
+      1.013,
+      1.06
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.006
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      1.0,
+      1.011,
+      1.071
+     ],
+     "boss_x": [
+      1.0,
+      1.008,
+      1.057
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.013
+    }
+   },
+   "best-4-red-seal": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      1.027,
+      1.093,
+      1.258
+     ],
+     "boss_x": [
+      1.024,
+      1.076,
+      1.242
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.136
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      1.028,
+      1.103,
+      1.242
+     ],
+     "boss_x": [
+      1.023,
+      1.089,
+      1.207
+     ],
+     "bench_gain": 0.023,
+     "lifted_over_x1.8": 0.019
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      1.025,
+      1.091,
+      1.242
+     ],
+     "boss_x": [
+      1.023,
+      1.068,
+      1.202
+     ],
+     "bench_gain": 0.0215,
+     "lifted_over_x1.8": 0.04
+    }
+   },
+   "best-card-glass": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      1.0,
+      1.0,
+      1.023
+     ],
+     "boss_x": [
+      1.0,
+      1.0,
+      1.016
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.03
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      1.0,
+      1.003,
+      1.031
+     ],
+     "boss_x": [
+      1.0,
+      1.003,
+      1.029
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      1.0,
+      1.003,
+      1.029
+     ],
+     "boss_x": [
+      1.0,
+      1.002,
+      1.026
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.004
+    }
+   },
+   "best-4-glass": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      1.008,
+      1.057,
+      1.206
+     ],
+     "boss_x": [
+      1.003,
+      1.046,
+      1.162
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.094
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      1.019,
+      1.079,
+      1.237
+     ],
+     "boss_x": [
+      1.012,
+      1.072,
+      1.194
+     ],
+     "bench_gain": 0.0255,
+     "lifted_over_x1.8": 0.026
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      1.014,
+      1.065,
+      1.207
+     ],
+     "boss_x": [
+      1.01,
+      1.055,
+      1.132
+     ],
+     "bench_gain": 0.0184,
+     "lifted_over_x1.8": 0.048
+    }
+   },
+   "best-card-steel": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      0.994,
+      1.001,
+      1.024
+     ],
+     "boss_x": [
+      0.994,
+      1.0,
+      1.018
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.012
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      0.996,
+      1.004,
+      1.032
+     ],
+     "boss_x": [
+      0.993,
+      1.0,
+      1.019
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      0.998,
+      1.005,
+      1.034
+     ],
+     "boss_x": [
+      0.996,
+      1.001,
+      1.022
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    }
+   },
+   "best-4-steel": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      0.985,
+      1.026,
+      1.104
+     ],
+     "boss_x": [
+      0.983,
+      1.018,
+      1.095
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.036
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      0.993,
+      1.03,
+      1.084
+     ],
+     "boss_x": [
+      0.996,
+      1.027,
+      1.099
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      0.992,
+      1.034,
+      1.101
+     ],
+     "boss_x": [
+      0.994,
+      1.027,
+      1.106
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    }
+   },
+   "joker:Hanging Chad": {
+    "all": {
+     "builds": 376,
+     "power_x": [
+      0.777,
+      0.89,
+      1.054
+     ],
+     "boss_x": [
+      0.764,
+      0.88,
+      1.054
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.043
+    },
+    "weakest_third": {
+     "builds": 129,
+     "power_x": [
+      0.837,
+      0.959,
+      1.107
+     ],
+     "boss_x": [
+      0.828,
+      0.949,
+      1.114
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.016
+    },
+    "under_x1.3": {
+     "builds": 192,
+     "power_x": [
+      0.822,
+      0.945,
+      1.102
+     ],
+     "boss_x": [
+      0.811,
+      0.934,
+      1.096
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.026
+    }
+   },
+   "joker:Sock and Buskin": {
+    "all": {
+     "builds": 450,
+     "power_x": [
+      0.771,
+      0.896,
+      1.077
+     ],
+     "boss_x": [
+      0.754,
+      0.888,
+      1.058
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.069
+    },
+    "weakest_third": {
+     "builds": 150,
+     "power_x": [
+      0.793,
+      0.911,
+      1.071
+     ],
+     "boss_x": [
+      0.784,
+      0.899,
+      1.062
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.02
+    },
+    "under_x1.3": {
+     "builds": 221,
+     "power_x": [
+      0.781,
+      0.926,
+      1.072
+     ],
+     "boss_x": [
+      0.769,
+      0.902,
+      1.051
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.036
+    }
+   },
+   "joker:Dusk": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      0.742,
+      0.847,
+      0.995
+     ],
+     "boss_x": [
+      0.722,
+      0.832,
+      0.986
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.012
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      0.779,
+      0.879,
+      1.006
+     ],
+     "boss_x": [
+      0.772,
+      0.879,
+      1.009
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      0.773,
+      0.866,
+      1.008
+     ],
+     "boss_x": [
+      0.747,
+      0.854,
+      1.01
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.004
+    }
+   },
+   "joker:Mime": {
+    "all": {
+     "builds": 459,
+     "power_x": [
+      0.725,
+      0.832,
+      0.975
+     ],
+     "boss_x": [
+      0.709,
+      0.816,
+      0.957
+     ],
+     "bench_gain": -0.0264,
+     "lifted_over_x1.8": 0.015
+    },
+    "weakest_third": {
+     "builds": 154,
+     "power_x": [
+      0.749,
+      0.857,
+      0.983
+     ],
+     "boss_x": [
+      0.729,
+      0.845,
+      0.957
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 225,
+     "power_x": [
+      0.752,
+      0.858,
+      0.987
+     ],
+     "boss_x": [
+      0.734,
+      0.843,
+      0.971
+     ],
+     "bench_gain": -0.0095,
+     "lifted_over_x1.8": 0.0
+    }
+   },
+   "joker:Hack": {
+    "all": {
+     "builds": 459,
+     "power_x": [
+      0.702,
+      0.804,
+      0.944
+     ],
+     "boss_x": [
+      0.697,
+      0.805,
+      0.943
+     ],
+     "bench_gain": -0.0313,
+     "lifted_over_x1.8": 0.018
+    },
+    "weakest_third": {
+     "builds": 152,
+     "power_x": [
+      0.733,
+      0.845,
+      0.949
+     ],
+     "boss_x": [
+      0.713,
+      0.828,
+      0.962
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 224,
+     "power_x": [
+      0.724,
+      0.825,
+      0.969
+     ],
+     "boss_x": [
+      0.715,
+      0.818,
+      0.966
+     ],
+     "bench_gain": -0.0146,
+     "lifted_over_x1.8": 0.004
+    }
+   },
+   "joker:Seltzer": {
+    "all": {
+     "builds": 452,
+     "power_x": [
+      0.854,
+      1.062,
+      1.318
+     ],
+     "boss_x": [
+      0.838,
+      1.036,
+      1.295
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.129
+    },
+    "weakest_third": {
+     "builds": 153,
+     "power_x": [
+      0.925,
+      1.115,
+      1.363
+     ],
+     "boss_x": [
+      0.898,
+      1.104,
+      1.336
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.059
+    },
+    "under_x1.3": {
+     "builds": 224,
+     "power_x": [
+      0.895,
+      1.089,
+      1.323
+     ],
+     "boss_x": [
+      0.865,
+      1.058,
+      1.322
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.089
+    }
+   },
+   "joker:Blueprint": {
+    "all": {
+     "builds": 419,
+     "power_x": [
+      1.211,
+      1.553,
+      2.004
+     ],
+     "boss_x": [
+      1.17,
+      1.504,
+      2.0
+     ],
+     "bench_gain": -0.0357,
+     "lifted_over_x1.8": 0.369
+    },
+    "weakest_third": {
+     "builds": 146,
+     "power_x": [
+      1.114,
+      1.434,
+      1.889
+     ],
+     "boss_x": [
+      1.097,
+      1.379,
+      1.834
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.116
+    },
+    "under_x1.3": {
+     "builds": 210,
+     "power_x": [
+      1.159,
+      1.476,
+      1.91
+     ],
+     "boss_x": [
+      1.117,
+      1.441,
+      1.851
+     ],
+     "bench_gain": -0.0169,
+     "lifted_over_x1.8": 0.214
+    }
+   },
+   "joker:Brainstorm": {
+    "all": {
+     "builds": 443,
+     "power_x": [
+      0.876,
+      1.102,
+      1.399
+     ],
+     "boss_x": [
+      0.869,
+      1.092,
+      1.373
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.144
+    },
+    "weakest_third": {
+     "builds": 147,
+     "power_x": [
+      0.896,
+      1.161,
+      1.4
+     ],
+     "boss_x": [
+      0.895,
+      1.099,
+      1.373
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.041
+    },
+    "under_x1.3": {
+     "builds": 217,
+     "power_x": [
+      0.895,
+      1.161,
+      1.4
+     ],
+     "boss_x": [
+      0.888,
+      1.099,
+      1.375
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.078
+    }
+   },
+   "best-common": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      1.051,
+      1.195,
+      1.384
+     ],
+     "boss_x": [
+      1.037,
+      1.192,
+      1.373
+     ],
+     "bench_gain": 0.0069,
+     "lifted_over_x1.8": 0.167
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      1.11,
+      1.277,
+      1.462
+     ],
+     "boss_x": [
+      1.127,
+      1.283,
+      1.492
+     ],
+     "bench_gain": 0.0454,
+     "lifted_over_x1.8": 0.026
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      1.11,
+      1.267,
+      1.454
+     ],
+     "boss_x": [
+      1.118,
+      1.262,
+      1.474
+     ],
+     "bench_gain": 0.0625,
+     "lifted_over_x1.8": 0.057
+    },
+    "found": {
+     "Popcorn": 162,
+     "Ice Cream": 116,
+     "Hanging Chad": 27,
+     "Photograph": 27,
+     "Scary Face": 20,
+     "Supernova": 17,
+     "Half Joker": 15,
+     "Odd Todd": 11
+    }
+   },
+   "best-uncommon": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      1.449,
+      1.742,
+      2.099
+     ],
+     "boss_x": [
+      1.381,
+      1.703,
+      2.093
+     ],
+     "bench_gain": 0.0908,
+     "lifted_over_x1.8": 0.452
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      1.493,
+      1.762,
+      2.057
+     ],
+     "boss_x": [
+      1.425,
+      1.668,
+      1.995
+     ],
+     "bench_gain": 0.3124,
+     "lifted_over_x1.8": 0.148
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      1.474,
+      1.744,
+      2.035
+     ],
+     "boss_x": [
+      1.384,
+      1.66,
+      1.995
+     ],
+     "bench_gain": 0.2637,
+     "lifted_over_x1.8": 0.26
+    },
+    "found": {
+     "Ramen": 128,
+     "Card Sharp": 121,
+     "Seltzer": 59,
+     "Turtle Bean": 36,
+     "Bootstraps": 28,
+     "Bull": 23,
+     "Seeing Double": 17,
+     "Sock and Buskin": 15
+    }
+   },
+   "best-rare": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      1.558,
+      1.868,
+      2.408
+     ],
+     "boss_x": [
+      1.465,
+      1.84,
+      2.421
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.512
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      1.544,
+      1.847,
+      2.293
+     ],
+     "boss_x": [
+      1.45,
+      1.762,
+      2.25
+     ],
+     "bench_gain": 0.2041,
+     "lifted_over_x1.8": 0.219
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      1.57,
+      1.843,
+      2.293
+     ],
+     "boss_x": [
+      1.461,
+      1.759,
+      2.25
+     ],
+     "bench_gain": 0.1579,
+     "lifted_over_x1.8": 0.348
+    },
+    "found": {
+     "Blueprint": 135,
+     "Baseball Card": 124,
+     "Brainstorm": 45,
+     "Ancient Joker": 37,
+     "The Duo": 35,
+     "Stuntman": 30,
+     "The Trio": 24,
+     "The Order": 18
+    }
+   },
+   "hand+1": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      1.14,
+      1.19,
+      1.234
+     ],
+     "boss_x": [
+      1.119,
+      1.176,
+      1.23
+     ],
+     "bench_gain": 0.016,
+     "lifted_over_x1.8": 0.148
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      1.141,
+      1.184,
+      1.229
+     ],
+     "boss_x": [
+      1.112,
+      1.17,
+      1.227
+     ],
+     "bench_gain": 0.0127,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      1.146,
+      1.192,
+      1.234
+     ],
+     "boss_x": [
+      1.118,
+      1.174,
+      1.229
+     ],
+     "bench_gain": 0.0312,
+     "lifted_over_x1.8": 0.004
+    }
+   },
+   "discard+1": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      1.0,
+      1.021,
+      1.067
+     ],
+     "boss_x": [
+      1.0,
+      1.015,
+      1.077
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.036
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      1.0,
+      1.025,
+      1.075
+     ],
+     "boss_x": [
+      1.0,
+      1.021,
+      1.078
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      1.0,
+      1.023,
+      1.069
+     ],
+     "boss_x": [
+      1.0,
+      1.019,
+      1.076
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    }
+   },
+   "hand-size+1": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      1.035,
+      1.092,
+      1.192
+     ],
+     "boss_x": [
+      1.028,
+      1.087,
+      1.199
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.091
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      1.042,
+      1.102,
+      1.197
+     ],
+     "boss_x": [
+      1.034,
+      1.094,
+      1.225
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      1.034,
+      1.1,
+      1.203
+     ],
+     "boss_x": [
+      1.029,
+      1.087,
+      1.204
+     ],
+     "bench_gain": 0.0171,
+     "lifted_over_x1.8": 0.0
+    }
+   },
+   "pair": {
+    "all": {
+     "builds": 463,
+     "power_x": [
+      2.531,
+      3.212,
+      4.812
+     ],
+     "boss_x": [
+      2.34,
+      3.132,
+      4.751
+     ],
+     "bench_gain": 0.1875,
+     "lifted_over_x1.8": 0.821
+    },
+    "weakest_third": {
+     "builds": 155,
+     "power_x": [
+      2.583,
+      3.235,
+      4.496
+     ],
+     "boss_x": [
+      2.305,
+      3.061,
+      4.418
+     ],
+     "bench_gain": 0.75,
+     "lifted_over_x1.8": 0.652
+    },
+    "under_x1.3": {
+     "builds": 227,
+     "power_x": [
+      2.556,
+      3.198,
+      4.426
+     ],
+     "boss_x": [
+      2.305,
+      2.969,
+      4.333
+     ],
+     "bench_gain": 0.5841,
+     "lifted_over_x1.8": 0.74
+    },
+    "found": {
+     "joker:Blueprint+one-suit+flush+3": 32,
+     "best-uncommon:Card Sharp+levels+5": 31,
+     "best-rare:Baseball Card+levels+5": 31,
+     "joker:Blueprint+levels+5": 29,
+     "best-rare:Baseball Card+one-suit+flush+3": 25,
+     "best-uncommon:Card Sharp+one-suit+flush+3": 13,
+     "best-uncommon:Card Sharp+hand+1": 12,
+     "best-rare:Baseball Card+hand+1": 11
+    }
+   },
+   "scoring-levels+3": {
+    "all": {
+     "builds": 215,
+     "power_x": [
+      1.117,
+      1.159,
+      1.259
+     ],
+     "boss_x": [
+      1.104,
+      1.159,
+      1.248
+     ],
+     "bench_gain": 0.0,
+     "lifted_over_x1.8": 0.143
+    },
+    "weakest_third": {
+     "builds": 74,
+     "power_x": [
+      1.116,
+      1.165,
+      1.236
+     ],
+     "boss_x": [
+      1.094,
+      1.153,
+      1.224
+     ],
+     "bench_gain": 0.0228,
+     "lifted_over_x1.8": 0.0
+    },
+    "under_x1.3": {
+     "builds": 108,
+     "power_x": [
+      1.118,
+      1.165,
+      1.246
+     ],
+     "boss_x": [
+      1.099,
+      1.158,
+      1.228
+     ],
+     "bench_gain": 0.0299,
+     "lifted_over_x1.8": 0.028
+    }
+   }
+  },
+  "offered": {
+   "all": {
+    "best_of_2_any": [
+     0.844,
+     0.955,
+     1.094
+    ],
+    "best_of_4_any": [
+     0.927,
+     1.046,
+     1.205
+    ],
+    "best_of_8_any": [
+     1.035,
+     1.164,
+     1.347
+    ],
+    "best_of_2_lasting": [
+     0.819,
+     0.927,
+     1.068
+    ],
+    "best_of_4_lasting": [
+     0.892,
+     1.011,
+     1.17
+    ],
+    "best_of_8_lasting": [
+     0.987,
+     1.121,
+     1.294
+    ],
+    "best_common_lasting": [
+     1.009,
+     1.169,
+     1.368
+    ],
+    "best_uncommon_lasting": [
+     1.379,
+     1.669,
+     2.022
+    ],
+    "best_rare_lasting": [
+     1.559,
+     1.9,
+     2.461
+    ]
+   },
+   "weakest_third": {
+    "best_of_2_any": [
+     0.887,
+     0.993,
+     1.138
+    ],
+    "best_of_4_any": [
+     0.979,
+     1.089,
+     1.239
+    ],
+    "best_of_8_any": [
+     1.078,
+     1.207,
+     1.388
+    ],
+    "best_of_2_lasting": [
+     0.858,
+     0.973,
+     1.11
+    ],
+    "best_of_4_lasting": [
+     0.935,
+     1.053,
+     1.198
+    ],
+    "best_of_8_lasting": [
+     1.02,
+     1.172,
+     1.322
+    ],
+    "best_common_lasting": [
+     1.096,
+     1.256,
+     1.443
+    ],
+    "best_uncommon_lasting": [
+     1.399,
+     1.66,
+     2.072
+    ],
+    "best_rare_lasting": [
+     1.549,
+     1.872,
+     2.287
+    ]
+   }
+  }
+ }
+}
