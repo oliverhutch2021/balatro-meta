@@ -414,6 +414,26 @@ def test_the_diagnosis_replays_the_newest_recording_with_the_champion_and_tables
     assert "diagnose" in jobs.JOBS
 
 
+def test_from_round_12_a_round_records_and_screens_at_green(tmp_path):
+    data = tmp_path / "data"
+    champion_in(tmp_path)
+    r12 = jobs.screened_round(12, tmp_path, data)
+    rec = {n: a for n, a, *_ in r12["teacher-data-12"]}
+    for k in range(1, jobs.ROUND_PARTS + 1):
+        a = rec[f"record-{k}"]
+        assert a[a.index("--stake") + 1] == "3" and "--endless" in a
+    screens = {n: a for n, a, *_ in r12["teacher-learned-12"]}
+    control = screens["champion"]
+    assert control[control.index("--stake") + 1] == "3", "the control played at Green, never White's stored report"
+    out = control[control.index("--out") + 1]
+    assert "-stake3-salt" in out
+    for n, a in screens.items():
+        if n not in ("build", "champion") and not n.startswith("compare-"):
+            assert a[a.index("--stake") + 1] == "3" and "-stake3-" in a[a.index("--out") + 1]
+    r11 = jobs.screened_round(11, tmp_path, data)
+    assert all("--stake" not in a for _, a, *_ in r11["teacher-data-11"]), "round 11 as it was"
+
+
 def test_from_round_11_the_champion_records_a_round_in_parts_and_its_pair_is_screened_against_it(tmp_path):
     data = tmp_path / "data"
     champion_in(tmp_path)

@@ -1775,6 +1775,18 @@ what Gros Michel led to (Cavendish offered afterwards).
 cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(a8e3 play-on live, multiplier table with candidates)" || true) && make sync && make offers
 ```
 
+## Step 64: the judge round on a8e3 at Green (S, lab #33, item 3; 22 November)
+
+Offered and passed (1,000 seeds): lasting jokers worth x1.6 or more are offered 1.46 times a run at antes 2-3, 0.52
+at 4-5 and 0.21 at 6-7, and the bot takes about two in three of the affordable ones; most strong jokers it passes are
+short-lived (Ice Cream, Popcorn, Gros Michel, Ramen). It rerolls little (1.3 to 1.5 rows a shop). Gros Michel: held in
+55 runs of 1,000, Cavendish offered afterwards in 6. From round 12 a round records and screens at Green
+(`jobs.GREEN_FROM`); with -d6 the champion's options play as a8e3. Five parts of 5,000 runs, each resumable alone.
+
+```
+cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(offered and passed)" || true) && make sync && make teacher-data-12
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

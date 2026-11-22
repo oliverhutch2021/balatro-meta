@@ -333,6 +333,10 @@ def learned_round(n: int, root: Path = ROOT) -> dict[str, list[tuple]]:
 # champion's weight and at ROUND_HIGH_WEIGHT, and the champion's networks with the pair. A screen chooses nothing by
 # itself (best_8k counts 8,000-seed reports only).
 SCREEN_FROM = 11
+# From round 12 a round records and screens at Green Stake (S, lab #33, 20 November: the new base's judge from its own
+# Green games; B: round 11 recorded at White, the default stake).
+GREEN_FROM = 12
+GREEN = 3
 ROUND_PARTS = 5
 ROUND_PART_RUNS = 5000
 ROUND_HIGH_WEIGHT = "4"
@@ -350,12 +354,14 @@ def screened_round(n: int, root: Path = ROOT, data: Path | None = None) -> dict[
     pair, on round n's runs alone) and teacher-learned-n (the screens against the champion)."""
     best = best_8k_report(root)
     record = exploring(best[1] if best else best_recording(root), n)
+    stake = GREEN if n >= GREEN_FROM else None
+    stake_args = ["--stake", str(stake)] if stake else []
     parts = round_parts(n, data or DATA)
     pair = f"models/value-{n}.bin,models/value-{n}b.bin"
     steps = [("build", [*MAKE, "build"])]
     for k, folder in enumerate(parts, 1):
         steps.append((f"record-{k}", [*BASELINE, "--bot", "teacher", *record, "--runs", str(ROUND_PART_RUNS),
-                                      "--seed", str(101 * (n + 1) + k - 1), "--endless", "--record", str(folder),
+                                      "--seed", str(101 * (n + 1) + k - 1), *stake_args, "--endless", "--record", str(folder),
                                       "--out", f"results/value/record-{n}-{k}.json"]))
     data_args = [a for f in parts for a in ("--data", str(f))]
     nets = best[1][best[1].index("--value-net") + 1] if best else None
@@ -371,7 +377,7 @@ def screened_round(n: int, root: Path = ROOT, data: Path | None = None) -> dict[
                                   "--report", f"results/value/value-{n}{suffix}.json"])
               for suffix, seed in (("", "1"), ("b", "2"))],
         ],
-        f"teacher-learned-{n}": champion_trials(root, tuple(trials), SCREEN_RUNS, salt=SCREEN_SALT),
+        f"teacher-learned-{n}": champion_trials(root, tuple(trials), SCREEN_RUNS, salt=SCREEN_SALT, stake=stake),
     }
 
 
@@ -413,7 +419,7 @@ SCREEN_SALT = 1
 
 
 def champion_trials(root: Path, trials: tuple[tuple, ...], runs: int,
-                    control_runs: int | None = None, salt: int = 0) -> list[tuple]:
+                    control_runs: int | None = None, salt: int = 0, stake: int | None = None) -> list[tuple]:
     """The teacher that won most of the first 8,000 usual seeds (best_8k), at each (weight, option) of `trials` on
     the first `runs` seeds, each set run by run against the champion's own runs (its report; or, with CONTROL_AGAIN
     or an "again" report there, the champion played again on today's code on `control_runs` seeds, once). The
@@ -423,7 +429,8 @@ def champion_trials(root: Path, trials: tuple[tuple, ...], runs: int,
     (weight, option, networks, name), plays those networks instead of the champion's (named so in its report's
     file: "-on-<name>"); an option of "" keeps the champion's options as they are. With a `salt`, the control is the
     champion played at that salt on `control_runs` seeds (once, "-salt<K>" in its name; SCREEN_SALT) and every trial
-    plays at the same salt."""
+    plays at the same salt. With a `stake`, the control and every trial play at it ("-stake<N>" in their names; the
+    control is then always played, since the champion's own report is White's)."""
     steps: list[tuple] = [("build", [*MAKE, "build"])]
     best = best_8k_report(root)
     if best is None:
@@ -456,7 +463,9 @@ def champion_trials(root: Path, trials: tuple[tuple, ...], runs: int,
     mark = DEFAULTS_MARK if old_code else ""
     again = f"results/tune/{tag}-{file_safe(opts)}-{control_size}-w{w0}-again{mark}-on-{nets_stem}.json"
     salted, salt_args = (f"-salt{salt}{mark}", ["--salt", str(salt)]) if salt else (mark, [])
-    if salt:
+    if stake:
+        salted, salt_args = f"-stake{stake}{salted}", [*salt_args, "--stake", str(stake)]
+    if salt or stake:
         control = f"results/tune/{tag}-{file_safe(opts)}-{control_size}-w{w0}{salted}-on-{nets_stem}.json"
     else:
         control = report if not (CONTROL_AGAIN or old_code) and not (root / again).exists() else again
