@@ -1457,6 +1457,9 @@ def ppo(a) -> dict:
             gae = delta + gm * a.lam * nonterm * gae
             adv2[t] = gae
         ret2 = adv2 + vals
+        # Each head's explained variance on this batch (S, lab #38): 1 - Var(return - value) / Var(return).
+        explained = [round(float(1.0 - (ret2[..., h] - vals[..., h]).var() / ret2[..., h].var()), 4)
+                     if float(ret2[..., h].var()) > 1e-12 else float("nan") for h in range(N_VALUES)]  # nan: no spread
         # The play's advantage: the win head's plus beta times the depth head's (normalised below).
         adv = adv2[..., WIN] + state["beta"] * adv2[..., DEPTH]
         # The spreads take in this batch's returns; the value targets are in the new units.
@@ -1550,6 +1553,12 @@ def ppo(a) -> dict:
             watch.history.append([round(el_s, 1), stats["runs"], round(ante_recent, 4), round(win_recent, 5)])
         last_losses = {k: round(v / max(nb, 1), 5) for k, v in losses.items()}
         last_losses["first_kl"] = round(first_kl or 0.0, 6)
+        last_losses["explained_win"], last_losses["explained_depth"] = explained
+        # Where the update's time went (lab #38: CPU or GPU decides what hardware helps).
+        play_s, learn_s = t_learn - t_play, time.time() - t_learn
+        last_losses["play_s"], last_losses["learn_s"] = round(play_s, 1), round(learn_s, 1)
+        state.setdefault("timing", []).append([round(play_s, 2), round(learn_s, 2)])
+        state["timing"] = state["timing"][-50:]
         if a.eval_every and state["updates"] % a.eval_every == 0:
             # The evaluator: the evaluator's seeds with the likeliest moves, the checkpoint kept beside its numbers.
             model.eval()
@@ -1561,7 +1570,7 @@ def ppo(a) -> dict:
                   "win_rate": ev_stats["wins"] / max(ev_stats["runs"], 1), "win_ci": [lo_e, hi_e],
                   "mean_ante": sum((i + 1) * k for i, k in enumerate(ev_stats["ante_hist"])) / max(ev_stats["runs"], 1),
                   "survival": survival(ev_stats["ante_hist"]), "run_stages": "".join(ev_stages),
-                  "seconds": round(time.time() - t_ev, 1)}
+                  "seconds": round(time.time() - t_ev, 1), "explained": explained}
             # The depth head's weight steps down as the win rate rises (B's rule; undone after a 2 SE fall).
             ev["beta_before"] = state["beta"]
             state["beta"], why = next_beta(state["beta"], last_eval, ev)
@@ -1610,7 +1619,11 @@ def ppo(a) -> dict:
                   f"{losses['entropy'] / max(nb, 1):.3f}, kl {losses['kl'] / max(nb, 1):.4f} (first {first_kl or 0.0:.5f}), "
                   f"clipped {losses['clip'] / max(nb, 1):.3f}, entropy shop/round "
                   f"{losses['entropy_shop'] / max(nb, 1):.3f}/{losses['entropy_round'] / max(nb, 1):.3f}, "
-                  f"beta {state['beta']:.2f}, spreads {', '.join(f'{x:.4f}' for x in spread.sigma())}, braked "
+                  f"beta {state['beta']:.2f}, spreads {', '.join(f'{x:.4f}' for x in spread.sigma())}, explained "
+                  f"{explained[WIN]:.2f}/{explained[DEPTH]:.2f}, "
+                  f"play/learn {sum(t[0] for t in state['timing'][-a.print_every:]) / max(len(state['timing'][-a.print_every:]), 1):.0f}/"
+                  f"{sum(t[1] for t in state['timing'][-a.print_every:]) / max(len(state['timing'][-a.print_every:]), 1):.0f} s, "
+                  f"{T * N / max(sum(sum(t) for t in state['timing'][-a.print_every:]) / max(len(state['timing'][-a.print_every:]), 1), 1e-9):,.0f} moves/s, braked "
                   f"{state['braked']} so far" + (f"; best {b['win']:.2%} (update {b['update']})" if b else ""),
                   flush=True)
         if time.time() - last_save >= a.save_minutes * 60:
