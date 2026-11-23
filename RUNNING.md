@@ -1841,6 +1841,10 @@ cd /mnt/h/balatro-meta && pkill -INT -f "jobs.py run teacher-data-12"; pkill -IN
 - A move refused as null leaves the run itself as it was (B's change 2; 128 such moves checked in the test).
 - Columns 14 and 15 of the learner block are kept for this ante's boss with its effect (S's ruling 6).
 - Entropy logged for shops and rounds apart; B's rate rule applied once at update 50 (`--lr-rule-at`).
+- B's review: both heads' last layer starts at zero (an untrained head's noise was about 60 times the signal in
+  the advantage), each head's spread has a floor near its reward's scale (win 0.05, depth 0.005), and the value head's
+  gradient is clipped apart from the policy's; checkpoints carry their layout and its version (older ones are
+  refused), a widened load accepts growth only at the end of a projection's input, and an undone beta step is held.
 - The smoke run (S's rules, fixed before it starts): 2M weights from scratch, White, 300 updates. Passes with no
   rollback, the brake on under a quarter of updates after 50, `first_kl` under 0.001, and at update 300 an evaluator
   win rate of 10% or more, above update 200's by more than 2 paired SE. Fails on a collapse, or under 2% with mean

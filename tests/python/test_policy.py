@@ -231,6 +231,8 @@ def test_in_ppo_the_value_cannot_change_how_it_plays():
     from balatro_meta.env import VecEnv
 
     model = tp.build_model(torch, 32, 1, 2, 64)
+    # The head's last layer starts at zero, which passes no gradient back at all; give it weights to test the wiring.
+    torch.nn.init.normal_(model.value_head[-1].weight)
     x = torch.from_numpy(VecEnv(8, seed=2).observe().copy())
     legal = torch.ones(8, tp.N_KINDS, dtype=torch.bool)
     for detached in (False, True):
@@ -239,7 +241,7 @@ def test_in_ppo_the_value_cannot_change_how_it_plays():
             k, slot, to, cards, _, _ = pp.act(x, legal)
         model.zero_grad(set_to_none=True)
         _, _, v = pp.evaluate(x, legal, k, slot, to, cards)
-        (v ** 2).mean().backward()
+        ((v - 1) ** 2).mean().backward()  # (the head starts at zero, so v ** 2 would give no gradient at all)
         moved = {n for n, q in model.named_parameters() if q.grad is not None and q.grad.abs().sum() > 0}
         assert moved and all(n.startswith("value_head.") for n in moved) == detached, moved
 
@@ -496,3 +498,41 @@ def test_the_two_heads_spread_and_beta():
     prev = {"win_rate": 0.6, "run_stages": "Y" * 400, "beta_before": 0.9}
     back, why = tp.next_beta(0.5, prev, {"win_rate": 0.5, "run_stages": "Y" * 300 + "A" * 100})
     assert back == 0.9 and "fell" in why
+
+
+def test_the_value_heads_start_at_zero_and_a_growth_must_be_at_an_end(tmp_path):
+    """B (lab #38): an untrained head adds no noise to the advantage; a widened load refuses growth that isn't at the
+    end of its projection's input, and a checkpoint of an older input layout."""
+    torch.manual_seed(2)
+    m = tp.build_model(torch, 16, 1, 2, 32)
+    assert torch.equal(m.value(torch.randn(3, 16)), torch.zeros(3, tp.N_VALUES))
+    lay = dict(m.lay)
+    tp.check_growth(lay, lay)
+    first = tp.GLOBAL_PARTS[0]
+    s, n, w = lay[first]
+    with pytest.raises(ValueError, match="inside the global token"):
+        tp.check_growth(lay, {**lay, first: (s, n, w + 1)})
+    s, n, w = lay["learner"]
+    tp.check_growth(lay, {**lay, "learner": (s, n, w + 4)})
+    s, n, w = lay["hand"]
+    tp.check_growth(lay, {**lay, "hand": (s, n, w + 2)})
+    with pytest.raises(ValueError, match="changed"):
+        tp.check_growth(lay, {**lay, "hand": (s, n + 1, w)})
+    tp.save(torch, tmp_path / "m.pt", m)
+    ck = torch.load(tmp_path / "m.pt", weights_only=False)
+    ck["layout_version"] = 1
+    torch.save(ck, tmp_path / "old.pt")
+    with pytest.raises(SystemExit, match="layout version"):
+        tp.load_model(torch, tmp_path / "old.pt", torch.device("cpu"))
+
+
+def test_an_undone_beta_step_is_held():
+    """B (lab #38): after a step is undone, beta stays until the win rate passes that step's level by 2 SE."""
+    prev = {"win_rate": 0.6, "run_stages": "Y" * 400, "beta_before": 0.9}
+    ev = {"win_rate": 0.5, "run_stages": "Y" * 300 + "A" * 100}
+    beta, _ = tp.next_beta(0.5, prev, ev)
+    assert beta == 0.9 and ev["hold"]["win"] == 0.6
+    ev2 = {"win_rate": 0.62, "run_stages": "Y" * 248 + "A" * 152}
+    assert tp.next_beta(beta, ev, ev2)[0] == 0.9, "held: not yet past 60% by 2 SE"
+    ev3 = {"win_rate": 0.9}
+    assert tp.next_beta(beta, {**ev2, "hold": ev["hold"]}, ev3)[0] < 0.9

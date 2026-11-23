@@ -192,6 +192,10 @@ def build_model(torch, d: int = 128, layers: int = 4, heads: int = 4, ff: int = 
             # Two values (lab #38, S's ruling 1): the win-only return and the depth (the potential's) return, each in
             # units of its own running spread (`Spread`).
             self.value_head = nn.Sequential(nn.Linear(d, d), nn.GELU(), nn.Linear(d, N_VALUES))
+            # Its last layer starts at zero (B, lab #38): an untrained head's random output was about 60 times the
+            # real signal in the advantage, and the spread's rescaling kept it there.
+            nn.init.zeros_(self.value_head[-1].weight)
+            nn.init.zeros_(self.value_head[-1].bias)
             self.kind_emb = nn.Embedding(N_KINDS, d)
             self.q_slot, self.k_slot = nn.Linear(d, d), nn.Linear(d, d)
             self.q_to, self.k_to = nn.Linear(d, d), nn.Linear(d, d)
@@ -491,26 +495,54 @@ class Parts:
 
 
 # ---------------------------------------------------------------------------------------------- saving
+# The network's input layout's version (B, lab #38): 2 from 46680c3, the hand's computed features first in each hand
+# token. A checkpoint of an older version would load with its hand inputs scrambled, so it is refused.
+LAYOUT_VERSION = 2
+
+
 def save(torch, path: Path, model, extra: dict | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    torch.save({"cfg": model.cfg, "model": model.state_dict(), **(extra or {})}, tmp)
+    torch.save({"cfg": model.cfg, "model": model.state_dict(), "layout": dict(model.lay),
+                "layout_version": LAYOUT_VERSION, **(extra or {})}, tmp)
     os.replace(tmp, path)
 
 
 def load_model(torch, path: Path, device):
     ck = torch.load(path, map_location=device, weights_only=False)
+    if ck.get("layout_version") != LAYOUT_VERSION:
+        raise SystemExit(f"{path}: input layout version {ck.get('layout_version')}, this code reads {LAYOUT_VERSION} "
+                         "(the hand's features moved): it would load with its inputs scrambled; train afresh")
     model = build_model(torch, **ck["cfg"]).to(device)
+    check_growth(ck.get("layout", {}), dict(model.lay))
     load_widened(torch, model, ck["model"])
     return model, ck
+
+
+def check_growth(saved: dict, now: dict) -> None:
+    """The layouts a widened load may join (B, lab #38): every saved part still there with as many slots; a part's
+    width may grow (at its end), but in the global token only its last part may (the parts are joined end to end
+    there, so a growth anywhere else lands mid-input); no part may be new unless it comes last."""
+    for name, (_, n, w) in saved.items():
+        if name not in now:
+            raise ValueError(f"layout: part {name!r} is gone")
+        _, n2, w2 = now[name]
+        if n2 != n or w2 < w:
+            raise ValueError(f"layout: part {name!r} changed from {n} x {w} to {n2} x {w2}")
+        if w2 > w and name in GLOBAL_PARTS and name != GLOBAL_PARTS[-1]:
+            raise ValueError(f"layout: {name!r} grew inside the global token (only {GLOBAL_PARTS[-1]!r} may)")
+    new = [p for p in now if p not in saved]
+    if saved and any(p in GLOBAL_PARTS[:-1] or p in GROUPS for p in new):
+        raise ValueError(f"layout: new parts {new} not at the end")
 
 
 def load_widened(torch, model, saved: dict) -> list[str]:
     """Load saved weights into a model whose inputs may since have grown (B, lab #38: an input switched on later
     loads into a checkpoint without a restart). A weight whose shape grew keeps its saved values in the leading
     rows and columns, the rest zero: a new input column then changes nothing until its weights move, and a new
-    output row starts at 0. Inputs only ever grow at the end of their part (the learner block, a token's columns).
-    Returns the names widened."""
+    output row starts at 0. This is right only for growth at the END of each projection's input: in the global token
+    only the last part (the learner block) may grow; a token may grow at the end of its own columns (its computed
+    features come first). `check_growth` refuses any other change. Returns the names widened."""
     own = model.state_dict()
     widened = []
     for k, w in saved.items():
@@ -817,8 +849,11 @@ class Spread:
     loss read 0.0000). When a spread changes, the head's last layer is rescaled so its outputs in returns stay as
     they were (PopArt's step, without a mean)."""
 
-    def __init__(self, n: int = N_VALUES, decay: float = 0.99, floor: float = 1e-3, state: dict | None = None):
-        self.decay, self.floor = decay, floor
+    def __init__(self, n: int = N_VALUES, decay: float = 0.99, floor: tuple = (0.05, 0.005),
+                 state: dict | None = None):
+        # Each head's floor near its reward's own scale (B, lab #38): with the win head at a tiny floor until the
+        # first win, a won run's normalised target was about 300 and its loss took the policy's step.
+        self.decay, self.floors = decay, tuple(floor)
         st = state if isinstance(state, dict) else {}
         self.ms = list(st.get("ms", [0.0] * n))
         self.batches = int(st.get("batches", 0))
@@ -826,7 +861,7 @@ class Spread:
     def sigma(self) -> list[float]:
         # The average corrected for its start at zero (as Adam's), so the first batches are read at their own size.
         corr = 1.0 - self.decay ** self.batches if self.batches else 1.0
-        return [max(math.sqrt(m / corr), self.floor) if self.batches else 1.0 for m in self.ms]
+        return [max(math.sqrt(m / corr), self.floors[h]) if self.batches else 1.0 for h, m in enumerate(self.ms)]
 
     def update(self, torch, model, returns) -> None:
         """Fold this batch's returns (T, N, N_VALUES) in, and keep the heads' outputs in returns unchanged."""
@@ -851,6 +886,11 @@ def next_beta(beta: float, prev: dict | None, ev: dict) -> tuple[float, str]:
     more than 2 paired standard errors (same seeds, run by run)."""
     win = ev["win_rate"]
     target = 1.0 if win < 0.2 else max(0.0, (1.0 - win) / 0.8)
+    # An undone step is held until the win rate passes its level at that step by 2 SE (B: no oscillation).
+    hold = (prev or {}).get("hold")
+    if hold and win < hold["win"] + 2 * hold["se"]:
+        ev["hold"] = hold
+        return beta, ""
     if prev and prev.get("run_stages") and ev.get("run_stages"):
         a, b = prev["run_stages"], ev["run_stages"]
         n = min(len(a), len(b))
@@ -859,6 +899,7 @@ def next_beta(beta: float, prev: dict | None, ev: dict) -> tuple[float, str]:
         d = (gained - lost) / max(n, 1)
         se = math.sqrt(max((gained + lost) / max(n, 1) - d * d, 0.0) / max(n, 1))
         if se > 0 and d < -2 * se and prev.get("beta_before") is not None:
+            ev["hold"] = {"win": prev["win_rate"], "se": se}
             return prev["beta_before"], f"win rate fell {d:+.2%} (paired SE {se:.2%}): beta back to {prev['beta_before']}"
     return min(beta, target), ""
 
@@ -1287,6 +1328,9 @@ def ppo(a) -> dict:
 
     guard = Guard(N, skips=a.skips, shop_cap=a.shop_cap)
     spread = Spread(state=state.get("spread"))
+    value_params = list(model.value_head.parameters())
+    value_ids = {id(q) for q in value_params}
+    policy_params = [q for q in model.parameters() if id(q) not in value_ids]
     state.setdefault("beta", 1.0)
     last_eval = None
     # The potential: each run's high-water mark of position and its last potential (lab #38).
@@ -1459,7 +1503,10 @@ def ppo(a) -> dict:
                     break
                 if warm:
                     value_only(model)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), a.max_grad)
+                # The value head's gradient is clipped apart from the policy's (B, lab #38), so a spike in the value
+                # loss (the first wins) can't shrink the policy's step.
+                torch.nn.utils.clip_grad_norm_(policy_params, a.max_grad)
+                torch.nn.utils.clip_grad_norm_(value_params, a.max_grad)
                 opt.step()
                 for key in losses:
                     losses[key] += got[key]
