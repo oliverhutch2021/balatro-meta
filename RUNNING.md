@@ -1830,6 +1830,26 @@ cd /mnt/h/balatro-meta && pkill -INT -f "jobs.py run teacher-data-12"; pkill -IN
 - Timing on today's code: 8,695 moves a second at 2M weights (4,096 x 128, 10.1 GB), 4,037 at 6M (2,048 x 128, micro
   512, 5.1 GB).
 
+## Step 67: before the smoke run: two value heads, inputs that widen, and the smoke run (lab #38, 23 November)
+
+- Two value heads (S's ruling 1, B's form): the win-only return and the depth return (the potential and the small
+  costs), each learned in units of its own running spread (`Spread`, the head's outputs kept when a spread moves);
+  the play's advantage is A_win + beta x A_depth, normalised. beta starts at 1, steps down as the evaluator's win
+  rate rises (1 under 20%, 0 at 100%), never up, and a step is undone after a fall of 2 paired SE (`next_beta`).
+- An input switched on later loads into a checkpoint (`load_widened`, B's change 1): weights that grew keep their saved
+  values, the rest zero; inputs grow only at the end of their part (the hand's computed features now come first).
+- A move refused as null leaves the run itself as it was (B's change 2; 128 such moves checked in the test).
+- Columns 14 and 15 of the learner block are kept for this ante's boss with its effect (S's ruling 6).
+- Entropy logged for shops and rounds apart; B's rate rule applied once at update 50 (`--lr-rule-at`).
+- The smoke run (S's rules, fixed before it starts): 2M weights from scratch, White, 300 updates. Passes with no
+  rollback, the brake on under a quarter of updates after 50, `first_kl` under 0.001, and at update 300 an evaluator
+  win rate of 10% or more, above update 200's by more than 2 paired SE. Fails on a collapse, or under 2% with mean
+  final ante under 2. In between: one extension to 600 updates. When B has approved and the user says go:
+
+```
+cd /mnt/h/balatro-meta && make sync && make build && make smoke-learner
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

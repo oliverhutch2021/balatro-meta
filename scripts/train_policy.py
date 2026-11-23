@@ -67,6 +67,11 @@ W_BLIND = 0.04
 W_SCORE = 0.02
 WIN_REWARD = 1.0
 SHOP_CAP = 60  # moves in one shop (its packs included) after which only leaving is offered
+# Two values (lab #38, S's ruling 1, B's form): column 0 the win-only return, column 1 the depth return (the
+# potential and the small costs). The advantage is A_win + beta x A_depth, normalised; beta starts at 1 and steps
+# down as the evaluator's win rate rises (`next_beta`).
+N_VALUES = 2
+WIN, DEPTH = 0, 1
 REFUSED_COST = 0.01
 FREE_COST = 0.0002
 MAX_MOVES = 3000  # a run still going after this many moves is cut short
@@ -184,7 +189,9 @@ def build_model(torch, d: int = 128, layers: int = 4, heads: int = 4, ff: int = 
             self.enc = nn.TransformerEncoder(layer, layers, enable_nested_tensor=False)
             self.norm_out = nn.LayerNorm(d)
             self.kind_head = nn.Sequential(nn.Linear(d, d), nn.GELU(), nn.Linear(d, N_KINDS))
-            self.value_head = nn.Sequential(nn.Linear(d, d), nn.GELU(), nn.Linear(d, 1))
+            # Two values (lab #38, S's ruling 1): the win-only return and the depth (the potential's) return, each in
+            # units of its own running spread (`Spread`).
+            self.value_head = nn.Sequential(nn.Linear(d, d), nn.GELU(), nn.Linear(d, N_VALUES))
             self.kind_emb = nn.Embedding(N_KINDS, d)
             self.q_slot, self.k_slot = nn.Linear(d, d), nn.Linear(d, d)
             self.q_to, self.k_to = nn.Linear(d, d), nn.Linear(d, d)
@@ -222,7 +229,9 @@ def build_model(torch, d: int = 128, layers: int = 4, heads: int = 4, ff: int = 
                 raw = x[:, s:s + n * w].reshape(B, n, w)
                 feats = sq[:, s:s + n * w].reshape(B, n, w)
                 if g == "hand":
-                    feats = torch.cat([feats, hand_features(torch, raw)], -1)
+                    # The computed hand features first, so the screen's own columns are last and can grow at the end
+                    # (an input switched on later: `load_widened`).
+                    feats = torch.cat([hand_features(torch, raw), feats], -1)
                 t = self.proj[g](feats) + self.group_emb.weight[gi] + self.slot_emb.weight[:n][None]
                 if g == "jokers":
                     t = t + self.joker_emb(self._joker_ids(raw[..., 1], raw[..., 0] > 0))
@@ -277,7 +286,8 @@ def build_model(torch, d: int = 128, layers: int = 4, heads: int = 4, ff: int = 
             return logits.masked_fill(~here, -1e9), here
 
         def value(self, cls):
-            return self.value_head(cls).squeeze(-1).float()
+            """(B, N_VALUES): the win and depth values, each in units of its running spread."""
+            return self.value_head(cls).float()
 
     return Policy()
 
@@ -491,8 +501,28 @@ def save(torch, path: Path, model, extra: dict | None = None) -> None:
 def load_model(torch, path: Path, device):
     ck = torch.load(path, map_location=device, weights_only=False)
     model = build_model(torch, **ck["cfg"]).to(device)
-    model.load_state_dict(ck["model"])
+    load_widened(torch, model, ck["model"])
     return model, ck
+
+
+def load_widened(torch, model, saved: dict) -> list[str]:
+    """Load saved weights into a model whose inputs may since have grown (B, lab #38: an input switched on later
+    loads into a checkpoint without a restart). A weight whose shape grew keeps its saved values in the leading
+    rows and columns, the rest zero: a new input column then changes nothing until its weights move, and a new
+    output row starts at 0. Inputs only ever grow at the end of their part (the learner block, a token's columns).
+    Returns the names widened."""
+    own = model.state_dict()
+    widened = []
+    for k, w in saved.items():
+        if k in own and own[k].shape != w.shape:
+            if own[k].dim() != w.dim() or any(n < o for n, o in zip(own[k].shape, w.shape)):
+                raise ValueError(f"{k}: saved {tuple(w.shape)} can't widen to {tuple(own[k].shape)}")
+            new = torch.zeros_like(own[k])
+            new[tuple(slice(0, n) for n in w.shape)] = w
+            saved = {**saved, k: new}
+            widened.append(k)
+    model.load_state_dict(saved)
+    return widened
 
 
 def device_of(torch, cpu: bool):
@@ -633,7 +663,7 @@ def imitate(a) -> dict:
             with autocast(torch, device):
                 lp, _, v = pp.evaluate(x, legal_t[rows], kind_t[rows], slot_t[rows], to_t[rows], cards_t[rows])
             # (A teacher move the network can't express, say a slot it doesn't see, would swamp the batch: capped.)
-            loss = -lp.clamp(min=-30).mean() + a.value_coef * ((v - g_t[rows]) ** 2).mean()
+            loss = -lp.clamp(min=-30).mean() + a.value_coef * ((v.sum(-1) - g_t[rows]) ** 2).mean()
             opt.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -779,6 +809,58 @@ def shaped(high, phi, position, progress, cleared, done, won, gamma_blind: float
     phi_now = W_BLIND * high_now + W_SCORE * progress
     g = np.where(cleared | done, gamma_blind, 1.0)
     return won * WIN_REWARD + g * phi_now - phi, g, high_now, phi_now
+
+
+class Spread:
+    """Each value head's running spread (the root mean square of its returns, an average that forgets slowly), so
+    each head learns targets of about unit size however small the returns are (S, lab #38: at the start the value
+    loss read 0.0000). When a spread changes, the head's last layer is rescaled so its outputs in returns stay as
+    they were (PopArt's step, without a mean)."""
+
+    def __init__(self, n: int = N_VALUES, decay: float = 0.99, floor: float = 1e-3, state: dict | None = None):
+        self.decay, self.floor = decay, floor
+        st = state if isinstance(state, dict) else {}
+        self.ms = list(st.get("ms", [0.0] * n))
+        self.batches = int(st.get("batches", 0))
+
+    def sigma(self) -> list[float]:
+        # The average corrected for its start at zero (as Adam's), so the first batches are read at their own size.
+        corr = 1.0 - self.decay ** self.batches if self.batches else 1.0
+        return [max(math.sqrt(m / corr), self.floor) if self.batches else 1.0 for m in self.ms]
+
+    def update(self, torch, model, returns) -> None:
+        """Fold this batch's returns (T, N, N_VALUES) in, and keep the heads' outputs in returns unchanged."""
+        old = self.sigma()
+        for h in range(len(self.ms)):
+            self.ms[h] = self.decay * self.ms[h] + (1 - self.decay) * float((returns[..., h] ** 2).mean())
+        self.batches += 1
+        new = self.sigma()
+        last = model.value_head[-1]
+        with torch.no_grad():
+            for h in range(len(new)):
+                last.weight[h] *= old[h] / new[h]
+                last.bias[h] *= old[h] / new[h]
+
+    def state(self) -> dict:
+        return {"ms": list(self.ms), "batches": self.batches}
+
+
+def next_beta(beta: float, prev: dict | None, ev: dict) -> tuple[float, str]:
+    """The depth head's weight after an evaluation (B's rule, lab #38): 1 while the win rate is under 20%, falling to
+    0 at 100%; it only steps down, and a step is undone when the win rate fell from the previous evaluation by
+    more than 2 paired standard errors (same seeds, run by run)."""
+    win = ev["win_rate"]
+    target = 1.0 if win < 0.2 else max(0.0, (1.0 - win) / 0.8)
+    if prev and prev.get("run_stages") and ev.get("run_stages"):
+        a, b = prev["run_stages"], ev["run_stages"]
+        n = min(len(a), len(b))
+        lost = sum(1 for i in range(n) if a[i] == "Y" and b[i] != "Y")
+        gained = sum(1 for i in range(n) if b[i] == "Y" and a[i] != "Y")
+        d = (gained - lost) / max(n, 1)
+        se = math.sqrt(max((gained + lost) / max(n, 1) - d * d, 0.0) / max(n, 1))
+        if se > 0 and d < -2 * se and prev.get("beta_before") is not None:
+            return prev["beta_before"], f"win rate fell {d:+.2%} (paired SE {se:.2%}): beta back to {prev['beta_before']}"
+    return min(beta, target), ""
 
 
 def new_stats() -> dict:
@@ -1024,7 +1106,7 @@ def ppo_grads(torch, pp, batch, mb, micro: int, device, clip: float, value_coef:
     training crawls rather than failing.)"""
     fx, fl, fk, fs, ft, fc, flp, fadv, fret, *rest = batch
     fsh = rest[0] if rest else None
-    out = dict.fromkeys(("policy", "value", "entropy", "clip", "kl"), 0.0)
+    out = dict.fromkeys(("policy", "value", "entropy", "clip", "kl", "entropy_shop", "entropy_round"), 0.0)
     n = len(mb)
     for c in range(0, n, micro):
         sub = mb[c:c + micro]
@@ -1034,8 +1116,15 @@ def ppo_grads(torch, pp, batch, mb, micro: int, device, clip: float, value_coef:
         log_ratio = (lp - flp[sub]).clamp(-20.0, 20.0)
         ratio = torch.exp(log_ratio)
         pg = -torch.min(ratio * fadv[sub], ratio.clamp(1 - clip, 1 + clip) * fadv[sub]).mean()
-        vl = ((v - fret[sub]) ** 2).mean()
+        vl = ((v - fret[sub]) ** 2).sum(-1).mean()
         el = ent.mean()
+        if fsh is not None:
+            # Entropy by phase (S, lab #38): shops and packs, and rounds.
+            sh = fsh[sub]
+            if sh.any():
+                out["entropy_shop"] += float(ent[sh].mean().detach()) * w
+            if (~sh).any():
+                out["entropy_round"] += float(ent[~sh].mean().detach()) * w
         # More entropy on shop and pack decisions than in rounds (lab #38: --shop-ent-mult).
         ew = ent if fsh is None else ent * torch.where(fsh[sub], shop_ent_mult, 1.0)
         loss = value_coef * vl if warm else pg + value_coef * vl - ent_coef * ew.mean()
@@ -1149,8 +1238,8 @@ def ppo(a) -> dict:
     buf_to = torch.zeros_like(buf_kind)
     buf_cards = torch.zeros(T, N, MAX_HAND, dtype=torch.bool, device=device)
     buf_logp = torch.zeros(T, N, device=device)
-    buf_v = torch.zeros(T, N, device=device)
-    buf_r = torch.zeros(T, N, device=device)
+    buf_v = torch.zeros(T, N, N_VALUES, device=device)  # the heads' values, each in units of its spread
+    buf_r = torch.zeros(T, N, N_VALUES, device=device)  # the win reward and the depth reward
     buf_done = torch.zeros(T, N, device=device)
     buf_gamma = torch.ones(T, N, device=device)  # each transition's discount: --gamma-blind if it ends a blind, else 1
     buf_shop = torch.zeros(T, N, dtype=torch.bool, device=device)  # shop and pack states (more entropy there)
@@ -1197,6 +1286,9 @@ def ppo(a) -> dict:
         save(torch, latest, model, {"opt": opt.state_dict(), "state": state})
 
     guard = Guard(N, skips=a.skips, shop_cap=a.shop_cap)
+    spread = Spread(state=state.get("spread"))
+    state.setdefault("beta", 1.0)
+    last_eval = None
     # The potential: each run's high-water mark of position and its last potential (lab #38).
     high = np.zeros(N, np.int64)
     phi = np.zeros(N, np.float64)
@@ -1240,7 +1332,8 @@ def ppo(a) -> dict:
             # and the round's progress. Discounted by blinds: --gamma-blind on a transition that ends a blind or the
             # run, 1 on every other.
             r, g, high_now, phi_now = shaped(high, phi, env.position, env.progress, cleared, done, won, a.gamma_blind)
-            r = r - refused * REFUSED_COST - np.isin(kind_np, FREE) * FREE_COST
+            r_win = won * WIN_REWARD
+            r_depth = r - r_win - refused * REFUSED_COST - np.isin(kind_np, FREE) * FREE_COST
             cut = (moves >= MAX_MOVES) & ~done
             if cut.any():
                 # A run cut short isn't lost: its last transition is bootstrapped with the value of where it stood
@@ -1249,8 +1342,10 @@ def ppo(a) -> dict:
                 idx = np.flatnonzero(cut)
                 with torch.no_grad(), autocast(torch, device):
                     _, _, cls_cut = model.encode(after[idx])
-                    v_cut = model.value(cls_cut).float().cpu().numpy()
-                r[idx] += g[idx] * v_cut
+                    v_cut = model.value(cls_cut).float().cpu().numpy() * np.array(spread.sigma())
+                r_win = r_win.astype(np.float64)
+                r_win[idx] += g[idx] * v_cut[:, WIN]
+                r_depth[idx] += g[idx] * v_cut[:, DEPTH]
             ended = done | cut
             high = np.where(ended, 0, high_now)
             phi = np.where(ended, 0.0, phi_now)
@@ -1289,7 +1384,7 @@ def ppo(a) -> dict:
             buf_legal[t] = legal
             buf_kind[t], buf_slot[t], buf_to[t], buf_cards[t] = kind, slot, to, cards
             buf_logp[t], buf_v[t] = logp.float(), v.float()
-            buf_r[t] = torch.from_numpy(r.astype(np.float32)).to(device)
+            buf_r[t] = torch.from_numpy(np.stack([r_win, r_depth], -1).astype(np.float32)).to(device)
             buf_done[t] = torch.from_numpy(ended.astype(np.float32)).to(device)
             buf_gamma[t] = torch.from_numpy(g.astype(np.float32)).to(device)
             buf_shop[t] = torch.from_numpy(Guard.in_shop(legal_np)).to(device)
@@ -1304,15 +1399,26 @@ def ppo(a) -> dict:
         with torch.no_grad(), autocast(torch, device):
             _, _, last_cls = model.encode(torch.from_numpy(x_np).to(device))
             last_v = model.value(last_cls).float()
-        adv = torch.zeros(T, N, device=device)
-        gae = torch.zeros(N, device=device)
+        # Each head's GAE in returns (its values times its spread), discounted by each transition's own discount.
+        sig = torch.tensor(spread.sigma(), device=device)
+        vals = buf_v * sig
+        last_v = last_v * sig
+        adv2 = torch.zeros(T, N, N_VALUES, device=device)
+        gae = torch.zeros(N, N_VALUES, device=device)
         for t in range(T - 1, -1, -1):
-            nv = last_v if t == T - 1 else buf_v[t + 1]
-            nonterm = 1.0 - buf_done[t]
-            delta = buf_r[t] + buf_gamma[t] * nv * nonterm - buf_v[t]
-            gae = delta + buf_gamma[t] * a.lam * nonterm * gae
-            adv[t] = gae
-        ret = adv + buf_v
+            nv = last_v if t == T - 1 else vals[t + 1]
+            nonterm = (1.0 - buf_done[t])[:, None]
+            gm = buf_gamma[t][:, None]
+            delta = buf_r[t] + gm * nv * nonterm - vals[t]
+            gae = delta + gm * a.lam * nonterm * gae
+            adv2[t] = gae
+        ret2 = adv2 + vals
+        # The play's advantage: the win head's plus beta times the depth head's (normalised below).
+        adv = adv2[..., WIN] + state["beta"] * adv2[..., DEPTH]
+        # The spreads take in this batch's returns; the value targets are in the new units.
+        spread.update(torch, model, ret2)
+        state["spread"] = spread.state()
+        ret = ret2 / torch.tensor(spread.sigma(), device=device)
         # The update.
         t_learn = time.time()
         model.train()
@@ -1320,9 +1426,10 @@ def ppo(a) -> dict:
         fx, fl, fk, fs, ft, fc = (flat(buf_x), flat(buf_legal), flat(buf_kind), flat(buf_slot), flat(buf_to),
                                   flat(buf_cards))
         fsh = flat(buf_shop)
-        flp, fadv, fret = flat(buf_logp), flat(adv), flat(ret)
+        flp, fadv, fret = flat(buf_logp), flat(adv), ret.reshape(T * N, N_VALUES)
         fadv = (fadv - fadv.mean()) / (fadv.std() + 1e-8)
-        losses = {"policy": 0.0, "value": 0.0, "entropy": 0.0, "clip": 0.0, "kl": 0.0}
+        losses = {"policy": 0.0, "value": 0.0, "entropy": 0.0, "clip": 0.0, "kl": 0.0, "entropy_shop": 0.0,
+                  "entropy_round": 0.0}
         nb = 0
         # A small steady learning rate (lab #38; antezero's later segments ran flat), halved at each fall back to the
         # best network; --lr-fall restores the old fall to a tenth over the run.
@@ -1361,6 +1468,18 @@ def ppo(a) -> dict:
                 break
         state["updates"] += 1
         state["braked"] = state.get("braked", 0) + int(braked)
+        # B's rate rule (lab #38), applied once at update --lr-rule-at: no brake and under 3% clipped over the
+        # updates so far doubles the rate; the brake on more than a quarter of them halves it.
+        state.setdefault("early", []).append([int(braked), losses["clip"] / max(nb, 1)])
+        if a.lr_rule_at and state["updates"] == a.lr_rule_at and "lr_rule" not in state:
+            early = state["early"][-a.lr_rule_at:]
+            brakes = sum(b for b, _ in early)
+            clip_mean = sum(c for _, c in early) / max(len(early), 1)
+            factor = 2.0 if brakes == 0 and clip_mean < 0.03 else 0.5 if brakes > len(early) / 4 else 1.0
+            state["lr_scale"] = state.get("lr_scale", 1.0) * factor
+            state["lr_rule"] = {"brakes": brakes, "clip": round(clip_mean, 4), "factor": factor}
+            print(f"B's rate rule at update {state['updates']}: {brakes} brakes, clipped {clip_mean:.3f} on average: "
+                  f"rate x{factor}", flush=True)
         if first:
             # How long an update takes, and how close it came to the GPU's memory.
             first = False
@@ -1396,6 +1515,13 @@ def ppo(a) -> dict:
                   "mean_ante": sum((i + 1) * k for i, k in enumerate(ev_stats["ante_hist"])) / max(ev_stats["runs"], 1),
                   "survival": survival(ev_stats["ante_hist"]), "run_stages": "".join(ev_stages),
                   "seconds": round(time.time() - t_ev, 1)}
+            # The depth head's weight steps down as the win rate rises (B's rule; undone after a 2 SE fall).
+            ev["beta_before"] = state["beta"]
+            state["beta"], why = next_beta(state["beta"], last_eval, ev)
+            ev["beta"] = state["beta"]
+            if why:
+                print(why, flush=True)
+            last_eval = ev
             folder.mkdir(parents=True, exist_ok=True)
             with open(folder / "evals.jsonl", "a") as fh:
                 fh.write(json.dumps(ev) + "\n")
@@ -1435,7 +1561,9 @@ def ppo(a) -> dict:
                   f"{len(last):,}: won {win_recent:.2%}, mean final ante {ante_recent:.2f}; policy "
                   f"{losses['policy'] / max(nb, 1):.4f}, value {losses['value'] / max(nb, 1):.4f}, entropy "
                   f"{losses['entropy'] / max(nb, 1):.3f}, kl {losses['kl'] / max(nb, 1):.4f} (first {first_kl or 0.0:.5f}), "
-                  f"clipped {losses['clip'] / max(nb, 1):.3f}, braked "
+                  f"clipped {losses['clip'] / max(nb, 1):.3f}, entropy shop/round "
+                  f"{losses['entropy_shop'] / max(nb, 1):.3f}/{losses['entropy_round'] / max(nb, 1):.3f}, "
+                  f"beta {state['beta']:.2f}, spreads {', '.join(f'{x:.4f}' for x in spread.sigma())}, braked "
                   f"{state['braked']} so far" + (f"; best {b['win']:.2%} (update {b['update']})" if b else ""),
                   flush=True)
         if time.time() - last_save >= a.save_minutes * 60:
@@ -1456,7 +1584,8 @@ def ppo(a) -> dict:
               "recent_win_rate": sum(w for w, _ in last) / max(len(last), 1),
               "recent_mean_ante": sum(an for _, an in last) / max(len(last), 1), "history": watch.history,
               "device": str(device), "envs": N, "steps_per_update": T, "model": str(latest), "best_model": str(best_path),
-              "best": state.get("best"), "rollbacks": state.get("rollbacks", 0), **fields}
+              "best": state.get("best"), "rollbacks": state.get("rollbacks", 0), "evals": state.get("evals", []),
+              "beta": state.get("beta"), "lr_rule": state.get("lr_rule"), "braked": state.get("braked", 0), **fields}
     if a.report:
         write_json(Path(a.report), report)
     if stop["now"] and seconds0 + time.time() - t_start < a.hours * 3600:
@@ -1513,6 +1642,7 @@ def main() -> None:
     p.add_argument("--skips", action="store_true", help="offer blind skips (off from Stage 0, lab #38)")
     p.add_argument("--shop-cap", type=int, default=SHOP_CAP, help="moves in one shop before only leaving is offered")
     p.add_argument("--shop-ent-mult", type=float, default=3.0, help="entropy's weight on shop and pack decisions")
+    p.add_argument("--lr-rule-at", type=int, default=50, help="the update B's rate rule is applied at (0: never)")
     p.add_argument("--eval-every", type=int, default=100,
                    help="updates between evaluations on the evaluator's seeds (0: never)")
     p.add_argument("--eval-runs", type=int, default=EVAL_RUNS)

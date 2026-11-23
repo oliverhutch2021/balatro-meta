@@ -180,7 +180,7 @@ def test_a_minibatch_in_pieces_gives_the_same_gradients():
         env.step(k, tp.to_moves(k, slot.numpy(), to.numpy(), cards.numpy()))
     cols = [torch.cat(c) for c in zip(*rows, strict=True)]
     n = cols[0].shape[0]
-    batch = (*cols, torch.randn(n), torch.randn(n))
+    batch = (*cols, torch.randn(n), torch.randn(n, tp.N_VALUES))
     mb = torch.randperm(n)[:40]
 
     def grads(micro):
@@ -446,3 +446,53 @@ def test_survival_and_the_held_out_seeds():
     upcoming = set(env.seeds())
     env.reject_seeds(sorted(upcoming))
     assert not set(env.seeds()) & upcoming, "runs on a rejected seed start again on another"
+
+
+def test_an_input_switched_on_later_loads_without_a_restart(monkeypatch, tmp_path):
+    """B (lab #38): inputs only grow at the end of their part; a checkpoint loads into the wider network with the new
+    columns' weights at zero, so play is unchanged until they move."""
+    torch.manual_seed(0)
+    small = tp.build_model(torch, 32, 1, 2, 64)
+    tp.save(torch, tmp_path / "m.pt", small)
+    lay = tp.layout()
+    wider = dict(lay)
+    # The learner block and the hand's cards each grow by 3 columns at their end (offsets shift after them).
+    shift, out = 0, {}
+    for name, (start, n, w) in sorted(lay.items(), key=lambda kv: kv[1][0]):
+        grow = 3 if name in ("learner", "hand") else 0
+        out[name] = (start + shift, n, w + grow)
+        shift += n * grow
+    monkeypatch.setattr(tp, "layout", lambda: out)
+    big, _ = tp.load_model(torch, tmp_path / "m.pt", torch.device("cpu"))
+    # The same position in both layouts: the new columns hold anything at all.
+    x_small = torch.randn(4, max(s + n * w for s, n, w in lay.values()))
+    x_big = torch.randn(4, max(s + n * w for s, n, w in out.values()))
+    for name, (s, n, w) in lay.items():
+        bs, _, bw = out[name]
+        x_big[:, bs:bs + n * bw].view(4, n, bw)[..., :w] = x_small[:, s:s + n * w].view(4, n, w)
+    with torch.no_grad():
+        _, _, c1 = small.encode(x_small)
+        _, _, c2 = big.encode(x_big)
+    assert torch.allclose(c1, c2, atol=1e-5), "play unchanged until the new weights move"
+    assert torch.allclose(small.value(c1), big.value(c2), atol=1e-5)
+
+
+def test_the_two_heads_spread_and_beta():
+    """Lab #38 (S's ruling 1, B's rule): each head's spread follows its returns and the head's outputs in returns
+    stay the same when it changes; beta steps down with the win rate, never up, and a step is undone on a fall."""
+    torch.manual_seed(1)
+    model = tp.build_model(torch, 16, 1, 2, 32)
+    sp = tp.Spread()
+    cls = torch.randn(5, 16)
+    before = model.value(cls) * torch.tensor(sp.sigma())
+    sp.update(torch, model, torch.tensor([[[0.5, 2.0]]]).repeat(10, 4, 1))
+    after = model.value(cls) * torch.tensor(sp.sigma())
+    assert torch.allclose(before, after, atol=1e-5) and abs(sp.sigma()[1] - 2.0) < 1e-6
+    ev = {"win_rate": 0.1, "run_stages": "YYAA"}
+    assert tp.next_beta(1.0, None, ev)[0] == 1.0, "under 20%: 1"
+    b, _ = tp.next_beta(1.0, None, {"win_rate": 0.6})
+    assert abs(b - 0.5) < 1e-9
+    assert tp.next_beta(0.5, None, {"win_rate": 0.3})[0] == 0.5, "never up"
+    prev = {"win_rate": 0.6, "run_stages": "Y" * 400, "beta_before": 0.9}
+    back, why = tp.next_beta(0.5, prev, {"win_rate": 0.5, "run_stages": "Y" * 300 + "A" * 100})
+    assert back == 0.9 and "fell" in why

@@ -383,7 +383,9 @@ const AUTO_MAX: usize = 32;
 /// where the run stands, the high-water mark less the position, in antes (after Hieroglyph or Petroglyph the
 /// potential pays nothing until the run gets back: B). Columns 1 to 13: `learner::fast_capacity` (ln capacity, and
 /// against each of six asks, this ante's next blind and boss, the next ante's three, the boss two antes on, the log
-/// margin and the share of deals that clear it). The rest are kept for later inputs and are 0.
+/// margin and the share of deals that clear it). Columns 14 and 15: this ante's boss with its effect (margin, share
+/// cleared), kept for that reading and 0 until it is built (S, lab #38, ruling 6). The rest are kept for later
+/// inputs and are 0; a token input added later widens its part at the end (`train_policy.load_widened`).
 pub const LEARNER_FEATURES: usize = 32;
 /// The learner's whole input: the screen, then the learner's block.
 pub const POLICY_OBS_LEN: usize = OBS_LEN + LEARNER_FEATURES;
@@ -780,6 +782,7 @@ mod learner_tests {
     /// nothing on the screen (B's test 3) is refused.
     #[test]
     fn the_learner_is_only_asked_for_decisions() {
+        let mut nulls = 0;
         for seed in 0..6u64 {
             let mut e = Env::new(100 + seed, 3);
             e.auto = true;
@@ -800,6 +803,26 @@ mod learner_tests {
                         tally: Tally::default(), ended: None, high: e.high, auto: true, skips: false, reject: None, log: Vec::new(), ended_log: Vec::new() };
                     assert!(c.step(MoveKind::MoveCard as i64, 0).refused, "a card moved onto itself");
                 }
+                // Any move refused as null left the run itself as it was, not only the screen (B, lab #38): money,
+                // deck, hand order, jokers, consumables and the random streams.
+                {
+                    let mut c = Env { run: e.run.clone(), seeds: SeedSampler::new(1), stake: 3, episodes: 0,
+                        tally: Tally::default(), ended: None, high: e.high, auto: false, skips: false, reject: None, log: Vec::new(), ended_log: Vec::new() };
+                    let probe = random_move(&e.run, &mut XorShift(rng.0 ^ 0xA5));
+                    if k[probe.0 as usize] {
+                        let before = format!("{:?}", c.run);
+                        let mut s0 = Vec::new();
+                        encode(&screen(&c.run), &mut s0);
+                        if apply(&mut c.run, probe.0, probe.1).is_ok() {
+                            let mut s1 = Vec::new();
+                            encode(&screen(&c.run), &mut s1);
+                            if s1 == s0 {
+                                nulls += 1;
+                                assert_eq!(format!("{:?}", c.run), before, "a null move changed the run: {probe:?}");
+                            }
+                        }
+                    }
+                }
                 // A random legal move among the learner's kinds.
                 let mut m = random_move(&e.run, &mut rng);
                 for _ in 0..20 {
@@ -814,5 +837,6 @@ mod learner_tests {
                 e.step(m.0 as i64, m.1);
             }
         }
+        eprintln!("null moves met and checked: {nulls}");
     }
 }
