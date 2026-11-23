@@ -381,3 +381,50 @@ def test_imitate_ppo_and_eval_end_to_end(moves, tmp_path):
     assert ev["kind"] == "baseline" and ev["done"] and ev["runs"] == 10 and len(ev["run_stages"]) == 10
     assert "?" not in ev["run_stages"] and sum(ev["ante_hist"]) == 10
     assert sum(n for _, n in ev["lost_to"]) == 10 - ev["wins"] and ev["now"]["runs"] == 10 and ev["per_run"]["moves"] > 0
+
+
+def test_the_potential_pays_position_once_and_keeps_it_at_a_loss():
+    """Lab #38 (B's test 1): the shaping is a function of the high-water mark of position and the round's progress,
+    so an ante sent back (Hieroglyph) and played again pays nothing more; a lost run keeps its potential; time is
+    counted by blinds."""
+    z = np.zeros(1)
+    f = np.zeros(1, bool)
+    t = np.ones(1, bool)
+
+    def walk(positions, gamma=1.0):
+        high, phi, total = np.zeros(1, np.int64), np.zeros(1), 0.0
+        for p in positions:
+            r, g, high, phi = tp.shaped(high, phi, np.array([p]), z, t, f, f, gamma)
+            total += float(r[0])
+        return total, high
+    straight, _ = walk([1, 2, 3, 4, 5, 6])
+    back, high = walk([1, 2, 3, 4, 5, 6, 3, 4, 5, 6])
+    assert abs(straight - 6 * tp.W_BLIND) < 1e-12 and abs(back - straight) < 1e-12 and high[0] == 6
+    # A loss keeps the potential (the reward at the last step is not taken back).
+    r, g, _, _ = tp.shaped(np.array([6]), np.array([6 * tp.W_BLIND]), np.array([6]), z, f, t, f, 0.98)
+    assert abs(r[0] - (0.98 * 6 * tp.W_BLIND - 6 * tp.W_BLIND)) < 1e-12 and g[0] == 0.98
+    # A move that ends nothing is not discounted; round progress counts at W_SCORE.
+    r, g, _, phi = tp.shaped(np.array([3]), np.array([3 * tp.W_BLIND]), np.array([3]), np.array([0.5]), f, f, f, 0.98)
+    assert g[0] == 1.0 and abs(r[0] - 0.5 * tp.W_SCORE) < 1e-12
+    # A win pays 1 on top.
+    r, _, _, _ = tp.shaped(np.array([23]), np.array([23 * tp.W_BLIND]), np.array([24]), z, t, t, t, 1.0)
+    assert abs(r[0] - (1 + tp.W_BLIND)) < 1e-12
+
+
+def test_the_guard_turns_skips_off_and_caps_a_shop():
+    """Lab #38 (B's test 2 and the shop cap): no skip is offered beside Select Blind; after the cap only leaving."""
+    g = tp.Guard(2, skips=False, shop_cap=3)
+    blind = np.zeros((2, tp.N_KINDS), bool)
+    blind[:, [tp.SELECT_BLIND, tp.SKIP_BLIND]] = True
+    m = g.mask(blind)
+    assert m[:, tp.SELECT_BLIND].all() and not m[:, tp.SKIP_BLIND].any()
+    assert tp.Guard(2).mask(blind)[:, tp.SKIP_BLIND].all(), "skips stay when asked for"
+    shop = np.zeros((2, tp.N_KINDS), bool)
+    shop[:, [tp.BUY, tp.REROLL, tp.LEAVE_SHOP]] = True
+    for _ in range(3):
+        g.count_shop(shop, np.array([False, True]))
+    m = g.mask(shop)
+    assert list(np.flatnonzero(m[0])) == [tp.LEAVE_SHOP], "capped: only leaving"
+    assert m[1, tp.BUY], "a run that ended starts its count again"
+    g.count_shop(blind, np.array([False, False]))
+    assert g.mask(shop)[0, tp.BUY], "leaving the shop resets the count"

@@ -58,6 +58,12 @@ class VecEnv:
         self._cleared = np.zeros(n, np.uint8)
         self._hand = np.zeros(n, np.int32)
         self.cleared = np.zeros(n, bool)  # whether each run's last move beat a blind
+        self._position = np.zeros(n, np.int32)
+        self._progress = np.zeros(n, np.float32)
+        # After each step: blinds beaten so far (24 at a win; before a finished run is replaced) and, in a round, the
+        # share of the blind's target scored (lab #38: the learner's potential).
+        self.position = np.zeros(n, np.int32)
+        self.progress = np.zeros(n, np.float32)
 
     def observe(self) -> np.ndarray:
         """The bot's input for every run (a view reused by the next call)."""
@@ -82,8 +88,11 @@ class VecEnv:
     def step(self, kinds: np.ndarray, args: np.ndarray):
         kinds = np.ascontiguousarray(kinds, dtype=np.int64)
         args = np.ascontiguousarray(args, dtype=np.uint64)
-        self._env.step(kinds, args, self._reward, self._done, self._won, self._refused, self._ante, self._cleared)
+        self._env.step(kinds, args, self._reward, self._done, self._won, self._refused, self._ante, self._cleared,
+                       self._position, self._progress)
         self.cleared = self._cleared.astype(bool)
+        self.position = self._position.copy()
+        self.progress = self._progress.copy()
         return (
             self._reward.copy(),
             self._done.astype(bool),

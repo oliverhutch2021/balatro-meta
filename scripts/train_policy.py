@@ -57,9 +57,16 @@ SLOT_GROUP = {MOVE_CARD: "hand", MOVE_JOKER: "jokers", SELL_JOKER: "jokers", BUY
 HAS_TO = (MOVE_CARD, MOVE_JOKER)
 # Cards picked: (fewest, most) for each kind that picks cards.
 CARD_RANGE = {PLAY: (1, 5), DISCARD: (1, 5), USE_CONSUMABLE: (0, 5), PACK_CHOOSE: (0, 5)}
-# Rewards.
+# Rewards (lab #38, Stage 0): the win, plus a potential of the run's position kept at a loss (antezero's lesson: zeroed,
+# every loss returns the same and nothing is learned) - W_BLIND a blind beaten, on the high-water mark of position, so
+# an ante sent back (Hieroglyph, Petroglyph) never pays twice, and W_SCORE for the share of the blind's target scored.
+# Time is counted by blinds (B's form): a transition that ends a blind or the run is discounted by --gamma-blind, every
+# other by 1, so a long shop costs nothing by itself (guarded by the shop cap and the free-move rules).
 BLIND_REWARD = 1 / 24
+W_BLIND = 0.04
+W_SCORE = 0.02
 WIN_REWARD = 1.0
+SHOP_CAP = 60  # moves in one shop (its packs included) after which only leaving is offered
 REFUSED_COST = 0.01
 FREE_COST = 0.0002
 MAX_MOVES = 3000  # a run still going after this many moves is cut short
@@ -487,12 +494,25 @@ def device_of(torch, cpu: bool):
     return torch.device("cuda" if torch.cuda.is_available() and not cpu else "cpu")
 
 
+# bf16 on the GPU only when asked (--bf16): antezero found bf16 rounding flipping near-tied choices between acting and
+# learning (PPO ratios to e^15), so from Stage 0 (lab #38) the network runs in float32 with TF32 matrix products.
+BF16 = {"on": False}
+
+
 def autocast(torch, device):
-    if device.type == "cuda":
+    if device.type == "cuda" and BF16["on"]:
         return torch.autocast("cuda", dtype=torch.bfloat16)
     import contextlib
 
     return contextlib.nullcontext()
+
+
+def fast_float32(torch, a) -> None:
+    """float32 with TF32 matrix products (the default), or bf16 autocast with --bf16."""
+    BF16["on"] = bool(getattr(a, "bf16", False))
+    if torch.cuda.is_available():
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
 
 
 def wilson(k: int, n: int) -> tuple[float, float]:
@@ -546,6 +566,7 @@ def returns(lab: np.ndarray, gamma: float) -> np.ndarray:
 
 def imitate(a) -> dict:
     torch = need_torch()
+    fast_float32(torch, a)
     import train_value as tv
 
     t0 = time.time()
@@ -698,15 +719,34 @@ class Guard:
     goes through, and so is reordering after FREE_STREAK reorders in a row. (The network sees the narrower list
     of kinds, so what it learns matches what it could choose.)"""
 
-    def __init__(self, n: int):
+    def __init__(self, n: int, skips: bool = True, shop_cap: int = 0):
         self.free = np.zeros(n, np.int64)
         self.blocked = np.zeros((n, N_KINDS), bool)
         self.allowed = np.ones(N_KINDS, bool)
         self.allowed[list(NEVER)] = False
+        # Stage 0 (lab #38): blind skips off (a skip's tag is a reward the learner could farm; antezero's first
+        # cheat), and a cap on moves in one shop, its packs included, after which only leaving is offered (with time
+        # counted by blinds, a shop's moves are otherwise free).
+        self.skips = skips
+        self.shop_cap = shop_cap
+        self.shop_moves = np.zeros(n, np.int64)
+
+    @staticmethod
+    def in_shop(legal: np.ndarray) -> np.ndarray:
+        """Shop and pack states (where leaving the shop or skipping a pack is a move)."""
+        return legal[:, LEAVE_SHOP] | legal[:, PACK_SKIP]
 
     def mask(self, legal: np.ndarray) -> np.ndarray:
         out = legal & ~self.blocked
         out[self.free >= FREE_STREAK] &= ~np.isin(np.arange(N_KINDS), FREE)
+        if not self.skips:
+            out[:, SKIP_BLIND] &= ~legal[:, SELECT_BLIND]
+        if self.shop_cap:
+            capped = (self.shop_moves >= self.shop_cap) & self.in_shop(legal)
+            if capped.any():
+                leave = np.zeros(N_KINDS, bool)
+                leave[[LEAVE_SHOP, PACK_SKIP]] = True
+                out[capped] &= leave
         none_left = ~(out & self.allowed).any(1)
         out[none_left] = legal[none_left]
         return out
@@ -719,6 +759,21 @@ class Guard:
         self.free = np.where(went, np.where(np.isin(kinds, FREE), self.free + 1, 0), self.free)
         self.free[ended] = 0
         self.blocked[ended] = False
+
+    def count_shop(self, legal: np.ndarray, ended: np.ndarray) -> None:
+        """After a move from a state with these legal kinds: count it if it was made in a shop or pack."""
+        self.shop_moves = np.where(self.in_shop(legal) & ~ended, self.shop_moves + 1, 0)
+
+
+def shaped(high, phi, position, progress, cleared, done, won, gamma_blind: float):
+    """One step's reward under the potential (lab #38): the win, plus g * Phi(after) - Phi(before), where Phi is
+    W_BLIND x the high-water mark of position plus W_SCORE x the round's progress, kept at the run's end, and g is
+    `gamma_blind` on a transition that ends a blind or the run, 1 on every other. Returns (reward, g, the high-water
+    mark after, Phi after); the caller zeroes the last two for runs that ended."""
+    high_now = np.maximum(high, position)
+    phi_now = W_BLIND * high_now + W_SCORE * progress
+    g = np.where(cleared | done, gamma_blind, 1.0)
+    return won * WIN_REWARD + g * phi_now - phi, g, high_now, phi_now
 
 
 def new_stats() -> dict:
@@ -839,6 +894,7 @@ def merge_blocks(blocks: list) -> list:
 def eval_policy(a) -> dict:
     """Play the baseline job's seeds with the network's likeliest moves."""
     torch = need_torch()
+    fast_float32(torch, a)
     from balatro_meta.env import VecEnv
 
     e = engine()
@@ -862,12 +918,14 @@ def eval_policy(a) -> dict:
                   "network", a.runs, a.threads)
     stats = new_stats()
     book = RunBook(e.HAND_NAMES, block_runs=a.block_runs)
-    guard = Guard(n)
+    # The same rules as training: no blind skips unless asked, the shop cap.
+    guard = Guard(n, skips=getattr(a, "skips", False), shop_cap=getattr(a, "shop_cap", SHOP_CAP))
     t0 = time.time()
     finished = 0
     while finished < a.runs:
         x = torch.from_numpy(env.observe()).to(device)
-        legal = torch.from_numpy(guard.mask(env.legal_kinds())).to(device)
+        legal_np = guard.mask(env.legal_kinds())
+        legal = torch.from_numpy(legal_np).to(device)
         with torch.no_grad(), autocast(torch, device):
             kind, slot, to, cards, _, _ = pp.act(x, legal, greedy=not a.sample)
         kind_np = kind.cpu().numpy()
@@ -901,6 +959,7 @@ def eval_policy(a) -> dict:
                 else:
                     slot_run[i] = -1
         guard.after(kind_np, refused, ended)
+        guard.count_shop(legal_np, ended)
         stats["elapsed"] = time.time() - t0
         stats["rate"] = stats["runs"] / max(stats["elapsed"], 1e-9)
         watch.report(stats, extra=book.fields)
@@ -921,13 +980,14 @@ def eval_policy(a) -> dict:
 
 
 def ppo_grads(torch, pp, batch, mb, micro: int, device, clip: float, value_coef: float, ent_coef: float,
-              warm: bool) -> dict:
+              warm: bool, shop_ent_mult: float = 1.0) -> dict:
     """Adds PPO's loss gradients on minibatch `mb` (indices into `batch`) to the network's, worked out `micro`
     positions at a time so a big minibatch fits in the GPU's memory: the same gradients as the whole minibatch at
     once. Returns the minibatch's mean policy, value and entropy losses, clipped share and approximate KL divergence
     from the policy that played (before this step). (Past the GPU's memory, Windows spills into the PC's RAM and
     training crawls rather than failing.)"""
-    fx, fl, fk, fs, ft, fc, flp, fadv, fret = batch
+    fx, fl, fk, fs, ft, fc, flp, fadv, fret, *rest = batch
+    fsh = rest[0] if rest else None
     out = dict.fromkeys(("policy", "value", "entropy", "clip", "kl"), 0.0)
     n = len(mb)
     for c in range(0, n, micro):
@@ -940,7 +1000,9 @@ def ppo_grads(torch, pp, batch, mb, micro: int, device, clip: float, value_coef:
         pg = -torch.min(ratio * fadv[sub], ratio.clamp(1 - clip, 1 + clip) * fadv[sub]).mean()
         vl = ((v - fret[sub]) ** 2).mean()
         el = ent.mean()
-        loss = value_coef * vl if warm else pg + value_coef * vl - ent_coef * el
+        # More entropy on shop and pack decisions than in rounds (lab #38: --shop-ent-mult).
+        ew = ent if fsh is None else ent * torch.where(fsh[sub], shop_ent_mult, 1.0)
+        loss = value_coef * vl if warm else pg + value_coef * vl - ent_coef * ew.mean()
         (loss * w).backward()
         out["policy"] += float(pg.detach()) * w
         out["value"] += float(vl.detach()) * w
@@ -1003,6 +1065,7 @@ def value_only(model) -> None:
 
 def ppo(a) -> dict:
     torch = need_torch()
+    fast_float32(torch, a)
     from balatro_meta.env import VecEnv
 
     e = engine()
@@ -1048,6 +1111,8 @@ def ppo(a) -> dict:
     buf_v = torch.zeros(T, N, device=device)
     buf_r = torch.zeros(T, N, device=device)
     buf_done = torch.zeros(T, N, device=device)
+    buf_gamma = torch.ones(T, N, device=device)  # each transition's discount: --gamma-blind if it ends a blind, else 1
+    buf_shop = torch.zeros(T, N, dtype=torch.bool, device=device)  # shop and pack states (more entropy there)
     del lay
     moves = np.zeros(N, np.int64)
     blinds = np.zeros(N, np.int64)
@@ -1090,7 +1155,10 @@ def ppo(a) -> dict:
         state["book"] = book.state()
         save(torch, latest, model, {"opt": opt.state_dict(), "state": state})
 
-    guard = Guard(N)
+    guard = Guard(N, skips=a.skips, shop_cap=a.shop_cap)
+    # The potential: each run's high-water mark of position and its last potential (lab #38).
+    high = np.zeros(N, np.int64)
+    phi = np.zeros(N, np.float64)
     last_losses: dict = {}
 
     def live() -> dict:
@@ -1116,7 +1184,8 @@ def ppo(a) -> dict:
             if stop["now"]:
                 break
             x = torch.from_numpy(x_np).to(device)
-            legal = torch.from_numpy(guard.mask(env.legal_kinds())).to(device)
+            legal_np = guard.mask(env.legal_kinds())
+            legal = torch.from_numpy(legal_np).to(device)
             with torch.no_grad(), autocast(torch, device):
                 kind, slot, to, cards, logp, v = pp.act(x, legal)
             kind_np = kind.cpu().numpy()
@@ -1126,9 +1195,24 @@ def ppo(a) -> dict:
             cleared = env.cleared
             moves += 1
             blinds += cleared
-            r = cleared * BLIND_REWARD + won * WIN_REWARD - refused * REFUSED_COST \
-                - np.isin(kind_np, FREE) * FREE_COST
+            # The potential after the move (before a finished run is replaced): the high-water mark of position,
+            # and the round's progress. Discounted by blinds: --gamma-blind on a transition that ends a blind or the
+            # run, 1 on every other.
+            r, g, high_now, phi_now = shaped(high, phi, env.position, env.progress, cleared, done, won, a.gamma_blind)
+            r = r - refused * REFUSED_COST - np.isin(kind_np, FREE) * FREE_COST
             cut = (moves >= MAX_MOVES) & ~done
+            if cut.any():
+                # A run cut short isn't lost: its last transition is bootstrapped with the value of where it stood
+                # (B, lab #38: a cut valued at 0 is the time-limit-as-terminal error).
+                after = torch.from_numpy(env.observe().copy()).to(device)
+                idx = np.flatnonzero(cut)
+                with torch.no_grad(), autocast(torch, device):
+                    _, _, cls_cut = model.encode(after[idx])
+                    v_cut = model.value(cls_cut).float().cpu().numpy()
+                r[idx] += g[idx] * v_cut
+            ended = done | cut
+            high = np.where(ended, 0, high_now)
+            phi = np.where(ended, 0.0, phi_now)
             seconds = seconds0 + time.time() - t_start
             if done.any():
                 for _, end in env.take_endings():
@@ -1137,8 +1221,8 @@ def ppo(a) -> dict:
                 book.add(env.cut_run(int(i)), seconds)
                 env.set_seed(int(i), e.run_seed(a.seed + 7919, trunc))
                 trunc += 1
-            ended = done | cut
             guard.after(kind_np, refused, ended)
+            guard.count_shop(legal_np, ended)
             for i in rec:
                 if not refused[i]:
                     rec[i][1].append([int(kind_np[i]), int(args[i])])
@@ -1157,6 +1241,8 @@ def ppo(a) -> dict:
             buf_logp[t], buf_v[t] = logp.float(), v.float()
             buf_r[t] = torch.from_numpy(r.astype(np.float32)).to(device)
             buf_done[t] = torch.from_numpy(ended.astype(np.float32)).to(device)
+            buf_gamma[t] = torch.from_numpy(g.astype(np.float32)).to(device)
+            buf_shop[t] = torch.from_numpy(Guard.in_shop(legal_np)).to(device)
             x_np = env.observe()
             if ended.any():
                 stats["elapsed"] = seconds
@@ -1173,8 +1259,8 @@ def ppo(a) -> dict:
         for t in range(T - 1, -1, -1):
             nv = last_v if t == T - 1 else buf_v[t + 1]
             nonterm = 1.0 - buf_done[t]
-            delta = buf_r[t] + a.gamma * nv * nonterm - buf_v[t]
-            gae = delta + a.gamma * a.lam * nonterm * gae
+            delta = buf_r[t] + buf_gamma[t] * nv * nonterm - buf_v[t]
+            gae = delta + buf_gamma[t] * a.lam * nonterm * gae
             adv[t] = gae
         ret = adv + buf_v
         # The update.
@@ -1183,25 +1269,32 @@ def ppo(a) -> dict:
         flat = lambda z: z.reshape(T * N, *z.shape[2:])
         fx, fl, fk, fs, ft, fc = (flat(buf_x), flat(buf_legal), flat(buf_kind), flat(buf_slot), flat(buf_to),
                                   flat(buf_cards))
+        fsh = flat(buf_shop)
         flp, fadv, fret = flat(buf_logp), flat(adv), flat(ret)
         fadv = (fadv - fadv.mean()) / (fadv.std() + 1e-8)
         losses = {"policy": 0.0, "value": 0.0, "entropy": 0.0, "clip": 0.0, "kl": 0.0}
         nb = 0
-        # The learning rate falls to a tenth over the run (and halves at each fall back to the best network).
+        # A small steady learning rate (lab #38; antezero's later segments ran flat), halved at each fall back to the
+        # best network; --lr-fall restores the old fall to a tenth over the run.
         done_frac = min(1.0, (seconds0 + time.time() - t_start) / max(a.hours * 3600, 1.0))
         for group in opt.param_groups:
-            group["lr"] = a.lr * state.get("lr_scale", 1.0) * (1.0 - 0.9 * done_frac)
+            group["lr"] = a.lr * state.get("lr_scale", 1.0) * (1.0 - 0.9 * done_frac if a.lr_fall else 1.0)
         # The first updates from a copied network train its value head only, on the network's own runs: how it
         # plays stays exactly the copy until the value can judge its moves.
         warm = state["updates"] < state.setdefault("warm_until", a.value_warmup if a.init else 0)
-        batch = (fx, fl, fk, fs, ft, fc, flp, fadv, fret)
+        batch = (fx, fl, fk, fs, ft, fc, flp, fadv, fret, fsh)
         braked = False
+        first_kl = None
         for _ in range(a.epochs):
             perm = torch.randperm(T * N, device=device)
             for k in range(0, T * N, a.minibatch):
                 opt.zero_grad(set_to_none=True)
                 got = ppo_grads(torch, pp, batch, perm[k:k + a.minibatch], a.micro, device, a.clip, a.value_coef,
-                                a.ent_coef, warm)
+                                a.ent_coef, warm, a.shop_ent_mult)
+                if first_kl is None:
+                    # Before any step the play hasn't moved, so this is about 0 unless acting and learning disagree
+                    # (B, lab #38: precision, a stale input).
+                    first_kl = got["kl"]
                 if not warm and a.target_kl and got["kl"] > 1.5 * a.target_kl:
                     # The brake: this update has already moved the play as far as one update should.
                     opt.zero_grad(set_to_none=True)
@@ -1240,6 +1333,7 @@ def ppo(a) -> dict:
         if not watch.history or el_s - watch.history[-1][0] >= 60:
             watch.history.append([round(el_s, 1), stats["runs"], round(ante_recent, 4), round(win_recent, 5)])
         last_losses = {k: round(v / max(nb, 1), 5) for k, v in losses.items()}
+        last_losses["first_kl"] = round(first_kl or 0.0, 6)
         # Keep the best network so far; if play collapses, go back to it and learn more slowly.
         judged = recent[-a.judge_runs:]
         verdict = judge_progress(state.get("best"), sum(w for w, _ in judged) / max(len(judged), 1),
@@ -1312,6 +1406,7 @@ def main() -> None:
     net.add_argument("--cpu", action="store_true")
     net.add_argument("--seed", type=int, default=1)
     net.add_argument("--threads", type=int, default=0)
+    net.add_argument("--bf16", action="store_true", help="bf16 autocast on the GPU (Stage 0's default is float32/TF32)")
     i = sub.add_parser("imitate", parents=[net])
     i.add_argument("--data", required=True)
     i.add_argument("--out", required=True)
@@ -1330,17 +1425,23 @@ def main() -> None:
     p.add_argument("--report")
     p.add_argument("--hours", type=float, default=8.0)
     p.add_argument("--max-updates", type=int, help="stop after this many updates in all (tests)")
-    p.add_argument("--envs", type=int, default=2048)
-    p.add_argument("--steps", type=int, default=64)
-    p.add_argument("--epochs", type=int, default=3)
-    p.add_argument("--minibatch", type=int, default=8192)
+    # Stage 0's recipe (lab #38): big batches used once (antezero: 4,096 games x 128 moves, one pass).
+    p.add_argument("--envs", type=int, default=4096)
+    p.add_argument("--steps", type=int, default=128)
+    p.add_argument("--epochs", type=int, default=1)
+    p.add_argument("--minibatch", type=int, default=4096)
     p.add_argument("--micro", type=int, default=2048,
                    help="positions worked out at once within a minibatch (GPU memory; the result is the same)")
     p.add_argument("--no-compile", dest="compile", action="store_false",
                    help="don't have PyTorch compile the network (it falls back by itself if compiling fails)")
-    p.add_argument("--lr", type=float, default=1e-4)
-    p.add_argument("--gamma", type=float, default=0.999)
+    p.add_argument("--lr", type=float, default=5e-5)
+    p.add_argument("--lr-fall", action="store_true", help="the old schedule: the rate falls to a tenth over the run")
+    p.add_argument("--gamma-blind", type=float, default=0.98,
+                   help="the discount of a transition that ends a blind or the run (every other: 1)")
     p.add_argument("--lam", type=float, default=0.95)
+    p.add_argument("--skips", action="store_true", help="offer blind skips (off from Stage 0, lab #38)")
+    p.add_argument("--shop-cap", type=int, default=SHOP_CAP, help="moves in one shop before only leaving is offered")
+    p.add_argument("--shop-ent-mult", type=float, default=3.0, help="entropy's weight on shop and pack decisions")
     p.add_argument("--clip", type=float, default=0.2)
     p.add_argument("--value-coef", type=float, default=0.5)
     p.add_argument("--ent-coef", type=float, default=0.003)

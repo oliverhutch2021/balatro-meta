@@ -375,6 +375,29 @@ pub struct StepInfo {
     pub ante: i32,
     /// The move beat a blind.
     pub cleared: bool,
+    /// Where the run stands after the move (before a new run starts at its end): blinds beaten so far, 3 an ante
+    /// before this one plus this ante's beaten (skipped blinds don't count); 24 at a win. The learner's potential
+    /// takes its high-water mark, so an ante sent back (Hieroglyph, Petroglyph) never pays twice (lab #38).
+    pub position: i32,
+    /// In a round, the share of the blind's target scored so far (0 to 1); 0 elsewhere.
+    pub progress: f32,
+}
+
+/// `StepInfo::position` of a run.
+pub fn position(run: &Run) -> i32 {
+    if run.won {
+        return 24;
+    }
+    let beaten = run.slots.iter().filter(|s| matches!(s, crate::blinds::SlotState::Defeated)).count() as i32;
+    3 * (run.ante.max(1) - 1) + beaten
+}
+
+/// `StepInfo::progress` of a run.
+pub fn progress(run: &Run) -> f32 {
+    match (&run.blind, run.phase) {
+        (Some(b), Phase::Round) if b.chips > 0.0 => (run.round_chips / b.chips).clamp(0.0, 1.0) as f32,
+        _ => 0.0,
+    }
 }
 
 impl Env {
@@ -416,6 +439,8 @@ impl Env {
             return StepInfo {
                 refused: true,
                 ante: self.run.ante,
+                position: position(&self.run),
+                progress: progress(&self.run),
                 ..StepInfo::default()
             };
         };
@@ -432,6 +457,8 @@ impl Env {
             refused,
             ante: self.run.ante,
             cleared: in_round && (won || self.run.phase == Phase::RoundEval),
+            position: position(&self.run),
+            progress: progress(&self.run),
         };
         if done {
             self.ended = Some(RunEnd::new(&self.run, std::mem::take(&mut self.tally)));
@@ -442,5 +469,32 @@ impl Env {
 
     pub fn observe(&self, out: &mut Vec<f32>) {
         encode(&screen(&self.run), out);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Lab #38: each step reports where the run stands (blinds beaten so far, 24 at a win; skipped blinds never
+    /// count) and, in a round, the share of the target scored.
+    #[test]
+    fn a_step_reports_position_and_progress() {
+        let mut e = Env::new(7, 3);
+        let mut beaten = 0;
+        for k in 0..2000u64 {
+            let (kind, arg) = crate::bots::greedy_move(&e.run, k);
+            let info = e.step(kind as i64, arg);
+            assert!((0.0..=1.0).contains(&info.progress));
+            if info.cleared {
+                beaten += 1;
+            }
+            if info.done {
+                assert_eq!(info.position, if info.won { 24 } else { beaten });
+                return;
+            }
+            assert_eq!(info.position, beaten, "with no skips, position counts the blinds beaten");
+            assert_eq!(info.position, position(&e.run));
+        }
     }
 }

@@ -1787,6 +1787,27 @@ short-lived (Ice Cream, Popcorn, Gros Michel, Ramen). It rerolls little (1.3 to 
 cd /mnt/h/balatro-meta && git add results && (git commit -qm "results(offered and passed)" || true) && make sync && make teacher-data-12
 ```
 
+## Step 65: Stage 0, part 1: the trainer's recipe (lab #38, 23 November)
+
+The teacher line has stopped (S, lab #38: the learner on billions of moves is the main line, decided by Gate 0). The
+user stopped round 12's recording after two parts. Stage 0, part 1, in `train_policy.py ppo` and the engine's step:
+- float32 with TF32 (bf16 only with `--bf16`): antezero's near-tie flips;
+- 4,096 games x 128 moves an update, one pass, minibatches of 4,096, a steady rate of 5e-5 (`--lr-fall` for the
+  old fall);
+- the reward: the win plus a potential of position kept at a loss, W_BLIND 0.04 a blind on the high-water mark (an
+  ante sent back never pays twice) and W_SCORE 0.02 for the round's progress (`env.rs` reports both each step);
+- time counted by blinds: a transition that ends a blind or the run is discounted by `--gamma-blind` (0.98), every
+  other by 1 (B's form, GAE per transition);
+- a run cut at MAX_MOVES bootstrapped with its value, never valued at 0;
+- blind skips off (`--skips` to offer them), a cap of 60 moves in one shop and its packs;
+- three times the entropy on shop and pack decisions; the first minibatch's KL logged (about 0 unless acting and
+  learning disagree).
+The GPU timing (two sizes, with and without compile) runs before anything else:
+
+```
+cd /mnt/h/balatro-meta && pkill -INT -f "jobs.py run teacher-data-12"; pkill -INT -f "examples/baseline"; sleep 30; mkdir -p results/bench .sync/ppo-timing; for cfg in "192 4 4" "256 6 8"; do set -- $cfg; for c in "" "--no-compile"; do n=w$1-l$2${c:+-eager}; ~/.venvs/balatro-meta/bin/python scripts/train_policy.py ppo --dir .sync/ppo-timing/$n --hours 0.08 --envs 2048 --steps 128 --epochs 1 --minibatch 2048 --micro 2048 --width $1 --layers $2 --heads $3 $c --report results/bench/ppo-timing-$n.json 2>&1 | tee .sync/ppo-timing/$n.log | grep -iE "compil|error|out of memory|Done"; done; done
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

@@ -192,7 +192,7 @@ impl VecEnv {
     /// reward (float32), done, won and refused (uint8) and the ante (int32),
     /// and, if given, whether the move beat a blind (`cleared`, uint8).
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (kinds, args, reward, done, won, refused, ante, cleared = None))]
+    #[pyo3(signature = (kinds, args, reward, done, won, refused, ante, cleared = None, position = None, progress = None))]
     fn step(
         &mut self,
         py: Python<'_>,
@@ -204,6 +204,8 @@ impl VecEnv {
         refused: &Bound<'_, PyAny>,
         ante: &Bound<'_, PyAny>,
         cleared: Option<&Bound<'_, PyAny>>,
+        position: Option<&Bound<'_, PyAny>>,
+        progress: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<()> {
         let n = self.envs.len();
         let k: Vec<i64> = buffer::<i64>(kinds, n, "kinds")?.to_vec(py)?;
@@ -234,6 +236,14 @@ impl VecEnv {
                 py,
                 &infos.iter().map(|x| x.cleared as u8).collect::<Vec<_>>(),
             )?;
+        }
+        if let Some(p) = position {
+            buffer::<i32>(p, n, "position")?
+                .copy_from_slice(py, &infos.iter().map(|x| x.position).collect::<Vec<_>>())?;
+        }
+        if let Some(p) = progress {
+            buffer::<f32>(p, n, "progress")?
+                .copy_from_slice(py, &infos.iter().map(|x| x.progress).collect::<Vec<_>>())?;
         }
         Ok(())
     }
