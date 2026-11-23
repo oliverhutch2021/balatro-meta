@@ -1802,6 +1802,11 @@ user stopped round 12's recording after two parts. Stage 0, part 1, in `train_po
 - blind skips off (`--skips` to offer them), a cap of 60 moves in one shop and its packs;
 - three times the entropy on shop and pack decisions; the first minibatch's KL logged (about 0 unless acting and
   learning disagree).
+B's review (approved): a lost run keeps its losing round's progress (`env::progress` reads the round a run was lost
+in), the clipped share is logged beside the KL, and the learner has its own input block after the screen's
+(`env::POLICY_OBS_LEN`, `LEARNER_FEATURES` = 32, column 0 the blinds paid for ahead after Hieroglyph or Petroglyph;
+the screen itself, which the teacher's value networks read, is unchanged). The smoke run's rate follows B's rule:
+over the first 50 updates, no brake and under 3% clipped means 1e-4; the brake on over a quarter means half.
 The GPU timing (two sizes, with and without compile) runs before anything else:
 
 ```

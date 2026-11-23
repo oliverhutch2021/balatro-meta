@@ -49,7 +49,7 @@ FREE = (MOVE_CARD, MOVE_JOKER)  # moves that change nothing but order
 MAX_HAND = 24
 N_JOKER_TOKENS = 152  # joker kinds + empty + face down (observe.rs: joker_token)
 GROUPS = ("hand", "jokers", "consumables", "shop_row", "shop_vouchers", "boosters", "pack")
-GLOBAL_PARTS = ("global", "hand_levels", "deck", "vouchers", "pack_booster", "tail")
+GLOBAL_PARTS = ("global", "hand_levels", "deck", "vouchers", "pack_booster", "tail", "learner")
 # Which group a kind's slot points into; kinds with a target "to" (moves) and with cards to pick.
 SLOT_GROUP = {MOVE_CARD: "hand", MOVE_JOKER: "jokers", SELL_JOKER: "jokers", BUY: "shop_row",
               REDEEM_VOUCHER: "shop_vouchers", OPEN_BOOSTER: "boosters", SELL_CONSUMABLE: "consumables",
@@ -195,6 +195,9 @@ def build_model(torch, d: int = 128, layers: int = 4, heads: int = 4, ff: int = 
                 spans[g] = (at, at + lay[g][1])
                 at += lay[g][1]
             self.spans, self.n_tokens = spans, at
+            # The input's length: a screen-only input (the teacher's recorded moves, written before the learner's
+            # block existed) is padded with zeros for that block (lab #38).
+            self.n_in = max(s + k * w for s, k, w in lay.values())
             group_of = torch.zeros(N_KINDS, at, dtype=torch.bool)
             for k, g in SLOT_GROUP.items():
                 a, b = spans[g]
@@ -207,6 +210,8 @@ def build_model(torch, d: int = 128, layers: int = 4, heads: int = 4, ff: int = 
         def encode(self, x):
             """Tokens (B, T, d), their presence (B, T) and the global token's output (B, d)."""
             B = x.shape[0]
+            if x.shape[1] < self.n_in:
+                x = torch.nn.functional.pad(x, (0, self.n_in - x.shape[1]))
             sq = torch.sign(x) * torch.log1p(torch.abs(x))  # big numbers (targets, chips) squashed
             toks, present = [], []
             gl = torch.cat([sq[:, s:s + n * w] for s, n, w in (self.lay[p] for p in GLOBAL_PARTS)], 1)
@@ -1364,7 +1369,8 @@ def ppo(a) -> dict:
             print(f"update {state['updates']}{' (value only)' if warm else ''}: {stats['runs']:,} runs, last "
                   f"{len(last):,}: won {win_recent:.2%}, mean final ante {ante_recent:.2f}; policy "
                   f"{losses['policy'] / max(nb, 1):.4f}, value {losses['value'] / max(nb, 1):.4f}, entropy "
-                  f"{losses['entropy'] / max(nb, 1):.3f}, kl {losses['kl'] / max(nb, 1):.4f}, braked "
+                  f"{losses['entropy'] / max(nb, 1):.3f}, kl {losses['kl'] / max(nb, 1):.4f} (first {first_kl or 0.0:.5f}), "
+                  f"clipped {losses['clip'] / max(nb, 1):.3f}, braked "
                   f"{state['braked']} so far" + (f"; best {b['win']:.2%} (update {b['update']})" if b else ""),
                   flush=True)
         if time.time() - last_save >= a.save_minutes * 60:

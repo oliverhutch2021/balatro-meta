@@ -42,7 +42,7 @@ def moves(tmp_path_factory):
 
 def test_recorded_moves_are_what_was_played(moves):
     man = json.loads((moves / "manifest.json").read_text())
-    assert man["input"] == "screen" and man["inputs"] == tp.engine().OBS_LEN and man["runs"] == 60
+    assert man["input"] == "screen" and man["inputs"] == tp.engine().SCREEN_LEN and man["runs"] == 60
     data, mov = tp.load_moves(moves, None)
     assert mov.shape == (data.rows, 3)
     assert all((m[2] >> m[0]) & 1 for m in mov), "every move's kind was allowed"
@@ -406,6 +406,9 @@ def test_the_potential_pays_position_once_and_keeps_it_at_a_loss():
     # A move that ends nothing is not discounted; round progress counts at W_SCORE.
     r, g, _, phi = tp.shaped(np.array([3]), np.array([3 * tp.W_BLIND]), np.array([3]), np.array([0.5]), f, f, f, 0.98)
     assert g[0] == 1.0 and abs(r[0] - 0.5 * tp.W_SCORE) < 1e-12
+    # A loss at 90% of the target keeps that round's progress in the end potential (B, lab #38).
+    _, _, _, phi = tp.shaped(np.array([6]), np.array([6 * tp.W_BLIND]), np.array([6]), np.array([0.9]), f, t, f, 0.98)
+    assert abs(phi[0] - (6 * tp.W_BLIND + 0.9 * tp.W_SCORE)) < 1e-12
     # A win pays 1 on top.
     r, _, _, _ = tp.shaped(np.array([23]), np.array([23 * tp.W_BLIND]), np.array([24]), z, t, t, t, 1.0)
     assert abs(r[0] - (1 + tp.W_BLIND)) < 1e-12

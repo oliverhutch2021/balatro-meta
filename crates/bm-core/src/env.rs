@@ -6,7 +6,7 @@ use bm_rng::SeedSampler;
 
 use crate::blinds::BlindSlot;
 use crate::card::SortMode;
-use crate::observe::{encode, screen};
+use crate::observe::{encode, obs_layout, screen, OBS_LEN};
 use crate::state::{Phase, Run, RunConfig};
 use crate::tally::{RunEnd, Tally};
 
@@ -356,6 +356,24 @@ pub struct Env {
     pub tally: Tally,
     /// How the last finished run ended, until the caller takes it.
     pub ended: Option<RunEnd>,
+    /// The run's high-water mark of position (`position`): what the learner's potential has already paid for.
+    pub high: i32,
+}
+
+/// The learner's own inputs (lab #38), after the screen's (`observe::encode`, which the teacher's value networks
+/// also read and so never changes): a block of LEARNER_FEATURES floats. Column 0: blinds already paid for ahead of
+/// where the run stands, the high-water mark less the position, in antes (after Hieroglyph or Petroglyph the
+/// potential pays nothing until the run gets back: B). The others are kept for Stage 0's next inputs (capacity
+/// against the coming blinds) and are 0 until then.
+pub const LEARNER_FEATURES: usize = 32;
+/// The learner's whole input: the screen, then the learner's block.
+pub const POLICY_OBS_LEN: usize = OBS_LEN + LEARNER_FEATURES;
+
+/// The learner's input layout: the screen's parts, then "learner".
+pub fn policy_layout() -> Vec<(&'static str, usize, usize, usize)> {
+    let mut l = obs_layout();
+    l.push(("learner", OBS_LEN, 1, LEARNER_FEATURES));
+    l
 }
 
 /// The seed of run `i` of a job with seed base `base` (the baseline job's runs, so other bots can play the
@@ -392,10 +410,13 @@ pub fn position(run: &Run) -> i32 {
     3 * (run.ante.max(1) - 1) + beaten
 }
 
-/// `StepInfo::progress` of a run.
+/// `StepInfo::progress` of a run: in a round, and in the round a run was lost in (its blind and score survive the
+/// loss: B, lab #38, so a near miss and a blowout don't end on the same return).
 pub fn progress(run: &Run) -> f32 {
     match (&run.blind, run.phase) {
-        (Some(b), Phase::Round) if b.chips > 0.0 => (run.round_chips / b.chips).clamp(0.0, 1.0) as f32,
+        (Some(b), Phase::Round | Phase::GameOver) if b.chips > 0.0 => {
+            (run.round_chips / b.chips).clamp(0.0, 1.0) as f32
+        }
         _ => 0.0,
     }
 }
@@ -412,6 +433,7 @@ impl Env {
             episodes: 0,
             tally: Tally::default(),
             ended: None,
+            high: 0,
         }
     }
 
@@ -421,6 +443,7 @@ impl Env {
         self.run = Run::new(cfg);
         self.episodes += 1;
         self.tally = Tally::default();
+        self.high = 0;
     }
 
     /// Start a new run on this seed (to play chosen seeds, such as another bot's).
@@ -429,6 +452,7 @@ impl Env {
         cfg.stake = self.stake;
         self.run = Run::new(cfg);
         self.tally = Tally::default();
+        self.high = 0;
     }
 
     /// Apply a move; at the end of an episode (lost, or won by beating
@@ -460,6 +484,7 @@ impl Env {
             position: position(&self.run),
             progress: progress(&self.run),
         };
+        self.high = self.high.max(info.position);
         if done {
             self.ended = Some(RunEnd::new(&self.run, std::mem::take(&mut self.tally)));
             self.reset();
@@ -467,14 +492,37 @@ impl Env {
         info
     }
 
+    /// The learner's input: the screen (`observe::encode`), then its own block (`LEARNER_FEATURES`).
     pub fn observe(&self, out: &mut Vec<f32>) {
         encode(&screen(&self.run), out);
+        let start = out.len();
+        out.resize(start + LEARNER_FEATURES, 0.0);
+        out[start] = (self.high - position(&self.run)).max(0) as f32 / 3.0;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The learner's input is the screen then its block; column 0 is the blinds paid for ahead (0 on a fresh run).
+    #[test]
+    fn the_learner_input_is_the_screen_then_its_block() {
+        let e = Env::new(3, 1);
+        let mut v = Vec::new();
+        e.observe(&mut v);
+        assert_eq!(v.len(), POLICY_OBS_LEN);
+        let mut s = Vec::new();
+        encode(&screen(&e.run), &mut s);
+        assert_eq!(&v[..OBS_LEN], &s[..]);
+        assert!(v[OBS_LEN..].iter().all(|&x| x == 0.0));
+        let mut e = e;
+        e.high = 6;
+        let mut v = Vec::new();
+        e.observe(&mut v);
+        assert_eq!(v[OBS_LEN], 2.0, "six blinds paid ahead of a fresh run: two antes");
+        assert_eq!(policy_layout().last().map(|p| (p.0, p.1, p.3)), Some(("learner", OBS_LEN, LEARNER_FEATURES)));
+    }
 
     /// Lab #38: each step reports where the run stands (blinds beaten so far, 24 at a win; skipped blinds never
     /// count) and, in a round, the share of the target scored.
@@ -491,6 +539,9 @@ mod tests {
             }
             if info.done {
                 assert_eq!(info.position, if info.won { 24 } else { beaten });
+                if !info.won {
+                    assert!(info.progress > 0.0 && info.progress < 1.0, "a loss keeps its round's progress");
+                }
                 return;
             }
             assert_eq!(info.position, beaten, "with no skips, position counts the blinds beaten");

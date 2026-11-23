@@ -7,9 +7,9 @@
 use bm_core::blinds::{BlindSlot, SlotState};
 use bm_core::card::{Edition, Enhancement, Seal};
 use bm_core::content::BOOSTERS;
-use bm_core::env::{apply, legal_kinds, random_move, Env, MoveKind, XorShift, N_MOVE_KINDS};
+use bm_core::env::{apply, legal_kinds, policy_layout, random_move, Env, MoveKind, XorShift, N_MOVE_KINDS, POLICY_OBS_LEN};
 use bm_core::observe::{
-    encode, encode_value, obs_layout, screen, OBS_LEN, VALUE_INPUT_VERSION, VALUE_LEN,
+    encode_value, screen, OBS_LEN, VALUE_INPUT_VERSION, VALUE_LEN,
 };
 use bm_core::packs::PackCard;
 use bm_core::shop::RowItem;
@@ -129,7 +129,7 @@ impl VecEnv {
         Ok(VecEnv {
             envs,
             rngs,
-            obs: vec![0.0; n * OBS_LEN],
+            obs: vec![0.0; n * POLICY_OBS_LEN],
             pool,
         })
     }
@@ -139,12 +139,12 @@ impl VecEnv {
         self.envs.len()
     }
 
-    /// Write every run's input into `out` (float32, n x OBS_LEN, C-contiguous,
+    /// Write every run's input into `out` (float32, n x POLICY_OBS_LEN, C-contiguous,
     /// writable). The runs are encoded in parallel straight into the array;
     /// don't touch the array from another thread during the call.
     fn obs_into(&mut self, py: Python<'_>, out: &Bound<'_, PyAny>) -> PyResult<()> {
         let n = self.envs.len();
-        let buf = buffer::<f32>(out, n * OBS_LEN, "out")?;
+        let buf = buffer::<f32>(out, n * POLICY_OBS_LEN, "out")?;
         if buf.readonly() {
             return Err(PyValueError::new_err("out: the array must be writable"));
         }
@@ -154,13 +154,14 @@ impl VecEnv {
             pool.install(|| {
                 // SAFETY: `buf` keeps the array alive and checked its size, layout and
                 // writability; each run writes only its own chunk.
-                let dst = unsafe { std::slice::from_raw_parts_mut(ptr as *mut f32, n * OBS_LEN) };
-                dst.par_chunks_mut(OBS_LEN)
+                let dst = unsafe { std::slice::from_raw_parts_mut(ptr as *mut f32, n * POLICY_OBS_LEN) };
+                dst.par_chunks_mut(POLICY_OBS_LEN)
                     .zip(envs.par_iter())
                     .for_each_init(
-                        || Vec::with_capacity(OBS_LEN),
+                        || Vec::with_capacity(POLICY_OBS_LEN),
                         |v, (o, e)| {
-                            encode(&screen(&e.run), v);
+                            v.clear();
+                            e.observe(v);
                             o.copy_from_slice(v);
                         },
                     )
@@ -172,15 +173,15 @@ impl VecEnv {
 
     /// The same through an intermediate copy (a slower reference for tests).
     fn obs_into_copy(&mut self, py: Python<'_>, out: &Bound<'_, PyAny>) -> PyResult<()> {
-        let buf = buffer::<f32>(out, self.envs.len() * OBS_LEN, "out")?;
+        let buf = buffer::<f32>(out, self.envs.len() * POLICY_OBS_LEN, "out")?;
         let (envs, obs, pool) = (&self.envs, &mut self.obs, &self.pool);
         py.detach(|| {
             pool.install(|| {
-                obs.par_chunks_mut(OBS_LEN)
+                obs.par_chunks_mut(POLICY_OBS_LEN)
                     .zip(envs.par_iter())
                     .for_each(|(o, e)| {
-                        let mut v = Vec::with_capacity(OBS_LEN);
-                        encode(&screen(&e.run), &mut v);
+                        let mut v = Vec::with_capacity(POLICY_OBS_LEN);
+                        e.observe(&mut v);
                         o.copy_from_slice(&v);
                     })
             })
@@ -900,7 +901,9 @@ fn playing_card<'py>(py: Python<'py>, c: &bm_core::card::Card) -> PyResult<Bound
 #[pymodule]
 fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
-    m.add("OBS_LEN", OBS_LEN)?;
+    // The learner's input (env::POLICY_OBS_LEN: the screen, then its own block); SCREEN_LEN is the screen's alone.
+    m.add("OBS_LEN", POLICY_OBS_LEN)?;
+    m.add("SCREEN_LEN", OBS_LEN)?;
     m.add("N_MOVE_KINDS", N_MOVE_KINDS)?;
     m.add(
         "HAND_NAMES",
@@ -910,7 +913,7 @@ fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
             .collect::<Vec<_>>(),
     )?;
     m.add("VALUE_LEN", VALUE_LEN)?;
-    m.add("OBS_LAYOUT", obs_layout())?;
+    m.add("OBS_LAYOUT", policy_layout())?;
     m.add_function(wrap_pyfunction!(run_seed, m)?)?;
     m.add("VALUE_INPUT_VERSION", VALUE_INPUT_VERSION)?;
     m.add_function(wrap_pyfunction!(pseudohash, m)?)?;
