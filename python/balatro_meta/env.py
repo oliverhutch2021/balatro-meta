@@ -104,6 +104,18 @@ class VecEnv:
             self._ante.copy(),
         )
 
+    def run_moves(self, i: int) -> list[tuple[int, int]]:
+        """Run i's moves so far, the engine's own among them: it replays from its seed."""
+        return self._env.run_moves(i)
+
+    def ended_moves(self, i: int) -> list[tuple[int, int]]:
+        """The moves of run i's last finished run."""
+        return self._env.ended_moves(i)
+
+    def reject_seeds(self, seeds: list[str]) -> None:
+        """Never start a new run on these seeds (lab #38: the evaluator's and the exam's)."""
+        self._env.reject_seeds(list(seeds))
+
     def take_endings(self) -> list[tuple[int, dict]]:
         """The runs that ended since the last call, as (index, how it ended): see the engine's VecEnv.take_endings
         (won, ante, lost_to, money, held and bought jokers, move counts, hands played, best_hand)."""

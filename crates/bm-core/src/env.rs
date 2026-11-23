@@ -364,6 +364,12 @@ pub struct Env {
     pub auto: bool,
     /// Whether the learner may skip blinds (off from Stage 0: `learner_kinds`).
     pub skips: bool,
+    /// Seeds a new run never takes (the evaluator's and the exam's, so training never plays them: B, lab #38).
+    pub reject: Option<std::sync::Arc<std::collections::HashSet<String>>>,
+    /// Every move the run has made, the engine's own (`auto`) among them, as (kind, argument): a saved run replays
+    /// from its seed by these. `ended_log` is the last finished run's.
+    pub log: Vec<(i64, u64)>,
+    pub ended_log: Vec<(i64, u64)>,
 }
 
 /// Kinds the learner never chooses (train_policy.py's NEVER): the sorts, buy-and-use, the boss reroll.
@@ -375,8 +381,9 @@ const AUTO_MAX: usize = 32;
 /// The learner's own inputs (lab #38), after the screen's (`observe::encode`, which the teacher's value networks
 /// also read and so never changes): a block of LEARNER_FEATURES floats. Column 0: blinds already paid for ahead of
 /// where the run stands, the high-water mark less the position, in antes (after Hieroglyph or Petroglyph the
-/// potential pays nothing until the run gets back: B). The others are kept for Stage 0's next inputs (capacity
-/// against the coming blinds) and are 0 until then.
+/// potential pays nothing until the run gets back: B). Columns 1 to 13: `learner::fast_capacity` (ln capacity, and
+/// against each of six asks, this ante's next blind and boss, the next ante's three, the boss two antes on, the log
+/// margin and the share of deals that clear it). The rest are kept for later inputs and are 0.
 pub const LEARNER_FEATURES: usize = 32;
 /// The learner's whole input: the screen, then the learner's block.
 pub const POLICY_OBS_LEN: usize = OBS_LEN + LEARNER_FEATURES;
@@ -448,6 +455,29 @@ impl Env {
             high: 0,
             auto: false,
             skips: true,
+            reject: None,
+            log: Vec::new(),
+            ended_log: Vec::new(),
+        }
+    }
+
+    /// The next seed for a new run, passing over the rejected ones.
+    fn next_seed(&mut self) -> String {
+        loop {
+            let s = self.seeds.next_seed();
+            if !self.reject.as_ref().is_some_and(|r| r.contains(&s)) {
+                return s;
+            }
+        }
+    }
+
+    /// Pass over these seeds from now on, and start the current run again if it holds one (it hasn't been played).
+    pub fn reject_seeds(&mut self, seeds: std::sync::Arc<std::collections::HashSet<String>>) {
+        let held = seeds.contains(&self.run.cfg.seed);
+        self.reject = Some(seeds);
+        if held {
+            self.episodes = self.episodes.saturating_sub(1);
+            self.reset();
         }
     }
 
@@ -498,18 +528,21 @@ impl Env {
             if apply(&mut self.run, kind, arg).is_err() {
                 break;
             }
+            self.log.push((kind as i64, arg));
             made += 1;
         }
         made
     }
 
     pub fn reset(&mut self) {
-        let mut cfg = RunConfig::new(&self.seeds.next_seed());
+        let mut cfg = RunConfig::new(&self.next_seed());
         cfg.stake = self.stake;
         self.run = Run::new(cfg);
         self.episodes += 1;
         self.tally = Tally::default();
         self.high = 0;
+        self.log.clear();
+        self.auto_steps();
     }
 
     /// Start a new run on this seed (to play chosen seeds, such as another bot's).
@@ -519,6 +552,7 @@ impl Env {
         self.run = Run::new(cfg);
         self.tally = Tally::default();
         self.high = 0;
+        self.log.clear();
         self.auto_steps();
     }
 
@@ -544,13 +578,17 @@ impl Env {
             encode(&screen(&self.run), &mut v);
             v
         });
-        let mut refused = apply(&mut self.run, k, arg).is_err();
+        let applied = apply(&mut self.run, k, arg).is_ok();
+        let mut refused = !applied;
         if let Some(b) = before.filter(|_| !refused) {
             let mut v = Vec::new();
             encode(&screen(&self.run), &mut v);
             refused = v == b;
         }
         self.tally.after(&self.run, pending, refused);
+        if applied {
+            self.log.push((kind, arg));
+        }
         let won = self.run.won;
         let done = won || self.run.phase == Phase::GameOver;
         let info = StepInfo {
@@ -566,6 +604,7 @@ impl Env {
         self.high = self.high.max(info.position);
         if done {
             self.ended = Some(RunEnd::new(&self.run, std::mem::take(&mut self.tally)));
+            self.ended_log = std::mem::take(&mut self.log);
             self.reset();
         }
         self.auto_steps();
@@ -574,10 +613,14 @@ impl Env {
 
     /// The learner's input: the screen (`observe::encode`), then its own block (`LEARNER_FEATURES`).
     pub fn observe(&self, out: &mut Vec<f32>) {
+        let from = out.len();
         encode(&screen(&self.run), out);
+        let salt = crate::learner::screen_salt(&out[from..]);
         let start = out.len();
         out.resize(start + LEARNER_FEATURES, 0.0);
         out[start] = (self.high - position(&self.run)).max(0) as f32 / 3.0;
+        let cap = crate::learner::fast_capacity(&self.run, salt, crate::learner::DEALS);
+        crate::learner::write_capacity(&mut out[start + 1..start + 1 + crate::learner::CAPACITY_COLUMNS], cap.as_ref());
     }
 }
 
@@ -595,7 +638,9 @@ mod tests {
         let mut s = Vec::new();
         encode(&screen(&e.run), &mut s);
         assert_eq!(&v[..OBS_LEN], &s[..]);
-        assert!(v[OBS_LEN..].iter().all(|&x| x == 0.0));
+        assert_eq!(v[OBS_LEN], 0.0, "nothing paid ahead on a fresh run");
+        assert!(v[OBS_LEN + 1] > 0.0, "the build's capacity is read");
+        assert!(v[OBS_LEN + 1 + crate::learner::CAPACITY_COLUMNS..].iter().all(|&x| x == 0.0), "the rest kept at 0");
         let mut e = e;
         e.high = 6;
         let mut v = Vec::new();
@@ -633,6 +678,61 @@ mod tests {
 #[cfg(test)]
 mod learner_tests {
     use super::*;
+
+    /// A run's log (the learner's moves and the engine's own) replays it from its seed to the same end.
+    #[test]
+    fn a_runs_log_replays_it() {
+        let mut e = Env::new(11, 3);
+        e.auto = true;
+        e.skips = false;
+        e.auto_steps();
+        let seed = e.run.cfg.seed.clone();
+        let mut rng = XorShift(4);
+        for _ in 0..5000 {
+            let k = e.learner_kinds();
+            let mut m = random_move(&e.run, &mut rng);
+            for _ in 0..20 {
+                if k[m.0 as usize] {
+                    break;
+                }
+                m = random_move(&e.run, &mut rng);
+            }
+            if !k[m.0 as usize] {
+                continue;
+            }
+            let ended = e.step(m.0 as i64, m.1);
+            if ended.done {
+                let mut cfg = RunConfig::new(&seed);
+                cfg.stake = 3;
+                let mut r = Run::new(cfg);
+                for &(kind, arg) in &e.ended_log {
+                    apply(&mut r, MoveKind::from_index(kind).unwrap(), arg).expect("each logged move replays");
+                }
+                assert!(r.phase == Phase::GameOver || r.won);
+                assert_eq!(r.ante, ended.ante);
+                return;
+            }
+        }
+        panic!("the run never ended");
+    }
+
+    /// Lab #38 (B's rules): a rejected seed is never a training run's.
+    #[test]
+    fn rejected_seeds_are_never_played() {
+        let mut probe = Env::new(5, 1);
+        let mut first: Vec<String> = Vec::new();
+        for _ in 0..50 {
+            first.push(probe.run.cfg.seed.clone());
+            probe.reset();
+        }
+        let banned: std::collections::HashSet<String> = first.iter().step_by(2).cloned().collect();
+        let mut e = Env::new(5, 1);
+        e.reject_seeds(std::sync::Arc::new(banned.clone()));
+        for _ in 0..50 {
+            assert!(!banned.contains(&e.run.cfg.seed), "{} was rejected", e.run.cfg.seed);
+            e.reset();
+        }
+    }
 
     /// Lab #38 (B's test 4): the learner's input is the screen's and its own block's only: two fair copies of a
     /// position (the deck's order and every random stream drawn afresh, the screen the same) give the same input,
@@ -697,7 +797,7 @@ mod learner_tests {
                 // A card moved onto itself changes nothing: refused.
                 if e.run.phase == Phase::Round && e.run.hand.len() > 1 {
                     let mut c = Env { run: e.run.clone(), seeds: SeedSampler::new(1), stake: 3, episodes: 0,
-                        tally: Tally::default(), ended: None, high: e.high, auto: true, skips: false };
+                        tally: Tally::default(), ended: None, high: e.high, auto: true, skips: false, reject: None, log: Vec::new(), ended_log: Vec::new() };
                     assert!(c.step(MoveKind::MoveCard as i64, 0).refused, "a card moved onto itself");
                 }
                 // A random legal move among the learner's kinds.

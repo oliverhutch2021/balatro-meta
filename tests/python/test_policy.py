@@ -431,3 +431,18 @@ def test_the_guard_turns_skips_off_and_caps_a_shop():
     assert m[1, tp.BUY], "a run that ended starts its count again"
     g.count_shop(blind, np.array([False, False]))
     assert g.mask(shop)[0, tp.BUY], "leaving the shop resets the count"
+
+
+def test_survival_and_the_held_out_seeds():
+    """Lab #38 (B's rules): alive after each ante from the endings; the evaluator's and the exam's seeds are disjoint
+    and a training engine told to reject them never starts a run on one."""
+    hist = [10, 0, 0, 0, 0, 0, 0, 0, 30]  # 10 lost at ante 1, 30 won
+    assert tp.survival(hist) == [0.75] * 8
+    e = tp.engine()
+    ev, ex = tp.eval_seeds(e, tp.EVAL_BASE, 500), tp.eval_seeds(e, tp.EXAM_BASE, 500)
+    assert not set(ev) & set(ex)
+    from balatro_meta.env import VecEnv
+    env = VecEnv(4, seed=3, auto=True, skips=False)
+    upcoming = set(env.seeds())
+    env.reject_seeds(sorted(upcoming))
+    assert not set(env.seeds()) & upcoming, "runs on a rejected seed start again on another"

@@ -282,6 +282,27 @@ impl VecEnv {
         end_dict(py, &end)
     }
 
+    /// Run `i`'s moves so far, the engine's own among them, as (kind, argument): it replays from its seed.
+    fn run_moves(&self, i: usize) -> PyResult<Vec<(i64, u64)>> {
+        Ok(self.envs.get(i).ok_or_else(|| PyValueError::new_err("no such run"))?.log.clone())
+    }
+
+    /// The moves of run `i`'s last finished run (as `run_moves`).
+    fn ended_moves(&self, i: usize) -> PyResult<Vec<(i64, u64)>> {
+        Ok(self.envs.get(i).ok_or_else(|| PyValueError::new_err("no such run"))?.ended_log.clone())
+    }
+
+    /// Never start a training run on these seeds (the evaluator's and the exam's: lab #38); a run now on one starts
+    /// again.
+    fn reject_seeds(&mut self, seeds: Vec<String>) {
+        let set: std::collections::HashSet<String> =
+            seeds.iter().filter_map(|s| bm_rng::normalize_seed(s)).collect();
+        let set = std::sync::Arc::new(set);
+        for e in self.envs.iter_mut() {
+            e.reject_seeds(set.clone());
+        }
+    }
+
     /// Start run `i` again on this seed (to play chosen seeds, such as another bot's).
     fn set_seed(&mut self, i: usize, seed: &str) -> PyResult<()> {
         let s = bm_rng::normalize_seed(seed)

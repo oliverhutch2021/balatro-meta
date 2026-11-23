@@ -896,43 +896,53 @@ def merge_blocks(blocks: list) -> list:
     return out
 
 
-def eval_policy(a) -> dict:
-    """Play the baseline job's seeds with the network's likeliest moves."""
-    torch = need_torch()
-    fast_float32(torch, a)
+# The evaluator (lab #38, B's rules): EVAL_RUNS fresh seeds from EVAL_BASE, played with the likeliest moves at every
+# --eval-every updates; the exam's seeds (jobs.EXAM_SEED) report a gate once and choose nothing. Training never plays
+# either set: its engine is told to pass over them (`VecEnv.reject_seeds`).
+EVAL_BASE = 9001
+EVAL_RUNS = 10_000
+EXAM_BASE = 5003
+
+
+def eval_seeds(e, base: int, runs: int) -> list[str]:
+    return [e.run_seed(base, i) for i in range(runs)]
+
+
+def survival(ante_hist: list[int]) -> list[float]:
+    """The share of runs still alive after each ante 1 to 8 (a win is alive after all of them)."""
+    n = max(sum(ante_hist), 1)
+    return [round(sum(ante_hist[k:]) / n, 4) for k in range(1, 9)]
+
+
+def play_seeds(torch, pp, device, e, seeds: list[str], n_envs: int, threads: int, skips: bool, shop_cap: int,
+               greedy: bool = True, watch=None, block_runs: int = 0) -> tuple[dict, list[str], "RunBook"]:
+    """Play each of `seeds` once with the network (likeliest moves unless `greedy` is False), under training's own
+    rules; returns (stats, each seed's ending stage letter, the RunBook)."""
     from balatro_meta.env import VecEnv
 
-    e = engine()
-    device = device_of(torch, a.cpu)
-    model, _ = load_model(torch, Path(a.model), device)
-    model.eval()
-    pp = Parts(torch, model)
-    n = min(a.envs, a.runs)
-    env = VecEnv(n, seed=a.seed, threads=a.threads, auto=True, skips=getattr(a, "skips", False))
-    seeds = [e.run_seed(a.seed, i) for i in range(a.runs)]
-    queue = list(range(a.runs))
+    runs = len(seeds)
+    n = min(n_envs, runs)
+    env = VecEnv(n, seed=0, threads=threads, auto=True, skips=skips)
+    queue = list(range(runs))
     slot_run = [-1] * n
     for i in range(n):
         r = queue.pop(0)
         env.set_seed(i, seeds[r])
         slot_run[i] = r
-    stages = ["?"] * a.runs
+    stages = ["?"] * runs
     moves = [0] * n
     blinds = [0] * n
-    watch = Watch(Path(os.environ["BM_WATCH_DIR"]) if os.environ.get("BM_WATCH_DIR") else None,
-                  "network", a.runs, a.threads)
     stats = new_stats()
-    book = RunBook(e.HAND_NAMES, block_runs=a.block_runs)
-    # The same rules as training: no blind skips unless asked, the shop cap.
-    guard = Guard(n, skips=getattr(a, "skips", False), shop_cap=getattr(a, "shop_cap", SHOP_CAP))
+    book = RunBook(e.HAND_NAMES, block_runs=block_runs or BLOCK_RUNS)
+    guard = Guard(n, skips=skips, shop_cap=shop_cap)
     t0 = time.time()
     finished = 0
-    while finished < a.runs:
+    while finished < runs:
         x = torch.from_numpy(env.observe()).to(device)
         legal_np = guard.mask(env.legal_kinds())
         legal = torch.from_numpy(legal_np).to(device)
         with torch.no_grad(), autocast(torch, device):
-            kind, slot, to, cards, _, _ = pp.act(x, legal, greedy=not a.sample)
+            kind, slot, to, cards, _, _ = pp.act(x, legal, greedy=greedy)
         kind_np = kind.cpu().numpy()
         args = to_moves(kind_np, slot.cpu().numpy(), to.cpu().numpy(), cards.cpu().numpy())
         _, done, won, refused, ante = env.step(kind_np, args)
@@ -967,20 +977,41 @@ def eval_policy(a) -> dict:
         guard.count_shop(legal_np, ended)
         stats["elapsed"] = time.time() - t0
         stats["rate"] = stats["runs"] / max(stats["elapsed"], 1e-9)
-        watch.report(stats, extra=book.fields)
+        if watch is not None:
+            watch.report(stats, extra=book.fields)
+    return stats, stages, book
+
+
+def eval_policy(a) -> dict:
+    """Play seeds with the network's likeliest moves: the baseline job's (--seed), the evaluator's (--evaluator,
+    EVAL_RUNS from EVAL_BASE) or the exam's (--exam, from EXAM_BASE: the gate, reported once)."""
+    torch = need_torch()
+    fast_float32(torch, a)
+    e = engine()
+    device = device_of(torch, a.cpu)
+    model, _ = load_model(torch, Path(a.model), device)
+    model.eval()
+    pp = Parts(torch, model)
+    base = EXAM_BASE if a.exam else EVAL_BASE if a.evaluator else a.seed
+    seeds = eval_seeds(e, base, a.runs)
+    watch = Watch(Path(os.environ["BM_WATCH_DIR"]) if os.environ.get("BM_WATCH_DIR") else None,
+                  "network", a.runs, a.threads)
+    stats, stages, book = play_seeds(torch, pp, device, e, seeds, a.envs, a.threads, getattr(a, "skips", False),
+                                     getattr(a, "shop_cap", SHOP_CAP), greedy=not a.sample, watch=watch,
+                                     block_runs=a.block_runs)
     runs, wins = stats["runs"], stats["wins"]
     lo, hi = wilson(wins, runs)
     mean = sum((i + 1) * k for i, k in enumerate(stats["ante_hist"])) / max(runs, 1)
     fields = book.fields()
     report = progress_body(stats, "network", a.runs, a.threads, True, [], {
-        "model": str(a.model), "seed_base": a.seed, "greedy": not a.sample, "run_stages": "".join(stages),
-        "refused_moves": book.total["refused"], **fields})
-    report.update({"win_ci": [lo, hi], "mean_ante": mean})
+        "model": str(a.model), "seed_base": base, "greedy": not a.sample, "run_stages": "".join(stages),
+        "refused_moves": book.total["refused"], "exam": bool(a.exam), **fields})
+    report.update({"win_ci": [lo, hi], "mean_ante": mean, "survival": survival(stats["ante_hist"])})
     watch.report(stats, done=True, extra=fields)
     if a.out:
         write_json(Path(a.out), report)
     print(f"{runs:,} runs: {wins:,} won ({wins / max(runs, 1):.2%}, 95% range {lo:.2%} to {hi:.2%}), "
-          f"mean final ante {mean:.2f}", flush=True)
+          f"mean final ante {mean:.2f}; alive after each ante {survival(stats['ante_hist'])}", flush=True)
     return report
 
 
@@ -1100,6 +1131,10 @@ def ppo(a) -> dict:
     N, T = a.envs, a.steps
     # The learner's engine (lab #38): the engine makes the moves with no decision in them and refuses a null move.
     env = VecEnv(N, seed=a.seed * 1_000_003 + state["updates"], threads=a.threads, auto=True, skips=a.skips)
+    # Training never plays a seed the evaluator or the exam plays (B, lab #38): the engine passes over them.
+    held_out = eval_seeds(e, EVAL_BASE, max(a.eval_runs, EVAL_RUNS)) + eval_seeds(e, EXAM_BASE, EVAL_RUNS)
+    env.reject_seeds(held_out)
+    held_set = set(held_out)
     if a.compile:
         t0 = time.time()
         how = compile_encode(torch, model, device, torch.from_numpy(env.observe().copy()).to(device),
@@ -1223,15 +1258,24 @@ def ppo(a) -> dict:
             if done.any():
                 for _, end in env.take_endings():
                     book.add(end, seconds)
+            cut_logs = {}
             for i in np.flatnonzero(cut):
                 book.add(env.cut_run(int(i)), seconds)
-                env.set_seed(int(i), e.run_seed(a.seed + 7919, trunc))
+                if int(i) in rec:
+                    cut_logs[int(i)] = env.run_moves(int(i))
+                seed_next = e.run_seed(a.seed + 7919, trunc)
+                while seed_next in held_set:
+                    trunc += 1
+                    seed_next = e.run_seed(a.seed + 7919, trunc)
+                env.set_seed(int(i), seed_next)
                 trunc += 1
             guard.after(kind_np, refused, ended)
             guard.count_shop(legal_np, ended)
-            for i in rec:
-                if not refused[i]:
-                    rec[i][1].append([int(kind_np[i]), int(args[i])])
+            # A saved run keeps every move it made, the engine's own among them (Env's log), so it replays.
+            for i in list(rec):
+                if ended[i]:
+                    log = cut_logs.get(i) if cut[i] else env.ended_moves(i)
+                    rec[i] = (rec[i][0], [[int(k), int(v)] for k, v in log])
             for i in np.flatnonzero(ended):
                 finish(int(i), bool(won[i]), int(ante[i]))
                 moves[i], blinds[i] = 0, 0
@@ -1340,6 +1384,26 @@ def ppo(a) -> dict:
             watch.history.append([round(el_s, 1), stats["runs"], round(ante_recent, 4), round(win_recent, 5)])
         last_losses = {k: round(v / max(nb, 1), 5) for k, v in losses.items()}
         last_losses["first_kl"] = round(first_kl or 0.0, 6)
+        if a.eval_every and state["updates"] % a.eval_every == 0:
+            # The evaluator: the evaluator's seeds with the likeliest moves, the checkpoint kept beside its numbers.
+            model.eval()
+            t_ev = time.time()
+            ev_stats, ev_stages, _ = play_seeds(torch, pp, device, e, eval_seeds(e, EVAL_BASE, a.eval_runs),
+                                                a.eval_envs, a.threads, a.skips, a.shop_cap)
+            lo_e, hi_e = wilson(ev_stats["wins"], ev_stats["runs"])
+            ev = {"updates": state["updates"], "steps": state["steps"], "runs": ev_stats["runs"],
+                  "win_rate": ev_stats["wins"] / max(ev_stats["runs"], 1), "win_ci": [lo_e, hi_e],
+                  "mean_ante": sum((i + 1) * k for i, k in enumerate(ev_stats["ante_hist"])) / max(ev_stats["runs"], 1),
+                  "survival": survival(ev_stats["ante_hist"]), "run_stages": "".join(ev_stages),
+                  "seconds": round(time.time() - t_ev, 1)}
+            folder.mkdir(parents=True, exist_ok=True)
+            with open(folder / "evals.jsonl", "a") as fh:
+                fh.write(json.dumps(ev) + "\n")
+            save(torch, folder / f"eval-{state['updates']:06d}.pt", model, {"eval": ev})
+            print(f"eval at update {state['updates']} ({state['steps']:,} moves): won {ev['win_rate']:.2%} "
+                  f"({lo_e:.2%} to {hi_e:.2%}) of {ev['runs']:,}, mean final ante {ev['mean_ante']:.2f}, alive after "
+                  f"each ante {ev['survival']} ({ev['seconds']:.0f} s)", flush=True)
+            state.setdefault("evals", []).append({k: v for k, v in ev.items() if k != "run_stages"})
         # Keep the best network so far; if play collapses, go back to it and learn more slowly.
         judged = recent[-a.judge_runs:]
         verdict = judge_progress(state.get("best"), sum(w for w, _ in judged) / max(len(judged), 1),
@@ -1449,6 +1513,10 @@ def main() -> None:
     p.add_argument("--skips", action="store_true", help="offer blind skips (off from Stage 0, lab #38)")
     p.add_argument("--shop-cap", type=int, default=SHOP_CAP, help="moves in one shop before only leaving is offered")
     p.add_argument("--shop-ent-mult", type=float, default=3.0, help="entropy's weight on shop and pack decisions")
+    p.add_argument("--eval-every", type=int, default=100,
+                   help="updates between evaluations on the evaluator's seeds (0: never)")
+    p.add_argument("--eval-runs", type=int, default=EVAL_RUNS)
+    p.add_argument("--eval-envs", type=int, default=2048)
     p.add_argument("--clip", type=float, default=0.2)
     p.add_argument("--value-coef", type=float, default=0.5)
     p.add_argument("--ent-coef", type=float, default=0.003)
@@ -1465,7 +1533,9 @@ def main() -> None:
     p.add_argument("--block-runs", type=int, default=BLOCK_RUNS, help="runs per point of the training's progress")
     v = sub.add_parser("eval", parents=[net])
     v.add_argument("--model", required=True)
-    v.add_argument("--runs", type=int, default=5000)
+    v.add_argument("--runs", type=int, default=EVAL_RUNS)
+    v.add_argument("--evaluator", action="store_true", help="the evaluator's seeds (EVAL_BASE), as training's evals")
+    v.add_argument("--exam", action="store_true", help="the exam's seeds (EXAM_BASE): a gate, reported once")
     v.add_argument("--envs", type=int, default=1024)
     v.add_argument("--out")
     v.add_argument("--sample", action="store_true", help="sample moves instead of taking the likeliest")

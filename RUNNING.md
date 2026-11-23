@@ -1813,6 +1813,23 @@ The GPU timing (two sizes, with and without compile) runs before anything else:
 cd /mnt/h/balatro-meta && pkill -INT -f "jobs.py run teacher-data-12"; pkill -INT -f "examples/baseline"; sleep 30; mkdir -p results/bench .sync/ppo-timing; for cfg in "192 4 4" "256 6 8"; do set -- $cfg; for c in "" "--no-compile"; do n=w$1-l$2${c:+-eager}; ~/.venvs/balatro-meta/bin/python scripts/train_policy.py ppo --dir .sync/ppo-timing/$n --hours 0.08 --envs 2048 --steps 128 --epochs 1 --minibatch 2048 --micro 2048 --width $1 --layers $2 --heads $3 $c --report results/bench/ppo-timing-$n.json 2>&1 | tee .sync/ppo-timing/$n.log | grep -iE "compil|error|out of memory|Done"; done; done
 ```
 
+## Step 66: Stage 0, part 2: the learner's engine, its capacity input and the evaluator (lab #38, 23 November)
+
+- The learner's engine (`env::Env::auto`): moves with no decision in them are the engine's (cash-out, the jokers into
+  the teacher's order, the only kind left that takes no argument), a move that leaves the screen as it was counts as
+  refused, and the learner is offered only its own kinds (no sorts, buy-and-use, boss reroll, joker moves or, from
+  Stage 0, blind skips).
+- `learner::fast_capacity` in the learner's block (columns 1 to 13): the best of the usual hand shapes on four fair
+  deals of the coming round, times its hands, against this ante's next blind and boss, the next ante's three blinds
+  and the boss two antes on; the deals' salt comes from the screen, so the same screen reads the same. About 60 us a
+  read (one cloud core); its rank agreement with the value's power read is 0.90 (371 shop states).
+- The evaluator: every 100 updates the network plays the evaluator's 10,000 seeds (from 9,001) with its likeliest
+  moves, written to `evals.jsonl` beside a checkpoint, with survival by ante; `eval --exam` plays the exam's seeds
+  (from 5,003) once for a gate. Training never plays either set (`VecEnv.reject_seeds`).
+- Saved runs (the viewer's samples) keep every move, the engine's own among them (`Env.log`), so they replay.
+- Timing on today's code: 8,695 moves a second at 2M weights (4,096 x 128, 10.1 GB), 4,037 at 6M (2,048 x 128, micro
+  512, 5.1 GB).
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001
