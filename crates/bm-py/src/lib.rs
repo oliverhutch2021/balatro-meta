@@ -332,6 +332,38 @@ impl VecEnv {
     }
 
     /// A random legal move for every run (for baselines and benchmarks).
+    /// The teacher's move for every run now in a round (S, lab #38: the exchange evaluation, the network in the shops
+    /// and the engine's play in the rounds): writes kinds and args, and `in_round` (uint8) 1 where a move was made.
+    fn round_moves_into(
+        &mut self,
+        py: Python<'_>,
+        kinds: &Bound<'_, PyAny>,
+        args: &Bound<'_, PyAny>,
+        in_round: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        let n = self.envs.len();
+        let (envs, pool) = (&self.envs, &self.pool);
+        let moves: Vec<Option<(MoveKind, u64)>> = py.detach(|| {
+            pool.install(|| {
+                envs.par_iter()
+                    .enumerate()
+                    .map(|(i, e)| {
+                        (e.run.phase == Phase::Round)
+                            .then(|| bm_core::teacher::teacher_move(&e.run, (i as u64) << 20 ^ e.run.round as u64))
+                    })
+                    .collect()
+            })
+        });
+        buffer::<i64>(kinds, n, "kinds")?.copy_from_slice(
+            py,
+            &moves.iter().map(|m| m.map_or(0, |m| m.0 as i64)).collect::<Vec<_>>(),
+        )?;
+        buffer::<u64>(args, n, "args")?
+            .copy_from_slice(py, &moves.iter().map(|m| m.map_or(0, |m| m.1)).collect::<Vec<_>>())?;
+        buffer::<u8>(in_round, n, "in_round")?
+            .copy_from_slice(py, &moves.iter().map(|m| u8::from(m.is_some())).collect::<Vec<_>>())
+    }
+
     fn random_moves_into(
         &mut self,
         py: Python<'_>,

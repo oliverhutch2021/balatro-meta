@@ -104,6 +104,14 @@ class VecEnv:
             self._ante.copy(),
         )
 
+    def round_moves(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """The teacher's move for each run now in a round: (kinds, args, in_round)."""
+        kinds = np.zeros(self.n, np.int64)
+        args = np.zeros(self.n, np.uint64)
+        mask = np.zeros(self.n, np.uint8)
+        self._env.round_moves_into(kinds, args, mask)
+        return kinds, args, mask.astype(bool)
+
     def run_moves(self, i: int) -> list[tuple[int, int]]:
         """Run i's moves so far, the engine's own among them: it replays from its seed."""
         return self._env.run_moves(i)

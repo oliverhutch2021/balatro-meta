@@ -1854,6 +1854,23 @@ cd /mnt/h/balatro-meta && pkill -INT -f "jobs.py run teacher-data-12"; pkill -IN
 cd /mnt/h/balatro-meta && make sync && make build && make smoke-learner
 ```
 
+## Step 68: the smoke run, and what it showed (lab #38, 23 November)
+
+The smoke run (d39f839, 300 updates, 157M moves, 4 h): from nothing to a mean final ante of 3.5 in about 55M moves,
+then flat. Evaluator (10,000 seeds): 0.01%, 0.12%, 0.11% at updates 100, 200, 300; 2 rollbacks; the brake fired on 171
+of 300 updates (S: the brake was throwing most batches away, so the learner was nearly switched off from update 100).
+It spends every dollar on rerolls and plays almost no flushes or straights. S did not order the extension. The
+depth head's explained variance at update 300 is 0.51 (Monte Carlo returns) and 0.74 (lambda-returns, as training
+reads it), above S's 0.3 line; the win head has almost no wins to explain.
+In: the trainer's log on disk every update (`train_log.jsonl`, and `<report>-log.jsonl`: the brake and where, the
+share of the batch learned from, time, losses, explained variance); the engine's cash-outs counted in the tally
+(blinds beaten read 0); `explain` (a checkpoint's explained variance per head); the exchange evaluation (`eval
+--engine-rounds`: the teacher plays the rounds, the network the rest). The exchange evaluation, on the user's go:
+
+```
+cd /mnt/h/balatro-meta && make sync && make build && ~/.venvs/balatro-meta/bin/python scripts/train_policy.py eval --model models/policy/smoke/eval-000200.pt --evaluator --engine-rounds --envs 2048 --out results/policy/smoke-exchange-200.json
+```
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

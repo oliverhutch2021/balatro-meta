@@ -527,9 +527,13 @@ impl Env {
                 }
             };
             let Some((kind, arg)) = m else { break };
+            // The engine's own moves count in the run's tally like the learner's (blinds beaten are counted at the
+            // cash-out: S, lab #38, the smoke run's report read 0 blinds beaten a run).
+            let pending = Tally::before(&self.run, kind, arg);
             if apply(&mut self.run, kind, arg).is_err() {
                 break;
             }
+            self.tally.after(&self.run, pending, false);
             self.log.push((kind as i64, arg));
             made += 1;
         }
@@ -680,6 +684,41 @@ mod tests {
 #[cfg(test)]
 mod learner_tests {
     use super::*;
+
+    /// With `auto`, the engine's cash-outs count as blinds beaten in the run's tally (the learner's report).
+    #[test]
+    fn the_engines_moves_count_in_the_tally() {
+        let mut e = Env::new(21, 1);
+        e.auto = true;
+        e.skips = false;
+        e.auto_steps();
+        let mut rng = XorShift(8);
+        let mut cleared = 0u64;
+        for _ in 0..20000 {
+            let k = e.learner_kinds();
+            let mut m = random_move(&e.run, &mut rng);
+            for _ in 0..20 {
+                if k[m.0 as usize] {
+                    break;
+                }
+                m = random_move(&e.run, &mut rng);
+            }
+            if !k[m.0 as usize] {
+                continue;
+            }
+            let info = e.step(m.0 as i64, m.1);
+            cleared += u64::from(info.cleared && !info.won);
+            if info.done {
+                let end = e.ended.take().expect("an ending");
+                assert_eq!(end.tally.blinds_beaten, cleared, "cash-outs by the engine are counted");
+                if cleared > 0 {
+                    return;
+                }
+                cleared = 0;
+            }
+        }
+        panic!("no random run beat a blind");
+    }
 
     /// A run's log (the learner's moves and the engine's own) replays it from its seed to the same end.
     #[test]

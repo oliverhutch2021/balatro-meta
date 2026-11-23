@@ -64,6 +64,7 @@ CARD_RANGE = {PLAY: (1, 5), DISCARD: (1, 5), USE_CONSUMABLE: (0, 5), PACK_CHOOSE
 # other by 1, so a long shop costs nothing by itself (guarded by the shop cap and the free-move rules).
 BLIND_REWARD = 1 / 24
 W_BLIND = 0.04
+GAMMA_BLIND = 0.98  # --gamma-blind's default
 W_SCORE = 0.02
 WIN_REWARD = 1.0
 SHOP_CAP = 60  # moves in one shop (its packs included) after which only leaving is offered
@@ -1038,9 +1039,11 @@ def survival(ante_hist: list[int]) -> list[float]:
 
 
 def play_seeds(torch, pp, device, e, seeds: list[str], n_envs: int, threads: int, skips: bool, shop_cap: int,
-               greedy: bool = True, watch=None, block_runs: int = 0) -> tuple[dict, list[str], "RunBook"]:
+               greedy: bool = True, watch=None, block_runs: int = 0,
+               engine_rounds: bool = False) -> tuple[dict, list[str], "RunBook"]:
     """Play each of `seeds` once with the network (likeliest moves unless `greedy` is False), under training's own
-    rules; returns (stats, each seed's ending stage letter, the RunBook)."""
+    rules; returns (stats, each seed's ending stage letter, the RunBook). With `engine_rounds` the teacher plays the
+    rounds and the network everything else (S, lab #38: the exchange evaluation, how much of the wall is play)."""
     from balatro_meta.env import VecEnv
 
     runs = len(seeds)
@@ -1068,6 +1071,10 @@ def play_seeds(torch, pp, device, e, seeds: list[str], n_envs: int, threads: int
             kind, slot, to, cards, _, _ = pp.act(x, legal, greedy=greedy)
         kind_np = kind.cpu().numpy()
         args = to_moves(kind_np, slot.cpu().numpy(), to.cpu().numpy(), cards.cpu().numpy())
+        if engine_rounds:
+            ek, ea, in_round = env.round_moves()
+            kind_np = np.where(in_round, ek, kind_np)
+            args = np.where(in_round, ea, args).astype(np.uint64)
         _, done, won, refused, ante = env.step(kind_np, args)
         cleared = env.cleared
         endings = dict(env.take_endings()) if done.any() else {}
@@ -1121,14 +1128,15 @@ def eval_policy(a) -> dict:
                   "network", a.runs, a.threads)
     stats, stages, book = play_seeds(torch, pp, device, e, seeds, a.envs, a.threads, getattr(a, "skips", False),
                                      getattr(a, "shop_cap", SHOP_CAP), greedy=not a.sample, watch=watch,
-                                     block_runs=a.block_runs)
+                                     block_runs=a.block_runs, engine_rounds=a.engine_rounds)
     runs, wins = stats["runs"], stats["wins"]
     lo, hi = wilson(wins, runs)
     mean = sum((i + 1) * k for i, k in enumerate(stats["ante_hist"])) / max(runs, 1)
     fields = book.fields()
     report = progress_body(stats, "network", a.runs, a.threads, True, [], {
         "model": str(a.model), "seed_base": base, "greedy": not a.sample, "run_stages": "".join(stages),
-        "refused_moves": book.total["refused"], "exam": bool(a.exam), **fields})
+        "refused_moves": book.total["refused"], "exam": bool(a.exam), "engine_rounds": bool(a.engine_rounds),
+        **fields})
     report.update({"win_ci": [lo, hi], "mean_ante": mean, "survival": survival(stats["ante_hist"])})
     watch.report(stats, done=True, extra=fields)
     if a.out:
@@ -1136,6 +1144,71 @@ def eval_policy(a) -> dict:
     print(f"{runs:,} runs: {wins:,} won ({wins / max(runs, 1):.2%}, 95% range {lo:.2%} to {hi:.2%}), "
           f"mean final ante {mean:.2f}; alive after each ante {survival(stats['ante_hist'])}", flush=True)
     return report
+
+
+def explain(a) -> dict:
+    """Each value head's explained variance for a checkpoint (S, lab #38), on fresh play under training's rules:
+    `--envs` runs played `--steps` moves by the network (sampled, as training plays), each head's lambda-return
+    worked out as training does, and 1 - Var(return - value) / Var(return)."""
+    torch = need_torch()
+    fast_float32(torch, a)
+    from balatro_meta.env import VecEnv
+
+    e = engine()
+    device = device_of(torch, a.cpu)
+    model, ck = load_model(torch, Path(a.model), device)
+    model.eval()
+    pp = Parts(torch, model)
+    st = ck.get("state", {})
+    known = bool(st.get("spread"))
+    sig = np.array(Spread(state=st["spread"]).sigma() if known else [1.0] * N_VALUES)
+    N, T = a.envs, a.steps
+    env = VecEnv(N, seed=a.seed * 7_919 + 13, threads=a.threads, auto=True, skips=False)
+    env.reject_seeds(eval_seeds(e, EVAL_BASE, EVAL_RUNS) + eval_seeds(e, EXAM_BASE, EVAL_RUNS))
+    guard = Guard(N, skips=False, shop_cap=SHOP_CAP)
+    high, phi = np.zeros(N, np.int64), np.zeros(N)
+    vals = np.zeros((T + 1, N, N_VALUES))
+    rews = np.zeros((T, N, N_VALUES))
+    gam = np.ones((T, N))
+    dones = np.zeros((T, N))
+    for t in range(T + 1):
+        x = torch.from_numpy(env.observe().copy()).to(device)
+        legal_np = guard.mask(env.legal_kinds())
+        with torch.no_grad(), autocast(torch, device):
+            kind, slot, to, cards, _, v = pp.act(x, torch.from_numpy(legal_np).to(device))
+        vals[t] = v.float().cpu().numpy() * sig
+        if t == T:
+            break
+        k = kind.cpu().numpy()
+        _, done, won, refused, _ = env.step(k, to_moves(k, slot.cpu().numpy(), to.cpu().numpy(), cards.cpu().numpy()))
+        r, g, high_now, phi_now = shaped(high, phi, env.position, env.progress, env.cleared, done, won, GAMMA_BLIND)
+        rews[t, :, WIN] = won * WIN_REWARD
+        rews[t, :, DEPTH] = r - won * WIN_REWARD - refused * REFUSED_COST
+        gam[t], dones[t] = g, done
+        high, phi = np.where(done, 0, high_now), np.where(done, 0.0, phi_now)
+        guard.after(k, refused, done)
+        guard.count_shop(legal_np, done)
+    adv = np.zeros((N, N_VALUES))
+    rets = np.zeros((T, N, N_VALUES))
+    for t in range(T - 1, -1, -1):
+        nonterm = (1.0 - dones[t])[:, None]
+        delta = rews[t] + gam[t][:, None] * vals[t + 1] * nonterm - vals[t]
+        adv = delta + gam[t][:, None] * a.lam * nonterm * adv
+        rets[t] = adv + vals[t]
+    out = {"model": str(a.model), "envs": N, "steps": T, "lam": a.lam, "spread_known": known}
+    for h, name in ((WIN, "win"), (DEPTH, "depth")):
+        R, V = rets[..., h].ravel(), vals[:T, :, h].ravel()
+        var = R.var()
+        # With the spread unknown (a checkpoint kept without it) the values' units are lost: the explained variance
+        # at the best scale, the square of their correlation, is the most the head could explain.
+        out[f"explained_{name}"] = float(1 - (R - V).var() / var) if var > 1e-12 and known else None
+        out[f"explained_{name}_best_scale"] = (float(np.corrcoef(R, V)[0, 1] ** 2)
+                                              if var > 1e-12 and V.var() > 1e-12 else None)
+        out[f"return_sd_{name}"] = float(np.sqrt(var))
+    print(json.dumps(out), flush=True)
+    if a.out:
+        write_json(Path(a.out), out)
+    return out
 
 
 def ppo_grads(torch, pp, batch, mb, micro: int, device, clip: float, value_coef: float, ent_coef: float,
@@ -1488,6 +1561,7 @@ def ppo(a) -> dict:
         warm = state["updates"] < state.setdefault("warm_until", a.value_warmup if a.init else 0)
         batch = (fx, fl, fk, fs, ft, fc, flp, fadv, fret, fsh)
         braked = False
+        brake_at = None
         first_kl = None
         for _ in range(a.epochs):
             perm = torch.randperm(T * N, device=device)
@@ -1503,6 +1577,7 @@ def ppo(a) -> dict:
                     # The brake: this update has already moved the play as far as one update should.
                     opt.zero_grad(set_to_none=True)
                     braked = True
+                    brake_at = nb
                     break
                 if warm:
                     value_only(model)
@@ -1559,6 +1634,24 @@ def ppo(a) -> dict:
         last_losses["play_s"], last_losses["learn_s"] = round(play_s, 1), round(learn_s, 1)
         state.setdefault("timing", []).append([round(play_s, 2), round(learn_s, 2)])
         state["timing"] = state["timing"][-50:]
+        # The training's log on disk, every update (S, lab #38: the smoke run left none): the brake and the share of
+        # the batch learned from, the time, the losses and each head's explained variance.
+        per_pass = -(-(T * N) // a.minibatch)
+        row = {"update": state["updates"], "steps": state["steps"], "seconds": round(seconds0 + time.time() - t_start, 1),
+               "braked": braked, "brake_at": brake_at, "minibatches": nb,
+               "learned_share": round(nb / max(per_pass * a.epochs, 1), 4),
+               "lr": round(opt.param_groups[0]["lr"], 8), "beta": state["beta"],
+               "spreads": [round(x, 5) for x in spread.sigma()], **last_losses,
+               "recent_win_rate": round(sum(w for w, _ in recent[-2000:]) / max(len(recent[-2000:]), 1), 5),
+               "recent_mean_ante": round(sum(an for _, an in recent[-2000:]) / max(len(recent[-2000:]), 1), 4)}
+        folder.mkdir(parents=True, exist_ok=True)
+        with open(folder / "train_log.jsonl", "a") as fh:
+            fh.write(json.dumps(row) + "\n")
+        if a.report:
+            log_copy = Path(a.report).with_name(Path(a.report).stem + "-log.jsonl")
+            log_copy.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_copy, "a") as fh:
+                fh.write(json.dumps(row) + "\n")
         if a.eval_every and state["updates"] % a.eval_every == 0:
             # The evaluator: the evaluator's seeds with the likeliest moves, the checkpoint kept beside its numbers.
             model.eval()
@@ -1581,7 +1674,8 @@ def ppo(a) -> dict:
             folder.mkdir(parents=True, exist_ok=True)
             with open(folder / "evals.jsonl", "a") as fh:
                 fh.write(json.dumps(ev) + "\n")
-            save(torch, folder / f"eval-{state['updates']:06d}.pt", model, {"eval": ev})
+            save(torch, folder / f"eval-{state['updates']:06d}.pt", model,
+                 {"eval": ev, "state": {"spread": spread.state(), "beta": state["beta"]}})
             print(f"eval at update {state['updates']} ({state['steps']:,} moves): won {ev['win_rate']:.2%} "
                   f"({lo_e:.2%} to {hi_e:.2%}) of {ev['runs']:,}, mean final ante {ev['mean_ante']:.2f}, alive after "
                   f"each ante {ev['survival']} ({ev['seconds']:.0f} s)", flush=True)
@@ -1726,11 +1820,22 @@ def main() -> None:
     v.add_argument("--runs", type=int, default=EVAL_RUNS)
     v.add_argument("--evaluator", action="store_true", help="the evaluator's seeds (EVAL_BASE), as training's evals")
     v.add_argument("--exam", action="store_true", help="the exam's seeds (EXAM_BASE): a gate, reported once")
+    v.add_argument("--engine-rounds", action="store_true",
+                   help="the teacher plays the rounds, the network the rest (the exchange evaluation)")
     v.add_argument("--envs", type=int, default=1024)
     v.add_argument("--out")
     v.add_argument("--sample", action="store_true", help="sample moves instead of taking the likeliest")
     v.add_argument("--block-runs", type=int, default=BLOCK_RUNS, help="runs per block in the live numbers")
+    x = sub.add_parser("explain", parents=[net])
+    x.add_argument("--model", required=True)
+    x.add_argument("--envs", type=int, default=256)
+    x.add_argument("--steps", type=int, default=512)
+    x.add_argument("--lam", type=float, default=0.95)
+    x.add_argument("--out")
     a = ap.parse_args()
+    if a.cmd == "explain":
+        explain(a)
+        return
     if a.cmd == "imitate":
         imitate(a)
     elif a.cmd == "ppo":
