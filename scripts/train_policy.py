@@ -908,7 +908,7 @@ def eval_policy(a) -> dict:
     model.eval()
     pp = Parts(torch, model)
     n = min(a.envs, a.runs)
-    env = VecEnv(n, seed=a.seed, threads=a.threads)
+    env = VecEnv(n, seed=a.seed, threads=a.threads, auto=True, skips=getattr(a, "skips", False))
     seeds = [e.run_seed(a.seed, i) for i in range(a.runs)]
     queue = list(range(a.runs))
     slot_run = [-1] * n
@@ -1098,7 +1098,8 @@ def ppo(a) -> dict:
         opt.load_state_dict(ck["opt"])
     pp = Parts(torch, model, value_detached=True)
     N, T = a.envs, a.steps
-    env = VecEnv(N, seed=a.seed * 1_000_003 + state["updates"], threads=a.threads)
+    # The learner's engine (lab #38): the engine makes the moves with no decision in them and refuses a null move.
+    env = VecEnv(N, seed=a.seed * 1_000_003 + state["updates"], threads=a.threads, auto=True, skips=a.skips)
     if a.compile:
         t0 = time.time()
         how = compile_encode(torch, model, device, torch.from_numpy(env.observe().copy()).to(device),

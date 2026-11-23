@@ -114,14 +114,22 @@ struct VecEnv {
 #[pymethods]
 impl VecEnv {
     #[new]
-    #[pyo3(signature = (n, seed = 0, stake = 1, threads = 0))]
-    fn new(n: usize, seed: u64, stake: u8, threads: usize) -> PyResult<Self> {
+    /// `auto` and `skips` (lab #38, Stage 0): the learner's engine (`Env::auto`: moves with no decision made by the
+    /// engine, a move that changes nothing refused) and whether blind skips are offered.
+    #[pyo3(signature = (n, seed = 0, stake = 1, threads = 0, auto = false, skips = true))]
+    fn new(n: usize, seed: u64, stake: u8, threads: usize, auto: bool, skips: bool) -> PyResult<Self> {
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(threads)
             .build()
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         let envs = (0..n)
-            .map(|i| Env::new(seed.wrapping_mul(1_000_003).wrapping_add(i as u64), stake))
+            .map(|i| {
+                let mut e = Env::new(seed.wrapping_mul(1_000_003).wrapping_add(i as u64), stake);
+                e.auto = auto;
+                e.skips = skips;
+                e.auto_steps();
+                e
+            })
             .collect();
         let rngs = (0..n)
             .map(|i| XorShift(0x9E37_79B9_7F4A_7C15 ^ (seed << 20) ^ (i as u64 + 1)))
@@ -297,7 +305,7 @@ impl VecEnv {
         let v: Vec<u8> = self
             .envs
             .iter()
-            .flat_map(|e| legal_kinds(&e.run).map(u8::from))
+            .flat_map(|e| e.learner_kinds().map(u8::from))
             .collect();
         buf.copy_from_slice(py, &v)
     }

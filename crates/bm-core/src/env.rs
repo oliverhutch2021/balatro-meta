@@ -358,7 +358,19 @@ pub struct Env {
     pub ended: Option<RunEnd>,
     /// The run's high-water mark of position (`position`): what the learner's potential has already paid for.
     pub high: i32,
+    /// The learner's engine (lab #38, Stage 0): moves with no decision in them are made here, never asked for (the
+    /// only kind the learner may choose, cash-out, the jokers' order by `teacher::joker_order`), and a move that
+    /// changes nothing on the screen counts as refused. Off by default (the other users of `Env`).
+    pub auto: bool,
+    /// Whether the learner may skip blinds (off from Stage 0: `learner_kinds`).
+    pub skips: bool,
 }
+
+/// Kinds the learner never chooses (train_policy.py's NEVER): the sorts, buy-and-use, the boss reroll.
+pub const LEARNER_NEVER: [MoveKind; 4] =
+    [MoveKind::SortRank, MoveKind::SortSuit, MoveKind::BuyAndUse, MoveKind::RerollBoss];
+/// Moves the engine makes by itself in a row at most (a guard; a few are ever needed).
+const AUTO_MAX: usize = 32;
 
 /// The learner's own inputs (lab #38), after the screen's (`observe::encode`, which the teacher's value networks
 /// also read and so never changes): a block of LEARNER_FEATURES floats. Column 0: blinds already paid for ahead of
@@ -434,7 +446,61 @@ impl Env {
             tally: Tally::default(),
             ended: None,
             high: 0,
+            auto: false,
+            skips: true,
         }
+    }
+
+    /// The kinds the learner may choose here: the game's legal kinds less `LEARNER_NEVER`; with `auto`, less joker
+    /// moves (the engine orders the jokers); without `skips`, less a blind skip.
+    pub fn learner_kinds(&self) -> [bool; N_MOVE_KINDS] {
+        let mut k = legal_kinds(&self.run);
+        if self.auto {
+            for m in LEARNER_NEVER {
+                k[m as usize] = false;
+            }
+            k[MoveKind::MoveJoker as usize] = false;
+        }
+        if !self.skips {
+            k[MoveKind::SkipBlind as usize] = false;
+        }
+        k
+    }
+
+    /// With `auto`: make the moves that hold no decision, in a row, until the learner has one: cash-out; the jokers
+    /// into `teacher::joker_order`; the only kind left that takes no choice of argument (Select Blind with skips off,
+    /// Leave Shop or Skip Pack with nothing else allowed). Returns how many it made.
+    pub fn auto_steps(&mut self) -> usize {
+        if !self.auto {
+            return 0;
+        }
+        let mut made = 0;
+        while made < AUTO_MAX && self.run.phase != Phase::GameOver && !self.run.won {
+            let m = if self.run.phase == Phase::RoundEval {
+                Some((MoveKind::CashOut, 0))
+            } else if let Some(m) = crate::teacher::reorder(&self.run).filter(|m| m.0 == MoveKind::MoveJoker) {
+                Some(m)
+            } else {
+                let k = self.learner_kinds();
+                let open: Vec<usize> = (0..N_MOVE_KINDS).filter(|&i| k[i]).collect();
+                match open.as_slice() {
+                    [i] if matches!(
+                        MoveKind::from_index(*i as i64),
+                        Some(MoveKind::SelectBlind | MoveKind::LeaveShop | MoveKind::PackSkip | MoveKind::CashOut)
+                    ) =>
+                    {
+                        MoveKind::from_index(*i as i64).map(|m| (m, 0))
+                    }
+                    _ => None,
+                }
+            };
+            let Some((kind, arg)) = m else { break };
+            if apply(&mut self.run, kind, arg).is_err() {
+                break;
+            }
+            made += 1;
+        }
+        made
     }
 
     pub fn reset(&mut self) {
@@ -453,6 +519,7 @@ impl Env {
         self.run = Run::new(cfg);
         self.tally = Tally::default();
         self.high = 0;
+        self.auto_steps();
     }
 
     /// Apply a move; at the end of an episode (lost, or won by beating
@@ -470,7 +537,19 @@ impl Env {
         };
         let in_round = self.run.phase == Phase::Round;
         let pending = Tally::before(&self.run, k, arg);
-        let refused = apply(&mut self.run, k, arg).is_err();
+        // With `auto`, a move that leaves the screen as it was is a move with nothing in it (re-sorting a sorted hand,
+        // a card moved onto itself): it counts as refused (lab #38, B's test 3).
+        let before = self.auto.then(|| {
+            let mut v = Vec::new();
+            encode(&screen(&self.run), &mut v);
+            v
+        });
+        let mut refused = apply(&mut self.run, k, arg).is_err();
+        if let Some(b) = before.filter(|_| !refused) {
+            let mut v = Vec::new();
+            encode(&screen(&self.run), &mut v);
+            refused = v == b;
+        }
         self.tally.after(&self.run, pending, refused);
         let won = self.run.won;
         let done = won || self.run.phase == Phase::GameOver;
@@ -489,6 +568,7 @@ impl Env {
             self.ended = Some(RunEnd::new(&self.run, std::mem::take(&mut self.tally)));
             self.reset();
         }
+        self.auto_steps();
         info
     }
 
@@ -546,6 +626,93 @@ mod tests {
             }
             assert_eq!(info.position, beaten, "with no skips, position counts the blinds beaten");
             assert_eq!(info.position, position(&e.run));
+        }
+    }
+}
+
+#[cfg(test)]
+mod learner_tests {
+    use super::*;
+
+    /// Lab #38 (B's test 4): the learner's input is the screen's and its own block's only: two fair copies of a
+    /// position (the deck's order and every random stream drawn afresh, the screen the same) give the same input,
+    /// along a run, in every phase.
+    #[test]
+    fn fair_copies_give_the_learner_the_same_input() {
+        let mut e = Env::new(42, 3);
+        e.auto = true;
+        e.skips = false;
+        e.auto_steps();
+        let mut rng = XorShift(9);
+        let mut checked = 0;
+        for step in 0..1200u64 {
+            let copy = |salt: u64| {
+                let mut c = Env::new(1, 3);
+                c.run = crate::observe::fair_copy(&e.run, salt);
+                c.high = e.high;
+                let mut v = Vec::new();
+                c.observe(&mut v);
+                v
+            };
+            let (a, b) = (copy(step * 2 + 1), copy(step * 2 + 2));
+            let mut mine = Vec::new();
+            e.observe(&mut mine);
+            assert_eq!(a, b, "two fair copies, one screen, at step {step} in {:?}", e.run.phase);
+            assert_eq!(a, mine, "a fair copy shows what the run shows");
+            checked += 1;
+            let k = e.learner_kinds();
+            let mut m = random_move(&e.run, &mut rng);
+            for _ in 0..20 {
+                if k[m.0 as usize] {
+                    break;
+                }
+                m = random_move(&e.run, &mut rng);
+            }
+            if k[m.0 as usize] {
+                e.step(m.0 as i64, m.1);
+            }
+        }
+        assert!(checked > 1000);
+    }
+
+    /// Lab #38 (Stage 0): with `auto`, the learner is never asked for a move with no decision in it: no cash-out
+    /// screen, no blind choice with skips off, the jokers always in the teacher's order; and a move that changes
+    /// nothing on the screen (B's test 3) is refused.
+    #[test]
+    fn the_learner_is_only_asked_for_decisions() {
+        for seed in 0..6u64 {
+            let mut e = Env::new(100 + seed, 3);
+            e.auto = true;
+            e.skips = false;
+            e.auto_steps();
+            let mut rng = XorShift(seed + 1);
+            for _ in 0..1500 {
+                assert_ne!(e.run.phase, Phase::RoundEval, "cash-out is the engine's");
+                let open = e.learner_kinds().iter().filter(|&&x| x).count();
+                assert!(e.run.phase != Phase::BlindSelect || open > 1, "a blind choice with nothing else to do is the engine's");
+                assert!(crate::teacher::reorder(&e.run).is_none(), "the jokers are in the teacher's order");
+                let k = e.learner_kinds();
+                assert!(!k[MoveKind::MoveJoker as usize] && !k[MoveKind::SkipBlind as usize]);
+                assert!(LEARNER_NEVER.iter().all(|m| !k[*m as usize]));
+                // A card moved onto itself changes nothing: refused.
+                if e.run.phase == Phase::Round && e.run.hand.len() > 1 {
+                    let mut c = Env { run: e.run.clone(), seeds: SeedSampler::new(1), stake: 3, episodes: 0,
+                        tally: Tally::default(), ended: None, high: e.high, auto: true, skips: false };
+                    assert!(c.step(MoveKind::MoveCard as i64, 0).refused, "a card moved onto itself");
+                }
+                // A random legal move among the learner's kinds.
+                let mut m = random_move(&e.run, &mut rng);
+                for _ in 0..20 {
+                    if k[m.0 as usize] {
+                        break;
+                    }
+                    m = random_move(&e.run, &mut rng);
+                }
+                if !k[m.0 as usize] {
+                    continue;
+                }
+                e.step(m.0 as i64, m.1);
+            }
         }
     }
 }

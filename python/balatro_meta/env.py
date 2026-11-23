@@ -45,9 +45,12 @@ assert len(MOVE_KINDS) == _engine.N_MOVE_KINDS
 
 
 class VecEnv:
-    def __init__(self, n: int, seed: int = 0, stake: int = 1, threads: int = 0) -> None:
+    def __init__(self, n: int, seed: int = 0, stake: int = 1, threads: int = 0, auto: bool = False,
+                 skips: bool = True) -> None:
+        """`auto` (lab #38): the engine makes the moves with no decision in them (cash-out, the jokers' order, the only
+        kind left) and refuses a move that changes nothing; `skips`: whether blind skips are offered."""
         self.n = n
-        self._env = _engine.VecEnv(n, seed, stake, threads)
+        self._env = _engine.VecEnv(n, seed, stake, threads, auto, skips)
         self._obs = np.zeros((n, OBS_LEN), np.float32)
         self._legal = np.zeros((n, len(MOVE_KINDS)), np.uint8)
         self._reward = np.zeros(n, np.float32)
