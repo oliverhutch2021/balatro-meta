@@ -186,7 +186,7 @@ def hand_features(torch, raw):
     return torch.stack([same_rank / 4, same_suit / 8, stretch / 5], -1)
 
 
-def build_model(torch, d: int = 128, layers: int = 4, heads: int = 4, ff: int = 384):
+def build_model(torch, d: int = 128, layers: int = 4, heads: int = 4, ff: int = 384, discards: bool = True):
     nn = torch.nn
     lay = layout()
     e = engine()
@@ -197,7 +197,10 @@ def build_model(torch, d: int = 128, layers: int = 4, heads: int = 4, ff: int = 
     class Policy(nn.Module):
         def __init__(self):
             super().__init__()
-            self.cfg = {"d": d, "layers": layers, "heads": heads, "ff": ff}
+            self.cfg = {"d": d, "layers": layers, "heads": heads, "ff": ff, "discards": discards}
+            # With discards off (S, lab #38: smoke-2's recipe on the layout-4 code, `--no-discard-cands`), the discard
+            # candidates' tokens are never present: a discard picks its cards with the card head, as before them.
+            self.discards = discards
             self.lay = lay
             self.proj = nn.ModuleDict({g: nn.Linear(lay[g][2] + (HAND_EXTRA if g == "hand" else 0), d)
                                        for g in GROUPS})
@@ -268,6 +271,8 @@ def build_model(torch, d: int = 128, layers: int = 4, heads: int = 4, ff: int = 
                     p = raw[..., 0:3].sum(-1) > 0
                 else:
                     p = raw[..., 0] > 0
+                if g == "dcands" and not self.discards:
+                    p = torch.zeros_like(p)
                 toks.append(t)
                 present.append(p)
             t = self.norm_in(torch.cat(toks, 1))
@@ -1422,6 +1427,7 @@ def ppo(a) -> dict:
     latest = folder / "latest.pt"
     best_path = folder / "best.pt"
     rng = random.Random(a.seed)
+    torch.manual_seed(a.seed)  # the network's start and its sampling repeat for a seed (preflight's resume check)
     if latest.exists():
         model, ck = load_model(torch, latest, device)
         state = ck["state"]
@@ -1433,11 +1439,13 @@ def ppo(a) -> dict:
             model, _ = load_model(torch, Path(a.init), device)
             print(f"Starting from {a.init}.", flush=True)
         else:
-            model = build_model(torch, a.width, a.layers, a.heads, a.width * 3).to(device)
-            print("Starting from scratch.", flush=True)
+            model = build_model(torch, a.width, a.layers, a.heads, a.width * 3,
+                                discards=not a.no_discard_cands).to(device)
+            print("Starting from scratch." + (" Discard candidates hidden." if a.no_discard_cands else ""), flush=True)
         ck = None
         state = {"updates": 0, "steps": 0, "seconds": 0.0, "stats": new_stats(), "history": [], "recent": [],
                  "book": None}
+    torch.manual_seed(a.seed * 1_000_003 + state["updates"])  # a resumed run samples the same from the same checkpoint
     opt = torch.optim.Adam(model.parameters(), lr=a.lr, eps=1e-5)
     if ck and "opt" in ck:
         opt.load_state_dict(ck["opt"])
@@ -1674,6 +1682,7 @@ def ppo(a) -> dict:
         base_lr = [g["lr"] for g in opt.param_groups]
         scale = 1.0
         scale_sum = 0.0
+        kl_max = 0.0
         for _ in range(a.epochs):
             perm = torch.randperm(T * N, device=device)
             for k in range(0, T * N, a.minibatch):
@@ -1698,6 +1707,7 @@ def ppo(a) -> dict:
                     # Before any step the play hasn't moved, so this is about 0 unless acting and learning disagree
                     # (B, lab #38: precision, a stale input).
                     first_kl = got["kl"]
+                kl_max = max(kl_max, got["kl"])  # B's nit: a pass that breaches over and over shows here
                 if not warm and a.target_kl and got["kl"] > 1.5 * a.target_kl:
                     breaches += 1
                     if not braked:
@@ -1774,7 +1784,7 @@ def ppo(a) -> dict:
                "braked": braked, "brake_at": brake_at, "breaches": breaches, "minibatches": nb,
                "learned_share": round(nb / max(per_pass * a.epochs, 1), 4),
                "rate_share": round(scale_sum / max(nb, 1), 4),
-               "micro": a.micro,
+               "micro": a.micro, "kl_max": round(kl_max, 5),
                "lr": round(opt.param_groups[0]["lr"], 8), "beta": state["beta"],
                "spreads": [round(x, 5) for x in spread.sigma()], **last_losses,
                "recent_win_rate": round(sum(w for w, _ in recent[-2000:]) / max(len(recent[-2000:]), 1), 5),
@@ -1950,6 +1960,8 @@ def main() -> None:
     p.add_argument("--target-kl", type=float, default=0.02,
                    help="the brake's line: a minibatch whose play has moved 1.5 x this far from the play it learns from "
                         "is a breach (0: no brake)")
+    p.add_argument("--no-discard-cands", action="store_true",
+                   help="hide the discard candidates (smoke-2's recipe on the layout-4 code; kept in the checkpoint)")
     p.add_argument("--brake", choices=("rate", "stop"), default="rate",
                    help="rate (S's default, lab #38): a breach lowers the rate for the rest of the pass and the batch "
                         "is learned from in full; stop: the old brake, the rest of the batch thrown away")

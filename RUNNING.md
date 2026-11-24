@@ -1947,6 +1947,25 @@ In (S's list before Gate 0):
 S and B now run as scheduled tasks (every 3 hours, and set off by A after each post), each keeping its notes in
 `.sync/lab/roles/`.
 
+## Step 73: S's and B's orders of 24 November (lab #38)
+
+S and B's first scheduled runs (04:32, 04:37): B approved d629f54, 0ef55a5 and 713d74f, ruled the brake (the 80% line
+read over the run: mean `rate_share` 0.8 or more, at most 5% of updates under 0.8), λ 0.99 and the detached value
+(judged at update 300 with `explain` against Monte Carlo returns), and confirmed d39f839. S kept A's rule for after
+smoke-2 and set the lines for the extension, smoke-3 (adopted at +0.5 blinds a run or more over smoke-2 at update 300)
+and renting. In:
+- `--no-discard-cands` (ppo; kept in the checkpoint's `cfg` as `discards`): the discard candidates' tokens hidden,
+  smoke-2's recipe on the layout-4 code, so both recipes run on one commit.
+- The log's `kl_max`: the largest minibatch KL of each update (B).
+- A training run seeds torch from `--seed` (and the update count on resume), so a run repeats for a seed and two
+  resumes from one checkpoint are identical.
+- Preflight: `resume` is S's check (three updates straight against two plus one resumed: the same first two, the
+  checkpoint's rate, beta and micro-batch carried exactly, and two resumes identical); `speed` fails under
+  `--min-speed` (5,000 on the PC; 15,000 on a rented machine); `known` replays a kept checkpoint on the evaluator's
+  first 2,000 seeds, twice on the GPU and once on the CPU, and reports the share of seeds ending differently.
+- The fair-copy test counts the screens showing play and discard candidates (both parts are in its comparison).
+- `.sync/after-smoke-2.sh`: `explain` on update 300 with `--lam 1.0`; after the extension, preflight then smoke-3.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

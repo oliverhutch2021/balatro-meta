@@ -14,8 +14,10 @@ training's own size on the GPU (the PC's or a rented one: about 30 to 60 minutes
   returns       the advantages plus values equal the lambda-returns worked out from their definition
   candidates    plays and discards through candidates are never refused, and both candidates and free picks occur
   oom-guard     a learning step that runs out of GPU memory halves the micro-batch and the run goes on
-  resume        a run stopped after 2 updates resumes and finishes its third, with its optimiser state
-  speed         full-size updates: moves a second, playing and learning seconds, GPU memory peak
+  resume        3 updates straight against 2 plus 1 resumed: the same first two, what the checkpoint carries, and two
+                resumes from one checkpoint identical
+  speed         full-size updates: moves a second (at least --min-speed), playing and learning seconds, GPU memory
+  known         a kept checkpoint replayed on the evaluator's first seeds, twice on the GPU and once on the CPU
   learns        updates from scratch climb past ante 1
 
 Exit 0 when nothing failed. The training-run checks go through train_policy.py's own command line in a child
@@ -290,19 +292,43 @@ def check_oom_guard(a):
     return True, "a simulated out-of-memory halved the micro-batch (256 to 128) and the update finished"
 
 
+CARRIED = ("lr", "beta", "micro")  # what a checkpoint carries into the next update exactly
+COMPARED = ("policy", "value", "entropy", "kl", "rate_share", "spreads", "steps", "beta", "lr", "micro")
+
+
 def check_resume(a):
+    """S's check (lab #38, rented machines get interrupted): three updates straight against two plus one resumed.
+    The two runs' first two updates are identical (a run repeats for a seed); a resumed run starts its games afresh
+    (a straight run carries them on), so its third update plays other games: what the checkpoint carries (rate,
+    beta, micro-batch) must match the straight run's exactly, the spreads within 20%; and resuming twice from the
+    same checkpoint must give the very same third update."""
+    import shutil
+
     with tempfile.TemporaryDirectory() as d:
-        run = Path(d) / "run"
-        rc, out = run_child(tiny_ppo_args(run, 2), timeout=1800)
-        if rc != 0:
-            return False, "first part failed: " + out.strip().splitlines()[-1][:200]
-        rc, out2 = run_child(tiny_ppo_args(run, 3), timeout=1800)
-        log = read_log(run)
-    if rc != 0:
-        return False, "the resumed part failed: " + out2.strip().splitlines()[-1][:200]
-    ups = [r["update"] for r in log]
-    ok = "Resuming" in out2 and ups == [1, 2, 3] and log[2]["steps"] > log[1]["steps"]
-    return ok, f"updates logged {ups}; resumed {'yes' if 'Resuming' in out2 else 'no'}"
+        straight, part, again = Path(d) / "straight", Path(d) / "part", Path(d) / "again"
+        for folder, n in ((straight, 3), (part, 2)):
+            rc, out = run_child(tiny_ppo_args(folder, n), timeout=1800)
+            if rc != 0:
+                return False, f"{folder.name} failed: " + out.strip().splitlines()[-1][:200]
+        shutil.copytree(part, again)
+        outs = []
+        for folder in (part, again):
+            rc, out = run_child(tiny_ppo_args(folder, 3), timeout=1800)
+            if rc != 0 or "Resuming" not in out:
+                return False, f"resuming {folder.name} failed: " + out.strip().splitlines()[-1][:200]
+            outs.append(out)
+        s3, p3, g3 = read_log(straight), read_log(part), read_log(again)
+    pick = lambda r: {k: r.get(k) for k in COMPARED}  # noqa: E731
+    if [pick(r) for r in s3[:2]] != [pick(r) for r in p3[:2]]:
+        return False, "the first two updates differ between two runs of one seed"
+    if pick(p3[2]) != pick(g3[2]):
+        diff = [k for k in COMPARED if p3[2].get(k) != g3[2].get(k)]
+        return False, f"two resumes from one checkpoint differ in {diff}"
+    off = [k for k in CARRIED if p3[2].get(k) != s3[2].get(k)]
+    spread_gap = max(abs(x - y) / max(abs(y), 1e-9) for x, y in zip(p3[2]["spreads"], s3[2]["spreads"]))
+    ok = not off and spread_gap < 0.2
+    return ok, (f"first two updates identical; two resumes identical; carried {'all equal' if not off else off} "
+                f"(rate, beta, micro-batch); spreads within {spread_gap:.1%} of the straight run's")
 
 
 def full_args(folder, updates):
@@ -331,8 +357,55 @@ def check_speed(a):
     peak = next((ln for ln in out.splitlines() if "GPU memory peak" in ln), "")
     peak = peak[peak.find("GPU memory peak"):].split(";")[0] if peak else "GPU memory peak not printed"
     rate = steps / max(secs, 1e-9)
-    return rate > 1000, (f"{rate:,.0f} moves a second; playing {play:.0f} s and learning {learn:.0f} s an update; "
+    return rate >= a.min_speed, (f"line {a.min_speed:,.0f}: " f"{rate:,.0f} moves a second; playing {play:.0f} s and learning {learn:.0f} s an update; "
                          f"{peak}; micro-batch {log[-1].get('micro')}")
+
+
+def known_checkpoint(a):
+    """--known, else the newest evaluation checkpoint under models/policy/ this code can load."""
+    torch = torch_mod()
+    if a.known:
+        return Path(a.known)
+    found = sorted((ROOT / "models" / "policy").glob("*/eval-*.pt"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for p in found:
+        try:
+            ck = torch.load(p, map_location="cpu", weights_only=False)
+        except Exception:
+            continue
+        if ck.get("layout_version") == tp.LAYOUT_VERSION:
+            return p
+    return None
+
+
+def check_known(a):
+    """S's known number (lab #38): a kept checkpoint replayed on the evaluator's first seeds, twice on the GPU and
+    once on the CPU, with the share of seeds that end differently: the natural rate before another machine (a
+    rented one) is compared with this one."""
+    torch = torch_mod()
+    path = known_checkpoint(a)
+    if path is None:
+        raise Skip("no evaluation checkpoint of this input layout yet (--known PATH)")
+    e = tp.engine()
+    runs = 200 if a.quick else 2000
+    seeds = tp.eval_seeds(e, tp.EVAL_BASE, runs)
+
+    def play(dev):
+        model, _ = tp.load_model(torch, path, dev)
+        model.eval()
+        stats, stages, _ = tp.play_seeds(torch, tp.Parts(torch, model), dev, e, seeds, min(runs, 1024), a.threads,
+                                         False, tp.SHOP_CAP)
+        return stages, stats["wins"] / max(stats["runs"], 1)
+
+    cpu, cpu_win = play(torch.device("cpu"))
+    detail = f"{path.relative_to(ROOT) if path.is_relative_to(ROOT) else path}, {runs} seeds: CPU won {cpu_win:.2%}"
+    if torch.cuda.is_available() and not a.cpu:
+        g1, w1 = play(torch.device("cuda"))
+        g2, _ = play(torch.device("cuda"))
+        rep_diff = sum(x != y for x, y in zip(g1, g2)) / runs
+        dev_diff = sum(x != y for x, y in zip(g1, cpu)) / runs
+        detail += (f"; GPU won {w1:.2%}; seeds ending differently: GPU against GPU {rep_diff:.2%}, GPU against CPU "
+                   f"{dev_diff:.2%}")
+    return True, detail
 
 
 def check_learns(a):
@@ -355,7 +428,7 @@ def check_learns(a):
 CHECKS = [("determinism", check_determinism), ("act-eval", check_act_eval), ("checkpoint", check_checkpoint),
           ("evaluator", check_evaluator), ("returns", check_returns), ("candidates", check_candidates),
           ("oom-guard", check_oom_guard), ("resume", check_resume), ("speed", check_speed),
-          ("learns", check_learns)]
+          ("known", check_known), ("learns", check_learns)]
 ARGS = None
 
 
@@ -366,6 +439,9 @@ def main() -> int:
     p.add_argument("--cpu", action="store_true")
     p.add_argument("--threads", type=int, default=0, help="engine threads (0: all)")
     p.add_argument("--only", help="comma-separated check names")
+    p.add_argument("--min-speed", type=float, default=5000,
+                   help="the speed check's line, moves a second (S: 5,000 on the PC; 15,000 on a rented machine)")
+    p.add_argument("--known", help="the known-number checkpoint (default: the newest loadable evaluation checkpoint)")
     p.add_argument("--out", default="results/preflight.json")
     a = p.parse_args()
     ARGS = a

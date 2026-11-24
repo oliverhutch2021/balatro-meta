@@ -633,3 +633,28 @@ def test_the_readouts_count_bosses_the_economy_and_the_order_gap():
     old = tp.new_totals()
     tp.add_end(old, {**base, "lost_to": "Small Blind"})
     assert tp.readouts(old)["bosses"]["faced"] == 0 and "hand_order" not in tp.readouts(old)
+
+
+def test_hidden_discard_candidates_leave_discards_to_the_card_head():
+    """S, lab #38: with --no-discard-cands (smoke-2's recipe on the layout-4 code) a discard never names a candidate:
+    its cards come from the card head, and act() agrees with evaluate()."""
+    from balatro_meta.env import VecEnv
+
+    torch.manual_seed(2)
+    env = VecEnv(16, seed=4, auto=True, skips=False)
+    for _ in range(4):
+        legal = env.legal_kinds().astype(bool)
+        k = np.where(legal[:, tp.SELECT_BLIND], tp.SELECT_BLIND, np.argmax(legal, 1))
+        env.step(k, np.zeros(16, np.uint64))
+    x = torch.from_numpy(env.observe().copy())
+    model = tp.build_model(torch, 32, 1, 2, 64, discards=False)
+    model.eval()
+    assert model.cfg["discards"] is False
+    pp = tp.Parts(torch, model)
+    legal = torch.zeros(16, tp.N_KINDS, dtype=torch.bool)
+    legal[:, tp.DISCARD] = True
+    with torch.no_grad():
+        kind, slot, to, cards, logp, _ = pp.act(x, legal)
+        lp, _, _ = pp.evaluate(x, legal, kind, slot, to, cards)
+    assert (slot == -1).all() and torch.allclose(lp, logp, atol=1e-4)
+    assert ((cards.sum(1) >= 1) & (cards.sum(1) <= 5)).all()

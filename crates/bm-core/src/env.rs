@@ -836,6 +836,7 @@ mod learner_tests {
         e.auto_steps();
         let mut rng = XorShift(9);
         let mut checked = 0;
+        let (mut with_plays, mut with_throws) = (0usize, 0usize);
         for step in 0..1200u64 {
             let copy = |salt: u64| {
                 let mut c = Env::new(1, 3);
@@ -851,6 +852,10 @@ mod learner_tests {
             assert_eq!(a, b, "two fair copies, one screen, at step {step} in {:?}", e.run.phase);
             assert_eq!(a, mine, "a fair copy shows what the run shows");
             checked += 1;
+            // The play and discard candidates' parts are in the comparison (S, lab #38): count the screens that show
+            // them, so the test is known to reach them.
+            with_plays += usize::from(mine[CANDS_START] == 1.0);
+            with_throws += usize::from(mine[DCANDS_START] == 1.0);
             let k = e.learner_kinds();
             let mut m = random_move(&e.run, &mut rng);
             for _ in 0..20 {
@@ -864,6 +869,7 @@ mod learner_tests {
             }
         }
         assert!(checked > 1000);
+        assert!(with_plays > 50 && with_throws > 20, "candidates shown on {with_plays} and {with_throws} screens");
     }
 
     /// Lab #38 (Stage 0): with `auto`, the learner is never asked for a move with no decision in it: no cash-out
