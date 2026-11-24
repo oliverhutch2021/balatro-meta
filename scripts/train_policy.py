@@ -48,12 +48,12 @@ NEVER = (SORT_RANK, SORT_SUIT, BUY_AND_USE, REROLL_BOSS)  # not chosen by the ne
 FREE = (MOVE_CARD, MOVE_JOKER)  # moves that change nothing but order
 MAX_HAND = 24
 N_JOKER_TOKENS = 152  # joker kinds + empty + face down (observe.rs: joker_token)
-GROUPS = ("hand", "jokers", "consumables", "shop_row", "shop_vouchers", "boosters", "pack", "cands")
+GROUPS = ("hand", "jokers", "consumables", "shop_row", "shop_vouchers", "boosters", "pack", "cands", "dcands")
 GLOBAL_PARTS = ("global", "hand_levels", "deck", "vouchers", "pack_booster", "tail", "learner")
 # Which group a kind's slot points into; kinds with a target "to" (moves) and with cards to pick.
 SLOT_GROUP = {MOVE_CARD: "hand", MOVE_JOKER: "jokers", SELL_JOKER: "jokers", BUY: "shop_row",
               REDEEM_VOUCHER: "shop_vouchers", OPEN_BOOSTER: "boosters", SELL_CONSUMABLE: "consumables",
-              USE_CONSUMABLE: "consumables", PACK_CHOOSE: "pack", PLAY: "cands"}
+              USE_CONSUMABLE: "consumables", PACK_CHOOSE: "pack", PLAY: "cands", DISCARD: "dcands"}
 # Play candidates (lab #38, after the exchange evaluation: the teacher's play took ante-1 deaths from 17% to 2%): in a
 # round the engine offers its PLAY_CANDS best plays (learner::play_candidates, best first) as tokens, then a free pick.
 # A play points at one: a candidate plays its cards (no card term); the free pick (slot FREE_SLOT), or no candidates
@@ -62,6 +62,11 @@ SLOT_GROUP = {MOVE_CARD: "hand", MOVE_JOKER: "jokers", SELL_JOKER: "jokers", BUY
 PLAY_CANDS = 8
 FREE_SLOT = PLAY_CANDS
 CAND_CARDS = 24
+# Discard candidates (lab #38, smoke-3): the planner's plans as throws (learner::discard_candidates), then a free
+# pick (slot D_FREE), the same way: a candidate throws its cards, the free pick uses the card head.
+DISCARD_CANDS = 8
+D_FREE = DISCARD_CANDS
+DCAND_CARDS = 16
 HAS_TO = (MOVE_CARD, MOVE_JOKER)
 # Cards picked: (fewest, most) for each kind that picks cards.
 CARD_RANGE = {PLAY: (1, 5), DISCARD: (1, 5), USE_CONSUMABLE: (0, 5), PACK_CHOOSE: (0, 5)}
@@ -122,10 +127,12 @@ def to_parts(kinds: np.ndarray, args: np.ndarray) -> dict[str, np.ndarray]:
     to = np.full(n, -1, np.int64)
     low = (args & np.uint64(0xFF)).astype(np.int64)
     high = ((args >> np.uint64(8)) & np.uint64(0xFF)).astype(np.int64)
-    has_slot = np.isin(kinds, list(SLOT_GROUP)) & (kinds != PLAY)
+    has_slot = np.isin(kinds, list(SLOT_GROUP)) & (kinds != PLAY) & (kinds != DISCARD)
     slot[has_slot] = low[has_slot]
-    # A play's argument is its cards: as parts it is the free pick (a recorded play names no candidate).
+    # A play's or a discard's argument is its cards: as parts it is the free pick (a recorded move names no
+    # candidate).
     slot[kinds == PLAY] = FREE_SLOT
+    slot[kinds == DISCARD] = D_FREE
     has_to = np.isin(kinds, HAS_TO)
     to[has_to] = high[has_to]
     bits = np.where(np.isin(kinds, (PLAY, DISCARD)), args,
@@ -182,8 +189,10 @@ def hand_features(torch, raw):
 def build_model(torch, d: int = 128, layers: int = 4, heads: int = 4, ff: int = 384):
     nn = torch.nn
     lay = layout()
-    if engine().PLAY_CANDS != PLAY_CANDS or engine().CAND_CARDS != CAND_CARDS:
-        raise SystemExit("the engine's play candidates differ from this script's: rebuild (make build)")
+    e = engine()
+    if (e.PLAY_CANDS, e.CAND_CARDS, getattr(e, "DISCARD_CANDS", None), getattr(e, "DCAND_CARDS", None)) != (
+            PLAY_CANDS, CAND_CARDS, DISCARD_CANDS, DCAND_CARDS):
+        raise SystemExit("the engine's play or discard candidates differ from this script's: rebuild (make build)")
 
     class Policy(nn.Module):
         def __init__(self):
@@ -447,18 +456,24 @@ class Parts:
         return x[:, s:s + n * w].reshape(x.shape[0], n, w)[..., 39] > 0
 
     def is_candidate(self, kind, slot):
-        """Plays that name a candidate (slot 0 .. PLAY_CANDS - 1): their cards are the candidate's, never picked."""
-        return (kind == PLAY) & (slot >= 0) & (slot < FREE_SLOT)
+        """Plays and discards that name a candidate (slot below the free pick's): their cards are the candidate's,
+        never picked."""
+        return (((kind == PLAY) & (slot < FREE_SLOT)) | ((kind == DISCARD) & (slot < D_FREE))) & (slot >= 0)
 
-    def candidate_cards(self, x, slot):
-        """The hand positions candidate `slot` plays (B, MAX_HAND), read from its token's card columns."""
+    def _group_cards(self, x, slot, group, col):
         torch = self.t
-        s, n, w = self.m.lay["cands"]
+        s, n, w = self.m.lay[group]
         if x.shape[1] < s + n * w:
             return torch.zeros(x.shape[0], MAX_HAND, dtype=torch.bool, device=x.device)
         rows = x[:, s:s + n * w].reshape(x.shape[0], n, w)
         tok = rows[torch.arange(x.shape[0], device=x.device), slot.clamp(0, n - 1)]
-        return tok[:, CAND_CARDS:CAND_CARDS + MAX_HAND] > 0.5
+        return tok[:, col:col + MAX_HAND] > 0.5
+
+    def candidate_cards(self, x, kind, slot):
+        """The hand positions candidate `slot` plays or throws (B, MAX_HAND), read from its token's card columns."""
+        play = self._group_cards(x, slot, "cands", CAND_CARDS)
+        throw = self._group_cards(x, slot, "dcands", DCAND_CARDS)
+        return self.t.where((kind == DISCARD)[:, None], throw, play)
 
     def evaluate(self, x, legal, kind, slot, to, cards):
         """log pi(move), entropy and value for given moves (as parts)."""
@@ -514,7 +529,7 @@ class Parts:
         cand = self.is_candidate(kind, slot)
         has_cards = torch.isin(kind, torch.tensor(list(CARD_RANGE), device=x.device)) & ~cand
         cards = sample_cards(torch, cl, here, lo, hi, greedy) & has_cards[:, None]
-        cards = torch.where(cand[:, None], self.candidate_cards(x, slot), cards)
+        cards = torch.where(cand[:, None], self.candidate_cards(x, kind, slot), cards)
         # The log-probability of exactly this move (the same sums as evaluate()).
         logp = cat_logp(torch, kl, kind)
         logp = logp + torch.where(has_slot, cat_logp(torch, sl, slot_tok), torch.zeros_like(logp))
@@ -527,7 +542,8 @@ class Parts:
 # ---------------------------------------------------------------------------------------------- saving
 # The network's input layout's version (B, lab #38): 2 from 46680c3, the hand's computed features first in each hand
 # token. A checkpoint of an older version would load with its hand inputs scrambled, so it is refused.
-LAYOUT_VERSION = 3  # 3 from lab #38's play candidates: a "cands" group (the global token's group embedding moved)
+LAYOUT_VERSION = 4  # 3: lab #38's play candidates ("cands"); 4: the discard candidates ("dcands"; each moved the
+# global token's group embedding)
 
 
 def save(torch, path: Path, model, extra: dict | None = None) -> None:
@@ -542,7 +558,8 @@ def load_model(torch, path: Path, device):
     ck = torch.load(path, map_location=device, weights_only=False)
     if ck.get("layout_version") != LAYOUT_VERSION:
         raise SystemExit(f"{path}: input layout version {ck.get('layout_version')}, this code reads {LAYOUT_VERSION} "
-                         "(the inputs moved: v2 the hand's features, v3 the play candidates): it would load with its "
+                         "(the inputs moved: v2 the hand's features, v3 the play candidates, v4 the discard "
+                         "candidates): it would load with its "
                          "inputs scrambled; train afresh")
     model = build_model(torch, **ck["cfg"]).to(device)
     check_growth(ck.get("layout", {}), dict(model.lay))
@@ -1347,6 +1364,8 @@ def ppo(a) -> dict:
         model, ck = load_model(torch, latest, device)
         state = ck["state"]
         print(f"Resuming from {latest}: {state['updates']} updates, {state['stats']['runs']:,} runs.", flush=True)
+        if state.get("micro") and state["micro"] < a.micro:
+            a.micro = state["micro"]  # a micro-batch halved for memory stays halved
     else:
         if a.init:
             model, _ = load_model(torch, Path(a.init), device)
@@ -1605,8 +1624,22 @@ def ppo(a) -> dict:
             perm = torch.randperm(T * N, device=device)
             for k in range(0, T * N, a.minibatch):
                 opt.zero_grad(set_to_none=True)
-                got = ppo_grads(torch, pp, batch, perm[k:k + a.minibatch], a.micro, device, a.clip, a.value_coef,
-                                a.ent_coef, warm, a.shop_ent_mult)
+                # Out of GPU memory (lab #38: the candidates' tokens add to every step, and a run started unattended
+                # must not crash on it): the micro-batch halves and the minibatch is tried again. The micro-batch
+                # only splits the gradient's sum, so the step is the same.
+                while True:
+                    try:
+                        got = ppo_grads(torch, pp, batch, perm[k:k + a.minibatch], a.micro, device, a.clip,
+                                        a.value_coef, a.ent_coef, warm, a.shop_ent_mult)
+                        break
+                    except torch.cuda.OutOfMemoryError:
+                        if a.micro <= 128:
+                            raise
+                        opt.zero_grad(set_to_none=True)
+                        torch.cuda.empty_cache()
+                        a.micro //= 2
+                        state["micro"] = a.micro
+                        print(f"Out of GPU memory: the micro-batch is now {a.micro}.", flush=True)
                 if first_kl is None:
                     # Before any step the play hasn't moved, so this is about 0 unless acting and learning disagree
                     # (B, lab #38: precision, a stale input).
@@ -1687,6 +1720,7 @@ def ppo(a) -> dict:
                "braked": braked, "brake_at": brake_at, "breaches": breaches, "minibatches": nb,
                "learned_share": round(nb / max(per_pass * a.epochs, 1), 4),
                "rate_share": round(scale_sum / max(nb, 1), 4),
+               "micro": a.micro,
                "lr": round(opt.param_groups[0]["lr"], 8), "beta": state["beta"],
                "spreads": [round(x, 5) for x in spread.sigma()], **last_losses,
                "recent_win_rate": round(sum(w for w, _ in recent[-2000:]) / max(len(recent[-2000:]), 1), 5),

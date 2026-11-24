@@ -982,6 +982,8 @@ fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // The play candidates' block (learner::play_candidates): candidates, then the free pick; card columns from CAND_CARDS.
     m.add("PLAY_CANDS", bm_core::learner::PLAY_CANDS)?;
     m.add("CAND_CARDS", bm_core::learner::CAND_CARDS)?;
+    m.add("DISCARD_CANDS", bm_core::learner::DISCARD_CANDS)?;
+    m.add("DCAND_CARDS", bm_core::learner::DCAND_CARDS)?;
     m.add_function(wrap_pyfunction!(run_seed, m)?)?;
     m.add("VALUE_INPUT_VERSION", VALUE_INPUT_VERSION)?;
     m.add_function(wrap_pyfunction!(pseudohash, m)?)?;

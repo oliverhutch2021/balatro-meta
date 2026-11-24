@@ -1896,6 +1896,26 @@ In:
 - `make smoke-learner-2`: the next smoke run, in its own folder (`models/policy/smoke-2`), on S's restated rules and
   the user's go.
 
+## Step 70: smoke-2's first evaluation, discard candidates, and what runs after smoke-2 (lab #38, 24 November)
+
+Smoke-2 (d629f54) at update 100: 2.09% won and mean ante 4.92 on the evaluator's 10,000 seeds, against 0.01% and
+3.59 for the first smoke run at update 100 and 4.26 for the exchange evaluation; one brake breach in 100 updates;
+explained variance 0.78 (depth) and 0.24 (win). Learning is now 62 s of each 85 s update.
+In:
+- **Discard candidates** (`learner::discard_candidates`): the planner's plans for the hand (a flush in a suit, a
+  kind, a full house, a straight, the best hand) as the cards each would throw (`planner::throw`), read on a fair
+  copy, at most 8, then a free pick, as tokens in a new "dcands" part after "cands": the plan, cards kept, thrown and
+  still needed, the helping cards in the pile (the deck view's counts), the expected helpers drawn, and the
+  hypergeometric chance of drawing all it needs. A discard points at one (`SLOT_GROUP[DISCARD]`) as a play does.
+  Input layout version 4.
+- **Out of GPU memory**, a learning step halves the micro-batch and tries again (the step is the same); the halved
+  size is kept in the checkpoint and logged (`micro`).
+- `make smoke-learner-3`: smoke-2 with discard candidates, in `models/policy/smoke-3`.
+- **After smoke-2** (`.sync/after-smoke-2.sh`, outside the repo so it runs before any sync): it waits for smoke-2,
+  runs the exam and the exchange evaluation on update 300 on smoke-2's own code, then `.sync/decide_smoke2.py`: if
+  update 300 beats update 200 on blinds beaten per run (paired, 95% range above 0) and the win rate did not fall,
+  smoke-2 goes on to 600 updates on the same code; otherwise `make sync && make build && make smoke-learner-3`.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

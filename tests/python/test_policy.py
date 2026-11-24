@@ -62,10 +62,13 @@ def test_moves_go_to_parts_and_back(moves):
     assert np.array_equal(tp.to_moves(parts["kind"], parts["slot"], parts["to"], parts["cards"]),
                           mov[:, 1].astype(np.uint64))
     # Every kind of argument.
-    kinds = np.array([tp.PLAY, tp.MOVE_JOKER, tp.SELL_JOKER, tp.USE_CONSUMABLE, tp.PACK_CHOOSE, tp.LEAVE_SHOP])
-    args = np.array([0b10110, 3 | 1 << 8, 2, 1 | 0b11 << 8, 4 | 0b1 << 8, 0], np.uint64)
+    kinds = np.array([tp.PLAY, tp.MOVE_JOKER, tp.SELL_JOKER, tp.USE_CONSUMABLE, tp.PACK_CHOOSE, tp.LEAVE_SHOP,
+                      tp.DISCARD])
+    args = np.array([0b10110, 3 | 1 << 8, 2, 1 | 0b11 << 8, 4 | 0b1 << 8, 0, 0b1001], np.uint64)
     p = tp.to_parts(kinds, args)
-    assert list(p["slot"]) == [tp.FREE_SLOT, 3, 2, 1, 4, -1] and list(p["to"]) == [-1, 1, -1, -1, -1, -1]
+    assert list(p["slot"]) == [tp.FREE_SLOT, 3, 2, 1, 4, -1, tp.D_FREE]
+    assert list(p["to"]) == [-1, 1, -1, -1, -1, -1, -1]
+    assert list(np.flatnonzero(p["cards"][6])) == [0, 3]
     assert list(np.flatnonzero(p["cards"][0])) == [1, 2, 4] and list(np.flatnonzero(p["cards"][3])) == [0, 1]
     assert np.array_equal(tp.to_moves(p["kind"], p["slot"], p["to"], p["cards"]), args)
 
@@ -267,6 +270,29 @@ def test_a_play_candidate_plays_its_cards_and_is_judged_as_played():
             else:
                 assert sl == tp.FREE_SLOT and 1 <= int(cards[i].sum()) <= 5
     assert seen == {True, False}, "both candidates and the free pick are played"
+    # Discards (smoke-3): a candidate throws exactly its token's cards, the free pick throws its own, and act()
+    # agrees with evaluate().
+    d0, dn, dw = lay["dcands"]
+    assert dn == tp.DISCARD_CANDS + 1
+    dc = x[:, d0:d0 + dn * dw].reshape(24, dn, dw)
+    assert (dc[:, tp.D_FREE, 0] > 0).all() and (dc[:, 0, 0] > 0).all()
+    dlegal = torch.zeros(24, tp.N_KINDS, dtype=torch.bool)
+    dlegal[:, tp.DISCARD] = True
+    dseen = set()
+    for _ in range(6):
+        with torch.no_grad():
+            dk, ds, dt, dcards, dlogp, _ = pp.act(x, dlegal)
+            dlp, _, _ = pp.evaluate(x, dlegal, dk, ds, dt, dcards)
+        assert (dk == tp.DISCARD).all() and torch.allclose(dlp, dlogp, atol=1e-4)
+        for i in range(24):
+            sl = int(ds[i])
+            dseen.add(sl == tp.D_FREE)
+            if sl < tp.D_FREE:
+                want = dc[i, sl, tp.DCAND_CARDS:tp.DCAND_CARDS + tp.MAX_HAND] > 0.5
+                assert dc[i, sl, 0] > 0 and torch.equal(dcards[i], want)
+            else:
+                assert 1 <= int(dcards[i].sum()) <= 5
+    assert dseen == {True, False}, "both discard candidates and the free throw are chosen"
     # The candidates' moves go through the engine.
     k = kind.numpy()
     _, _, _, refused, _ = env.step(k, tp.to_moves(k, slot.numpy(), to.numpy(), cards.numpy()))

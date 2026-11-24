@@ -206,6 +206,170 @@ pub fn write_candidates(out: &mut [f32], run: &Run, cands: &[Candidate]) {
     free[23] = 1.0;
 }
 
+/// Discard candidates (lab #38, smoke-3): the planner's own plans for the hand (`planner::options_for`: a flush in a
+/// suit, a kind, a full house, a straight, the best hand), each as the cards it would throw (`planner::throw`, at
+/// most 5, the cheapest first, Cerulean Bell's card kept in), with what the throw is for: the cards it keeps, the
+/// cards it still needs, how many cards left in the draw pile would help (the deck view's counts: the pile and the
+/// face-down cards in hand), and the chance a throw of that size draws what it needs (hypergeometric). Read on a
+/// fair copy (the best hand's mask is scored there). The network can still pick its own cards (the last slot).
+pub const DISCARD_CANDS: usize = 8;
+/// The discard candidates' slots: `DISCARD_CANDS`, then the free pick (present whenever a discard is legal).
+pub const DISCARD_SLOTS: usize = DISCARD_CANDS + 1;
+/// Floats per discard slot (`write_discards`): 0 present; 1 to 5 the plan (best, flush, kind, full house,
+/// straight); 6 cards kept / 8; 7 cards thrown / 5; 8 cards still needed / 5; 9 helping cards / cards in the pile;
+/// 10 expected helping cards drawn / 5; 11 the chance of drawing all it needs; 12 discards left / 5; 13 hands left
+/// / 5; 14 its place in the list / DISCARD_CANDS; 15 the free pick's flag; then `MAX_HAND` columns: the hand
+/// positions it throws.
+pub const DCAND_FEATURES: usize = 16 + crate::observe::MAX_HAND;
+/// The first of the discard tokens' card columns.
+pub const DCAND_CARDS: usize = 16;
+
+/// A discard candidate: the hand positions thrown and what for.
+#[derive(Clone, Debug)]
+pub struct DiscardCand {
+    pub mask: u64,
+    /// 0 best, 1 flush, 2 kind, 3 full house, 4 straight.
+    pub plan: u8,
+    pub kept: u32,
+    pub need: u32,
+    pub outs: u32,
+    pub pile: u32,
+}
+
+/// The chance that `draws` cards from a pile of `pile` holding `outs` helpers bring at least `need` of them.
+pub fn chance_at_least(pile: u32, outs: u32, draws: u32, need: u32) -> f64 {
+    if need == 0 {
+        return 1.0;
+    }
+    let draws = draws.min(pile);
+    if outs < need || draws < need || pile == 0 {
+        return 0.0;
+    }
+    // ln C(n, k)
+    let lc = |n: u32, k: u32| -> f64 {
+        if k > n {
+            return f64::NEG_INFINITY;
+        }
+        (1..=k).map(|i| ((n - k + i) as f64).ln() - (i as f64).ln()).sum()
+    };
+    let total = lc(pile, draws);
+    (need..=draws.min(outs))
+        .map(|k| (lc(outs, k) + lc(pile - outs, draws - k) - total).exp())
+        .sum::<f64>()
+        .min(1.0)
+}
+
+fn discard_live(run: &Run) -> bool {
+    run.phase == Phase::Round && run.discards_left > 0 && run.hands_left > 0 && !run.hand.is_empty() && !run.won
+}
+
+/// The discard candidates of `run` (empty when no discard is legal), in the planner's order, at most
+/// `DISCARD_CANDS`, each throw distinct.
+pub fn discard_candidates(run: &Run, salt: u64) -> Vec<DiscardCand> {
+    use crate::planner::Plan;
+    if !discard_live(run) {
+        return Vec::new();
+    }
+    let fair = crate::observe::fair_copy(run, salt ^ 0xD15C);
+    let hand = crate::planner::seen(&fair);
+    // The deck view's counts: the draw pile and the face-down cards in hand.
+    let pile_cards: Vec<&crate::card::Card> = fair
+        .deck
+        .iter()
+        .chain(fair.hand.iter().filter(|&&id| fair.card(id).face_down))
+        .map(|&id| fair.card(id))
+        .collect();
+    let pile = pile_cards.len() as u32;
+    let usable = |c: &crate::card::Card| c.enhancement != crate::card::Enhancement::Stone;
+    let best = crate::planner::quick_best(&fair);
+    let mut out: Vec<DiscardCand> = Vec::new();
+    for plan in crate::planner::options_for(&fair) {
+        let keep = match plan {
+            Plan::Best => best.1,
+            p => p.keep(&hand),
+        };
+        let mask = crate::planner::throw(&fair, &hand, keep);
+        if mask == 0 || out.iter().any(|d| d.mask == mask) {
+            continue;
+        }
+        let kept = keep.count_ones();
+        let (code, need, outs) = match plan {
+            Plan::Best => (0u8, 0u32, 0u32),
+            Plan::Flush(s) => {
+                let n = pile_cards
+                    .iter()
+                    .filter(|c| usable(c) && (c.suit == s || c.enhancement == crate::card::Enhancement::Wild))
+                    .count();
+                (1, 5u32.saturating_sub(kept), n as u32)
+            }
+            Plan::Kind(r) => {
+                let n = pile_cards.iter().filter(|c| usable(c) && c.rank == r).count();
+                (2, 4u32.saturating_sub(kept), n as u32)
+            }
+            Plan::House(a, b) => {
+                let n = pile_cards.iter().filter(|c| usable(c) && (c.rank == a || c.rank == b)).count();
+                (3, 5u32.saturating_sub(kept), n as u32)
+            }
+            Plan::Straight(low) => {
+                // Ranks of the window not yet held.
+                let held: Vec<u8> = (0..hand.len())
+                    .filter(|&i| keep >> i & 1 == 1)
+                    .map(|i| fair.card(fair.hand[i]).rank.id())
+                    .map(|r| if low == 1 && r == 14 { 1 } else { r })
+                    .collect();
+                let n = pile_cards
+                    .iter()
+                    .filter(|c| usable(c))
+                    .filter(|c| {
+                        let r = c.rank.id();
+                        let r = if low == 1 && r == 14 { 1 } else { r };
+                        (low..low + 5).contains(&r) && !held.contains(&r)
+                    })
+                    .count();
+                (4, 5u32.saturating_sub(kept), n as u32)
+            }
+        };
+        out.push(DiscardCand { mask, plan: code, kept, need, outs, pile });
+        if out.len() == DISCARD_CANDS {
+            break;
+        }
+    }
+    out
+}
+
+/// The discard candidates' block, written into `out` (DISCARD_SLOTS x DCAND_FEATURES floats, zeros when no discard
+/// is legal).
+pub fn write_discards(out: &mut [f32], run: &Run, cands: &[DiscardCand]) {
+    if !discard_live(run) {
+        return;
+    }
+    for (k, d) in cands.iter().enumerate().take(DISCARD_CANDS) {
+        let row = &mut out[k * DCAND_FEATURES..(k + 1) * DCAND_FEATURES];
+        let thrown = d.mask.count_ones();
+        row[0] = 1.0;
+        row[1 + d.plan as usize] = 1.0;
+        row[6] = d.kept as f32 / 8.0;
+        row[7] = thrown as f32 / 5.0;
+        row[8] = d.need as f32 / 5.0;
+        row[9] = if d.pile > 0 { d.outs as f32 / d.pile as f32 } else { 0.0 };
+        row[10] = if d.pile > 0 { (thrown.min(d.pile) as f32 * d.outs as f32 / d.pile as f32) / 5.0 } else { 0.0 };
+        row[11] = if d.plan == 0 { 0.0 } else { chance_at_least(d.pile, d.outs, thrown, d.need) as f32 };
+        row[12] = run.discards_left as f32 / 5.0;
+        row[13] = run.hands_left as f32 / 5.0;
+        row[14] = k as f32 / DISCARD_CANDS as f32;
+        for i in 0..crate::observe::MAX_HAND {
+            if d.mask & (1 << i) != 0 {
+                row[DCAND_CARDS + i] = 1.0;
+            }
+        }
+    }
+    let free = &mut out[DISCARD_CANDS * DCAND_FEATURES..DISCARD_SLOTS * DCAND_FEATURES];
+    free[0] = 1.0;
+    free[15] = 1.0;
+    free[12] = run.discards_left as f32 / 5.0;
+    free[13] = run.hands_left as f32 / 5.0;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,5 +424,55 @@ mod tests {
         // The best candidate scores at least what the planner's quick best does on the same fair copy.
         let fair = crate::observe::fair_copy(&run, 3 ^ 0xC4_4D5);
         assert!(c[0].score.score >= crate::planner::quick_best(&fair).0 - 1e-9);
+    }
+
+    /// The hypergeometric chance: certain with nothing needed, impossible without enough helpers or draws, and
+    /// the textbook value for one helper drawn from four in a pile of ten with three draws.
+    #[test]
+    fn the_chance_of_drawing_what_a_throw_needs() {
+        assert_eq!(chance_at_least(40, 0, 5, 0), 1.0);
+        assert_eq!(chance_at_least(40, 1, 5, 2), 0.0);
+        assert_eq!(chance_at_least(40, 9, 1, 2), 0.0);
+        // P(at least 1 of 4 in 3 draws from 10) = 1 - C(6,3)/C(10,3) = 1 - 20/120.
+        assert!((chance_at_least(10, 4, 3, 1) - (1.0 - 20.0 / 120.0)).abs() < 1e-12);
+        let all: f64 = (0..=3).map(|k| chance_at_least(10, 4, 3, k) - chance_at_least(10, 4, 3, k + 1)).sum();
+        assert!((all - 1.0).abs() < 1e-12);
+    }
+
+    /// In a round with discards the candidates are distinct throws of 1 to 5 cards in hand, the same for the same
+    /// salt, none without a discard left; the block marks them and the free pick, each card column is the throw.
+    #[test]
+    fn discard_candidates_are_the_plans_throws() {
+        let mut run = Run::new(crate::RunConfig::new("DCANDS1"));
+        assert!(discard_candidates(&run, 3).is_empty());
+        crate::env::apply(&mut run, crate::env::MoveKind::SelectBlind, 0).unwrap();
+        let d = discard_candidates(&run, 3);
+        assert!(!d.is_empty() && d.len() <= DISCARD_CANDS);
+        let n = run.hand.len() as u32;
+        for (i, x) in d.iter().enumerate() {
+            assert!((1..=5).contains(&x.mask.count_ones()) && x.mask >> n == 0, "{:b}", x.mask);
+            assert!(d[..i].iter().all(|y| y.mask != x.mask));
+            assert!(x.outs <= x.pile && x.plan <= 4);
+            assert!(crate::env::apply(&mut run.clone(), crate::env::MoveKind::Discard, x.mask).is_ok());
+        }
+        let again = discard_candidates(&run, 3);
+        assert_eq!(d.iter().map(|x| x.mask).collect::<Vec<_>>(), again.iter().map(|x| x.mask).collect::<Vec<_>>());
+        let mut out = vec![0.0f32; DISCARD_SLOTS * DCAND_FEATURES];
+        write_discards(&mut out, &run, &d);
+        for (k, x) in d.iter().enumerate() {
+            let row = &out[k * DCAND_FEATURES..(k + 1) * DCAND_FEATURES];
+            let bits = (0..crate::observe::MAX_HAND).fold(0u64, |m, i| m | (u64::from(row[DCAND_CARDS + i] > 0.5) << i));
+            assert_eq!(bits, x.mask);
+            assert_eq!(row[1..6].iter().sum::<f32>(), 1.0);
+            assert!((0.0..=1.0).contains(&row[11]));
+        }
+        let free = &out[DISCARD_CANDS * DCAND_FEATURES..];
+        assert!(free[0] == 1.0 && free[15] == 1.0);
+        // No discard left: no candidates, and the block stays zero.
+        run.discards_left = 0;
+        assert!(discard_candidates(&run, 3).is_empty());
+        let mut none = vec![0.0f32; DISCARD_SLOTS * DCAND_FEATURES];
+        write_discards(&mut none, &run, &[]);
+        assert!(none.iter().all(|&x| x == 0.0));
     }
 }

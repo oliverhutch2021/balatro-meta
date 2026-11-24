@@ -389,15 +389,19 @@ const AUTO_MAX: usize = 32;
 pub const LEARNER_FEATURES: usize = 32;
 /// Where the play candidates' block starts (`learner::play_candidates`): after the learner's block.
 pub const CANDS_START: usize = OBS_LEN + LEARNER_FEATURES;
-/// The learner's whole input: the screen, then the learner's block, then the play candidates (`PLAY_SLOTS` tokens).
+/// Where the discard candidates' block starts (`learner::discard_candidates`): after the play candidates.
+pub const DCANDS_START: usize = CANDS_START + crate::learner::PLAY_SLOTS * crate::learner::CAND_FEATURES;
+/// The learner's whole input: the screen, then the learner's block, then the play candidates (`PLAY_SLOTS` tokens),
+/// then the discard candidates (`DISCARD_SLOTS` tokens).
 pub const POLICY_OBS_LEN: usize =
-    CANDS_START + crate::learner::PLAY_SLOTS * crate::learner::CAND_FEATURES;
+    DCANDS_START + crate::learner::DISCARD_SLOTS * crate::learner::DCAND_FEATURES;
 
-/// The learner's input layout: the screen's parts, then "learner", then "cands".
+/// The learner's input layout: the screen's parts, then "learner", "cands" and "dcands".
 pub fn policy_layout() -> Vec<(&'static str, usize, usize, usize)> {
     let mut l = obs_layout();
     l.push(("learner", OBS_LEN, 1, LEARNER_FEATURES));
     l.push(("cands", CANDS_START, crate::learner::PLAY_SLOTS, crate::learner::CAND_FEATURES));
+    l.push(("dcands", DCANDS_START, crate::learner::DISCARD_SLOTS, crate::learner::DCAND_FEATURES));
     l
 }
 
@@ -642,6 +646,10 @@ impl Env {
         out.resize(at + crate::learner::PLAY_SLOTS * crate::learner::CAND_FEATURES, 0.0);
         let cands = crate::learner::play_candidates(&self.run, salt);
         crate::learner::write_candidates(&mut out[at..], &self.run, &cands);
+        let at = out.len();
+        out.resize(at + crate::learner::DISCARD_SLOTS * crate::learner::DCAND_FEATURES, 0.0);
+        let throws = crate::learner::discard_candidates(&self.run, salt);
+        crate::learner::write_discards(&mut out[at..], &self.run, &throws);
     }
 }
 
@@ -669,10 +677,11 @@ mod tests {
         e.observe(&mut v);
         assert_eq!(v[OBS_LEN], 2.0, "six blinds paid ahead of a fresh run: two antes");
         let l = policy_layout();
-        assert_eq!(l[l.len() - 2].0, "learner");
+        assert_eq!(l[l.len() - 3].0, "learner");
+        assert_eq!(l[l.len() - 2].clone(), ("cands", CANDS_START, crate::learner::PLAY_SLOTS, crate::learner::CAND_FEATURES));
         assert_eq!(l.last().map(|p| (p.0, p.1, p.2, p.3)),
-                   Some(("cands", CANDS_START, crate::learner::PLAY_SLOTS, crate::learner::CAND_FEATURES)));
-        assert_eq!(CANDS_START + crate::learner::PLAY_SLOTS * crate::learner::CAND_FEATURES, POLICY_OBS_LEN);
+                   Some(("dcands", DCANDS_START, crate::learner::DISCARD_SLOTS, crate::learner::DCAND_FEATURES)));
+        assert_eq!(DCANDS_START + crate::learner::DISCARD_SLOTS * crate::learner::DCAND_FEATURES, POLICY_OBS_LEN);
         // In a round the candidates' block shows the plays and the free pick.
         let mut e = Env::new(3, 1);
         e.step(MoveKind::SelectBlind as i64, 0);
@@ -682,6 +691,9 @@ mod tests {
         let c = &v[CANDS_START..];
         assert_eq!(c[0], 1.0, "a first candidate");
         assert_eq!(c[crate::learner::PLAY_CANDS * crate::learner::CAND_FEATURES], 1.0, "the free pick");
+        let d = &v[DCANDS_START..];
+        assert_eq!(d[0], 1.0, "a first discard candidate");
+        assert_eq!(d[crate::learner::DISCARD_CANDS * crate::learner::DCAND_FEATURES + 15], 1.0, "the free throw");
     }
 
     /// Lab #38: each step reports where the run stands (blinds beaten so far, 24 at a win; skipped blinds never
