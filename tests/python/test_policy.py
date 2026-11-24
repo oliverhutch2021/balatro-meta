@@ -612,3 +612,24 @@ def test_an_undone_beta_step_is_held():
     assert tp.next_beta(beta, ev, ev2)[0] == 0.9, "held: not yet past 60% by 2 SE"
     ev3 = {"win_rate": 0.9}
     assert tp.next_beta(beta, {**ev2, "hold": ev["hold"]}, ev3)[0] < 0.9
+
+
+def test_the_readouts_count_bosses_the_economy_and_the_order_gap():
+    """Lab #38's readouts: each boss faced and lost to, the economy at each shop by ante, B's hand-order gap."""
+    t = tp.new_totals()
+    base = {"won": False, "ante": 2, "money": 3, "held": [], "bought": [], "moves": 10, "refused": 0, "rerolls": 1,
+            "skips": 0, "packs": 0, "vouchers": 0, "blinds_beaten": 4, "hands": [0] * 12}
+    tp.add_end(t, {**base, "lost_to": "The Wall", "bosses": ["The Hook", "The Wall"],
+                   "shops": [[1, 10, 2, 1], [1, 30, 26, 0]], "order": [5, 1, 0]})
+    tp.add_end(t, {**base, "lost_to": "Big Blind", "bosses": ["The Wall"], "shops": [[2, 8, 0, 3]],
+                   "order": [3, 2, 1]})
+    out = tp.readouts(t)
+    assert out["bosses"]["faced"] == 3 and out["bosses"]["lost"] == 1
+    assert out["bosses"]["by_boss"][0] == ["The Wall", 2, 1, 0.5]
+    assert out["economy"][0] == {"ante": 1, "shops": 2, "money_open": 20.0, "money_left": 14.0, "rerolls": 0.5,
+                                 "left_with_25": 0.5}
+    assert out["hand_order"] == {"hands": 8, "another_order_scores_more": 0.375, "it_would_have_won": 0.125}
+    # Totals saved before the readouts existed still read.
+    old = tp.new_totals()
+    tp.add_end(old, {**base, "lost_to": "Small Blind"})
+    assert tp.readouts(old)["bosses"]["faced"] == 0 and "hand_order" not in tp.readouts(old)

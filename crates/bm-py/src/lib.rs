@@ -303,6 +303,14 @@ impl VecEnv {
         }
     }
 
+    /// B's hand-order gap (lab #38): measure, before each hand played, whether another joker order would have
+    /// scored more (the evaluator's; costly).
+    fn measure_order(&mut self, on: bool) {
+        for e in self.envs.iter_mut() {
+            e.measure_order = on;
+        }
+    }
+
     /// Start run `i` again on this seed (to play chosen seeds, such as another bot's).
     fn set_seed(&mut self, i: usize, seed: &str) -> PyResult<()> {
         let s = bm_rng::normalize_seed(seed)
@@ -464,6 +472,9 @@ fn end_dict<'py>(py: Python<'py>, end: &RunEnd) -> PyResult<Bound<'py, PyDict>> 
     d.set_item("blinds_beaten", t.blinds_beaten)?;
     d.set_item("hands", t.hands.to_vec())?;
     d.set_item("best_hand", t.best_hand)?;
+    d.set_item("bosses", t.bosses.clone())?;
+    d.set_item("shops", t.shops.iter().map(|x| x.to_vec()).collect::<Vec<_>>())?;
+    d.set_item("order", t.order.to_vec())?;
     Ok(d)
 }
 

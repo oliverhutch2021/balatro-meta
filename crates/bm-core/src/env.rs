@@ -370,6 +370,9 @@ pub struct Env {
     /// from its seed by these. `ended_log` is the last finished run's.
     pub log: Vec<(i64, u64)>,
     pub ended_log: Vec<(i64, u64)>,
+    /// B's hand-order gap (lab #38): before each hand played with two or more jokers, whether another order of them
+    /// would have scored more (`teacher::order_gap`, into the tally). Costly: the evaluator's, off in training.
+    pub measure_order: bool,
 }
 
 /// Kinds the learner never chooses (train_policy.py's NEVER): the sorts, buy-and-use, the boss reroll.
@@ -468,6 +471,7 @@ impl Env {
             reject: None,
             log: Vec::new(),
             ended_log: Vec::new(),
+            measure_order: false,
         }
     }
 
@@ -591,6 +595,11 @@ impl Env {
             };
         };
         let in_round = self.run.phase == Phase::Round;
+        if self.measure_order && k == MoveKind::Play && in_round && self.run.jokers.len() >= 2 {
+            let (used, best) = crate::teacher::order_gap(&self.run, arg, self.log.len() as u64 ^ 0x0A11);
+            let needed = self.run.blind.as_ref().map_or(0.0, |b| b.chips) - self.run.round_chips;
+            self.tally.order_check(used, best, needed);
+        }
         let pending = Tally::before(&self.run, k, arg);
         // With `auto`, a move that leaves the screen as it was is a move with nothing in it (re-sorting a sorted hand,
         // a card moved onto itself): it counts as refused (lab #38, B's test 3).
@@ -880,14 +889,14 @@ mod learner_tests {
                 // A card moved onto itself changes nothing: refused.
                 if e.run.phase == Phase::Round && e.run.hand.len() > 1 {
                     let mut c = Env { run: e.run.clone(), seeds: SeedSampler::new(1), stake: 3, episodes: 0,
-                        tally: Tally::default(), ended: None, high: e.high, auto: true, skips: false, reject: None, log: Vec::new(), ended_log: Vec::new() };
+                        tally: Tally::default(), ended: None, high: e.high, auto: true, skips: false, reject: None, log: Vec::new(), ended_log: Vec::new(), measure_order: false };
                     assert!(c.step(MoveKind::MoveCard as i64, 0).refused, "a card moved onto itself");
                 }
                 // Any move refused as null left the run itself as it was, not only the screen (B, lab #38): money,
                 // deck, hand order, jokers, consumables and the random streams.
                 {
                     let mut c = Env { run: e.run.clone(), seeds: SeedSampler::new(1), stake: 3, episodes: 0,
-                        tally: Tally::default(), ended: None, high: e.high, auto: false, skips: false, reject: None, log: Vec::new(), ended_log: Vec::new() };
+                        tally: Tally::default(), ended: None, high: e.high, auto: false, skips: false, reject: None, log: Vec::new(), ended_log: Vec::new(), measure_order: false };
                     let probe = random_move(&e.run, &mut XorShift(rng.0 ^ 0xA5));
                     if k[probe.0 as usize] {
                         let before = format!("{:?}", c.run);

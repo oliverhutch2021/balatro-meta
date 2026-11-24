@@ -1728,6 +1728,19 @@ fn all_orders(run: &Run) -> Vec<Vec<usize>> {
 /// Joker orders tried for a hand, with their scores: every order (up to six jokers), else those met on a
 /// climb from the scoring order (and, when `low`, a descent from the least-scoring order), each step
 /// moving the one joker that helps most.
+/// B's hand-order gap (lab #38, the evaluator's measure): the score of `mask` with the jokers as they stand, and the
+/// best score any order of them gives (every order up to six jokers, a search beyond), on a fair copy.
+pub(crate) fn order_gap(run: &Run, mask: u64, salt: u64) -> (f64, f64) {
+    let fair = fair_copy(run, salt ^ 0x0DE5);
+    let used = crate::bots::preview_score(&fair, mask);
+    let mut probe = fair.clone();
+    let scored = scored_orders(run, false, &mut |o: &[usize]| {
+        probe.jokers = o.iter().map(|&i| fair.jokers[i].clone()).collect();
+        crate::bots::preview_score(&probe, mask)
+    });
+    (used, scored.iter().map(|o| o.1).fold(used, f64::max))
+}
+
 fn scored_orders(
     run: &Run,
     low: bool,
@@ -4917,6 +4930,33 @@ mod tests {
         // Ceremonial Dagger rightmost: it destroys the joker to its right at every blind.
         let o = order(&[CeremonialDagger, Cavendish, Joker]);
         assert_eq!(o, vec![Joker, Cavendish, CeremonialDagger]);
+    }
+
+    /// B's hand-order gap (lab #38): jokers set worst first score less than the best order, which the measure
+    /// finds; set best first, it finds no gap; the tally counts a gap that would have won the blind.
+    #[test]
+    fn the_hand_order_gap_sees_a_worse_order() {
+        use crate::blinds::BlindKind;
+        use crate::card::Rank::*;
+        use Suit::*;
+        let mut run = round_with(
+            BlindKind::Small,
+            &[JokerKind::Cavendish, JokerKind::Joker, JokerKind::GrosMichel],
+            &[(Spades, Ace), (Hearts, Ace), (Clubs, Two), (Diamonds, Seven)],
+        );
+        run.jokers[1].edition = Edition::Polychrome;
+        let mask = 0b11;
+        let (used, best) = order_gap(&run, mask, 9);
+        assert!(best > used * 1.01, "worst first: {used} against {best}");
+        let o = hand_order(&run, mask, 9, false);
+        let mut good = run.clone();
+        good.jokers = o.iter().map(|&i| run.jokers[i].clone()).collect();
+        let (u2, b2) = order_gap(&good, mask, 9);
+        assert!((b2 - u2).abs() <= 1e-9 * b2.max(1.0), "best first: {u2} against {b2}");
+        let mut t = crate::tally::Tally::default();
+        t.order_check(used, best, (used + best) / 2.0);
+        t.order_check(u2, b2, 0.0);
+        assert_eq!(t.order, [2, 1, 1]);
     }
 
     #[test]

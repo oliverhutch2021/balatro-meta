@@ -32,6 +32,18 @@ pub struct Tally {
     pub hands: [u64; 12],
     /// The biggest single hand.
     pub best_hand: f64,
+    /// The bosses the run faced (selected), in order (lab #38, B's rule on the boss columns: deaths by boss against
+    /// how often each boss comes).
+    pub bosses: Vec<&'static str>,
+    /// Each shop the run left: [ante, money as it opened, money as it was left, rerolls in it] (lab #38: the
+    /// economy, the ante-5 wall of the exchange evaluation).
+    pub shops: Vec<[i64; 4]>,
+    /// The shop now open: (ante, money as it opened, rerolls before it).
+    pub shop_open: Option<(i64, i64, u64)>,
+    /// B's hand-order gap (lab #38), counted when the evaluator asks (`Env::measure_order`): hands played with two or
+    /// more jokers, those some other joker order would have scored more, and those where it would have beaten the
+    /// blind the order used did not.
+    pub order: [u64; 3],
 }
 
 /// A move about to be made, read before it changes the run: the joker it would take, the score before.
@@ -85,7 +97,22 @@ impl Tally {
             MoveKind::SkipBlind => self.skips += 1,
             MoveKind::OpenBooster => self.packs += 1,
             MoveKind::RedeemVoucher => self.vouchers += 1,
-            MoveKind::CashOut => self.blinds_beaten += 1,
+            MoveKind::CashOut => {
+                self.blinds_beaten += 1;
+                self.shop_open = Some((i64::from(run.ante), run.money, self.rerolls));
+            }
+            MoveKind::LeaveShop => {
+                if let Some((ante, open, r0)) = self.shop_open.take() {
+                    self.shops.push([ante, open, run.money, (self.rerolls - r0) as i64]);
+                }
+            }
+            MoveKind::SelectBlind => {
+                if let Some(b) = run.blind.as_ref() {
+                    if matches!(b.kind, BlindKind::Boss(_)) {
+                        self.bosses.push(blind_name(b.kind));
+                    }
+                }
+            }
             MoveKind::Play => {
                 if let Some(h) = run.last_hand {
                     self.hands[h as usize] += 1;
@@ -98,6 +125,20 @@ impl Tally {
                 self.best_hand = self.best_hand.max(scored);
             }
             _ => {}
+        }
+    }
+}
+
+impl Tally {
+    /// One hand's order check (`Env::measure_order`): the score with the jokers' order used, the best any order
+    /// scores, and what the blind still needed.
+    pub fn order_check(&mut self, used: f64, best: f64, needed: f64) {
+        self.order[0] += 1;
+        if best > used * (1.0 + 1e-9) + 1e-9 {
+            self.order[1] += 1;
+            if used < needed && best >= needed {
+                self.order[2] += 1;
+            }
         }
     }
 }

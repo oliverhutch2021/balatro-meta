@@ -1933,6 +1933,20 @@ up. In:
   to bring back.
 - `.sync/after-smoke-2.sh` runs preflight after the sync, and smoke-3 only if it passes.
 
+## Step 72: the evaluator's readouts, and S and B as scheduled tasks (lab #38, 24 November)
+
+In (S's list before Gate 0):
+- **Deaths by boss against appearances**: the tally keeps each boss a run faced (`Tally::bosses`); reports give
+  `bosses`: faced, lost, the loss share overall and by boss (B's rule: the boss columns only if effect bosses kill
+  more than their appearances explain).
+- **The economy at each shop**: money as each shop opened and as it was left, and its rerolls (`Tally::shops`);
+  reports give `economy` by ante, with the share of shops left holding the interest cap's $25.
+- **B's hand-order gap**: before each hand played with two or more jokers, whether another order of them would have
+  scored more and whether it would have beaten the blind (`teacher::order_gap`, `Env::measure_order`); on in the
+  `eval` subcommand (`--no-order` skips it), off in training. Reports give `hand_order`.
+S and B now run as scheduled tasks (every 3 hours, and set off by A after each post), each keeping its notes in
+`.sync/lab/roles/`.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

@@ -963,7 +963,8 @@ def new_totals() -> dict:
 
 
 END_KEYS = ("won", "ante", "lost_to", "money", "held", "bought", "moves", "refused", "rerolls", "skips", "packs",
-            "vouchers", "blinds_beaten", "hands")
+            "vouchers", "blinds_beaten", "hands", "bosses", "shops", "order")
+INTEREST_CAP_MONEY = 25  # money that earns the most interest without vouchers ($1 per $5, up to $5)
 
 
 def add_end(t: dict, end: dict) -> None:
@@ -984,6 +985,23 @@ def add_end(t: dict, end: dict) -> None:
         if won:
             t["held_won"][j] = t["held_won"].get(j, 0) + 1
     t["hands"] = [a + int(b) for a, b in zip(t["hands"], end["hands"], strict=False)]
+    # Lab #38's readouts (totals saved before them start these afresh): bosses faced, the economy at each shop by
+    # ante ([shops, money as they opened, money as they were left, rerolls, left with the interest cap's money]),
+    # and B's hand-order gap ([hands checked, another order scored more, it would have beaten the blind]).
+    faced = t.setdefault("bosses_faced", {})
+    for b in end.get("bosses", ()):
+        faced[b] = faced.get(b, 0) + 1
+    eco = t.setdefault("economy", [[0] * 5 for _ in range(8)])
+    for ante, opened, left, rerolls in end.get("shops", ()):
+        row = eco[min(max(int(ante), 1), 8) - 1]
+        row[0] += 1
+        row[1] += int(opened)
+        row[2] += int(left)
+        row[3] += int(rerolls)
+        row[4] += int(left >= INTEREST_CAP_MONEY)
+    order = t.setdefault("order", [0, 0, 0])
+    for i, x in enumerate(end.get("order", (0, 0, 0))):
+        order[i] += int(x)
 
 
 def breakdown(t: dict, hand_names) -> dict:
@@ -1005,7 +1023,30 @@ def breakdown(t: dict, hand_names) -> dict:
             "jokers_in_wins": table(t["held_won"], wins),
             "per_run": {"moves": t["moves"] / per, "jokers_bought": t["jokers"] / per, "rerolls": t["rerolls"] / per,
                         "skips": t["skips"] / per, "packs": t["packs"] / per, "vouchers": t["vouchers"] / per,
-                        "money_at_end": t["money"] / per, "refused": t["refused"] / per}}
+                        "money_at_end": t["money"] / per, "refused": t["refused"] / per},
+            **readouts(t)}
+
+
+def readouts(t: dict) -> dict:
+    """Lab #38's readouts: each boss faced, lost to and its loss share against all bosses' (B's rule: the boss
+    columns only if effect bosses kill more than their appearances explain); the economy at each shop by ante; B's
+    hand-order gap (measured by `eval`)."""
+    faced = t.get("bosses_faced") or {}
+    lost = {k: v for k, v in (t.get("lost_to") or {}).items() if k in faced}
+    all_faced, all_lost = sum(faced.values()), sum(lost.values())
+    bosses = sorted(([k, n, lost.get(k, 0), round(lost.get(k, 0) / n, 4)] for k, n in faced.items()),
+                    key=lambda r: (-r[3], r[0]))
+    eco = [{"ante": i + 1, "shops": r[0], "money_open": round(r[1] / r[0], 2), "money_left": round(r[2] / r[0], 2),
+            "rerolls": round(r[3] / r[0], 2), "left_with_25": round(r[4] / r[0], 4)}
+           for i, r in enumerate(t.get("economy") or []) if r[0]]
+    o = t.get("order") or [0, 0, 0]
+    out = {"bosses": {"faced": all_faced, "lost": all_lost, "loss_rate": round(all_lost / max(all_faced, 1), 4),
+                      "by_boss": bosses},
+           "economy": eco}
+    if o[0]:
+        out["hand_order"] = {"hands": o[0], "another_order_scores_more": round(o[1] / o[0], 4),
+                             "it_would_have_won": round(o[2] / o[0], 4)}
+    return out
 
 
 class RunBook:
@@ -1024,7 +1065,7 @@ class RunBook:
         self.block = s.get("block") or dict.fromkeys(BLOCK_FIELDS[2:], 0)
 
     def add(self, end: dict, seconds: float) -> None:
-        end = {k: end[k] for k in END_KEYS}
+        end = {k: end[k] for k in END_KEYS if k in end}  # the readouts' keys may be missing (older engines)
         add_end(self.total, end)
         self.recent.append(end)
         b = self.block
@@ -1087,7 +1128,7 @@ def survival(ante_hist: list[int]) -> list[float]:
 
 def play_seeds(torch, pp, device, e, seeds: list[str], n_envs: int, threads: int, skips: bool, shop_cap: int,
                greedy: bool = True, watch=None, block_runs: int = 0,
-               engine_rounds: bool = False) -> tuple[dict, list[str], "RunBook"]:
+               engine_rounds: bool = False, measure_order: bool = False) -> tuple[dict, list[str], "RunBook"]:
     """Play each of `seeds` once with the network (likeliest moves unless `greedy` is False), under training's own
     rules; returns (stats, each seed's ending stage letter, the RunBook). With `engine_rounds` the teacher plays the
     rounds and the network everything else (S, lab #38: the exchange evaluation, how much of the wall is play)."""
@@ -1096,6 +1137,8 @@ def play_seeds(torch, pp, device, e, seeds: list[str], n_envs: int, threads: int
     runs = len(seeds)
     n = min(n_envs, runs)
     env = VecEnv(n, seed=0, threads=threads, auto=True, skips=skips)
+    if measure_order:
+        env.measure_order(True)  # B's hand-order gap (lab #38): the eval subcommand's, costly
     queue = list(range(runs))
     slot_run = [-1] * n
     for i in range(n):
@@ -1175,7 +1218,8 @@ def eval_policy(a) -> dict:
                   "network", a.runs, a.threads)
     stats, stages, book = play_seeds(torch, pp, device, e, seeds, a.envs, a.threads, getattr(a, "skips", False),
                                      getattr(a, "shop_cap", SHOP_CAP), greedy=not a.sample, watch=watch,
-                                     block_runs=a.block_runs, engine_rounds=a.engine_rounds)
+                                     block_runs=a.block_runs, engine_rounds=a.engine_rounds,
+                                     measure_order=not a.no_order)
     runs, wins = stats["runs"], stats["wins"]
     lo, hi = wilson(wins, runs)
     mean = sum((i + 1) * k for i, k in enumerate(stats["ante_hist"])) / max(runs, 1)
@@ -1924,6 +1968,8 @@ def main() -> None:
     v.add_argument("--envs", type=int, default=1024)
     v.add_argument("--out")
     v.add_argument("--sample", action="store_true", help="sample moves instead of taking the likeliest")
+    v.add_argument("--no-order", action="store_true",
+                   help="skip B's hand-order gap (each hand's joker orders scored: the slowest readout)")
     v.add_argument("--block-runs", type=int, default=BLOCK_RUNS, help="runs per block in the live numbers")
     x = sub.add_parser("explain", parents=[net])
     x.add_argument("--model", required=True)

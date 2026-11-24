@@ -124,6 +124,11 @@ class VecEnv:
         """Never start a new run on these seeds (lab #38: the evaluator's and the exam's)."""
         self._env.reject_seeds(list(seeds))
 
+    def measure_order(self, on: bool = True) -> None:
+        """B's hand-order gap (lab #38): count, before each hand played, whether another joker order would have scored
+        more (each ending's "order": hands, shorter, would have won). The evaluator's: costly."""
+        self._env.measure_order(bool(on))
+
     def take_endings(self) -> list[tuple[int, dict]]:
         """The runs that ended since the last call, as (index, how it ended): see the engine's VecEnv.take_endings
         (won, ante, lost_to, money, held and bought jokers, move counts, hands played, best_hand)."""
