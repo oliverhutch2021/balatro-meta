@@ -65,7 +65,7 @@ def test_moves_go_to_parts_and_back(moves):
     kinds = np.array([tp.PLAY, tp.MOVE_JOKER, tp.SELL_JOKER, tp.USE_CONSUMABLE, tp.PACK_CHOOSE, tp.LEAVE_SHOP])
     args = np.array([0b10110, 3 | 1 << 8, 2, 1 | 0b11 << 8, 4 | 0b1 << 8, 0], np.uint64)
     p = tp.to_parts(kinds, args)
-    assert list(p["slot"]) == [-1, 3, 2, 1, 4, -1] and list(p["to"]) == [-1, 1, -1, -1, -1, -1]
+    assert list(p["slot"]) == [tp.FREE_SLOT, 3, 2, 1, 4, -1] and list(p["to"]) == [-1, 1, -1, -1, -1, -1]
     assert list(np.flatnonzero(p["cards"][0])) == [1, 2, 4] and list(np.flatnonzero(p["cards"][3])) == [0, 1]
     assert np.array_equal(tp.to_moves(p["kind"], p["slot"], p["to"], p["cards"]), args)
 
@@ -227,6 +227,52 @@ def test_a_move_with_nothing_to_point_at_is_judged_as_it_was_played():
         assert torch.allclose(lp, logp, atol=1e-5), (kind, (lp - logp).abs().max())
 
 
+def test_a_play_candidate_plays_its_cards_and_is_judged_as_played():
+    """Lab #38 (play candidates): in a round the engine shows its best plays; a play that points at one plays exactly
+    that candidate's cards with no card term in its probability, the free pick picks cards as before, and act() and
+    evaluate() agree either way."""
+    from balatro_meta.env import VecEnv
+
+    torch.manual_seed(5)
+    env = VecEnv(24, seed=6, auto=True, skips=False)
+    lay = tp.layout()
+    s0, n, w = lay["cands"]
+    assert n == tp.PLAY_CANDS + 1
+    for _ in range(4):  # into the first round
+        legal = env.legal_kinds().astype(bool)
+        k = np.where(legal[:, tp.SELECT_BLIND], tp.SELECT_BLIND, np.argmax(legal, 1))
+        env.step(k, np.zeros(24, np.uint64))
+    x = torch.from_numpy(env.observe().copy())
+    cands = x[:, s0:s0 + n * w].reshape(24, n, w)
+    in_round = cands[:, tp.FREE_SLOT, 0] > 0
+    assert in_round.all(), "every run is in its first round"
+    assert (cands[:, 0, 0] > 0).all(), "with a first candidate"
+    model = tp.build_model(torch, 32, 1, 2, 64)
+    model.eval()
+    pp = tp.Parts(torch, model)
+    legal = torch.zeros(24, tp.N_KINDS, dtype=torch.bool)
+    legal[:, tp.PLAY] = True
+    seen = set()
+    for _ in range(6):
+        with torch.no_grad():
+            kind, slot, to, cards, logp, _ = pp.act(x, legal)
+            lp, _, _ = pp.evaluate(x, legal, kind, slot, to, cards)
+        assert (kind == tp.PLAY).all() and torch.allclose(lp, logp, atol=1e-4)
+        for i in range(24):
+            sl = int(slot[i])
+            seen.add(sl == tp.FREE_SLOT)
+            if sl < tp.FREE_SLOT:
+                want = cands[i, sl, tp.CAND_CARDS:tp.CAND_CARDS + tp.MAX_HAND] > 0.5
+                assert cands[i, sl, 0] > 0 and torch.equal(cards[i], want)
+            else:
+                assert sl == tp.FREE_SLOT and 1 <= int(cards[i].sum()) <= 5
+    assert seen == {True, False}, "both candidates and the free pick are played"
+    # The candidates' moves go through the engine.
+    k = kind.numpy()
+    _, _, _, refused, _ = env.step(k, tp.to_moves(k, slot.numpy(), to.numpy(), cards.numpy()))
+    assert not refused.any()
+
+
 def test_in_ppo_the_value_cannot_change_how_it_plays():
     from balatro_meta.env import VecEnv
 
@@ -351,6 +397,10 @@ def test_imitate_ppo_and_eval_end_to_end(moves, tmp_path):
     out = run("ppo", "--dir", str(tmp_path / "ppo"), "--max-updates", "7", "--envs", "16", "--steps", "8",
               "--minibatch", "64", "--block-runs", "2", "--no-compile")
     assert "Resuming" in out
+    # The brake (S's default, lab #38) never throws a batch away: every minibatch is learned from, at a lower rate
+    # after a breach.
+    log = [json.loads(line) for line in (tmp_path / "ppo" / "train_log.jsonl").read_text().splitlines()]
+    assert len(log) == 7 and all(r["learned_share"] == 1.0 and 0 < r["rate_share"] <= 1.0 for r in log)
     second = torch.load(tmp_path / "ppo" / "latest.pt", weights_only=False)["state"]
     assert first["updates"] == 4 and second["updates"] == 7 and second["stats"]["runs"] > first["stats"]["runs"]
     assert second["book"]["total"]["runs"] == second["stats"]["runs"], "a resumed run carries on counting"

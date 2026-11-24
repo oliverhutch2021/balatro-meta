@@ -387,13 +387,17 @@ const AUTO_MAX: usize = 32;
 /// cleared), kept for that reading and 0 until it is built (S, lab #38, ruling 6). The rest are kept for later
 /// inputs and are 0; a token input added later widens its part at the end (`train_policy.load_widened`).
 pub const LEARNER_FEATURES: usize = 32;
-/// The learner's whole input: the screen, then the learner's block.
-pub const POLICY_OBS_LEN: usize = OBS_LEN + LEARNER_FEATURES;
+/// Where the play candidates' block starts (`learner::play_candidates`): after the learner's block.
+pub const CANDS_START: usize = OBS_LEN + LEARNER_FEATURES;
+/// The learner's whole input: the screen, then the learner's block, then the play candidates (`PLAY_SLOTS` tokens).
+pub const POLICY_OBS_LEN: usize =
+    CANDS_START + crate::learner::PLAY_SLOTS * crate::learner::CAND_FEATURES;
 
-/// The learner's input layout: the screen's parts, then "learner".
+/// The learner's input layout: the screen's parts, then "learner", then "cands".
 pub fn policy_layout() -> Vec<(&'static str, usize, usize, usize)> {
     let mut l = obs_layout();
     l.push(("learner", OBS_LEN, 1, LEARNER_FEATURES));
+    l.push(("cands", CANDS_START, crate::learner::PLAY_SLOTS, crate::learner::CAND_FEATURES));
     l
 }
 
@@ -634,6 +638,10 @@ impl Env {
         out[start] = (self.high - position(&self.run)).max(0) as f32 / 3.0;
         let cap = crate::learner::fast_capacity(&self.run, salt, crate::learner::DEALS);
         crate::learner::write_capacity(&mut out[start + 1..start + 1 + crate::learner::CAPACITY_COLUMNS], cap.as_ref());
+        let at = out.len();
+        out.resize(at + crate::learner::PLAY_SLOTS * crate::learner::CAND_FEATURES, 0.0);
+        let cands = crate::learner::play_candidates(&self.run, salt);
+        crate::learner::write_candidates(&mut out[at..], &self.run, &cands);
     }
 }
 
@@ -653,13 +661,27 @@ mod tests {
         assert_eq!(&v[..OBS_LEN], &s[..]);
         assert_eq!(v[OBS_LEN], 0.0, "nothing paid ahead on a fresh run");
         assert!(v[OBS_LEN + 1] > 0.0, "the build's capacity is read");
-        assert!(v[OBS_LEN + 1 + crate::learner::CAPACITY_COLUMNS..].iter().all(|&x| x == 0.0), "the rest kept at 0");
+        assert!(v[OBS_LEN + 1 + crate::learner::CAPACITY_COLUMNS..].iter().all(|&x| x == 0.0),
+                "the rest kept at 0, and no play candidates before a round");
         let mut e = e;
         e.high = 6;
         let mut v = Vec::new();
         e.observe(&mut v);
         assert_eq!(v[OBS_LEN], 2.0, "six blinds paid ahead of a fresh run: two antes");
-        assert_eq!(policy_layout().last().map(|p| (p.0, p.1, p.3)), Some(("learner", OBS_LEN, LEARNER_FEATURES)));
+        let l = policy_layout();
+        assert_eq!(l[l.len() - 2].0, "learner");
+        assert_eq!(l.last().map(|p| (p.0, p.1, p.2, p.3)),
+                   Some(("cands", CANDS_START, crate::learner::PLAY_SLOTS, crate::learner::CAND_FEATURES)));
+        assert_eq!(CANDS_START + crate::learner::PLAY_SLOTS * crate::learner::CAND_FEATURES, POLICY_OBS_LEN);
+        // In a round the candidates' block shows the plays and the free pick.
+        let mut e = Env::new(3, 1);
+        e.step(MoveKind::SelectBlind as i64, 0);
+        assert_eq!(e.run.phase, Phase::Round);
+        let mut v = Vec::new();
+        e.observe(&mut v);
+        let c = &v[CANDS_START..];
+        assert_eq!(c[0], 1.0, "a first candidate");
+        assert_eq!(c[crate::learner::PLAY_CANDS * crate::learner::CAND_FEATURES], 1.0, "the free pick");
     }
 
     /// Lab #38: each step reports where the run stands (blinds beaten so far, 24 at a win; skipped blinds never

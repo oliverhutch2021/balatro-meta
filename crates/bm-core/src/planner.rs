@@ -211,7 +211,7 @@ pub fn quick_best(run: &Run) -> (f64, u64) {
 
 /// The hands `quick_best` chooses among: each pair, trips, two pair, full house, flush, straight, the high card
 /// (and five of a rank with "five-kind"), with Cerulean Bell's card and The Psychic's five cards added.
-fn shape_candidates(run: &Run) -> Vec<u64> {
+pub(crate) fn shape_candidates(run: &Run) -> Vec<u64> {
     let hand = seen(run);
     let n = hand.len();
     let mut cands: Vec<u64> = Vec::with_capacity(16);

@@ -1874,6 +1874,28 @@ with the teacher's rounds against 3.62 for the network alone, no run cut. Again,
 cd /mnt/h/balatro-meta && make sync && make build && ~/.venvs/balatro-meta/bin/python scripts/train_policy.py eval --model models/policy/smoke/eval-000200.pt --evaluator --engine-rounds --envs 2048 --out results/policy/smoke-exchange-200b.json
 ```
 
+## Step 69: the exchange evaluation's answer, play candidates, the brake and λ (lab #38, 24 November)
+
+The exchange evaluation on update 200 (`results/policy/smoke-exchange-200b.json`, 10,000 evaluator seeds, paired
+with update 200's own evaluation): the teacher's rounds with the network's shops beat 2.22 more blinds a run (± 0.10),
+mean ante 3.51 to 4.26, deaths in ante 1 from 17.1% to 2.2%, alive after ante 4 from 31.6% to 45.8%; past ante 5 no
+better (9.5% against 10.5%) and fewer wins (3 against 12, p 0.035): play is most of the wall to ante 4, the build
+(spent to zero, no vouchers) the rest. On the evaluator's greedy runs the network loses 58% of runs at bosses, none
+of them standing out (the 63% at Small and Big came from training's sampled runs).
+In:
+- **Play candidates** (`learner::play_candidates`): in a round, the planner's hand shapes scored on a fair copy (salt
+  from the screen), the best 8, as tokens in a new "cands" part of the learner's input after the learner block
+  (hand type, ln score, log margin against the chips still to score, clears now, the margin of score x hands left,
+  chips, mult, the boss's veto, the cards it plays), then a free pick. A play points at one (`SLOT_GROUP[PLAY]`): a
+  candidate plays its cards with no card term, the free pick uses the card head as before. 33 µs a position in a
+  round. The input's layout version is 3: older checkpoints are refused (train afresh).
+- **The brake** (S's default): a breach (KL over 1.5 x `--target-kl` on a minibatch) lowers the rate for the rest of
+  the pass (x0.5 each time, down to 1/8) and the batch is always learned from in full; `--brake stop` is the old
+  brake. The log gains `breaches` and `rate_share` (the mean rate used, as a share of the update's).
+- **λ 0.99** a move (about an ante; 0.95 reached one blind), pending B's ruling.
+- `make smoke-learner-2`: the next smoke run, in its own folder (`models/policy/smoke-2`), on S's restated rules and
+  the user's go.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001

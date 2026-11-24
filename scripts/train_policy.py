@@ -48,12 +48,20 @@ NEVER = (SORT_RANK, SORT_SUIT, BUY_AND_USE, REROLL_BOSS)  # not chosen by the ne
 FREE = (MOVE_CARD, MOVE_JOKER)  # moves that change nothing but order
 MAX_HAND = 24
 N_JOKER_TOKENS = 152  # joker kinds + empty + face down (observe.rs: joker_token)
-GROUPS = ("hand", "jokers", "consumables", "shop_row", "shop_vouchers", "boosters", "pack")
+GROUPS = ("hand", "jokers", "consumables", "shop_row", "shop_vouchers", "boosters", "pack", "cands")
 GLOBAL_PARTS = ("global", "hand_levels", "deck", "vouchers", "pack_booster", "tail", "learner")
 # Which group a kind's slot points into; kinds with a target "to" (moves) and with cards to pick.
 SLOT_GROUP = {MOVE_CARD: "hand", MOVE_JOKER: "jokers", SELL_JOKER: "jokers", BUY: "shop_row",
               REDEEM_VOUCHER: "shop_vouchers", OPEN_BOOSTER: "boosters", SELL_CONSUMABLE: "consumables",
-              USE_CONSUMABLE: "consumables", PACK_CHOOSE: "pack"}
+              USE_CONSUMABLE: "consumables", PACK_CHOOSE: "pack", PLAY: "cands"}
+# Play candidates (lab #38, after the exchange evaluation: the teacher's play took ante-1 deaths from 17% to 2%): in a
+# round the engine offers its PLAY_CANDS best plays (learner::play_candidates, best first) as tokens, then a free pick.
+# A play points at one: a candidate plays its cards (no card term); the free pick (slot FREE_SLOT), or no candidates
+# shown at all (a screen-only recording), picks cards with the card head as before. Each candidate token's card
+# columns (from CAND_CARDS) are the hand positions it plays.
+PLAY_CANDS = 8
+FREE_SLOT = PLAY_CANDS
+CAND_CARDS = 24
 HAS_TO = (MOVE_CARD, MOVE_JOKER)
 # Cards picked: (fewest, most) for each kind that picks cards.
 CARD_RANGE = {PLAY: (1, 5), DISCARD: (1, 5), USE_CONSUMABLE: (0, 5), PACK_CHOOSE: (0, 5)}
@@ -114,8 +122,10 @@ def to_parts(kinds: np.ndarray, args: np.ndarray) -> dict[str, np.ndarray]:
     to = np.full(n, -1, np.int64)
     low = (args & np.uint64(0xFF)).astype(np.int64)
     high = ((args >> np.uint64(8)) & np.uint64(0xFF)).astype(np.int64)
-    has_slot = np.isin(kinds, list(SLOT_GROUP))
+    has_slot = np.isin(kinds, list(SLOT_GROUP)) & (kinds != PLAY)
     slot[has_slot] = low[has_slot]
+    # A play's argument is its cards: as parts it is the free pick (a recorded play names no candidate).
+    slot[kinds == PLAY] = FREE_SLOT
     has_to = np.isin(kinds, HAS_TO)
     to[has_to] = high[has_to]
     bits = np.where(np.isin(kinds, (PLAY, DISCARD)), args,
@@ -172,6 +182,8 @@ def hand_features(torch, raw):
 def build_model(torch, d: int = 128, layers: int = 4, heads: int = 4, ff: int = 384):
     nn = torch.nn
     lay = layout()
+    if engine().PLAY_CANDS != PLAY_CANDS or engine().CAND_CARDS != CAND_CARDS:
+        raise SystemExit("the engine's play candidates differ from this script's: rebuild (make build)")
 
     class Policy(nn.Module):
         def __init__(self):
@@ -434,6 +446,20 @@ class Parts:
         s, n, w = self.m.lay["hand"]
         return x[:, s:s + n * w].reshape(x.shape[0], n, w)[..., 39] > 0
 
+    def is_candidate(self, kind, slot):
+        """Plays that name a candidate (slot 0 .. PLAY_CANDS - 1): their cards are the candidate's, never picked."""
+        return (kind == PLAY) & (slot >= 0) & (slot < FREE_SLOT)
+
+    def candidate_cards(self, x, slot):
+        """The hand positions candidate `slot` plays (B, MAX_HAND), read from its token's card columns."""
+        torch = self.t
+        s, n, w = self.m.lay["cands"]
+        if x.shape[1] < s + n * w:
+            return torch.zeros(x.shape[0], MAX_HAND, dtype=torch.bool, device=x.device)
+        rows = x[:, s:s + n * w].reshape(x.shape[0], n, w)
+        tok = rows[torch.arange(x.shape[0], device=x.device), slot.clamp(0, n - 1)]
+        return tok[:, CAND_CARDS:CAND_CARDS + MAX_HAND] > 0.5
+
     def evaluate(self, x, legal, kind, slot, to, cards):
         """log pi(move), entropy and value for given moves (as parts)."""
         torch, m = self.t, self.m
@@ -454,6 +480,7 @@ class Parts:
         logp = logp + torch.where(has_to, cat_logp(torch, tl, to_tok), torch.zeros_like(logp))
         ent = ent + torch.where(has_to, cat_entropy(torch, tl), torch.zeros_like(ent))
         has_cards = torch.isin(kind, torch.tensor(list(CARD_RANGE), device=x.device))
+        has_cards = has_cards & ~(self.is_candidate(kind, slot) & has_slot)
         cl, here = m.card_logits(h, present, cls, kind, slot_tok, self.forced(x))
         lo, hi = self.lo_hi(kind)
         logp = logp + torch.where(has_cards, cards_logp(torch, cl, here, cards, lo, hi), torch.zeros_like(logp))
@@ -484,8 +511,10 @@ class Parts:
         to = torch.where(has_to, to, torch.full_like(to, -1))
         cl, here = m.card_logits(h, present, cls, kind, slot_tok, self.forced(x))
         lo, hi = self.lo_hi(kind)
-        has_cards = torch.isin(kind, torch.tensor(list(CARD_RANGE), device=x.device))
+        cand = self.is_candidate(kind, slot)
+        has_cards = torch.isin(kind, torch.tensor(list(CARD_RANGE), device=x.device)) & ~cand
         cards = sample_cards(torch, cl, here, lo, hi, greedy) & has_cards[:, None]
+        cards = torch.where(cand[:, None], self.candidate_cards(x, slot), cards)
         # The log-probability of exactly this move (the same sums as evaluate()).
         logp = cat_logp(torch, kl, kind)
         logp = logp + torch.where(has_slot, cat_logp(torch, sl, slot_tok), torch.zeros_like(logp))
@@ -498,7 +527,7 @@ class Parts:
 # ---------------------------------------------------------------------------------------------- saving
 # The network's input layout's version (B, lab #38): 2 from 46680c3, the hand's computed features first in each hand
 # token. A checkpoint of an older version would load with its hand inputs scrambled, so it is refused.
-LAYOUT_VERSION = 2
+LAYOUT_VERSION = 3  # 3 from lab #38's play candidates: a "cands" group (the global token's group embedding moved)
 
 
 def save(torch, path: Path, model, extra: dict | None = None) -> None:
@@ -513,7 +542,8 @@ def load_model(torch, path: Path, device):
     ck = torch.load(path, map_location=device, weights_only=False)
     if ck.get("layout_version") != LAYOUT_VERSION:
         raise SystemExit(f"{path}: input layout version {ck.get('layout_version')}, this code reads {LAYOUT_VERSION} "
-                         "(the hand's features moved): it would load with its inputs scrambled; train afresh")
+                         "(the inputs moved: v2 the hand's features, v3 the play candidates): it would load with its "
+                         "inputs scrambled; train afresh")
     model = build_model(torch, **ck["cfg"]).to(device)
     check_growth(ck.get("layout", {}), dict(model.lay))
     load_widened(torch, model, ck["model"])
@@ -1562,7 +1592,15 @@ def ppo(a) -> dict:
         batch = (fx, fl, fk, fs, ft, fc, flp, fadv, fret, fsh)
         braked = False
         brake_at = None
+        breaches = 0
         first_kl = None
+        # The brake (S's default, lab #38, after the smoke run threw most batches away on 171 of 300 updates): a
+        # breach lowers the rate for the rest of the pass, x --brake-factor each time down to --brake-floor of the
+        # update's rate, and the batch is always learned from in full. `--brake stop` is the old brake (the rest of the
+        # batch thrown away). rate_share: the mean of the rate used over the pass's steps, as a share of the update's.
+        base_lr = [g["lr"] for g in opt.param_groups]
+        scale = 1.0
+        scale_sum = 0.0
         for _ in range(a.epochs):
             perm = torch.randperm(T * N, device=device)
             for k in range(0, T * N, a.minibatch):
@@ -1574,11 +1612,17 @@ def ppo(a) -> dict:
                     # (B, lab #38: precision, a stale input).
                     first_kl = got["kl"]
                 if not warm and a.target_kl and got["kl"] > 1.5 * a.target_kl:
-                    # The brake: this update has already moved the play as far as one update should.
-                    opt.zero_grad(set_to_none=True)
-                    braked = True
-                    brake_at = nb
-                    break
+                    breaches += 1
+                    if not braked:
+                        braked, brake_at = True, nb
+                    if a.brake == "stop":
+                        # The old brake: this update has already moved the play as far as one update should.
+                        opt.zero_grad(set_to_none=True)
+                        break
+                    scale = max(scale * a.brake_factor, a.brake_floor)
+                    for g, lr0 in zip(opt.param_groups, base_lr, strict=True):
+                        g["lr"] = lr0 * scale
+                scale_sum += scale
                 if warm:
                     value_only(model)
                 # The value head's gradient is clipped apart from the policy's (B, lab #38), so a spike in the value
@@ -1589,8 +1633,10 @@ def ppo(a) -> dict:
                 for key in losses:
                     losses[key] += got[key]
                 nb += 1
-            if braked:
+            if braked and a.brake == "stop":
                 break
+        for g, lr0 in zip(opt.param_groups, base_lr, strict=True):
+            g["lr"] = lr0
         state["updates"] += 1
         state["braked"] = state.get("braked", 0) + int(braked)
         # B's rate rule (lab #38), applied once at update --lr-rule-at: no brake and under 3% clipped over the
@@ -1638,8 +1684,9 @@ def ppo(a) -> dict:
         # the batch learned from, the time, the losses and each head's explained variance.
         per_pass = -(-(T * N) // a.minibatch)
         row = {"update": state["updates"], "steps": state["steps"], "seconds": round(seconds0 + time.time() - t_start, 1),
-               "braked": braked, "brake_at": brake_at, "minibatches": nb,
+               "braked": braked, "brake_at": brake_at, "breaches": breaches, "minibatches": nb,
                "learned_share": round(nb / max(per_pass * a.epochs, 1), 4),
+               "rate_share": round(scale_sum / max(nb, 1), 4),
                "lr": round(opt.param_groups[0]["lr"], 8), "beta": state["beta"],
                "spreads": [round(x, 5) for x in spread.sigma()], **last_losses,
                "recent_win_rate": round(sum(w for w, _ in recent[-2000:]) / max(len(recent[-2000:]), 1), 5),
@@ -1792,7 +1839,8 @@ def main() -> None:
     p.add_argument("--lr-fall", action="store_true", help="the old schedule: the rate falls to a tenth over the run")
     p.add_argument("--gamma-blind", type=float, default=0.98,
                    help="the discount of a transition that ends a blind or the run (every other: 1)")
-    p.add_argument("--lam", type=float, default=0.95)
+    # 0.99 a move (lab #38, A's default pending B): about 100 moves, an ante, where 0.95 reached a single blind.
+    p.add_argument("--lam", type=float, default=0.99)
     p.add_argument("--skips", action="store_true", help="offer blind skips (off from Stage 0, lab #38)")
     p.add_argument("--shop-cap", type=int, default=SHOP_CAP, help="moves in one shop before only leaving is offered")
     p.add_argument("--shop-ent-mult", type=float, default=3.0, help="entropy's weight on shop and pack decisions")
@@ -1812,7 +1860,14 @@ def main() -> None:
                    help="a fall in final ante below the best that counts as a collapse (back to the best network)")
     p.add_argument("--max-rollbacks", type=int, default=6, help="collapses after which the run stops")
     p.add_argument("--target-kl", type=float, default=0.02,
-                   help="an update stops once its play has moved this far from the play it learns from (0: never)")
+                   help="the brake's line: a minibatch whose play has moved 1.5 x this far from the play it learns from "
+                        "is a breach (0: no brake)")
+    p.add_argument("--brake", choices=("rate", "stop"), default="rate",
+                   help="rate (S's default, lab #38): a breach lowers the rate for the rest of the pass and the batch "
+                        "is learned from in full; stop: the old brake, the rest of the batch thrown away")
+    p.add_argument("--brake-factor", type=float, default=0.5, help="the rate's fall at each breach (--brake rate)")
+    p.add_argument("--brake-floor", type=float, default=0.125,
+                   help="the lowest share of the update's rate the brake goes down to")
     p.add_argument("--print-every", type=int, default=5)
     p.add_argument("--block-runs", type=int, default=BLOCK_RUNS, help="runs per point of the training's progress")
     v = sub.add_parser("eval", parents=[net])
@@ -1830,7 +1885,7 @@ def main() -> None:
     x.add_argument("--model", required=True)
     x.add_argument("--envs", type=int, default=256)
     x.add_argument("--steps", type=int, default=512)
-    x.add_argument("--lam", type=float, default=0.95)
+    x.add_argument("--lam", type=float, default=0.99)
     x.add_argument("--out")
     a = ap.parse_args()
     if a.cmd == "explain":

@@ -119,6 +119,93 @@ pub fn write_capacity(out: &mut [f32], c: Option<&Capacity>) {
     }
 }
 
+/// Play candidates (lab #38, A's queue after the exchange evaluation): with the network's shops, the teacher's play
+/// took ante-1 deaths from 17% to 2%, and the network alone almost never found a Flush or a Straight (0.4% of hands),
+/// which a free pick of cards has to assemble card by card. So the engine offers its own best plays as choices, each
+/// with what it scores, and the network can still pick its own cards (the last slot).
+///
+/// In a round with a hand left: the planner's hand shapes (`planner::shape_candidates`: each pair, trips, two pair,
+/// full house, flush, straight, high card, Cerulean Bell's card and The Psychic's padding), each scored on a fair copy
+/// whose salt is the screen's, so a chance effect (Lucky cards, Misprint) is never read off the run's own streams,
+/// the best `PLAY_CANDS` by score, best first.
+pub const PLAY_CANDS: usize = 8;
+/// The candidates' slots: `PLAY_CANDS` candidates, then the free pick (present whenever a play is).
+pub const PLAY_SLOTS: usize = PLAY_CANDS + 1;
+/// Floats per candidate slot (`write_candidates`): 0 present; 1 to 12 the hand type; 13 ln score / 20; 14 log margin
+/// against the chips still to score this round / 4 (+-1); 15 it clears the blind now; 16 log margin of its score
+/// times the hands left against the chips still to score / 4 (+-1); 17 cards / 5; 18 its place in the list /
+/// PLAY_CANDS; 19 ln chips / 10; 20 ln mult / 10; 21 the boss makes it score nothing; 22 scoring cards / 5; 23 the
+/// free pick's flag; then `MAX_HAND` columns: the hand positions it plays (1 or 0).
+pub const CAND_FEATURES: usize = 24 + crate::observe::MAX_HAND;
+/// The first of the card columns.
+pub const CAND_CARDS: usize = 24;
+
+/// A candidate: the hand positions played and what the play scores.
+#[derive(Clone, Debug)]
+pub struct Candidate {
+    pub mask: u64,
+    pub score: crate::scoring::HandScore,
+}
+
+/// The play candidates of `run` (empty outside a round or with no hand left), best first, at most `PLAY_CANDS`.
+pub fn play_candidates(run: &Run, salt: u64) -> Vec<Candidate> {
+    if run.phase != Phase::Round || run.hands_left <= 0 || run.hand.is_empty() || run.won {
+        return Vec::new();
+    }
+    let fair = crate::observe::fair_copy(run, salt ^ 0xC4_4D5);
+    let mut seen: Vec<u64> = Vec::new();
+    let mut out: Vec<Candidate> = Vec::new();
+    for m in crate::planner::shape_candidates(&fair) {
+        if m == 0 || m.count_ones() > 5 || seen.contains(&m) {
+            continue;
+        }
+        seen.push(m);
+        out.push(Candidate { mask: m, score: crate::bots::preview(&fair, m) });
+    }
+    // Best first; equal scores keep the planner's order (stable).
+    out.sort_by(|a, b| b.score.score.partial_cmp(&a.score.score).unwrap_or(std::cmp::Ordering::Equal));
+    out.truncate(PLAY_CANDS);
+    out
+}
+
+/// The candidates' block, written into `out` (PLAY_SLOTS x CAND_FEATURES floats, zeros outside a round).
+pub fn write_candidates(out: &mut [f32], run: &Run, cands: &[Candidate]) {
+    if run.phase != Phase::Round || run.hands_left <= 0 || run.hand.is_empty() || run.won {
+        return;
+    }
+    let left = run
+        .blind
+        .as_ref()
+        .map_or(1.0, |b| (b.chips - run.round_chips).max(1.0));
+    let hands = run.hands_left.max(1) as f64;
+    let lm = |x: f64| ((x.max(1.0).ln() - left.ln()) / 4.0).clamp(-1.0, 1.0) as f32;
+    for (k, c) in cands.iter().enumerate().take(PLAY_CANDS) {
+        let row = &mut out[k * CAND_FEATURES..(k + 1) * CAND_FEATURES];
+        let s = &c.score;
+        let score = if s.not_allowed { 0.0 } else { s.score };
+        row[0] = 1.0;
+        row[1 + s.hand as usize] = 1.0;
+        row[13] = ((score + 1.0).ln() / 20.0) as f32;
+        row[14] = lm(score);
+        row[15] = f32::from(score >= left);
+        row[16] = lm(score * hands);
+        row[17] = c.mask.count_ones() as f32 / 5.0;
+        row[18] = k as f32 / PLAY_CANDS as f32;
+        row[19] = (s.chips.max(1.0).ln() / 10.0) as f32;
+        row[20] = (s.mult.max(1.0).ln() / 10.0) as f32;
+        row[21] = f32::from(s.not_allowed);
+        row[22] = s.scoring.len() as f32 / 5.0;
+        for i in 0..crate::observe::MAX_HAND {
+            if c.mask & (1 << i) != 0 {
+                row[CAND_CARDS + i] = 1.0;
+            }
+        }
+    }
+    let free = &mut out[PLAY_CANDS * CAND_FEATURES..PLAY_SLOTS * CAND_FEATURES];
+    free[0] = 1.0;
+    free[23] = 1.0;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,5 +224,41 @@ mod tests {
         let mut out = [0.0f32; CAPACITY_COLUMNS];
         write_capacity(&mut out, fast_capacity(&run, 7, DEALS).as_ref());
         assert!(out.iter().all(|x| (-1.0..=1.0).contains(x)));
+    }
+
+    /// In a round the candidates are distinct plays of 1 to 5 cards in hand, best first, the same for the same salt,
+    /// and none outside a round; the block marks them and the free pick, and each card column is the play's mask.
+    #[test]
+    fn play_candidates_are_the_best_plays_in_hand() {
+        let mut run = Run::new(crate::RunConfig::new("CANDS1"));
+        let mut empty = vec![0.0f32; PLAY_SLOTS * CAND_FEATURES];
+        assert!(play_candidates(&run, 3).is_empty());
+        write_candidates(&mut empty, &run, &[]);
+        assert!(empty.iter().all(|&x| x == 0.0), "nothing outside a round");
+        crate::env::apply(&mut run, crate::env::MoveKind::SelectBlind, 0).unwrap();
+        assert_eq!(run.phase, Phase::Round);
+        let c = play_candidates(&run, 3);
+        assert!(!c.is_empty() && c.len() <= PLAY_CANDS);
+        let n = run.hand.len() as u32;
+        for (i, x) in c.iter().enumerate() {
+            assert!((1..=5).contains(&x.mask.count_ones()) && x.mask >> n == 0, "{:b}", x.mask);
+            assert!(c[..i].iter().all(|y| y.mask != x.mask && y.score.score >= x.score.score));
+        }
+        let again = play_candidates(&run, 3);
+        assert_eq!(c.iter().map(|x| x.mask).collect::<Vec<_>>(), again.iter().map(|x| x.mask).collect::<Vec<_>>());
+        let mut out = vec![0.0f32; PLAY_SLOTS * CAND_FEATURES];
+        write_candidates(&mut out, &run, &c);
+        for (k, x) in c.iter().enumerate() {
+            let row = &out[k * CAND_FEATURES..(k + 1) * CAND_FEATURES];
+            assert_eq!(row[0], 1.0);
+            let bits = (0..crate::observe::MAX_HAND).fold(0u64, |m, i| m | (u64::from(row[CAND_CARDS + i] > 0.5) << i));
+            assert_eq!(bits, x.mask);
+            assert_eq!(row[1..13].iter().sum::<f32>(), 1.0);
+        }
+        let free = &out[PLAY_CANDS * CAND_FEATURES..];
+        assert!(free[0] == 1.0 && free[23] == 1.0);
+        // The best candidate scores at least what the planner's quick best does on the same fair copy.
+        let fair = crate::observe::fair_copy(&run, 3 ^ 0xC4_4D5);
+        assert!(c[0].score.score >= crate::planner::quick_best(&fair).0 - 1e-9);
     }
 }
