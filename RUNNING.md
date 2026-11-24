@@ -1865,10 +1865,13 @@ reads it), above S's 0.3 line; the win head has almost no wins to explain.
 In: the trainer's log on disk every update (`train_log.jsonl`, and `<report>-log.jsonl`: the brake and where, the
 share of the batch learned from, time, losses, explained variance); the engine's cash-outs counted in the tally
 (blinds beaten read 0); `explain` (a checkpoint's explained variance per head); the exchange evaluation (`eval
---engine-rounds`: the teacher plays the rounds, the network the rest). The exchange evaluation, on the user's go:
+--engine-rounds`: the teacher plays the rounds, the network the rest). The first exchange evaluation was broken: the engine reordered the jokers back after each of the teacher's per-hand
+reorders, and 88% of runs hit the move limit (mean ante 1.97). Fixed: the engine orders the jokers between hands only,
+and the teacher's memory starts fresh for each move (runs share threads). On 60 seeds in the cloud: mean ante 4.40
+with the teacher's rounds against 3.62 for the network alone, no run cut. Again, on the user's go:
 
 ```
-cd /mnt/h/balatro-meta && make sync && make build && ~/.venvs/balatro-meta/bin/python scripts/train_policy.py eval --model models/policy/smoke/eval-000200.pt --evaluator --engine-rounds --envs 2048 --out results/policy/smoke-exchange-200.json
+cd /mnt/h/balatro-meta && make sync && make build && ~/.venvs/balatro-meta/bin/python scripts/train_policy.py eval --model models/policy/smoke/eval-000200.pt --evaluator --engine-rounds --envs 2048 --out results/policy/smoke-exchange-200b.json
 ```
 
 ## Later steps

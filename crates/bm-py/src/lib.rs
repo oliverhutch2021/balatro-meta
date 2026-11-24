@@ -348,8 +348,12 @@ impl VecEnv {
                 envs.par_iter()
                     .enumerate()
                     .map(|(i, e)| {
-                        (e.run.phase == Phase::Round)
-                            .then(|| bm_core::teacher::teacher_move(&e.run, (i as u64) << 20 ^ e.run.round as u64))
+                        (e.run.phase == Phase::Round).then(|| {
+                            // The teacher's memory is a thread's, made for one run at a time; here runs share
+                            // threads, so it starts fresh for each move (it plans again from the position).
+                            bm_core::teacher::new_run();
+                            bm_core::teacher::teacher_move(&e.run, (i as u64) << 20 ^ e.log.len() as u64)
+                        })
                     })
                     .collect()
             })

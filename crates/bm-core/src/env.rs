@@ -510,7 +510,14 @@ impl Env {
         while made < AUTO_MAX && self.run.phase != Phase::GameOver && !self.run.won {
             let m = if self.run.phase == Phase::RoundEval {
                 Some((MoveKind::CashOut, 0))
-            } else if let Some(m) = crate::teacher::reorder(&self.run).filter(|m| m.0 == MoveKind::MoveJoker) {
+            } else if let Some(m) = (self.run.phase != Phase::Round)
+                .then(|| crate::teacher::reorder(&self.run))
+                .flatten()
+                .filter(|m| m.0 == MoveKind::MoveJoker)
+            {
+                // Between hands only: the order set before a round holds through it. (In a round the exchange
+                // evaluation's teacher sets its own per-hand order; reordering back after every move made the two
+                // undo each other until the move limit: 88% of its runs.)
                 Some(m)
             } else {
                 let k = self.learner_kinds();
@@ -832,7 +839,7 @@ mod learner_tests {
                 assert_ne!(e.run.phase, Phase::RoundEval, "cash-out is the engine's");
                 let open = e.learner_kinds().iter().filter(|&&x| x).count();
                 assert!(e.run.phase != Phase::BlindSelect || open > 1, "a blind choice with nothing else to do is the engine's");
-                assert!(crate::teacher::reorder(&e.run).is_none(), "the jokers are in the teacher's order");
+                assert!(e.run.phase == Phase::Round || crate::teacher::reorder(&e.run).is_none(), "the jokers are in the teacher's order between hands");
                 let k = e.learner_kinds();
                 assert!(!k[MoveKind::MoveJoker as usize] && !k[MoveKind::SkipBlind as usize]);
                 assert!(LEARNER_NEVER.iter().all(|m| !k[*m as usize]));
