@@ -17,7 +17,7 @@ WATCH ?= 1
 JOB_FLAGS := $(FORCE_FLAG) $(if $(filter 0,$(WATCH)),--no-watch,)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-stakes teacher-exam watch watch-mod record-me compare-me diagnose-control look pack-audit green-bench league rule1 multipliers offers smoke-learner smoke-learner-2 smoke-learner-3 recheck check-saved diagnose
+.PHONY: help setup setup-gpu build test doctor sync status smoke rng-check rng-game rng-fixtures rng-stress fmt lint bench baseline teacher teacher-data value-net teacher-learned learned teacher-moves train eval-net teacher-data-2 value-net-2 teacher-learned-2 learned-2 teacher-ensemble teacher-stakes teacher-exam watch watch-mod record-me compare-me diagnose-control look pack-audit green-bench league rule1 multipliers offers smoke-learner smoke-learner-2 smoke-learner-3 preflight preflight-quick recheck check-saved diagnose
 
 help:  ## List the commands
 	@grep -hE '^[a-z0-9%-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/; s/%/N/' | expand -t 19
@@ -135,6 +135,12 @@ multipliers:  ## The multiplier table (S, lab #33): a8e3 on 800 fresh Green seed
 
 offers:  ## Offered and passed (S and B, lab #33): a8e3 on 1,000 fresh Green seeds; every shop row at antes 2 to 7 with each joker on offer read as a multiplier on the build, and which the run took (about 2 h)
 	$(PY) scripts/offers.py --play $(if $(RUNS),--runs $(RUNS))
+
+preflight:  ## Small checks that the learner's code is correct and smooth, at training's own size on the GPU (about 30-60 min): results/preflight.json
+	$(PY) scripts/preflight.py
+
+preflight-quick:  ## The same checks shrunk to run on a CPU in a minute or two
+	$(PY) scripts/preflight.py --quick --cpu --out results/preflight-quick.json
 
 smoke-learner-3:  ## The third smoke run (lab #38): as smoke-learner-2, with discard candidates (input layout 4), in models/policy/smoke-3; resumable
 	$(PY) scripts/train_policy.py ppo --dir models/policy/smoke-3 --max-updates 300 --hours 48 --report results/policy/smoke-3.json

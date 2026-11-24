@@ -1258,6 +1258,24 @@ def explain(a) -> dict:
     return out
 
 
+def gae(xp, r, vals, last_v, done, gamma, lam: float):
+    """Each head's GAE (numpy or torch, `xp`): r and vals (T, N, H), last_v (N, H) the value where the runs are now,
+    done and gamma (T, N) each transition's end and its own discount (--gamma-blind on one that ends a blind, else
+    1). A_t = delta_t + g_t * lam * (1 - d_t) * A_{t+1}, delta_t = r_t + g_t * (1 - d_t) * V_{t+1} - V_t; so A + V
+    is the lambda-return (`scripts/preflight.py` checks it against the definition)."""
+    T = r.shape[0]
+    adv = xp.zeros_like(r)
+    g = xp.zeros_like(last_v)
+    for t in range(T - 1, -1, -1):
+        nv = last_v if t == T - 1 else vals[t + 1]
+        nonterm = (1.0 - done[t])[:, None]
+        gm = gamma[t][:, None]
+        delta = r[t] + gm * nv * nonterm - vals[t]
+        g = delta + gm * lam * nonterm * g
+        adv[t] = g
+    return adv
+
+
 def ppo_grads(torch, pp, batch, mb, micro: int, device, clip: float, value_coef: float, ent_coef: float,
               warm: bool, shop_ent_mult: float = 1.0) -> dict:
     """Adds PPO's loss gradients on minibatch `mb` (indices into `batch`) to the network's, worked out `micro`
@@ -1569,15 +1587,7 @@ def ppo(a) -> dict:
         sig = torch.tensor(spread.sigma(), device=device)
         vals = buf_v * sig
         last_v = last_v * sig
-        adv2 = torch.zeros(T, N, N_VALUES, device=device)
-        gae = torch.zeros(N, N_VALUES, device=device)
-        for t in range(T - 1, -1, -1):
-            nv = last_v if t == T - 1 else vals[t + 1]
-            nonterm = (1.0 - buf_done[t])[:, None]
-            gm = buf_gamma[t][:, None]
-            delta = buf_r[t] + gm * nv * nonterm - vals[t]
-            gae = delta + gm * a.lam * nonterm * gae
-            adv2[t] = gae
+        adv2 = gae(torch, buf_r, vals, last_v, buf_done, buf_gamma, a.lam)
         ret2 = adv2 + vals
         # Each head's explained variance on this batch (S, lab #38): 1 - Var(return - value) / Var(return).
         explained = [round(float(1.0 - (ret2[..., h] - vals[..., h]).var() / ret2[..., h].var()), 4)

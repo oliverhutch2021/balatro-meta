@@ -1916,6 +1916,23 @@ In:
   update 300 beats update 200 on blinds beaten per run (paired, 95% range above 0) and the win rate did not fall,
   smoke-2 goes on to 600 updates on the same code; otherwise `make sync && make build && make smoke-learner-3`.
 
+## Step 71: preflight, then a rented GPU (lab #38, the user's order, 24 November)
+
+The user's order: many small checks that the code is correct and runs smoothly, then a rented GPU to speed the runs
+up. In:
+- `make preflight` (`scripts/preflight.py`, `results/preflight.json`): determinism (the same seeds and network play
+  the same games move for move, on 1 and 4 threads), act and learn agree (log-probabilities from stored inputs;
+  bf16 reported), a checkpoint reloads identically, the evaluator repeats itself (also with another number of
+  parallel runs), the advantages plus values equal the lambda-returns from their definition (`gae`, now a function
+  of its own), candidate moves are never refused, the out-of-memory guard (a simulated failure), a run resumes, the
+  speed at full size (moves a second, playing and learning seconds, GPU memory peak), and that 12 updates from
+  scratch climb past ante 1. `make preflight-quick` runs them shrunk on a CPU (20 s in the cloud: 9 passed, speed
+  skipped).
+- `scripts/rent/setup.sh`: on a rented Ubuntu GPU machine, after cloning the repo there: the PC's bootstrap, the
+  build, then preflight at full size before any run. `scripts/rent/pack.sh` packs `models/policy` and `results`
+  to bring back.
+- `.sync/after-smoke-2.sh` runs preflight after the sync, and smoke-3 only if it passes.
+
 ## Later steps
 
 Claude adds each one here when it's ready. Next: a screen that can be extended (`baseline --skip`, so seeds 2,001
